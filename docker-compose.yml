@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  docchat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: docchat-enterprise
+    ports:
+      - "7860:7860"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DOCCHAT_ENABLE_AGENTS=true
+      - DOCCHAT_ENABLE_MEMORY=true
+      - DOCCHAT_ENABLE_AUDIT=true
+      - DOCCHAT_MAX_UPLOAD_MB=2000
+      - DOCCHAT_MAX_DOCS=200
+    volumes:
+      - ./data:/app/data
+      - ./documents:/app/documents
+      - ./.docchat_cache:/app/.docchat_cache
+      - ./.docchat_vectordb:/app/.docchat_vectordb
+      - ./.docchat_memory:/app/.docchat_memory
+      - ./.docchat_audit:/app/.docchat_audit
+    restart: unless-stopped
+    networks:
+      - docchat-network
+
+  # Optional: Redis for caching (if needed)
+  redis:
+    image: redis:7-alpine
+    container_name: docchat-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - docchat-network
+
+  # Optional: PostgreSQL for enterprise features
+  postgres:
+    image: postgres:15-alpine
+    container_name: docchat-postgres
+    environment:
+      - POSTGRES_DB=docchat
+      - POSTGRES_USER=docchat
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - docchat-network
+
+networks:
+  docchat-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  postgres-data:
+
+
+

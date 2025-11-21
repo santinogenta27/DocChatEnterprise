@@ -1,0 +1,60 @@
+========================================
+  🚀 CÓMO USAR DOCCHAT ENTERPRISE
+========================================
+
+✅ TU API KEY YA ESTÁ CONFIGURADA
+
+📋 OPCIONES PARA INICIAR LA APLICACIÓN:
+
+OPCIÓN 1: Usar el script automático (MÁS FÁCIL)
+-----------------------------------------------
+Doble clic en: INICIAR_APP.bat
+O ejecuta: .\INICIAR_APP.ps1
+
+OPCIÓN 2: Ejecutar manualmente
+-------------------------------
+1. Abre PowerShell o CMD en esta carpeta
+2. Ejecuta: python app.py
+3. Espera a ver: "Running on local URL: http://127.0.0.1:7860"
+4. Abre tu navegador en: http://127.0.0.1:7860
+
+========================================
+  🎯 FUNCIONALIDADES PRINCIPALES
+========================================
+
+1. 🔥 WORKFLOW COMPLETO (LA ESTRELLA)
+   - Tab "🔥 Workflow Completo"
+   - Sube 100+ PDFs
+   - Escribe: "Analiza estos documentos y genera informe + PPT + Excel"
+   - El sistema genera TODO automáticamente
+
+2. 📚 PROCESAMIENTO MASIVO
+   - Tab "📚 Procesamiento Masivo"
+   - Arrastra carpetas completas
+   - Procesa hasta 200 documentos
+
+3. 🔍 CONSULTA RAG
+   - Tab "🔍 Consulta RAG"
+   - Sube documentos y haz preguntas
+   - Obtén respuestas verificadas
+
+========================================
+  ⚠️ SI HAY PROBLEMAS
+========================================
+
+- Si el puerto 7860 está ocupado, la app usará otro puerto
+- Revisa el mensaje en la terminal para ver qué puerto usa
+- Si no inicia, verifica que tengas Python instalado
+- Si hay errores, presiona Ctrl+C y vuelve a intentar
+
+========================================
+  ✅ TODO ESTÁ LISTO
+========================================
+
+Tu API key está configurada en el archivo .env
+Solo necesitas ejecutar: python app.py
+
+¡Disfruta tu producto enterprise! 🚀
+
+
+
