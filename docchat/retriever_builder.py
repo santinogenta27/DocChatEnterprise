@@ -99,15 +99,31 @@ class RetrieverBuilder:
         api_key = config.openai_api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY must be set in config or environment")
-        self.embeddings = OpenAIEmbeddings(model=config.embedding_model, api_key=api_key)
+        # Optimizar embeddings para evitar rate limits
+        self.embeddings = OpenAIEmbeddings(
+            model=config.embedding_model, 
+            api_key=api_key,
+            chunk_size=100,  # Procesar en lotes más pequeños
+            max_retries=5,  # Más reintentos
+            request_timeout=120  # Timeout más largo
+        )
 
     def build_hybrid_retriever(self, docs: Iterable[Document]) -> HybridRetriever:
         docs = list(docs)
         if not docs:
             raise ValueError("No hay documentos procesados para indexar.")
 
+        # Para grandes volúmenes, mostrar progreso
+        total_docs = len(docs)
+        if total_docs > 1000:
+            print(f"Generando embeddings para {total_docs} chunks... Esto puede tardar varios minutos.")
+            print("El sistema maneja rate limits automáticamente, por favor espera...")
+
         namespace = uuid.uuid4().hex
         persist_dir = Path(self.config.persist_dir) / namespace
+        
+        # Chroma.from_documents genera embeddings automáticamente
+        # Con muchos documentos, esto puede tardar pero funciona correctamente
         vector_store = Chroma.from_documents(
             documents=docs,
             embedding=self.embeddings,

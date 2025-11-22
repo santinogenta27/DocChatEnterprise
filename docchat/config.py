@@ -37,9 +37,15 @@ class AppConfig:
     relevance_model: str = os.getenv("DOCCHAT_RELEVANCE_MODEL", "gpt-4o-mini")
     research_model: str = os.getenv("DOCCHAT_RESEARCH_MODEL", "gpt-4o")
     verification_model: str = os.getenv("DOCCHAT_VERIFICATION_MODEL", "gpt-4o-mini")
-    embedding_model: str = os.getenv("DOCCHAT_EMBEDDING_MODEL", "text-embedding-3-large")
+    embedding_model: str = os.getenv("DOCCHAT_EMBEDDING_MODEL", "text-embedding-3-small")  # Cambiado a small: más rápido, calidad similar
     agentic_model: str = os.getenv("DOCCHAT_AGENTIC_MODEL", "gpt-4o")
     temperature: float = float(os.getenv("DOCCHAT_TEMPERATURE", "0.15"))
+    
+    # Speed/Quality Modes
+    speed_mode: str = os.getenv("DOCCHAT_SPEED_MODE", "balanced")  # "fast", "balanced", "quality"
+    # Fast mode: usa modelos más rápidos, menos tokens
+    # Balanced: balance entre velocidad y calidad (default)
+    # Quality: máxima calidad, más lento
     
     # API Keys
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")

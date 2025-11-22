@@ -14,8 +14,17 @@ class ResearchResult:
 
 
 class ResearchAgent:
-    def __init__(self, model_name: str, temperature: float = 0.2, max_tokens: int = 4000):
-        # Aumentado a 4000 tokens para permitir respuestas más completas y detalladas
+    def __init__(self, model_name: str, temperature: float = 0.2, max_tokens: int = 4000, speed_mode: str = "balanced"):
+        # max_tokens ajustado según modo de velocidad
+        # Balanced: 3000 tokens (suficiente para respuestas completas, más rápido)
+        # Quality: 4000 tokens (máxima calidad)
+        # Fast: 2000 tokens (más rápido, respuestas más concisas)
+        if speed_mode == "fast":
+            max_tokens = min(2000, max_tokens)
+        elif speed_mode == "balanced":
+            max_tokens = min(3000, max_tokens)
+        # Quality mode usa el max_tokens original (4000)
+        
         # Agregar retry con backoff para manejar rate limits
         self.llm = ChatOpenAI(
             model=model_name, 
@@ -24,6 +33,7 @@ class ResearchAgent:
             max_retries=3,  # Reintentar hasta 3 veces
             request_timeout=120  # Timeout de 2 minutos
         )
+        self.speed_mode = speed_mode
 
     def run(self, question: str, documents: List[Document]) -> ResearchResult:
         if not documents:
@@ -59,12 +69,23 @@ class ResearchAgent:
         
         context = "\n\n".join(context_parts)
         
-        # Limitar el contexto total a ~15,000 tokens (estimado)
-        # Cada token ≈ 4 caracteres, entonces ~60,000 caracteres máximo
-        if len(context) > 60000:
-            context = context[:60000] + "\n\n[Contexto truncado para evitar límites de tokens]"
+        # Limitar el contexto según modo de velocidad
+        # Fast: menos contexto, más rápido
+        # Balanced: contexto moderado
+        # Quality: máximo contexto
+        if self.speed_mode == "fast":
+            max_context_chars = 40000  # ~10,000 tokens
+        elif self.speed_mode == "balanced":
+            max_context_chars = 60000  # ~15,000 tokens
+        else:  # quality
+            max_context_chars = 80000  # ~20,000 tokens
+        
+        if len(context) > max_context_chars:
+            context = context[:max_context_chars] + "\n\n[Contexto truncado para optimizar velocidad]"
         
         num_sources = len(docs_by_source)
+        print(f"   Analizando {num_sources} documento(s) con {len(documents)} chunks totales...")
+        print(f"   Generando respuesta (esto puede tardar 2-5 minutos)...\n")
         prompt = (
             "Eres un investigador experto en análisis de documentos. Tu tarea es analizar TODOS los documentos proporcionados de manera exhaustiva.\n\n"
             f"PREGUNTA DEL USUARIO:\n{question}\n\n"
@@ -101,7 +122,10 @@ class ResearchAgent:
         
         for attempt in range(max_retries):
             try:
+                if attempt > 0:
+                    print(f"   Reintentando generación de respuesta (intento {attempt + 1}/{max_retries})...")
                 answer = self.llm.invoke(prompt).content.strip()
+                print(f"   ✅ Respuesta generada exitosamente ({len(answer)} caracteres)\n")
                 return ResearchResult(answer=answer, context=context)
             except Exception as e:
                 error_str = str(e).lower()

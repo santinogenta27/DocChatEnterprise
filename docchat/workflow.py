@@ -37,7 +37,9 @@ class AgentWorkflow:
             model_name=self.config.relevance_model, temperature=0.0
         )
         self.research_agent = ResearchAgent(
-            model_name=self.config.research_model, temperature=self.config.temperature
+            model_name=self.config.research_model, 
+            temperature=self.config.temperature,
+            speed_mode=self.config.speed_mode
         )
         self.verification_agent = VerificationAgent(
             model_name=self.config.verification_model, temperature=0.0
@@ -73,8 +75,11 @@ class AgentWorkflow:
         return graph.compile()
 
     def _check_relevance_step(self, state: AgentState) -> AgentState:
+        print("🔍 Verificando relevancia de la pregunta...")
         result = self.relevance_checker.check(state["question"], state["retriever"])
         context_docs = result.documents
+        print(f"   Label de relevancia: {result.label}")
+        print(f"   Documentos recuperados inicialmente: {len(context_docs)}")
         
         # Si la pregunta es general (analizar todos los documentos), asegurar chunks de todos
         question_lower = state["question"].lower()
@@ -117,12 +122,26 @@ class AgentWorkflow:
                             seen_content.add(content_hash)
                             enhanced_docs.append(doc)
                 
-                # Limitar chunks según número de documentos para evitar rate limits
-                # Para muchos documentos, usar menos chunks totales
-                if len(docs_by_source) > 50:
-                    max_total_chunks = min(80, len(enhanced_docs))  # Máximo 80 chunks para 50+ documentos
-                else:
-                    max_total_chunks = min(100, len(enhanced_docs))  # Máximo 100 chunks para <50 documentos
+                # Limitar chunks según número de documentos y modo de velocidad
+                # Fast mode: menos chunks, más rápido
+                # Balanced: chunks moderados
+                # Quality: más chunks, mejor análisis
+                speed_mode = getattr(self.config, 'speed_mode', 'balanced')
+                if speed_mode == "fast":
+                    if len(docs_by_source) > 50:
+                        max_total_chunks = min(50, len(enhanced_docs))  # 50 chunks para modo rápido
+                    else:
+                        max_total_chunks = min(60, len(enhanced_docs))
+                elif speed_mode == "balanced":
+                    if len(docs_by_source) > 50:
+                        max_total_chunks = min(80, len(enhanced_docs))  # 80 chunks para modo balanceado
+                    else:
+                        max_total_chunks = min(100, len(enhanced_docs))
+                else:  # quality mode
+                    if len(docs_by_source) > 50:
+                        max_total_chunks = min(100, len(enhanced_docs))  # 100 chunks para máxima calidad
+                    else:
+                        max_total_chunks = min(120, len(enhanced_docs))
                 
                 context_docs = enhanced_docs[:max_total_chunks]
                 print(f"\n📊 Modo 'Analizar Todos': Usando {len(context_docs)} chunks de {len(docs_by_source)} documentos")
@@ -171,7 +190,25 @@ class AgentWorkflow:
 
     def _decide_after_relevance(self, state: AgentState) -> str:
         label = state.get("relevance_label", RelevanceLabel.NO_MATCH)
-        return "relevant" if label != RelevanceLabel.NO_MATCH else "irrelevant"
+        question = state.get("question", "").lower()
+        
+        # Si es una pregunta general (analizar todos), SIEMPRE ejecutar research
+        is_general_query = any(word in question for word in [
+            "todos", "cada", "todos los", "all", "each", "every", 
+            "analiza", "analyze", "analizar", "resumen", "summary", 
+            "información más valiosa", "informacion mas valiosa",
+            "información valiosa", "informacion valiosa",
+            "puntos clave", "insights", "insights principales"
+        ])
+        
+        if is_general_query:
+            print(f"🔍 Pregunta general detectada - Forzando ejecución de ResearchAgent")
+            print(f"   (Label de relevancia: {label}, pero es pregunta general)")
+            return "relevant"  # Forzar ejecución
+        
+        decision = "relevant" if label != RelevanceLabel.NO_MATCH else "irrelevant"
+        print(f"🔍 Decisión después de relevancia: {decision} (label: {label})")
+        return decision
 
     def _research_step(self, state: AgentState) -> AgentState:
         context_docs = state.get("context_docs", [])
@@ -185,15 +222,31 @@ class AgentWorkflow:
             for source, count in sources_count.items():
                 print(f"   - {source}: {count} chunks")
             print(f"   Total: {len(context_docs)} chunks de {len(sources_count)} documentos\n")
-        research = self.research_agent.run(state["question"], context_docs)
-        return {**state, "draft_answer": research.answer}
+        
+        print("🔍 Generando respuesta con Research Agent...")
+        print("   (Esto puede tardar varios minutos con muchos documentos)\n")
+        try:
+            research = self.research_agent.run(state["question"], context_docs)
+            if research and research.answer:
+                print(f"✅ Respuesta generada exitosamente ({len(research.answer)} caracteres)\n")
+                return {**state, "draft_answer": research.answer}
+            else:
+                print("⚠️ ADVERTENCIA: ResearchAgent no generó respuesta")
+                return {**state, "draft_answer": "No se pudo generar una respuesta. Intenta reformular la pregunta."}
+        except Exception as e:
+            print(f"❌ ERROR en ResearchAgent: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {**state, "draft_answer": f"Error al generar respuesta: {str(e)}"}
 
     def _verification_step(self, state: AgentState) -> AgentState:
+        print("🔎 Verificando respuesta...")
         verification = self.verification_agent.verify(
             answer=state.get("draft_answer", ""),
             question=state["question"],
             documents=state.get("context_docs", []),
         )
+        print("✅ Verificación completada\n")
         # Always end after verification to prevent infinite loops
         # The answer is returned even if verification fails
         return {
@@ -209,6 +262,9 @@ class AgentWorkflow:
 
     def run(self, question: str, retriever: BaseRetriever, all_documents: List[Document] = None) -> Dict:
         """Execute the LangGraph workflow and return structured result."""
+        print("\n" + "="*60)
+        print("🚀 INICIANDO WORKFLOW DE ANÁLISIS")
+        print("="*60 + "\n")
         # Set recursion limit to prevent infinite loops
         config = {"recursion_limit": 10}
         # Initialize state
@@ -218,6 +274,23 @@ class AgentWorkflow:
             "all_documents": all_documents or [],
         }
         result = self.graph.invoke(initial_state, config=config)
+        print("\n" + "="*60)
+        print("✅ WORKFLOW COMPLETADO - Preparando respuesta final...")
+        print("="*60 + "\n")
+        
+        # Debug: verificar qué contiene el resultado
+        print(f"🔍 Debug - Estado del resultado:")
+        print(f"   - Tiene 'answer': {'answer' in result}")
+        print(f"   - Tiene 'draft_answer': {'draft_answer' in result}")
+        print(f"   - Tiene 'context_docs': {'context_docs' in result}")
+        if 'answer' in result:
+            answer_len = len(result.get('answer', ''))
+            print(f"   - Longitud de respuesta: {answer_len} caracteres")
+        if 'draft_answer' in result:
+            draft_len = len(result.get('draft_answer', ''))
+            print(f"   - Longitud de draft_answer: {draft_len} caracteres")
+        print()
+        
         verification: VerificationResult | None = result.get("verification")
         # Obtener fuentes únicas de todos los documentos recuperados
         seen_sources = set()
@@ -232,9 +305,19 @@ class AgentWorkflow:
                 })
                 if len(sources) >= 10:  # Mostrar hasta 10 fuentes únicas
                     break
+        # Obtener respuesta (puede estar en 'answer' o 'draft_answer')
+        final_answer = result.get("answer") or result.get("draft_answer", "")
+        if not final_answer:
+            final_answer = "No pude generar una respuesta. El workflow se completó pero no se generó contenido."
+            print("⚠️ ADVERTENCIA: No se encontró respuesta en el resultado del workflow")
+        
+        print(f"📝 Respuesta final preparada: {len(final_answer)} caracteres")
+        print(f"📚 Fuentes encontradas: {len(sources)}")
+        print()
+        
         return {
             "relevance": result.get("relevance_label", RelevanceLabel.NO_MATCH),
-            "answer": result.get("answer", "No pude generar una respuesta."),
+            "answer": final_answer,
             "sources": sources,
             "verification_report": verification.report() if verification else "Sin verificación.",
         }

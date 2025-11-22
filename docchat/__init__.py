@@ -9,6 +9,8 @@ from .memory import MemoryStore, ContextManager  # noqa: F401
 from .audit import AuditLogger  # noqa: F401
 from .autonomous_agent import AutonomousAgent, AgentTask  # noqa: F401
 from .advanced_agent import AdvancedAutonomousAgent  # noqa: F401
+from .enterprise_api import EnterpriseAPIMode  # noqa: F401
+from .cloud_integrations import CloudStorageIntegration, WebhookProcessor  # noqa: F401
 from .auth import UserManager, WorkspaceManager  # noqa: F401
 from .integrations import (  # noqa: F401
     GmailIntegration, DriveIntegration, SlackIntegration,
@@ -33,6 +35,9 @@ __all__ = [
     "AutonomousAgent",
     "AgentTask",
     "AdvancedAutonomousAgent",
+    "EnterpriseAPIMode",
+    "CloudStorageIntegration",
+    "WebhookProcessor",
     "UserManager",
     "WorkspaceManager",
     "GmailIntegration",
