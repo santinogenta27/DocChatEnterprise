@@ -23,7 +23,21 @@ from .tools import (  # noqa: F401
     IntegrationTool, TableAnalysisTool, SchedulerTool
 )
 
-__version__ = "2.0.0"
+# Nuevos módulos de mejoras
+from .cache.embedding_cache import EmbeddingCache, CachedOpenAIEmbeddings  # noqa: F401
+from .async_processor import AsyncDocumentProcessor  # noqa: F401
+from .streaming.response_streamer import ResponseStreamer  # noqa: F401
+from .analytics.analytics_engine import AnalyticsEngine  # noqa: F401
+from .security.encryption import DocumentEncryption, Watermarking  # noqa: F401
+from .security.rbac import RBACManager, Role, Permission  # noqa: F401
+from .rag.graph_rag import GraphRAG, KnowledgeGraph  # noqa: F401
+from .rag.multimodal_rag import MultiModalRAG  # noqa: F401
+from .rag.context_compression import ContextCompressor  # noqa: F401
+from .integrations.premium_integrations import PremiumIntegrations, AutoSyncManager  # noqa: F401
+from .workflows.visual_workflow import VisualWorkflowEngine, Workflow  # noqa: F401
+from .observability.monitoring import MonitoringSystem  # noqa: F401
+
+__version__ = "2.1.0"
 __all__ = [
     "AppConfig",
     "load_config",
@@ -60,4 +74,24 @@ __all__ = [
     "IntegrationTool",
     "TableAnalysisTool",
     "SchedulerTool",
+    # Nuevos módulos
+    "EmbeddingCache",
+    "CachedOpenAIEmbeddings",
+    "AsyncDocumentProcessor",
+    "ResponseStreamer",
+    "AnalyticsEngine",
+    "DocumentEncryption",
+    "Watermarking",
+    "RBACManager",
+    "Role",
+    "Permission",
+    "GraphRAG",
+    "KnowledgeGraph",
+    "MultiModalRAG",
+    "ContextCompressor",
+    "PremiumIntegrations",
+    "AutoSyncManager",
+    "VisualWorkflowEngine",
+    "Workflow",
+    "MonitoringSystem",
 ]
