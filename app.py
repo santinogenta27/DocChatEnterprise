@@ -87,6 +87,17 @@ mass_processor = MassDocumentProcessor(config)
 retriever_builder = RetrieverBuilder(config)
 workflow = AgentWorkflow(config)
 
+# Inicializar sistemas avanzados de mejoras
+from docchat.analytics.analytics_engine import AnalyticsEngine
+from docchat.observability.monitoring import MonitoringSystem
+from docchat.security.rbac import RBACManager
+from docchat.async_processor import AsyncDocumentProcessor
+
+analytics_engine = AnalyticsEngine(config)
+monitoring_system = MonitoringSystem(config)
+rbac_manager = RBACManager(config)
+async_processor = AsyncDocumentProcessor(config)
+
 # Inicializar sistemas avanzados
 memory_store = MemoryStore(config.memory_dir, config.memory_retention_days) if config.enable_memory else None
 context_manager = ContextManager(memory_store, config) if memory_store else None
@@ -144,6 +155,12 @@ def _format_comparative_analysis(analysis) -> str:
 # Funciones principales
 def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str = "balanced"):
     """Pipeline principal de RAG - Soporta hasta 1000 documentos."""
+    import time
+    
+    # Iniciar tracking de performance
+    start_time = time.time()
+    trace = monitoring_system.start_trace("rag_pipeline", {"question": question[:50], "file_count": len(files)})
+    
     if not files:
         raise gr.Error("Primero sube al menos un documento.")
     if not question or not question.strip():
@@ -282,6 +299,28 @@ def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str 
             sources=[s["source"] for s in result["sources"]],
             metadata={"relevance": result["relevance"]}
         )
+    
+    # Finalizar tracking
+    response_time = time.time() - start_time
+    monitoring_system.end_trace(trace)
+    
+    # Registrar métricas
+    monitoring_system.record_metric("pipeline_response_time", response_time, {"speed_mode": speed_mode})
+    monitoring_system.record_metric("pipeline_documents_processed", len(files))
+    monitoring_system.record_metric("pipeline_sources_retrieved", len(result.get("sources", [])))
+    
+    # Trackear en analytics
+    documents_used = [s.get("source", "unknown") for s in result.get("sources", [])]
+    analytics_engine.track_query(
+        query=question,
+        user_id="user",
+        response_time=response_time,
+        documents_used=documents_used,
+        success=True
+    )
+    
+    # Análisis de sentimiento de la pregunta
+    sentiment = analytics_engine.analyze_sentiment(question)
     
     return (
         result["answer"],
@@ -837,6 +876,67 @@ def list_chatbots():
         
     except Exception as e:
         return f"Error listando chatbots: {str(e)}"
+
+
+# ==================== Funciones para Analytics ====================
+
+def refresh_analytics_dashboard(days: int):
+    """Actualiza dashboard de analytics."""
+    try:
+        # Obtener métricas del dashboard
+        metrics = analytics_engine.get_dashboard_metrics(days=days)
+        
+        # Formatear dashboard
+        dashboard_output = f"## 📊 Dashboard Ejecutivo - Últimos {days} días\n\n"
+        dashboard_output += f"### 📈 Métricas Principales\n\n"
+        dashboard_output += f"- **Total de Consultas:** {metrics['total_queries']}\n"
+        dashboard_output += f"- **Consultas Exitosas:** {metrics['successful_queries']}\n"
+        dashboard_output += f"- **Tasa de Éxito:** {metrics['success_rate']:.1%}\n"
+        dashboard_output += f"- **Tiempo de Respuesta Promedio:** {metrics['avg_response_time']:.2f}s\n\n"
+        
+        # Sentimiento promedio
+        sentiment = metrics.get('avg_sentiment', {})
+        dashboard_output += f"### 😊 Análisis de Sentimiento\n\n"
+        dashboard_output += f"- **Positivo:** {sentiment.get('positive', 0):.1%}\n"
+        dashboard_output += f"- **Neutro:** {sentiment.get('neutral', 0):.1%}\n"
+        dashboard_output += f"- **Negativo:** {sentiment.get('negative', 0):.1%}\n\n"
+        
+        # Documentos más consultados
+        if metrics.get('top_documents'):
+            dashboard_output += f"### 📚 Documentos Más Consultados\n\n"
+            for doc in metrics['top_documents'][:5]:
+                from pathlib import Path
+                doc_name = Path(doc['name']).name
+                dashboard_output += f"- **{doc_name}**: {doc['count']} consultas\n"
+            dashboard_output += "\n"
+        
+        # Gaps de conocimiento
+        if metrics.get('knowledge_gaps'):
+            dashboard_output += f"### ⚠️ Gaps de Conocimiento Detectados\n\n"
+            for gap in metrics['knowledge_gaps'][:5]:
+                dashboard_output += f"- {gap[:100]}...\n"
+            dashboard_output += "\n"
+        
+        # Preguntas frecuentes predichas
+        frequent_questions = analytics_engine.predict_frequent_questions(top_n=10)
+        frequent_output = f"## ❓ Preguntas Frecuentes Predichas\n\n"
+        for i, fq in enumerate(frequent_questions, 1):
+            frequent_output += f"{i}. **{fq['example']}** ({fq['count']} veces)\n\n"
+        
+        # ROI metrics
+        roi_metrics = analytics_engine.get_roi_metrics()
+        roi_output = f"## 💰 Métricas de ROI\n\n"
+        roi_output += f"- **Consultas Totales:** {roi_metrics['total_queries']}\n"
+        roi_output += f"- **Consultas Exitosas:** {roi_metrics['successful_queries']}\n"
+        roi_output += f"- **Tiempo Ahorrado:** {roi_metrics['time_saved_hours']:.1f} horas\n"
+        roi_output += f"- **Costo Estimado Ahorrado:** ${roi_metrics['estimated_cost_saved']:.2f}\n"
+        roi_output += f"- **Ganancia de Eficiencia:** {roi_metrics['efficiency_gain']}\n"
+        
+        return dashboard_output, frequent_output, roi_output
+        
+    except Exception as e:
+        error_msg = f"Error obteniendo analytics: {str(e)}"
+        return f"## ❌ Error\n\n{error_msg}", "", ""
 
 
 def run_autonomous_task(task_description: str, context_data: str = ""):
@@ -2405,6 +2505,46 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     inputs=[],
                     outputs=[chatbots_list_output]
                 )
+        
+        # Tab 4.7: Analytics y Dashboard (NUEVO)
+        with gr.Tab("📊 Analytics y Dashboard"):
+            gr.Markdown("### 📊 Analytics y Business Intelligence")
+            gr.Markdown("""
+            **🚀 Métricas y Insights en Tiempo Real:**
+            - Dashboard ejecutivo con métricas de uso
+            - Análisis de sentimiento en consultas
+            - Detección de gaps de conocimiento
+            - Predicción de preguntas frecuentes
+            - ROI calculator
+            - Performance metrics
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    analytics_days = gr.Slider(
+                        label="Período de Análisis (días)",
+                        minimum=1,
+                        maximum=90,
+                        value=30,
+                        step=1
+                    )
+                    refresh_analytics_btn = gr.Button("🔄 Actualizar Analytics", variant="primary")
+                
+                with gr.Column(scale=2):
+                    analytics_output = gr.Markdown(label="📊 Dashboard Ejecutivo")
+            
+            with gr.Row():
+                with gr.Column():
+                    frequent_questions_output = gr.Markdown(label="❓ Preguntas Frecuentes Predichas")
+                
+                with gr.Column():
+                    roi_output = gr.Markdown(label="💰 Métricas de ROI")
+            
+            refresh_analytics_btn.click(
+                fn=refresh_analytics_dashboard,
+                inputs=[analytics_days],
+                outputs=[analytics_output, frequent_questions_output, roi_output]
+            )
         
         # Tab 4.6: Cloud Storage Integration (NUEVO)
         with gr.Tab("☁️ Cloud Storage"):

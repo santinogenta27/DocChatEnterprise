@@ -14,6 +14,7 @@ from langchain_openai import OpenAIEmbeddings
 from pydantic import ConfigDict
 
 from .config import AppConfig
+from .cache.embedding_cache import CachedOpenAIEmbeddings
 
 
 class HybridRetriever(BaseRetriever):
@@ -99,8 +100,9 @@ class RetrieverBuilder:
         api_key = config.openai_api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY must be set in config or environment")
-        # Optimizar embeddings para evitar rate limits
-        self.embeddings = OpenAIEmbeddings(
+        # Usar CachedOpenAIEmbeddings para mejor performance y evitar regenerar embeddings
+        self.embeddings = CachedOpenAIEmbeddings(
+            config=config,
             model=config.embedding_model, 
             api_key=api_key,
             chunk_size=100,  # Procesar en lotes más pequeños

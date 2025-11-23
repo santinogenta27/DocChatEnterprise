@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.documents import Document
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain_core.retrievers import BaseRetriever
 from langchain_community.vectorstores import Chroma
 
 from .config import AppConfig
 from .document_processor import DocumentProcessor
 from .retriever_builder import RetrieverBuilder
+from .cache.embedding_cache import CachedOpenAIEmbeddings
 
 
 @dataclass
@@ -183,8 +184,9 @@ class ChatbotMode:
         vector_store_dir = self.data_dir / chatbot_id / "vectorstore"
         vector_store_dir.mkdir(parents=True, exist_ok=True)
         
-        # Construir embeddings
-        embeddings = OpenAIEmbeddings(
+        # Construir embeddings con caché
+        embeddings = CachedOpenAIEmbeddings(
+            config=self.config,
             model=self.config.embedding_model,
             api_key=self.config.openai_api_key
         )
