@@ -119,11 +119,21 @@ class EnterpriseAPIMode:
                     docs_by_file[file_key].append(doc)
             
             # También crear un mapeo desde los archivos originales a sus nombres limpios
+            # Priorizar el nombre original de Google Drive si está disponible
             file_name_mapping = {}
             for file_obj in files:
-                original_name = getattr(file_obj, "name", "documento")
+                # Obtener nombre original de Google Drive si está disponible
+                original_name = getattr(file_obj, "original_name", None)
+                if not original_name:
+                    original_name = getattr(file_obj, "name", "documento")
                 clean_name = Path(original_name).name
                 file_name_mapping[clean_name] = original_name
+                
+                # También mapear el nombre temporal al original (para archivos de Drive)
+                temp_name = getattr(file_obj, "name", "")
+                if temp_name and temp_name != original_name:
+                    temp_clean = Path(temp_name).name
+                    file_name_mapping[temp_clean] = original_name
             
             # Generar resumen para CADA archivo único encontrado en los documentos
             print(f"   Encontrados {len(docs_by_file)} archivos únicos en los documentos procesados")
@@ -142,8 +152,14 @@ class EnterpriseAPIMode:
             # Verificar que todos los archivos subidos tengan resumen
             missing_summaries = []
             for file_obj in files:
-                file_name = getattr(file_obj, "name", "documento")
+                # Obtener nombre original de Google Drive si está disponible
+                original_name = getattr(file_obj, "original_name", None)
+                file_name = original_name if original_name else getattr(file_obj, "name", "documento")
                 clean_name = Path(file_name).name
+                
+                # También obtener el nombre temporal (puede ser diferente del original)
+                temp_name = getattr(file_obj, "name", "")
+                temp_clean_name = Path(temp_name).name if temp_name else None
                 
                 # Verificar si ya tenemos un resumen para este archivo
                 found = False
@@ -154,8 +170,24 @@ class EnterpriseAPIMode:
                 
                 if not found:
                     missing_summaries.append(file_name)
-                    # Intentar encontrar documentos por nombre limpio
+                    # Intentar encontrar documentos por nombre limpio (original)
                     file_docs = [d for d in docs if Path(d.metadata.get("source", "")).name == clean_name]
+                    
+                    # Si no se encuentra por nombre original, intentar por nombre temporal
+                    if not file_docs and temp_clean_name and temp_clean_name != clean_name:
+                        file_docs = [d for d in docs if Path(d.metadata.get("source", "")).name == temp_clean_name]
+                    
+                    # También buscar por cualquier variación del nombre (sin espacios, con/sin extensiones)
+                    if not file_docs:
+                        # Buscar por hash del archivo si está disponible
+                        try:
+                            from docchat.utils import read_bytes, sha256_bytes
+                            data = read_bytes(file_obj)
+                            file_hash = sha256_bytes(data)
+                            file_docs = [d for d in docs if d.metadata.get("hash", "") == file_hash]
+                        except:
+                            pass
+                    
                     if file_docs:
                         print(f"   Generando resumen tardío para: {clean_name} ({len(file_docs)} chunks)")
                         summary = self._generate_automatic_summary(file_name, file_docs, retriever)
@@ -336,13 +368,82 @@ Responde ÚNICAMENTE en formato JSON válido:
             
             summary_data = json.loads(response)
             
-            # Asegurar que el summary sea extenso
-            if len(summary_data.get("summary", "")) < 300:
-                # Si el resumen es muy corto, intentar mejorarlo
-                summary_data["summary"] = summary_data.get("summary", "") + " " + " ".join(summary_data.get("key_points", [])[:3])
+            # Validar que el resumen no sea genérico
+            summary_text = summary_data.get("summary", "")
+            generic_phrases = [
+                "contiene información relevante sobre múltiples temas",
+                "se identificaron",
+                "secciones principales con contenido sustancial",
+                "análisis del documento",
+                "documento procesado"
+            ]
+            
+            is_generic = any(phrase.lower() in summary_text.lower() for phrase in generic_phrases)
+            
+            # Si el resumen es genérico o muy corto, intentar mejorarlo con más contexto
+            if is_generic or len(summary_text) < 300:
+                # Intentar generar un resumen mejor con más chunks
+                if len(file_docs) > 10:
+                    # Usar más contexto para generar mejor resumen
+                    extended_context = []
+                    for doc in file_docs[:30]:
+                        content = doc.page_content[:800]
+                        if content.strip():
+                            extended_context.append(content)
+                    
+                    if extended_context:
+                        extended_prompt = f"""Genera un resumen ejecutivo profesional y específico para el documento '{clean_file_name}'.
+
+CONTENIDO EXTENDIDO:
+{chr(10).join(extended_context[:20])}
+
+IMPORTANTE: 
+- Sé ESPECÍFICO sobre el contenido real del documento
+- NO uses frases genéricas como "contiene información relevante" o "múltiples temas"
+- Incluye detalles concretos, nombres, conceptos, ideas específicas del documento
+- Si es un libro, menciona el autor, temas principales, argumentos clave
+- Si es un artículo, menciona el tema específico, hallazgos, conclusiones
+
+Responde en JSON:
+{{
+    "summary": "resumen específico y detallado de 4-6 párrafos",
+    "key_points": ["punto específico 1", "punto específico 2", ...],
+    "document_type": "tipo específico",
+    "relevant_date": "fecha si existe",
+    "entities": ["entidad1", "entidad2"],
+    "topics": ["tema1", "tema2"],
+    "business_value": "valor específico"
+}}"""
+                        try:
+                            improved_response = self.llm.invoke(extended_prompt).content.strip()
+                            if improved_response.startswith("```json"):
+                                improved_response = improved_response.replace("```json", "").replace("```", "").strip()
+                            elif improved_response.startswith("```"):
+                                improved_response = improved_response.replace("```", "").strip()
+                            improved_data = json.loads(improved_response)
+                            if len(improved_data.get("summary", "")) > 300 and not any(phrase.lower() in improved_data.get("summary", "").lower() for phrase in generic_phrases):
+                                return improved_data
+                        except:
+                            pass
+            
+            # Si aún es genérico, marcar como tal pero retornar
+            if is_generic:
+                summary_data["_is_generic"] = True
             
             return summary_data
         except Exception as e:
+            # Si hay un error pero tenemos documentos, intentar generar resumen básico
+            if not file_docs:
+                return {
+                    "summary": f"No se pudo generar resumen para '{clean_file_name}'. No se encontraron chunks extraíbles del documento.",
+                    "key_points": [],
+                    "document_type": "unknown",
+                    "relevant_date": "N/A",
+                    "entities": [],
+                    "topics": [],
+                    "business_value": "Documento procesado pero sin contenido extraíble"
+                }
+            
             # Fallback: generar resumen básico pero más completo
             key_points = []
             for doc in file_docs[:10]:

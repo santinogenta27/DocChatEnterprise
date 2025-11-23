@@ -23,6 +23,7 @@ class AgentState(TypedDict, total=False):
     verification: VerificationResult
     answer: str
     should_continue: Literal["re_research", "end"]
+    conversational_mode: bool  # Modo conversacional (solo para Chat Conversacional)
 
 
 @dataclass
@@ -226,7 +227,9 @@ class AgentWorkflow:
         print("🔍 Generando respuesta con Research Agent...")
         print("   (Esto puede tardar varios minutos con muchos documentos)\n")
         try:
-            research = self.research_agent.run(state["question"], context_docs)
+            # Pasar modo conversacional al ResearchAgent
+            conversational_mode = state.get("conversational_mode", False)
+            research = self.research_agent.run(state["question"], context_docs, conversational_mode=conversational_mode)
             if research and research.answer:
                 print(f"✅ Respuesta generada exitosamente ({len(research.answer)} caracteres)\n")
                 return {**state, "draft_answer": research.answer}
@@ -260,8 +263,15 @@ class AgentWorkflow:
     def _decide_after_verification(state: AgentState) -> str:
         return state.get("should_continue", "end")
 
-    def run(self, question: str, retriever: BaseRetriever, all_documents: List[Document] = None) -> Dict:
-        """Execute the LangGraph workflow and return structured result."""
+    def run(self, question: str, retriever: BaseRetriever, all_documents: List[Document] = None, conversational_mode: bool = False) -> Dict:
+        """Execute the LangGraph workflow and return structured result.
+        
+        Args:
+            question: Pregunta del usuario
+            retriever: Retriever para buscar documentos relevantes
+            all_documents: Lista de todos los documentos procesados
+            conversational_mode: Si True, usa formato conversacional libre (solo para Chat Conversacional)
+        """
         print("\n" + "="*60)
         print("🚀 INICIANDO WORKFLOW DE ANÁLISIS")
         print("="*60 + "\n")
@@ -272,6 +282,7 @@ class AgentWorkflow:
             "question": question, 
             "retriever": retriever,
             "all_documents": all_documents or [],
+            "conversational_mode": conversational_mode,
         }
         result = self.graph.invoke(initial_state, config=config)
         print("\n" + "="*60)

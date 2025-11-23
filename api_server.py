@@ -15,12 +15,16 @@ import uvicorn
 
 from docchat import load_config
 from docchat.enterprise_api import EnterpriseAPIMode
+from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
+from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.audit import AuditLogger
 
 # Cargar configuración
 config = load_config()
 enterprise_api = EnterpriseAPIMode(config)
+enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
+chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
 audit_logger = AuditLogger(config.audit_log_dir, config.enable_audit_logs)
@@ -316,6 +320,446 @@ async def process_webhook(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Enterprise Agentic AI Endpoints ====================
+
+class IDPProcessRequest(BaseModel):
+    """Request para procesar documentos con IDP."""
+    extract_entities: bool = True
+    extract_metrics: bool = True
+
+
+class AgenticTaskRequest(BaseModel):
+    """Request para ejecutar tarea autónoma."""
+    task_description: str = Field(..., description="Descripción de la tarea a ejecutar")
+    task_type: str = Field(
+        default="análisis",
+        description="Tipo de tarea: análisis, automatización, integración, generación, optimización"
+    )
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Contexto adicional en JSON")
+    use_processed_data: bool = Field(default=True, description="Usar datos procesados con IDP")
+
+
+@app.post("/api/v1/agentic-ai/process-idp")
+async def process_documents_with_idp(
+    files: List[UploadFile] = File(...),
+    extract_entities: bool = True,
+    extract_metrics: bool = True
+):
+    """
+    Procesa documentos con Intelligent Document Processing (IDP).
+    
+    IDP extrae información estructurada de documentos:
+    - Clasificación de tipo de documento
+    - Extracción de entidades (nombres, fechas, montos, etc.)
+    - Extracción de métricas clave
+    - Estructuración de contenido
+    """
+    if not enterprise_agentic_ai:
+        raise HTTPException(
+            status_code=503,
+            detail="Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true"
+        )
+    
+    try:
+        # Convertir UploadFile a objetos procesables
+        file_objects = []
+        for file in files:
+            # Crear objeto temporal con atributos necesarios
+            class FileObj:
+                def __init__(self, name, content):
+                    self.name = name
+                    self.content = content
+                    self.read = lambda: content
+                    self.seek = lambda pos: None
+            
+            content = await file.read()
+            file_obj = FileObj(file.filename, content)
+            file_objects.append(file_obj)
+        
+        # Procesar con IDP
+        idp_results = enterprise_agentic_ai.process_documents_with_idp(
+            files=file_objects,
+            extract_entities=extract_entities,
+            extract_metrics=extract_metrics
+        )
+        
+        # Formatear resultados para respuesta
+        results = {}
+        for file_name, result in idp_results.items():
+            results[file_name] = {
+                "document_type": result.document_type,
+                "entities": result.entities,
+                "key_metrics": result.key_metrics,
+                "structured_content": result.structured_content,
+                "metadata": result.metadata
+            }
+        
+        audit_logger.log(
+            event_type="idp_processing",
+            action="process_documents",
+            resource="enterprise_agentic_ai",
+            metadata={"file_count": len(files)}
+        )
+        
+        return {
+            "success": True,
+            "documents_processed": len(idp_results),
+            "results": results
+        }
+        
+    except Exception as e:
+        audit_logger.log(
+            event_type="idp_processing",
+            action="error",
+            resource="enterprise_agentic_ai",
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error en procesamiento IDP: {str(e)}")
+
+
+@app.post("/api/v1/agentic-ai/execute-task")
+async def execute_agentic_task(request: AgenticTaskRequest):
+    """
+    Ejecuta una tarea autónoma usando Enterprise Agentic AI.
+    
+    Tipos de tareas soportadas:
+    - análisis: Analizar datos y generar insights
+    - automatización: Automatizar procesos empresariales
+    - integración: Integrar con sistemas externos
+    - generación: Generar contenido, informes, etc.
+    - optimización: Optimizar procesos y recursos
+    """
+    if not enterprise_agentic_ai:
+        raise HTTPException(
+            status_code=503,
+            detail="Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true"
+        )
+    
+    if request.use_processed_data and not enterprise_agentic_ai.idp_results:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay documentos procesados con IDP. Primero procesa documentos con /api/v1/agentic-ai/process-idp"
+        )
+    
+    try:
+        result = enterprise_agentic_ai.execute_autonomous_task(
+            task_description=request.task_description,
+            task_type=request.task_type,
+            context=request.context or {},
+            use_processed_data=request.use_processed_data
+        )
+        
+        audit_logger.log(
+            event_type="enterprise_agentic_task",
+            action="execute_task",
+            resource="enterprise_agentic_ai",
+            metadata={
+                "task": request.task_description[:100],
+                "task_type": request.task_type
+            }
+        )
+        
+        return {
+            "success": result.get("success", False),
+            "task_description": result.get("task_description"),
+            "task_type": result.get("task_type"),
+            "tools_used": result.get("tools_used", []),
+            "summary": result.get("summary", ""),
+            "idp_data_used": result.get("idp_data_used", 0),
+            "results": result.get("results", [])
+        }
+        
+    except Exception as e:
+        audit_logger.log(
+            event_type="enterprise_agentic_task",
+            action="error",
+            resource="enterprise_agentic_ai",
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error ejecutando tarea: {str(e)}")
+
+
+@app.get("/api/v1/agentic-ai/idp-summary")
+async def get_idp_summary():
+    """Obtiene un resumen de todos los documentos procesados con IDP."""
+    if not enterprise_agentic_ai:
+        raise HTTPException(
+            status_code=503,
+            detail="Enterprise Agentic AI no está habilitado."
+        )
+    
+    if not enterprise_agentic_ai.idp_results:
+        return {
+            "success": True,
+            "message": "No hay documentos procesados con IDP.",
+            "documents": []
+        }
+    
+    documents = []
+    for file_name, result in enterprise_agentic_ai.idp_results.items():
+        documents.append({
+            "file_name": file_name,
+            "document_type": result.document_type,
+            "entities_count": len(result.entities),
+            "metrics_count": len(result.key_metrics),
+            "entities": result.entities[:10],  # Primeras 10 entidades
+            "key_metrics": dict(list(result.key_metrics.items())[:5])  # Primeras 5 métricas
+        })
+    
+        return {
+            "success": True,
+            "documents_processed": len(documents),
+            "documents": documents
+        }
+
+
+# ==================== Chatbot Mode Endpoints ====================
+
+class ChatbotQueryRequest(BaseModel):
+    """Request para consultar chatbot."""
+    chatbot_id: str = Field(..., description="ID del chatbot")
+    question: str = Field(..., description="Pregunta del usuario")
+    use_reranking: bool = Field(default=True, description="Usar reranking avanzado")
+    max_chunks: int = Field(default=5, description="Máximo número de chunks a usar")
+
+
+class ChatbotRegisterRequest(BaseModel):
+    """Request para registrar chatbot."""
+    chatbot_name: str = Field(..., description="Nombre del chatbot")
+    company_name: str = Field(..., description="Nombre de la empresa")
+    api_key: Optional[str] = Field(None, description="API key personalizada (opcional)")
+
+
+def verify_chatbot_api_key(chatbot_id: str, api_key: str) -> bool:
+    """Verifica que el API key sea válido para el chatbot."""
+    try:
+        chatbot_info = chatbot_mode.get_chatbot_info(chatbot_id)
+        return chatbot_info.get("api_key") == api_key
+    except Exception:
+        return False
+
+
+@app.post("/api/v1/chatbot/query")
+async def query_chatbot_api(
+    request: ChatbotQueryRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Endpoint para que chatbots externos consulten la base vectorizada.
+    
+    Autenticación: Bearer token con formato: "Bearer chatbot_id:api_key"
+    """
+    try:
+        # Verificar autenticación
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header required")
+        
+        # Extraer chatbot_id y api_key del header
+        auth_parts = authorization.replace("Bearer ", "").strip().split(":")
+        if len(auth_parts) != 2:
+            raise HTTPException(status_code=401, detail="Invalid authorization format. Use: Bearer chatbot_id:api_key")
+        
+        auth_chatbot_id, auth_api_key = auth_parts
+        
+        # Verificar que el chatbot_id coincida
+        if auth_chatbot_id != request.chatbot_id:
+            raise HTTPException(status_code=403, detail="Chatbot ID mismatch")
+        
+        # Verificar API key
+        if not verify_chatbot_api_key(auth_chatbot_id, auth_api_key):
+            raise HTTPException(status_code=403, detail="Invalid API key")
+        
+        # Consultar chatbot
+        response = chatbot_mode.query_chatbot(
+            chatbot_id=request.chatbot_id,
+            user_question=request.question,
+            use_reranking=request.use_reranking,
+            max_chunks=request.max_chunks
+        )
+        
+        audit_logger.log(
+            event_type="chatbot_query",
+            action="api_query",
+            resource="chatbot_mode",
+            metadata={
+                "chatbot_id": request.chatbot_id,
+                "question_length": len(request.question),
+                "chunks_used": response.chunks_used
+            }
+        )
+        
+        return {
+            "success": True,
+            "answer": response.answer,
+            "sources": response.sources,
+            "confidence": response.confidence,
+            "chunks_used": response.chunks_used,
+            "reranked": response.reranked,
+            "metadata": response.metadata
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        audit_logger.log(
+            event_type="chatbot_query",
+            action="error",
+            resource="chatbot_mode",
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error consultando chatbot: {str(e)}")
+
+
+@app.post("/api/v1/chatbot/register")
+async def register_chatbot_api(request: ChatbotRegisterRequest):
+    """Registra un nuevo chatbot."""
+    try:
+        connection = chatbot_mode.register_chatbot(
+            chatbot_name=request.chatbot_name,
+            company_name=request.company_name,
+            api_key=request.api_key
+        )
+        
+        audit_logger.log(
+            event_type="chatbot_registration",
+            action="api_register",
+            resource="chatbot_mode",
+            metadata={
+                "chatbot_name": connection.chatbot_name,
+                "company_name": connection.company_name
+            }
+        )
+        
+        return {
+            "success": True,
+            "chatbot_id": connection.chatbot_id,
+            "api_key": connection.api_key,
+            "chatbot_name": connection.chatbot_name,
+            "company_name": connection.company_name,
+            "created_at": connection.created_at
+        }
+        
+    except Exception as e:
+        audit_logger.log(
+            event_type="chatbot_registration",
+            action="error",
+            resource="chatbot_mode",
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error registrando chatbot: {str(e)}")
+
+
+@app.post("/api/v1/chatbot/upload-data")
+async def upload_chatbot_data_api(
+    chatbot_id: str,
+    files: List[UploadFile] = File(...),
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """Sube data para un chatbot."""
+    try:
+        # Verificar autenticación
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header required")
+        
+        auth_parts = authorization.replace("Bearer ", "").strip().split(":")
+        if len(auth_parts) != 2:
+            raise HTTPException(status_code=401, detail="Invalid authorization format")
+        
+        auth_chatbot_id, auth_api_key = auth_parts
+        
+        if auth_chatbot_id != chatbot_id:
+            raise HTTPException(status_code=403, detail="Chatbot ID mismatch")
+        
+        if not verify_chatbot_api_key(auth_chatbot_id, auth_api_key):
+            raise HTTPException(status_code=403, detail="Invalid API key")
+        
+        # Convertir UploadFile a objetos procesables
+        file_objects = []
+        for file in files:
+            class FileObj:
+                def __init__(self, name, content):
+                    self.name = name
+                    self.content = content
+                    self.read = lambda: content
+                    self.seek = lambda pos: None
+            
+            content = await file.read()
+            file_obj = FileObj(file.filename, content)
+            file_objects.append(file_obj)
+        
+        # Procesar data
+        result = chatbot_mode.upload_chatbot_data(
+            chatbot_id=chatbot_id,
+            files=file_objects
+        )
+        
+        audit_logger.log(
+            event_type="chatbot_data_upload",
+            action="api_upload",
+            resource="chatbot_mode",
+            metadata={
+                "chatbot_id": chatbot_id,
+                "files_count": len(files)
+            }
+        )
+        
+        return {
+            "success": True,
+            "chatbot_id": chatbot_id,
+            "documents_processed": result["documents_processed"],
+            "chunks_created": result["chunks_created"]
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        audit_logger.log(
+            event_type="chatbot_data_upload",
+            action="error",
+            resource="chatbot_mode",
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error subiendo data: {str(e)}")
+
+
+@app.get("/api/v1/chatbot/info/{chatbot_id}")
+async def get_chatbot_info_api(
+    chatbot_id: str,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """Obtiene información de un chatbot."""
+    try:
+        # Verificar autenticación
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header required")
+        
+        auth_parts = authorization.replace("Bearer ", "").strip().split(":")
+        if len(auth_parts) != 2:
+            raise HTTPException(status_code=401, detail="Invalid authorization format")
+        
+        auth_chatbot_id, auth_api_key = auth_parts
+        
+        if auth_chatbot_id != chatbot_id:
+            raise HTTPException(status_code=403, detail="Chatbot ID mismatch")
+        
+        if not verify_chatbot_api_key(auth_chatbot_id, auth_api_key):
+            raise HTTPException(status_code=403, detail="Invalid API key")
+        
+        info = chatbot_mode.get_chatbot_info(chatbot_id)
+        # No retornar api_key por seguridad
+        info.pop("api_key", None)
+        
+        return {
+            "success": True,
+            "chatbot": info
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo info: {str(e)}")
 
 
 if __name__ == "__main__":

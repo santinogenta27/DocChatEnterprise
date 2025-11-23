@@ -60,7 +60,9 @@ class DocumentProcessor:
 
         unique_chunks: dict[str, Document] = {}
         for idx, file_obj in enumerate(files, 1):
-            file_name = getattr(file_obj, "name", "documento")
+            # Obtener nombre original si está disponible (para archivos de Google Drive)
+            original_name = getattr(file_obj, "original_name", None)
+            file_name = original_name if original_name else getattr(file_obj, "name", "documento")
             suffix = Path(file_name).suffix.lower()
             if suffix not in self.SUPPORTED_EXT:
                 raise ValueError(
@@ -77,6 +79,12 @@ class DocumentProcessor:
             if cache_path.exists() and self._is_cache_valid(cache_path):
                 cached = load_pickle(cache_path)
                 chunks = cached.chunks
+                # Actualizar el source de los chunks si tenemos un nombre original disponible
+                # Esto es importante para archivos de Google Drive que pueden tener nombres temporales en caché
+                if original_name:
+                    for chunk in chunks:
+                        if chunk.metadata.get("source"):
+                            chunk.metadata["source"] = file_name
                 if total_files > 1:
                     print(f"   ✅ Usando caché: {len(chunks)} chunks")
             else:
@@ -128,7 +136,7 @@ class DocumentProcessor:
         return self._extract_documents_from_result(result, file_name, file_hash)
     
     def _process_pdf_with_fallback(self, data: bytes, file_name: str, file_hash: str) -> List[Document]:
-        """Procesar PDF: PyPDF2 primero (rápido), Docling solo si es necesario."""
+        """Procesar PDF usando solo PyPDF2. Si falla, se salta el documento y continúa."""
         import tempfile
         
         file_size_mb = len(data) / (1024*1024)
@@ -150,32 +158,17 @@ class DocumentProcessor:
                     print(f"   ✅ PyPDF2 completado en {elapsed:.1f}s → {len(chunks)} chunks")
                     return chunks
                 else:
-                    print(f"   ⚠️ PyPDF2 extrajo poco texto ({total_text} chars), probando Docling...")
+                    print(f"   ⚠️ PyPDF2 extrajo poco texto ({total_text} chars)")
+                    print(f"   ⏭️ Saltando este documento y continuando con el siguiente...")
+                    return []  # Retornar lista vacía para continuar con siguiente documento
             else:
-                print(f"   ⚠️ PyPDF2 no extrajo texto, probando Docling...")
+                print(f"   ⚠️ PyPDF2 no extrajo texto")
+                print(f"   ⏭️ Saltando este documento y continuando con el siguiente...")
+                return []  # Retornar lista vacía para continuar con siguiente documento
         except Exception as pypdf_error:
-            print(f"   ⚠️ PyPDF2 falló: {str(pypdf_error)[:80]}, probando Docling...")
-        
-        # Fallback a Docling solo si PyPDF2 no funcionó bien
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(data)
-            tmp.flush()
-            tmp_path = tmp.name
-        
-        try:
-            print(f"   🔄 Usando Docling (más lento pero más completo)...")
-            import time
-            start_time = time.time()
-            result = self.converter.convert(tmp_path)
-            elapsed = time.time() - start_time
-            print(f"   ✅ Docling completado en {elapsed:.1f}s")
-            return self._extract_documents_from_result(result, file_name, file_hash)
-        except Exception as docling_error:
-            print(f"   ❌ Docling también falló: {str(docling_error)[:80]}")
-            # Último recurso: intentar PyPDF2 de nuevo
-            return self._extract_text_native_pdf(data, file_name, file_hash)
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
+            print(f"   ⚠️ PyPDF2 falló: {str(pypdf_error)[:80]}")
+            print(f"   ⏭️ Saltando este documento y continuando con el siguiente...")
+            return []  # Retornar lista vacía para continuar con siguiente documento
     
     def _extract_text_native_pdf(self, data: bytes, file_name: str, file_hash: str) -> List[Document]:
         """Extraer texto nativo de PDF usando PyPDF2 (método rápido)."""

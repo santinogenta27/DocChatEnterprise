@@ -35,7 +35,7 @@ class ResearchAgent:
         )
         self.speed_mode = speed_mode
 
-    def run(self, question: str, documents: List[Document]) -> ResearchResult:
+    def run(self, question: str, documents: List[Document], conversational_mode: bool = False) -> ResearchResult:
         if not documents:
             return ResearchResult(
                 answer="No encontré suficiente información en los documentos para responder.",
@@ -86,33 +86,54 @@ class ResearchAgent:
         num_sources = len(docs_by_source)
         print(f"   Analizando {num_sources} documento(s) con {len(documents)} chunks totales...")
         print(f"   Generando respuesta (esto puede tardar 2-5 minutos)...\n")
-        prompt = (
-            "Eres un investigador experto en análisis de documentos. Tu tarea es analizar TODOS los documentos proporcionados de manera exhaustiva.\n\n"
-            f"PREGUNTA DEL USUARIO:\n{question}\n\n"
-            f"DOCUMENTOS A ANALIZAR ({num_sources} documento(s) diferente(s)):\n{context}\n\n"
-            "INSTRUCCIONES CRÍTICAS:\n"
-            "1. DEBES analizar CADA UNO de los documentos proporcionados\n"
-            "2. Para cada documento, identifica y extrae:\n"
-            "   - Título o tema principal\n"
-            "   - Puntos clave (mínimo 3-5 por documento)\n"
-            "   - Información más valiosa o insights principales\n"
-            "   - Conclusiones o recomendaciones importantes\n"
-            "3. Organiza tu respuesta por documento, usando el nombre del archivo como encabezado\n"
-            "4. NO omitas ningún documento - todos deben ser analizados\n"
-            "5. Si un documento tiene poca información, indícalo pero aún así extrae lo que puedas\n"
-            "6. Responde en español, con precisión y sin inventar datos\n"
-            "7. Sé específico y detallado - evita respuestas genéricas\n\n"
-            "FORMATO DE RESPUESTA REQUERIDO:\n"
-            "Para cada documento, estructura así:\n"
-            "## [Nombre del Documento]\n"
-            "- **Tema Principal:** [descripción]\n"
-            "- **Puntos Clave:**\n"
-            "  1. [punto 1]\n"
-            "  2. [punto 2]\n"
-            "  3. [punto 3]\n"
-            "- **Información Más Valiosa:** [insights principales]\n\n"
-            "RESPUESTA COMPLETA:"
-        )
+        
+        # Prompt diferente para chat conversacional (más libre y natural)
+        if conversational_mode:
+            prompt = (
+                "Eres un asistente experto que ayuda a los usuarios a entender y explorar documentos. "
+                "Responde de manera natural, conversacional y directa, como si estuvieras teniendo una conversación.\n\n"
+                f"PREGUNTA DEL USUARIO:\n{question}\n\n"
+                f"CONTEXTO DE LOS DOCUMENTOS ({num_sources} documento(s)):\n{context}\n\n"
+                "INSTRUCCIONES:\n"
+                "1. Responde de forma natural y conversacional, como en una charla\n"
+                "2. Sé directo y claro, sin estructuras rígidas\n"
+                "3. Usa el contexto de los documentos para responder la pregunta específica\n"
+                "4. Si la pregunta requiere comparar o analizar múltiples documentos, hazlo de forma fluida\n"
+                "5. Incluye información específica y relevante de los documentos\n"
+                "6. Responde en español de manera natural\n"
+                "7. NO uses formatos estructurados como 'Tema Principal', 'Puntos Clave', etc.\n"
+                "8. Simplemente responde la pregunta de manera clara y útil\n\n"
+                "RESPUESTA:"
+            )
+        else:
+            # Prompt original para otros modos (Consulta RAG, etc.)
+            prompt = (
+                "Eres un investigador experto en análisis de documentos. Tu tarea es analizar TODOS los documentos proporcionados de manera exhaustiva.\n\n"
+                f"PREGUNTA DEL USUARIO:\n{question}\n\n"
+                f"DOCUMENTOS A ANALIZAR ({num_sources} documento(s) diferente(s)):\n{context}\n\n"
+                "INSTRUCCIONES CRÍTICAS:\n"
+                "1. DEBES analizar CADA UNO de los documentos proporcionados\n"
+                "2. Para cada documento, identifica y extrae:\n"
+                "   - Título o tema principal\n"
+                "   - Puntos clave (mínimo 3-5 por documento)\n"
+                "   - Información más valiosa o insights principales\n"
+                "   - Conclusiones o recomendaciones importantes\n"
+                "3. Organiza tu respuesta por documento, usando el nombre del archivo como encabezado\n"
+                "4. NO omitas ningún documento - todos deben ser analizados\n"
+                "5. Si un documento tiene poca información, indícalo pero aún así extrae lo que puedas\n"
+                "6. Responde en español, con precisión y sin inventar datos\n"
+                "7. Sé específico y detallado - evita respuestas genéricas\n\n"
+                "FORMATO DE RESPUESTA REQUERIDO:\n"
+                "Para cada documento, estructura así:\n"
+                "## [Nombre del Documento]\n"
+                "- **Tema Principal:** [descripción]\n"
+                "- **Puntos Clave:**\n"
+                "  1. [punto 1]\n"
+                "  2. [punto 2]\n"
+                "  3. [punto 3]\n"
+                "- **Información Más Valiosa:** [insights principales]\n\n"
+                "RESPUESTA COMPLETA:"
+            )
 
         # LangChain 1.0+ uses invoke() instead of predict()
         # Manejar rate limits con retry

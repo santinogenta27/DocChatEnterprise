@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import json
+import uuid
 from typing import List, Optional, Dict, Any
 from pathlib import Path
+from datetime import datetime
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -50,6 +52,8 @@ from docchat.memory import MemoryStore, ContextManager
 from docchat.autonomous_agent import AutonomousAgent
 from docchat.advanced_agent import AdvancedAutonomousAgent
 from docchat.enterprise_api import EnterpriseAPIMode
+from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
+from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.audit import AuditLogger
 from docchat.auth import UserManager, WorkspaceManager
@@ -89,6 +93,8 @@ context_manager = ContextManager(memory_store, config) if memory_store else None
 autonomous_agent = AutonomousAgent(config) if config.enable_autonomous_agents else None
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
 enterprise_api = EnterpriseAPIMode(config)
+enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
+chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
 audit_logger = AuditLogger(config.audit_log_dir, config.enable_audit_logs)
@@ -411,8 +417,430 @@ def run_complete_workflow(files, task_description: str, output_format: str = "al
         raise gr.Error(error_msg)
 
 
+def run_idp_processing(files):
+    """Procesa documentos con Intelligent Document Processing (IDP)."""
+    if not files:
+        raise gr.Error("Primero sube documentos para procesar con IDP.")
+    
+    if not enterprise_agentic_ai:
+        raise gr.Error("Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true")
+    
+    audit_logger.log(
+        event_type="idp_processing",
+        action="process_documents",
+        resource="enterprise_agentic_ai",
+        user_id="user",
+        metadata={"file_count": len(files)}
+    )
+    
+    try:
+        idp_results = enterprise_agentic_ai.process_documents_with_idp(
+            files=files,
+            extract_entities=True,
+            extract_metrics=True
+        )
+        
+        output = f"## ✅ Procesamiento IDP Completado\n\n"
+        output += f"**Documentos procesados:** {len(idp_results)}\n\n"
+        
+        for file_name, result in idp_results.items():
+            from pathlib import Path
+            clean_name = Path(file_name).name
+            output += f"### 📄 {clean_name}\n\n"
+            output += f"- **Tipo de documento:** {result.document_type}\n"
+            output += f"- **Entidades extraídas:** {len(result.entities)}\n"
+            output += f"- **Métricas clave:** {len(result.key_metrics)}\n"
+            if result.entities:
+                output += f"- **Entidades principales:** {', '.join(result.entities[:5])}\n"
+            if result.key_metrics:
+                output += f"- **Métricas:** {', '.join(list(result.key_metrics.keys())[:3])}\n"
+            output += "\n"
+        
+        output += "\n**💡 Ahora puedes ejecutar tareas autónomas usando estos datos procesados.**\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error en procesamiento IDP: {str(e)}"
+        audit_logger.log(
+            event_type="idp_processing",
+            action="error",
+            resource="enterprise_agentic_ai",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+def run_enterprise_agentic_task(task_description: str, task_type: str, context_data: str = ""):
+    """Ejecuta tarea autónoma usando Enterprise Agentic AI con datos IDP."""
+    if not task_description or not task_description.strip():
+        raise gr.Error("Describe la tarea que quieres que el Agentic AI ejecute.")
+    
+    if not enterprise_agentic_ai:
+        raise gr.Error("Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true")
+    
+    # Verificar si hay documentos procesados con IDP (opcional)
+    has_idp_data = bool(enterprise_agentic_ai.idp_results)
+    
+    if not has_idp_data:
+        # Permitir ejecutar tareas sin IDP (para tareas simples como enviar emails)
+        print("⚠️ No hay documentos procesados con IDP. Ejecutando tarea sin datos IDP.")
+    
+    audit_logger.log(
+        event_type="enterprise_agentic_task",
+        action="execute_task",
+        resource="enterprise_agentic_ai",
+        user_id="user",
+        metadata={"task": task_description[:100], "task_type": task_type, "has_idp_data": has_idp_data}
+    )
+    
+    try:
+        context = {}
+        if context_data:
+            try:
+                context = json.loads(context_data)
+            except:
+                context = {"context": context_data}
+        
+        # Usar datos IDP solo si están disponibles
+        result = enterprise_agentic_ai.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            context=context,
+            use_processed_data=has_idp_data  # Solo usar IDP si hay datos
+        )
+        
+        output = result.get("summary", "No se generó resumen")
+        output += f"\n\n**Herramientas utilizadas:** {', '.join(result.get('tools_used', []))}\n"
+        output += f"**Datos IDP utilizados:** {result.get('idp_data_used', 0)} documentos\n"
+        
+        if result.get("success"):
+            output += "\n✅ **Tarea completada exitosamente**\n"
+        else:
+            output += "\n⚠️ **Tarea completada con algunos errores**\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error ejecutando tarea autónoma: {str(e)}"
+        audit_logger.log(
+            event_type="enterprise_agentic_task",
+            action="error",
+            resource="enterprise_agentic_ai",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+def run_idp_processing(files):
+    """Procesa documentos con Intelligent Document Processing (IDP)."""
+    if not files:
+        raise gr.Error("Primero sube documentos para procesar con IDP.")
+    
+    if not enterprise_agentic_ai:
+        raise gr.Error("Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true")
+    
+    audit_logger.log(
+        event_type="idp_processing",
+        action="process_documents",
+        resource="enterprise_agentic_ai",
+        user_id="user",
+        metadata={"file_count": len(files)}
+    )
+    
+    try:
+        idp_results = enterprise_agentic_ai.process_documents_with_idp(
+            files=files,
+            extract_entities=True,
+            extract_metrics=True
+        )
+        
+        output = f"## ✅ Procesamiento IDP Completado\n\n"
+        output += f"**Documentos procesados:** {len(idp_results)}\n\n"
+        
+        for file_name, result in idp_results.items():
+            from pathlib import Path
+            clean_name = Path(file_name).name
+            output += f"### 📄 {clean_name}\n\n"
+            output += f"- **Tipo de documento:** {result.document_type}\n"
+            output += f"- **Entidades extraídas:** {len(result.entities)}\n"
+            output += f"- **Métricas clave:** {len(result.key_metrics)}\n"
+            if result.entities:
+                output += f"- **Entidades principales:** {', '.join(result.entities[:5])}\n"
+            if result.key_metrics:
+                output += f"- **Métricas:** {', '.join(list(result.key_metrics.keys())[:3])}\n"
+            output += "\n"
+        
+        output += "\n**💡 Ahora puedes ejecutar tareas autónomas usando estos datos procesados.**\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error en procesamiento IDP: {str(e)}"
+        audit_logger.log(
+            event_type="idp_processing",
+            action="error",
+            resource="enterprise_agentic_ai",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+def run_enterprise_agentic_task(task_description: str, task_type: str, context_data: str = ""):
+    """Ejecuta tarea autónoma usando Enterprise Agentic AI con datos IDP."""
+    if not task_description or not task_description.strip():
+        raise gr.Error("Describe la tarea que quieres que el Agentic AI ejecute.")
+    
+    if not enterprise_agentic_ai:
+        raise gr.Error("Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true")
+    
+    # Verificar si hay documentos procesados con IDP (opcional)
+    has_idp_data = bool(enterprise_agentic_ai.idp_results)
+    
+    if not has_idp_data:
+        # Permitir ejecutar tareas sin IDP (para tareas simples como enviar emails)
+        print("⚠️ No hay documentos procesados con IDP. Ejecutando tarea sin datos IDP.")
+    
+    audit_logger.log(
+        event_type="enterprise_agentic_task",
+        action="execute_task",
+        resource="enterprise_agentic_ai",
+        user_id="user",
+        metadata={"task": task_description[:100], "task_type": task_type, "has_idp_data": has_idp_data}
+    )
+    
+    try:
+        context = {}
+        if context_data:
+            try:
+                context = json.loads(context_data)
+            except:
+                context = {"context": context_data}
+        
+        # Usar datos IDP solo si están disponibles
+        result = enterprise_agentic_ai.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            context=context,
+            use_processed_data=has_idp_data  # Solo usar IDP si hay datos
+        )
+        
+        output = result.get("summary", "No se generó resumen")
+        output += f"\n\n**Herramientas utilizadas:** {', '.join(result.get('tools_used', []))}\n"
+        output += f"**Datos IDP utilizados:** {result.get('idp_data_used', 0)} documentos\n"
+        
+        if result.get("success"):
+            output += "\n✅ **Tarea completada exitosamente**\n"
+        else:
+            output += "\n⚠️ **Tarea completada con algunos errores**\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error ejecutando tarea autónoma: {str(e)}"
+        audit_logger.log(
+            event_type="enterprise_agentic_task",
+            action="error",
+            resource="enterprise_agentic_ai",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+# ==================== Funciones para Modo Chatbot ====================
+
+def register_chatbot(chatbot_name: str, company_name: str):
+    """Registra un nuevo chatbot."""
+    if not chatbot_name or not chatbot_name.strip():
+        raise gr.Error("Ingresa el nombre del chatbot.")
+    
+    if not company_name or not company_name.strip():
+        raise gr.Error("Ingresa el nombre de la empresa.")
+    
+    try:
+        connection = chatbot_mode.register_chatbot(
+            chatbot_name=chatbot_name.strip(),
+            company_name=company_name.strip()
+        )
+        
+        output = f"## ✅ Chatbot Registrado Exitosamente\n\n"
+        output += f"**Nombre del Chatbot:** {connection.chatbot_name}\n"
+        output += f"**Empresa:** {connection.company_name}\n"
+        output += f"**Chatbot ID:** `{connection.chatbot_id}`\n"
+        output += f"**API Key:** `{connection.api_key}`\n\n"
+        output += "**⚠️ IMPORTANTE:** Guarda estos valores. Los necesitarás para:\n"
+        output += "- Conectar tu chatbot por API\n"
+        output += "- Subir data para este chatbot\n"
+        output += "- Hacer consultas desde tu chatbot externo\n"
+        
+        audit_logger.log(
+            event_type="chatbot_registration",
+            action="register",
+            resource="chatbot_mode",
+            user_id="user",
+            metadata={
+                "chatbot_name": connection.chatbot_name,
+                "company_name": connection.company_name,
+                "chatbot_id": connection.chatbot_id
+            }
+        )
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error registrando chatbot: {str(e)}"
+        audit_logger.log(
+            event_type="chatbot_registration",
+            action="error",
+            resource="chatbot_mode",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+def upload_chatbot_data(chatbot_id: str, files):
+    """Sube y procesa data para un chatbot."""
+    if not chatbot_id or not chatbot_id.strip():
+        raise gr.Error("Ingresa el Chatbot ID.")
+    
+    if not files:
+        raise gr.Error("Sube al menos un documento.")
+    
+    chatbot_id = chatbot_id.strip()
+    
+    try:
+        result = chatbot_mode.upload_chatbot_data(
+            chatbot_id=chatbot_id,
+            files=files
+        )
+        
+        output = f"## ✅ Data Procesada Exitosamente\n\n"
+        output += f"**Chatbot ID:** {chatbot_id}\n"
+        output += f"**Documentos procesados:** {result['documents_processed']}\n"
+        output += f"**Chunks creados:** {result['chunks_created']}\n\n"
+        output += "✅ **Base vectorizada creada y lista para consultas**\n\n"
+        output += "Ahora tu chatbot puede consultar esta data por API.\n"
+        
+        audit_logger.log(
+            event_type="chatbot_data_upload",
+            action="upload",
+            resource="chatbot_mode",
+            user_id="user",
+            metadata={
+                "chatbot_id": chatbot_id,
+                "documents_count": result['documents_processed'],
+                "chunks_count": result['chunks_created']
+            }
+        )
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error procesando data: {str(e)}"
+        audit_logger.log(
+            event_type="chatbot_data_upload",
+            action="error",
+            resource="chatbot_mode",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+def test_chatbot_query(chatbot_id: str, question: str):
+    """Prueba una consulta al chatbot."""
+    if not chatbot_id or not chatbot_id.strip():
+        raise gr.Error("Ingresa el Chatbot ID.")
+    
+    if not question or not question.strip():
+        raise gr.Error("Ingresa una pregunta.")
+    
+    chatbot_id = chatbot_id.strip()
+    question = question.strip()
+    
+    try:
+        response = chatbot_mode.query_chatbot(
+            chatbot_id=chatbot_id,
+            user_question=question,
+            use_reranking=True,
+            max_chunks=5
+        )
+        
+        output = f"## 💬 Respuesta del Chatbot\n\n"
+        output += f"**Pregunta:** {question}\n\n"
+        output += f"**Respuesta:**\n{response.answer}\n\n"
+        
+        if response.sources:
+            output += f"**📚 Fuentes utilizadas ({len(response.sources)}):**\n"
+            for source in response.sources[:5]:
+                from pathlib import Path
+                clean_source = Path(source).name
+                output += f"- {clean_source}\n"
+            output += "\n"
+        
+        output += f"**Confianza:** {response.confidence:.0%}\n"
+        output += f"**Chunks utilizados:** {response.chunks_used}\n"
+        if response.reranked:
+            output += f"**Reranking:** ✅ Activado\n"
+        
+        audit_logger.log(
+            event_type="chatbot_query",
+            action="test_query",
+            resource="chatbot_mode",
+            user_id="user",
+            metadata={
+                "chatbot_id": chatbot_id,
+                "question_length": len(question),
+                "chunks_used": response.chunks_used,
+                "confidence": response.confidence
+            }
+        )
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error consultando chatbot: {str(e)}"
+        audit_logger.log(
+            event_type="chatbot_query",
+            action="error",
+            resource="chatbot_mode",
+            user_id="user",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+
+def list_chatbots():
+    """Lista todos los chatbots registrados."""
+    try:
+        chatbots = chatbot_mode.list_chatbots()
+        
+        if not chatbots:
+            return "## 📋 No hay chatbots registrados\n\nRegistra un chatbot en el tab 'Registrar Chatbot'."
+        
+        output = f"## 📋 Chatbots Registrados: {len(chatbots)}\n\n"
+        
+        for chatbot in chatbots:
+            output += f"### 🤖 {chatbot['chatbot_name']}\n\n"
+            output += f"- **Empresa:** {chatbot['company_name']}\n"
+            output += f"- **Chatbot ID:** `{chatbot['chatbot_id']}`\n"
+            output += f"- **Estado:** {chatbot['status']}\n"
+            output += f"- **Documentos:** {chatbot['documents_count']}\n"
+            output += f"- **Chunks:** {chatbot['chunks_count']}\n\n"
+        
+        return output
+        
+    except Exception as e:
+        return f"Error listando chatbots: {str(e)}"
+
+
 def run_autonomous_task(task_description: str, context_data: str = ""):
-    """Ejecutar tarea con agente autónomo."""
+    """Ejecutar tarea con agente autónomo (modo legacy - mantener compatibilidad)."""
     if not task_description or not task_description.strip():
         raise gr.Error("Describe la tarea que quieres que el agente ejecute.")
     
@@ -431,7 +859,6 @@ def run_autonomous_task(task_description: str, context_data: str = ""):
         context = {}
         if context_data:
             try:
-                import json
                 context = json.loads(context_data)
             except:
                 context = {"context": context_data}
@@ -517,10 +944,191 @@ def get_audit_stats():
     return output
 
 
-def run_enterprise_api_mode(files, auto_detect: bool = True, rules_json: str = ""):
-    """Ejecuta modo Enterprise API con procesamiento automático."""
+# Estado global para chat conversacional
+chat_sessions = {}  # {session_id: {"docs": [], "retriever": None, "history": []}}
+
+def run_chat_conversational(message, history, files, session_id, speed_mode="balanced"):
+    """
+    Maneja chat conversacional con documentos.
+    Mantiene contexto entre preguntas y permite seguimiento.
+    Formato: history debe ser una lista de dicts con 'role' y 'content' (formato messages).
+    """
     if not files:
-        raise gr.Error("Primero sube documentos para procesar.")
+        return history, "⚠️ Primero carga documentos para comenzar el chat."
+    
+    # Convertir history a formato messages si viene en formato antiguo (tuplas)
+    if history and isinstance(history[0], (tuple, list)) and len(history[0]) == 2:
+        # Convertir de formato (user_msg, bot_msg) a formato messages
+        messages_history = []
+        for user_msg, bot_msg in history:
+            messages_history.append({"role": "user", "content": user_msg})
+            messages_history.append({"role": "assistant", "content": bot_msg})
+        history = messages_history
+    
+    # Inicializar o recuperar sesión
+    if session_id not in chat_sessions:
+        chat_sessions[session_id] = {
+            "docs": [],
+            "retriever": None,
+            "processed_files": set(),
+            "history": []
+        }
+    
+    session = chat_sessions[session_id]
+    
+    # Procesar nuevos archivos si hay
+    new_files = []
+    for file_obj in files:
+        file_name = getattr(file_obj, "name", "")
+        if file_name not in session["processed_files"]:
+            new_files.append(file_obj)
+            session["processed_files"].add(file_name)
+    
+    if new_files:
+        try:
+            print(f"📄 Procesando {len(new_files)} nuevos documentos para chat...")
+            new_docs = processor.process(new_files)
+            session["docs"].extend(new_docs)
+            
+            # Reconstruir retriever con todos los documentos
+            if session["docs"]:
+                session["retriever"] = retriever_builder.build_hybrid_retriever(session["docs"])
+                print(f"✅ Retriever actualizado con {len(session['docs'])} chunks totales")
+        except Exception as e:
+            return history, f"❌ Error procesando documentos: {str(e)}"
+    
+    if not session["retriever"]:
+        return history, "⚠️ No hay documentos procesados. Carga documentos primero."
+    
+    # Construir contexto de conversación desde history (formato messages)
+    conversation_context = ""
+    if history:
+        # Incluir últimas 3 interacciones para contexto
+        recent_history = history[-6:] if len(history) > 6 else history  # 3 pares user/assistant
+        conversation_context = "\n\nContexto de la conversación anterior:\n"
+        for msg in recent_history:
+            if isinstance(msg, dict):
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role == "user":
+                    conversation_context += f"Usuario: {content}\n"
+                elif role == "assistant":
+                    conversation_context += f"Asistente: {content[:200]}...\n\n"
+            elif isinstance(msg, (tuple, list)) and len(msg) == 2:
+                # Formato antiguo (tupla)
+                user_msg, bot_msg = msg
+                conversation_context += f"Usuario: {user_msg}\n"
+                conversation_context += f"Asistente: {bot_msg[:200]}...\n\n"
+    
+    # Enriquecer pregunta con contexto
+    enriched_question = message
+    if conversation_context:
+        enriched_question = f"{message}\n\n{conversation_context}"
+    
+    # Obtener contexto de memoria si está habilitado
+    memory_context = {}
+    if context_manager:
+        memory_context = context_manager.get_context_for_query(message)
+        # Agregar contexto de sesión
+        if session["history"]:
+            memory_context["chat_history"] = session["history"][-5:]
+    
+    # Aplicar modo de velocidad temporalmente
+    original_speed_mode = config.speed_mode
+    config.speed_mode = speed_mode
+    
+    try:
+        # Ejecutar workflow con contexto de conversación
+        # Pasar conversational_mode=True para respuestas más libres y naturales
+        result = workflow.run(
+            enriched_question,
+            session["retriever"],
+            all_documents=session["docs"],
+            conversational_mode=True  # Modo conversacional libre
+        )
+        
+        answer = result.get("answer", result.get("draft_answer", "No se pudo generar respuesta."))
+        sources = result.get("sources", [])
+        
+        # Formatear respuesta con fuentes
+        formatted_answer = answer
+        if sources:
+            # Formatear fuentes (pueden ser dicts o strings)
+            sources_list = []
+            for s in sources[:5]:
+                if isinstance(s, dict):
+                    source_name = s.get("source", s.get("file", "Documento"))
+                    # Extraer solo el nombre del archivo
+                    from pathlib import Path
+                    clean_name = Path(source_name).name
+                    sources_list.append(f"- {clean_name}")
+                else:
+                    from pathlib import Path
+                    clean_name = Path(str(s)).name
+                    sources_list.append(f"- {clean_name}")
+            
+            if sources_list:
+                formatted_answer += f"\n\n📚 **Fuentes:**\n" + "\n".join(sources_list)
+        
+        # Guardar en historial de sesión
+        session["history"].append({
+            "question": message,
+            "answer": answer,
+            "sources": sources,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Guardar en memoria persistente
+        if context_manager:
+            context_manager.add_query(
+                query=message,
+                answer=answer,
+                sources=[getattr(f, "name", "") for f in files],
+                metadata={
+                    "mode": "chat_conversational",
+                    "session_id": session_id,
+                    "conversation_turn": len(session["history"])
+                }
+            )
+        
+        # Actualizar historial de Gradio en formato messages
+        # Agregar mensaje del usuario
+        history.append({"role": "user", "content": message})
+        # Agregar respuesta del asistente
+        history.append({"role": "assistant", "content": formatted_answer})
+        
+        return history, None
+        
+    except Exception as e:
+        error_msg = f"❌ Error en chat: {str(e)}"
+        # Agregar mensaje del usuario
+        history.append({"role": "user", "content": message})
+        # Agregar mensaje de error
+        history.append({"role": "assistant", "content": error_msg})
+        return history, None
+        
+    finally:
+        # Restaurar modo original
+        config.speed_mode = original_speed_mode
+
+def clear_chat_session(session_id):
+    """Limpia la sesión de chat."""
+    if session_id in chat_sessions:
+        del chat_sessions[session_id]
+    return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+
+def run_enterprise_api_mode(files, auto_detect: bool = True, rules_json: str = ""):
+    """Ejecuta modo Enterprise API con procesamiento automático (SOLO para archivos locales)."""
+    if not files:
+        raise gr.Error(
+            "❌ No hay archivos subidos localmente.\n\n"
+            "**💡 Si quieres usar archivos de Google Drive:**\n"
+            "1. Ve a la sección '📁 Usar archivos de Google Drive' arriba\n"
+            "2. Ingresa el Session ID\n"
+            "3. Selecciona los archivos con los checkboxes\n"
+            "4. Click en **'📂 Procesar Archivos Seleccionados'** (NO este botón)\n\n"
+            "**O sube archivos localmente:** Arrastra archivos al campo '📂 Documentos Empresariales' arriba."
+        )
     
     audit_logger.log(
         event_type="enterprise_api",
@@ -764,6 +1372,331 @@ def connect_gcs_storage(
         raise gr.Error(error_msg)
 
 
+def connect_google_drive_with_token(
+    access_token: str,
+    folder_id: str,
+    auto_process: bool
+):
+    """Conecta Google Drive usando un token de acceso directo (método fácil).
+    SOLO LISTA los archivos, NO los descarga automáticamente.
+    """
+    if not access_token or not access_token.strip():
+        raise gr.Error("Por favor ingresa el Access Token de Google Drive.")
+    
+    try:
+        # Usar el nuevo método que solo lista archivos
+        result = cloud_integration.list_google_drive_files(
+            access_token=access_token.strip(),
+            folder_id=folder_id.strip() if folder_id else None
+        )
+        
+        session_id = result['session_id']
+        files = result['files']
+        
+        # Formatear lista de archivos para mostrar
+        files_list = ""
+        for i, file_info in enumerate(files[:50], 1):  # Mostrar primeros 50
+            size_mb = file_info.get('size_mb', 0)
+            files_list += f"{i}. **{file_info['name']}** ({size_mb} MB)\n"
+        
+        if len(files) > 50:
+            files_list += f"\n... y {len(files) - 50} archivos más\n"
+        
+        output = f"## ✅ ¡Google Drive Conectado Exitosamente!\n\n"
+        output += f"**📁 Archivos encontrados**: **{len(files)}**\n\n"
+        output += f"**🔑 Session ID**: `{session_id}`\n\n"
+        output += "---\n\n"
+        output += "### 📋 Archivos Disponibles:\n\n"
+        output += files_list
+        output += "\n---\n\n"
+        
+        output += "**💡 IMPORTANTE - Selecciona qué archivos procesar:**\n\n"
+        output += f"1. Ve al tab **'🏢 Enterprise API'**\n"
+        output += f"2. En el campo **'📁 Session ID de Google Drive'**, pega:\n"
+        output += f"   ```\n   {session_id}\n   ```\n"
+        output += f"3. Selecciona los archivos que quieres procesar (máximo 200)\n"
+        output += f"4. Click en **'📂 Procesar Archivos Seleccionados'**\n\n"
+        output += "**✨ Ventajas:**\n"
+        output += "- ✅ Solo descargas los archivos que seleccionas\n"
+        output += "- ✅ Ahorras espacio en disco\n"
+        output += "- ✅ Procesas solo lo que necesitas\n"
+        output += "- ✅ Los archivos se procesan directamente desde Drive\n"
+        
+        audit_logger.log(
+            event_type="cloud_connection",
+            action="connect_google_drive_token",
+            resource="google_drive",
+            metadata={"session_id": session_id, "files_found": len(files)}
+        )
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error conectando Google Drive: {str(e)}"
+        raise gr.Error(error_msg)
+
+def connect_google_drive_storage(
+    credentials_json: str,
+    folder_id: str,
+    auto_process: bool
+):
+    """Conecta Google Drive desde la UI y procesa archivos directamente."""
+    if not credentials_json:
+        raise gr.Error("Por favor proporciona las credenciales JSON de Google Drive.")
+    
+    try:
+        result = cloud_integration.connect_google_drive(
+            credentials_json=credentials_json,
+            folder_id=folder_id if folder_id.strip() else None,
+            auto_process=auto_process
+        )
+        
+        audit_logger.log(
+            event_type="cloud_connection",
+            action="connect_google_drive_ui",
+            resource="google_drive",
+            metadata={"session_id": result.get('session_id'), "files_found": result.get('files_found', 0)}
+        )
+        
+        output = "## ✅ Conexión Google Drive Exitosa\n\n"
+        output += f"**Archivos encontrados**: {result.get('files_found', 0)}\n"
+        output += f"**Session ID**: `{result.get('session_id', 'N/A')}`\n\n"
+        
+        if auto_process:
+            output += f"**Archivos procesados**: {result.get('files_processed', 0)}\n"
+            output += "\n✅ **Procesamiento automático completado**\n"
+            output += "Los archivos han sido procesados con Enterprise API Mode.\n"
+        else:
+            output += "\n⚠️ **Procesamiento automático desactivado**\n"
+            output += "Los archivos están listos para procesar en Enterprise API Mode.\n"
+            output += f"\n💡 **Para procesar estos archivos:**\n"
+            output += f"1. Ve al tab '🏢 Enterprise API'\n"
+            output += f"2. Usa el botón '📂 Usar archivos de Google Drive'\n"
+            output += f"3. Ingresa el Session ID: `{result.get('session_id', 'N/A')}`\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error conectando Google Drive: {str(e)}"
+        audit_logger.log(
+            event_type="error",
+            action="connect_google_drive_ui",
+            resource="google_drive",
+            result="error",
+            metadata={"error": str(e)}
+        )
+        raise gr.Error(error_msg)
+
+def list_drive_files_for_selection(session_id: str):
+    """Lista archivos de Google Drive y retorna datos para checkboxes interactivos."""
+    if not session_id or not session_id.strip():
+        return [], "⚠️ Por favor ingresa el Session ID de Google Drive primero."
+    
+    try:
+        if not hasattr(cloud_integration, '_drive_sessions') or session_id.strip() not in cloud_integration._drive_sessions:
+            return [], "⚠️ Session ID no encontrado. Por favor conecta Google Drive primero."
+        
+        session = cloud_integration._drive_sessions[session_id.strip()]
+        files = session.get('files', [])
+        
+        if not files:
+            return [], "⚠️ No se encontraron archivos en esta sesión."
+        
+        # Limitar a 200 archivos
+        files_to_show = files[:200]
+        
+        # Crear lista de opciones para CheckboxGroup: "Nombre (Tamaño MB) | ID"
+        file_options = []
+        file_id_map = {}  # Mapeo de índice a file_id
+        
+        for i, file_info in enumerate(files_to_show):
+            file_name = file_info.get('name', 'Sin nombre')
+            size_mb = file_info.get('size_mb', 0)
+            file_id = file_info.get('id', '')
+            
+            # Formato: "Nombre del archivo (2.5 MB)"
+            display_name = f"{file_name} ({size_mb} MB)"
+            file_options.append(display_name)
+            file_id_map[display_name] = file_id
+        
+        info_text = f"## 📋 Archivos Disponibles ({len(files_to_show)}/{len(files)} archivos)\n\n"
+        info_text += f"**💡 Selecciona los archivos que quieres procesar:**\n\n"
+        if len(files) > 200:
+            info_text += f"⚠️ Mostrando primeros 200 archivos (de {len(files)} totales)\n\n"
+        info_text += "**✅ Los archivos seleccionados se procesarán automáticamente**\n"
+        
+        return file_options, info_text
+        
+    except Exception as e:
+        return [], f"❌ Error: {str(e)}"
+
+def convert_selected_files_to_ids(selected_files: list, session_id: str):
+    """Convierte los nombres de archivos seleccionados a sus IDs."""
+    if not selected_files or not session_id:
+        return ""
+    
+    try:
+        if not hasattr(cloud_integration, '_drive_sessions') or session_id.strip() not in cloud_integration._drive_sessions:
+            return ""
+        
+        session = cloud_integration._drive_sessions[session_id.strip()]
+        files = session.get('files', [])[:200]  # Limitar a 200
+        
+        # Crear mapeo de nombre a ID
+        name_to_id = {}
+        for file_info in files:
+            file_name = file_info.get('name', 'Sin nombre')
+            size_mb = file_info.get('size_mb', 0)
+            file_id = file_info.get('id', '')
+            display_name = f"{file_name} ({size_mb} MB)"
+            name_to_id[display_name] = file_id
+        
+        # Convertir nombres seleccionados a IDs
+        selected_ids = []
+        for selected in selected_files:
+            if selected in name_to_id:
+                selected_ids.append(name_to_id[selected])
+        
+        return ", ".join(selected_ids)
+        
+    except Exception as e:
+        print(f"Error convirtiendo archivos seleccionados: {e}")
+        return ""
+
+def use_drive_files_in_enterprise(
+    session_id: str, 
+    selected_file_ids: str = "",
+    auto_detect: bool = True, 
+    rules_json: str = ""
+):
+    """Usa archivos de Google Drive conectados en Enterprise API Mode.
+    
+    Args:
+        session_id: Session ID de Google Drive
+        selected_file_ids: IDs de archivos seleccionados (separados por comas). Si está vacío, procesa todos (máx 200)
+        auto_detect: Si activar detección automática
+        rules_json: Reglas de automatización en JSON
+    """
+    if not session_id or not session_id.strip():
+        raise gr.Error(
+            "❌ Por favor ingresa el Session ID de Google Drive.\n\n"
+            "**💡 Cómo obtener el Session ID:**\n"
+            "1. Ve al tab '☁️ Cloud Storage' → '📁 Google Drive'\n"
+            "2. Conecta tu Google Drive con el token\n"
+            "3. Copia el Session ID que aparece (ej: `drive_20241122_163132`)\n"
+            "4. Pégalo en el campo de arriba"
+        )
+    
+    try:
+        print(f"\n{'='*60}")
+        print(f"🚀 INICIANDO PROCESAMIENTO DE GOOGLE DRIVE")
+        print(f"{'='*60}\n")
+        
+        # Parsear IDs seleccionados
+        file_ids_list = None
+        if selected_file_ids and selected_file_ids.strip():
+            # Separar por comas y limpiar espacios
+            file_ids_list = [fid.strip() for fid in selected_file_ids.strip().split(',') if fid.strip()]
+            print(f"📋 Archivos seleccionados: {len(file_ids_list)} archivos")
+        else:
+            print(f"📋 Procesando todos los archivos disponibles (máximo 200)")
+        
+        print(f"🔑 Session ID: {session_id.strip()}\n")
+        
+        # Obtener archivos de Drive (solo los seleccionados si hay selección)
+        print(f"📥 Descargando archivos desde Google Drive...")
+        drive_files = cloud_integration.get_drive_files_for_enterprise(
+            session_id.strip(),
+            selected_file_ids=file_ids_list
+        )
+        
+        print(f"✅ {len(drive_files)} archivos descargados exitosamente\n")
+        
+        if not drive_files:
+            raise gr.Error(
+                f"No se encontraron archivos para procesar.\n"
+                f"Verifica que:\n"
+                f"1. El Session ID sea correcto\n"
+                f"2. Hayas conectado Google Drive primero\n"
+                f"3. Los IDs de archivos seleccionados sean válidos (si especificaste algunos)"
+            )
+        
+        # Parsear reglas
+        rules = []
+        if rules_json and rules_json.strip():
+            try:
+                rules = json.loads(rules_json)
+            except:
+                rules = []
+        
+        # Procesar con Enterprise API
+        results = enterprise_api.process_enterprise_documents(
+            files=drive_files,
+            auto_detect=auto_detect,
+            rules=rules
+        )
+        
+        # Formatear resultados (igual que run_enterprise_api_mode)
+        output = "## 🚀 Procesamiento Enterprise API con Google Drive\n\n"
+        output += f"**Estado**: {results.get('status', 'unknown')}\n"
+        output += f"**Documentos procesados**: {results.get('documents_processed', 0)}\n"
+        output += f"**Chunks generados**: {results.get('chunks_generated', 0)}\n\n"
+        
+        # Resúmenes
+        if results.get('summaries'):
+            total_summaries = len(results['summaries'])
+            successful_summaries = sum(1 for s in results['summaries'].values() if s.get('summary') and s.get('summary') != 'No se pudo generar resumen')
+            
+            output += f"### 📄 Resúmenes Automáticos ({successful_summaries}/{total_summaries} exitosos)\n\n"
+            for file_name, summary in list(results['summaries'].items()):
+                from pathlib import Path
+                clean_file_name = Path(file_name).name
+                
+                output += f"#### {clean_file_name}\n\n"
+                output += f"**Tipo de Documento**: {summary.get('document_type', 'N/A')}\n\n"
+                output += f"**Resumen Ejecutivo**:\n{summary.get('summary', 'N/A')}\n\n"
+                
+                if summary.get('key_points'):
+                    output += f"**Puntos Clave** ({len(summary['key_points'])}):\n"
+                    for i, point in enumerate(summary['key_points'][:10], 1):
+                        output += f"{i}. {point}\n"
+                    output += "\n"
+                
+                if summary.get('topics'):
+                    output += f"**Temas**: {', '.join(summary['topics'][:5])}\n\n"
+                
+                if summary.get('business_value'):
+                    output += f"**Valor para el Negocio**: {summary['business_value']}\n\n"
+                
+                output += "---\n\n"
+        
+        # Problemas, oportunidades, patrones (igual que run_enterprise_api_mode)
+        if results.get('problems_detected'):
+            output += "### ⚠️ Problemas Detectados\n\n"
+            for problem in results['problems_detected'][:5]:
+                output += f"- **{problem.get('type', 'Unknown')}** ({problem.get('severity', 'N/A')}): "
+                output += f"{problem.get('description', 'N/A')[:150]}...\n"
+            output += "\n"
+        
+        if results.get('opportunities_detected'):
+            output += "### 💡 Oportunidades Detectadas\n\n"
+            for opp in results['opportunities_detected'][:5]:
+                output += f"- **{opp.get('type', 'Unknown')}** ({opp.get('impact', 'N/A')}): "
+                output += f"{opp.get('description', 'N/A')[:150]}...\n"
+            output += "\n"
+        
+        if results.get('patterns_found'):
+            output += "### 🔍 Patrones Encontrados\n\n"
+            for pattern in results['patterns_found'][:5]:
+                output += f"- **{pattern.get('type', 'Unknown')}**: {pattern.get('description', 'N/A')[:150]}...\n"
+            output += "\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error usando archivos de Google Drive: {str(e)}"
+        raise gr.Error(error_msg)
+
 def connect_azure_storage(
     container_name: str,
     connection_string: str,
@@ -832,20 +1765,48 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
         """
     )
     
-    # Verificar espacio en disco al inicio
+    # Verificar espacio en disco al inicio y mostrar advertencia
+    disk_warning_shown = False
     try:
         import shutil
+        import psutil
         disk_usage = shutil.disk_usage(".")
         free_space_gb = disk_usage.free / (1024 * 1024 * 1024)
         
         if free_space_gb < 1:
-            gr.Info(
-                f"⚠️ ADVERTENCIA: Espacio en disco muy bajo ({free_space_gb:.2f} GB libre).\n"
-                f"Para procesar muchos PDFs necesitas al menos 2-3 GB libres.\n"
-                f"Ejecuta .\\LIMPIAR_TEMPORALES.ps1 para liberar espacio."
+            disk_warning_shown = True
+            gr.Markdown(
+                f"""
+                ## ⚠️ ADVERTENCIA CRÍTICA: Espacio en Disco Muy Bajo
+                
+                **Espacio libre actual**: {free_space_gb:.2f} GB
+                
+                **Problema**: No hay suficiente espacio para subir archivos. Gradio necesita espacio temporal.
+                
+                **Solución inmediata**:
+                1. Ejecuta `LIMPIAR_TEMPORALES.ps1` en PowerShell para liberar espacio
+                2. O libera espacio manualmente en:
+                   - `C:\\Users\\Random\\AppData\\Local\\Temp\\gradio`
+                   - Papelera de reciclaje
+                   - Archivos temporales de Windows
+                
+                **Recomendación**: Necesitas al menos **2-3 GB libres** para procesar PDFs.
+                
+                **💡 Alternativa**: Usa Google Drive desde el tab "☁️ Cloud Storage" para procesar archivos sin ocupar espacio local.
+                """,
+                visible=True
             )
-    except:
-        pass
+        elif free_space_gb < 2:
+            gr.Markdown(
+                f"""
+                ⚠️ **Advertencia**: Espacio en disco bajo ({free_space_gb:.2f} GB libre).
+                Para procesar muchos PDFs se recomienda al menos 2-3 GB libres.
+                Ejecuta `LIMPIAR_TEMPORALES.ps1` si necesitas más espacio.
+                """,
+                visible=True
+            )
+    except Exception as e:
+        print(f"Advertencia: No se pudo verificar espacio en disco: {e}")
     
     with gr.Tabs():
         # Tab 1: RAG Principal
@@ -944,43 +1905,96 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 outputs=[mass_summary, mass_metadata],
             )
         
-        # Tab 3: Agentes Autónomos
+        # Tab 3: Agentes Autónomos (Enterprise Agentic AI con IDP)
         with gr.Tab("🤖 Agentes Autónomos"):
-            gr.Markdown("### Ejecuta tareas autónomas con herramientas")
+            gr.Markdown("### 🤖 Enterprise Agentic AI con Intelligent Document Processing (IDP)")
+            gr.Markdown("""
+            **🚀 Funcionalidades:**
+            - Sube todos tus datos empresariales (hasta 1000 documentos)
+            - Procesamiento IDP automático: extrae información estructurada de documentos
+            - Conecta tu Agentic AI por API a tu empresa
+            - Ejecuta 50+ tareas autónomas usando tus datos procesados
             
-            if not autonomous_agent:
-                gr.Markdown("⚠️ **Agentes autónomos no están habilitados.** Configura `DOCCHAT_ENABLE_AGENTS=true`")
-            else:
+            **📋 Tipos de tareas soportadas:**
+            - Análisis de datos y generación de insights
+            - Automatización de procesos empresariales
+            - Integración con sistemas externos (CRM, ERP, etc.)
+            - Generación de contenido, informes y presentaciones
+            - Optimización de procesos y recursos
+            - **Marketing y Advertising:** Campañas publicitarias, optimización automática, generación de creativos
+            - **Sales:** Gestión de leads, outreach personalizado, seguimiento automático
+            - **Email Marketing:** Campañas automatizadas, personalización, lead nurturing
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📂 Paso 1: Subir Datos Empresariales")
+                    agentic_files = gr.File(
+                        label="📄 Documentos Empresariales (PDF, DOCX, TXT, MD)",
+                        file_count="multiple",
+                        file_types=[".pdf", ".docx", ".txt", ".md"]
+                    )
+                    
+                    process_idp_btn = gr.Button("🔍 Procesar con IDP", variant="primary")
+                    idp_status = gr.Markdown(label="📊 Estado IDP")
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("### 🤖 Paso 2: Ejecutar Tareas Autónomas")
+                    
+                    task_type = gr.Dropdown(
+                        label="Tipo de Tarea",
+                        choices=[
+                            "análisis",
+                            "automatización",
+                            "integración",
+                            "generación",
+                            "optimización"
+                        ],
+                        value="análisis"
+                    )
+                    
+                    task_input = gr.Textbox(
+                        label="📝 Descripción de la tarea",
+                        placeholder="Ejemplo: Analizar los datos y generar un reporte de ventas con las métricas clave",
+                        lines=4,
+                    )
+                    
+                    context_input = gr.Textbox(
+                        label="📋 Contexto adicional (JSON opcional)",
+                        placeholder='{"recipient": "juan@empresa.com", "format": "excel", "priority": "high"}',
+                        lines=3,
+                    )
+                    
+                    execute_task_btn = gr.Button("🚀 Ejecutar Tarea Autónoma", variant="primary")
+            
+            with gr.Row():
+                agent_output = gr.Markdown(label="📊 Resultado de Tarea")
+            
+            with gr.Row():
+                gr.Markdown("### 🔌 Conexión API")
                 gr.Markdown("""
-                **Ejemplos de tareas:**
-                - "Analizar los documentos y generar un reporte en Excel"
-                - "Enviar un email a juan@empresa.com con el resumen del análisis"
-                - "Crear una presentación con los hallazgos principales"
-                - "Programar una tarea para ejecutar cada lunes"
+                **Para conectar tu Agentic AI por API:**
+                1. Inicia el servidor API: `python api_server.py` o `python INICIAR_API.py`
+                2. Usa los endpoints `/api/v1/agentic-ai/process-idp` y `/api/v1/agentic-ai/execute-task`
+                3. Autentica con tu API key en el header: `Authorization: Bearer YOUR_API_KEY`
+                
+                **Endpoints disponibles:**
+                - `POST /api/v1/agentic-ai/process-idp`: Procesa documentos con IDP
+                - `POST /api/v1/agentic-ai/execute-task`: Ejecuta tarea autónoma
+                - `GET /api/v1/agentic-ai/idp-summary`: Obtiene resumen de documentos procesados
                 """)
             
-            with gr.Row():
-                task_input = gr.Textbox(
-                    label="📝 Descripción de la tarea",
-                    placeholder="Ejemplo: Analizar los documentos y enviar un reporte por email",
-                    lines=4,
-                )
+            # Event handlers
+            process_idp_btn.click(
+                fn=run_idp_processing,
+                inputs=[agentic_files],
+                outputs=[idp_status]
+            )
             
-            with gr.Row():
-                context_input = gr.Textbox(
-                    label="📋 Contexto adicional (JSON opcional)",
-                    placeholder='{"recipient": "juan@empresa.com", "format": "excel"}',
-                    lines=3,
-                )
-            
-            agent_button = gr.Button("🚀 Ejecutar Tarea Autónoma", variant="primary")
-            
-            agent_output = gr.Markdown(label="📊 Resultado")
-            
-            agent_button.click(
-                fn=run_autonomous_task,
-                inputs=[task_input, context_input],
-                outputs=[agent_output],
+            execute_task_btn.click(
+                fn=run_enterprise_agentic_task,
+                inputs=[task_input, task_type, context_input],
+                outputs=[agent_output]
             )
         
         # Tab 4.5: Enterprise API Mode (NUEVO)
@@ -1000,17 +2014,18 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             - Automatización de workflows empresariales
             """)
             
-            with gr.Row():
-                enterprise_files = gr.Files(
-                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD, Emails)",
-                    file_count="multiple",
-                    file_types=[".pdf", ".docx", ".txt", ".md"],
-                )
+            gr.Markdown("""
+            **💡 NUEVO: Usa archivos de Google Drive sin descargarlos**
+            
+            Si tienes archivos en Google Drive, conéctalos desde el tab "☁️ Cloud Storage" → "📁 Google Drive"
+            y luego úsalos aquí con el botón de abajo.
+            """)
             
             with gr.Row():
-                auto_detect_check = gr.Checkbox(
-                    label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
-                    value=True,
+                enterprise_files = gr.Files(
+                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD, Emails) - O usa Google Drive abajo",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
@@ -1033,9 +2048,102 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     lines=8,
                 )
             
-            enterprise_button = gr.Button("🚀 Procesar con Enterprise API", variant="primary", size="lg")
+            with gr.Row():
+                with gr.Column():
+                    drive_session_id = gr.Textbox(
+                        label="📁 Usar archivos de Google Drive (Session ID)",
+                        placeholder="Pega el Session ID que obtuviste al conectar Google Drive",
+                        info="Obtén el Session ID desde el tab '☁️ Cloud Storage' → '📁 Google Drive'",
+                    )
+                    list_drive_files_btn = gr.Button("📋 Listar Archivos Disponibles", variant="secondary")
+                    
+                    drive_files_info = gr.Markdown(
+                        label="ℹ️ Información",
+                        value="**💡 Instrucciones:**\n\n1. Ingresa el Session ID arriba\n2. Click en 'Listar Archivos Disponibles'\n3. Selecciona los archivos que quieres procesar (aparecerán checkboxes)\n4. Los IDs se llenarán automáticamente\n5. Click en 'Procesar Archivos Seleccionados'"
+                    )
+                    
+                    drive_files_checkboxes = gr.CheckboxGroup(
+                        label="📋 Selecciona Archivos para Procesar",
+                        choices=[],
+                        value=[],
+                        interactive=True,
+                        visible=False,
+                        info="Marca los archivos que quieres procesar. Los IDs se actualizarán automáticamente.",
+                    )
+                    
+                    selected_file_ids = gr.Textbox(
+                        label="📝 IDs de Archivos Seleccionados (se llena automáticamente)",
+                        placeholder="Los IDs aparecerán aquí cuando selecciones archivos arriba",
+                        info="Este campo se llena automáticamente cuando seleccionas archivos. También puedes editarlo manualmente.",
+                        lines=2,
+                        interactive=True,
+                    )
+                    
+                    use_drive_btn = gr.Button(
+                        "📂 Procesar Archivos Seleccionados de Google Drive", 
+                        variant="primary", 
+                        size="lg",
+                        elem_id="drive_process_btn"
+                    )
+                
+                with gr.Column():
+                    auto_detect_check = gr.Checkbox(
+                        label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                        value=True,
+                    )
             
-            enterprise_output = gr.Markdown(label="📊 Resultados Enterprise API")
+            drive_enterprise_output = gr.Markdown(
+                label="📊 Resultados desde Google Drive",
+                value="**💡 Instrucciones:**\n\n1. ✅ Selecciona archivos de Google Drive arriba con los checkboxes\n2. ✅ Los IDs se llenarán automáticamente\n3. ✅ Click en **'📂 Procesar Archivos Seleccionados'** (el botón verde arriba)\n4. ⚠️ **NO uses el botón 'Procesar con Enterprise API' de abajo** (ese es SOLO para archivos locales)"
+            )
+            
+            gr.Markdown("---\n\n**⚠️ IMPORTANTE:** El botón de abajo es **SOLO para archivos subidos localmente**. Para Google Drive usa el botón **'📂 Procesar Archivos Seleccionados'** de arriba.\n")
+            
+            enterprise_button = gr.Button("🚀 Procesar con Enterprise API (Archivos Locales)", variant="secondary", size="lg")
+            
+            enterprise_output = gr.Markdown(label="📊 Resultados Enterprise API (Archivos Locales)")
+            
+            # Función para actualizar checkboxes cuando se seleccionan archivos
+            def update_file_ids(selected_files, session_id):
+                """Actualiza el campo de IDs cuando se seleccionan archivos."""
+                ids = convert_selected_files_to_ids(selected_files, session_id)
+                return ids
+            
+            # Botón para listar archivos
+            def load_drive_files(session_id):
+                """Carga archivos y muestra checkboxes."""
+                file_options, info_text = list_drive_files_for_selection(session_id)
+                if file_options:
+                    return (
+                        gr.update(choices=file_options, value=[], visible=True, interactive=True),
+                        gr.update(value=info_text, visible=True),
+                        gr.update(value="")  # Limpiar IDs
+                    )
+                else:
+                    return (
+                        gr.update(choices=[], value=[], visible=False),
+                        gr.update(value=info_text, visible=True),
+                        gr.update(value="")
+                    )
+            
+            list_drive_files_btn.click(
+                fn=load_drive_files,
+                inputs=[drive_session_id],
+                outputs=[drive_files_checkboxes, drive_files_info, selected_file_ids],
+            )
+            
+            # Actualizar IDs automáticamente cuando se seleccionan archivos
+            drive_files_checkboxes.change(
+                fn=update_file_ids,
+                inputs=[drive_files_checkboxes, drive_session_id],
+                outputs=[selected_file_ids],
+            )
+            
+            use_drive_btn.click(
+                fn=use_drive_files_in_enterprise,
+                inputs=[drive_session_id, selected_file_ids, auto_detect_check, rules_input],
+                outputs=[drive_enterprise_output],
+            )
             
             enterprise_button.click(
                 fn=run_enterprise_api_mode,
@@ -1043,7 +2151,262 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 outputs=[enterprise_output],
             )
         
-        # Tab 4.5: Cloud Storage Integration (NUEVO)
+        # Tab 4.5: Chat Conversacional (NUEVO)
+        with gr.Tab("💬 Chat Conversacional"):
+            gr.Markdown("### Chat Prolongado con Documentos")
+            gr.Markdown("""
+            **🚀 Conversación Natural con tus Documentos**
+            
+            - 💬 Haz preguntas de seguimiento sin repetir contexto
+            - 📚 Carga documentos una vez, chatea todo lo que quieras
+            - 🧠 El sistema recuerda la conversación anterior
+            - 🔄 Ideal para explorar documentos en profundidad
+            
+            **💡 Ejemplo:** 
+            - "¿Qué dice sobre X?"
+            - "Y sobre Y, qué menciona?"
+            - "Compara X con Y"
+            """)
+            
+            # Generar session_id único
+            chat_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                chat_files = gr.Files(
+                    label="📂 Documentos para Chat (PDF, DOCX, TXT, MD) - Hasta 1000 documentos",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                chat_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+            
+            # Chatbot component
+            chatbot = gr.Chatbot(
+                label="💬 Conversación",
+                height=500,
+                show_copy_button=True,
+                avatar_images=(None, "🤖"),
+                type="messages",
+            )
+            
+            with gr.Row():
+                chat_input = gr.Textbox(
+                    label="Escribe tu pregunta",
+                    placeholder="Ejemplo: ¿Qué información importante hay en estos documentos?",
+                    lines=2,
+                    scale=4,
+                )
+                chat_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_chat_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+            
+            chat_status = gr.Markdown(label="ℹ️ Estado del Chat")
+            
+            # Event handlers
+            def chat_submit(message, history, files, session_id, speed_mode):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta."
+                if not files:
+                    return history, history, "⚠️ Primero carga documentos."
+                
+                new_history, error = run_chat_conversational(
+                    message, history, files, session_id, speed_mode
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+            
+            def clear_chat(history, session_id):
+                new_history, status = clear_chat_session(session_id)
+                return new_history, status
+            
+            def clear_files(files, session_id):
+                if session_id in chat_sessions:
+                    chat_sessions[session_id]["processed_files"].clear()
+                    chat_sessions[session_id]["docs"] = []
+                    chat_sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+            
+            chat_submit_btn.click(
+                fn=chat_submit,
+                inputs=[chat_input, chatbot, chat_files, chat_session_id, chat_speed_mode],
+                outputs=[chatbot, chatbot, chat_status],
+            ).then(
+                lambda: "", None, chat_input
+            )
+            
+            chat_input.submit(
+                fn=chat_submit,
+                inputs=[chat_input, chatbot, chat_files, chat_session_id, chat_speed_mode],
+                outputs=[chatbot, chatbot, chat_status],
+            ).then(
+                lambda: "", None, chat_input
+            )
+            
+            clear_chat_btn.click(
+                fn=clear_chat,
+                inputs=[chatbot, chat_session_id],
+                outputs=[chatbot, chat_status],
+            )
+            
+            clear_files_btn.click(
+                fn=clear_files,
+                inputs=[chat_files, chat_session_id],
+                outputs=[chat_files, chat_status],
+            )
+        
+        # Tab 4.7: Chatbot Mode (NUEVO - Para conectar chatbots externos)
+        with gr.Tab("🤖 Chatbot"):
+            gr.Markdown("### 🤖 Modo Chatbot - Conecta tu Chatbot por API")
+            gr.Markdown("""
+            **🚀 Funcionalidades:**
+            - Conecta tu chatbot existente por API
+            - Sube toda tu data privada empresarial
+            - Tu chatbot usa RAG con tu data para responder consultas
+            - Optimizado con chunking inteligente, reranking y prompt interno
+            - Base vectorizada por chatbot
+            
+            **💡 Perfecto para empresas que ya tienen chatbots y quieren mejorarlos con RAG**
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Registrar Chatbot
+                with gr.Tab("📝 Registrar Chatbot"):
+                    gr.Markdown("### Paso 1: Registra tu Chatbot")
+                    gr.Markdown("""
+                    Registra tu chatbot para obtener un `chatbot_id` y `api_key` que usarás
+                    para conectar tu chatbot por API.
+                    """)
+                    
+                    chatbot_name_input = gr.Textbox(
+                        label="Nombre del Chatbot",
+                        placeholder="Ej: Chatbot de Soporte Cliente"
+                    )
+                    
+                    company_name_input = gr.Textbox(
+                        label="Nombre de la Empresa",
+                        placeholder="Ej: Mi Empresa S.A."
+                    )
+                    
+                    register_chatbot_btn = gr.Button("📝 Registrar Chatbot", variant="primary")
+                    chatbot_registration_output = gr.Markdown(label="📊 Información del Chatbot")
+                    
+                    register_chatbot_btn.click(
+                        fn=register_chatbot,
+                        inputs=[chatbot_name_input, company_name_input],
+                        outputs=[chatbot_registration_output]
+                    )
+                
+                # Sub-tab: Subir Data
+                with gr.Tab("📂 Subir Data del Chatbot"):
+                    gr.Markdown("### Paso 2: Sube la Data para tu Chatbot")
+                    gr.Markdown("""
+                    Sube todos los documentos que tu chatbot necesita para responder.
+                    Se procesarán con chunking optimizado y se creará una base vectorizada.
+                    """)
+                    
+                    chatbot_id_input = gr.Textbox(
+                        label="Chatbot ID",
+                        placeholder="Pega el chatbot_id que obtuviste al registrar"
+                    )
+                    
+                    chatbot_files = gr.File(
+                        label="📄 Documentos para el Chatbot (PDF, DOCX, TXT, MD)",
+                        file_count="multiple",
+                        file_types=[".pdf", ".docx", ".txt", ".md"]
+                    )
+                    
+                    upload_chatbot_data_btn = gr.Button("📤 Subir y Procesar Data", variant="primary")
+                    chatbot_data_output = gr.Markdown(label="📊 Estado del Procesamiento")
+                    
+                    upload_chatbot_data_btn.click(
+                        fn=upload_chatbot_data,
+                        inputs=[chatbot_id_input, chatbot_files],
+                        outputs=[chatbot_data_output]
+                    )
+                
+                # Sub-tab: Probar Chatbot
+                with gr.Tab("💬 Probar Chatbot"):
+                    gr.Markdown("### Paso 3: Prueba tu Chatbot")
+                    gr.Markdown("""
+                    Prueba consultas a tu chatbot para verificar que funciona correctamente
+                    con la data que subiste.
+                    """)
+                    
+                    test_chatbot_id = gr.Textbox(
+                        label="Chatbot ID",
+                        placeholder="Pega el chatbot_id"
+                    )
+                    
+                    test_question = gr.Textbox(
+                        label="Pregunta de Prueba",
+                        placeholder="Ej: ¿Cuáles son las políticas de la empresa?",
+                        lines=3
+                    )
+                    
+                    test_chatbot_btn = gr.Button("🔍 Consultar Chatbot", variant="primary")
+                    chatbot_test_output = gr.Markdown(label="📊 Respuesta del Chatbot")
+                    
+                    test_chatbot_btn.click(
+                        fn=test_chatbot_query,
+                        inputs=[test_chatbot_id, test_question],
+                        outputs=[chatbot_test_output]
+                    )
+                
+                # Sub-tab: API y Conexión
+                with gr.Tab("🔌 API y Conexión"):
+                    gr.Markdown("### Paso 4: Conecta tu Chatbot por API")
+                    gr.Markdown("""
+                    **Para conectar tu chatbot externo:**
+                    
+                    1. Inicia el servidor API: `python api_server.py`
+                    2. Usa el endpoint: `POST /api/v1/chatbot/query`
+                    3. Autentica con tu `api_key` en el header: `Authorization: Bearer YOUR_API_KEY`
+                    
+                    **Ejemplo de request:**
+                    ```json
+                    {
+                        "chatbot_id": "tu-chatbot-id",
+                        "question": "pregunta del usuario",
+                        "use_reranking": true
+                    }
+                    ```
+                    
+                    **Ejemplo de response:**
+                    ```json
+                    {
+                        "answer": "respuesta basada en tu data",
+                        "sources": ["documento1.pdf", "documento2.pdf"],
+                        "confidence": 0.95,
+                        "chunks_used": 5
+                    }
+                    ```
+                    """)
+            
+            with gr.Row():
+                gr.Markdown("### 📋 Chatbots Registrados")
+                list_chatbots_btn = gr.Button("📋 Listar Chatbots", variant="secondary")
+                chatbots_list_output = gr.Markdown(label="📊 Lista de Chatbots")
+                
+                list_chatbots_btn.click(
+                    fn=list_chatbots,
+                    inputs=[],
+                    outputs=[chatbots_list_output]
+                )
+        
+        # Tab 4.6: Cloud Storage Integration (NUEVO)
         with gr.Tab("☁️ Cloud Storage"):
             gr.Markdown("### Conecta tu Cloud Storage para Procesamiento Automático")
             gr.Markdown("""
@@ -1100,6 +2463,129 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                         fn=connect_s3_storage,
                         inputs=[s3_bucket, s3_access_key, s3_secret_key, s3_region, s3_prefix, s3_auto_process],
                         outputs=[s3_output],
+                    )
+                
+                # Sub-tab: Google Drive (NUEVO - LA MEJOR OPCIÓN)
+                with gr.Tab("📁 Google Drive (Recomendado)"):
+                    gr.Markdown("### Conectar Google Drive")
+                    gr.Markdown("""
+                    **🚀 LA MEJOR OPCIÓN - Procesa archivos directamente sin descargarlos**
+                    
+                    - ✅ Conecta tu Google Drive
+                    - ✅ Procesa hasta 200 PDFs sin ocupar espacio en tu PC
+                    - ✅ Los archivos se procesan directamente desde Drive
+                    - ✅ Perfecto para Enterprise API Mode
+                    """)
+                    
+                    with gr.Tabs():
+                        # Opción 1: Método fácil (Token directo)
+                        with gr.Tab("🔑 Método Fácil (Recomendado)"):
+                            gr.Markdown("""
+                            ### ✨ Conectar Google Drive en 3 Pasos Simples
+                            
+                            **Paso 1:** Click en el botón azul de abajo → Se abre OAuth Playground
+                            
+                            **Paso 2:** 
+                            - Marca: `https://www.googleapis.com/auth/drive.readonly`
+                            - Click en "Authorize APIs"
+                            - Inicia sesión con Google
+                            - Click en "Exchange authorization code for tokens"
+                            
+                            **Paso 3:** Copia el "Access token" y pégalo abajo → Click en "Conectar"
+                            """)
+                            
+                            # Botón para abrir OAuth Playground
+                            oauth_link = gr.Markdown("""
+                            <div style="text-align: center; margin: 20px 0;">
+                                <a href="https://developers.google.com/oauthplayground/" target="_blank" style="text-decoration: none;">
+                                    <button style="background-color: #4285F4; color: white; padding: 20px 40px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                        🔗 Abrir OAuth Playground (Click Aquí)
+                                    </button>
+                                </a>
+                            </div>
+                            """)
+                            
+                            gr.Markdown("""
+                            **💡 Tip:** El token empieza con `ya29.` y es largo (más de 100 caracteres)
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    drive_access_token = gr.Textbox(
+                                        label="🔑 Pega aquí el Access Token",
+                                        placeholder="ya29.a0AfH6SMC...",
+                                        type="password",
+                                        info="Copia el token desde OAuth Playground (paso 6 arriba)",
+                                    )
+                                    
+                                    with gr.Accordion("⚙️ Opciones Avanzadas (Opcional)", open=False):
+                                        drive_folder_id_easy = gr.Textbox(
+                                            label="ID de Carpeta específica (opcional)",
+                                            placeholder="1ABC123xyz...",
+                                            info="Deja vacío para procesar todo 'My Drive'",
+                                        )
+                                    drive_auto_process_easy = gr.Checkbox(
+                                        label="Procesar automáticamente al conectar",
+                                        value=False,
+                                        info="⚠️ DESACTIVADO por defecto - Primero lista los archivos y selecciona cuáles procesar"
+                                    )
+                                    
+                                    drive_connect_easy_btn = gr.Button("✅ Conectar Google Drive", variant="primary", size="lg")
+                            
+                            drive_output_easy = gr.Markdown(
+                                label="📊 Resultado",
+                                value="**Esperando conexión...**\n\n1. Click en el botón de arriba para abrir OAuth Playground\n2. Sigue los pasos\n3. Pega el token y click en 'Conectar Google Drive'"
+                            )
+                            
+                            drive_connect_easy_btn.click(
+                                fn=lambda token, folder, auto: connect_google_drive_with_token(token, folder, auto),
+                                inputs=[drive_access_token, drive_folder_id_easy, drive_auto_process_easy],
+                                outputs=[drive_output_easy],
+                            )
+                        
+                        # Opción 2: Método completo (OAuth completo)
+                        with gr.Tab("⚙️ Método Completo (OAuth)"):
+                            gr.Markdown("""
+                            **📋 Cómo obtener credenciales:**
+                            1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
+                            2. Crea un proyecto o selecciona uno existente
+                            3. Habilita "Google Drive API"
+                            4. Crea credenciales OAuth 2.0 (tipo "Aplicación de escritorio")
+                            5. Descarga el JSON de credenciales
+                            6. Agrega estas URIs de redirección: `http://localhost:8080`, `http://127.0.0.1:8080`
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    drive_credentials = gr.Textbox(
+                                        label="Credenciales JSON de Google Drive",
+                                        placeholder='{"web": {"client_id": "...", "client_secret": "...", ...}}',
+                                        lines=8,
+                                        info="Pega el contenido completo del archivo JSON de credenciales",
+                                    )
+                                    drive_folder_id = gr.Textbox(
+                                        label="ID de Carpeta (opcional)",
+                                        placeholder="1ABC123xyz...",
+                                        info="Deja vacío para procesar todo 'My Drive'",
+                                    )
+                                    drive_auto_process = gr.Checkbox(
+                                        label="Procesar automáticamente al conectar",
+                                        value=True,
+                                    )
+                                    drive_connect_btn = gr.Button("🔗 Conectar Google Drive", variant="primary", size="lg")
+                            
+                            drive_output = gr.Markdown(label="📊 Resultado de Conexión")
+                            
+                            drive_connect_btn.click(
+                                fn=connect_google_drive_storage,
+                                inputs=[drive_credentials, drive_folder_id, drive_auto_process],
+                                outputs=[drive_output],
+                            )
+                    
+                    drive_connect_btn.click(
+                        fn=connect_google_drive_storage,
+                        inputs=[drive_credentials, drive_folder_id, drive_auto_process],
+                        outputs=[drive_output],
                     )
                 
                 # Sub-tab: Google Cloud Storage
