@@ -1,0 +1,42 @@
+========================================
+  COMANDOS GIT ESENCIALES
+========================================
+
+📌 ESTÁS EN: rama "desarrollo" (para nuevas funcionalidades)
+
+✅ VERSIÓN ESTABLE GUARDADA en rama "main"
+
+========================================
+  COMANDOS QUE NECESITAS:
+========================================
+
+1. VER EN QUÉ RAMA ESTÁS:
+   git branch
+
+2. VOLVER A VERSIÓN ESTABLE (si algo sale mal):
+   git checkout main
+
+3. VOLVER A DESARROLLO:
+   git checkout desarrollo
+
+4. DESHACER CAMBIOS (volver al último commit):
+   git checkout .
+
+5. VER QUÉ CAMBIÓ:
+   git status
+
+6. GUARDAR CAMBIOS EXITOSOS:
+   git add .
+   git commit -m "Descripción de lo que agregaste"
+
+========================================
+  FLUJO DE TRABAJO:
+========================================
+
+1. Trabajas en "desarrollo" (donde estás ahora)
+2. Si algo sale mal → git checkout main
+3. Si funciona bien → git add . && git commit -m "mensaje"
+4. Cuando termines → git checkout main && git merge desarrollo
+
+========================================
+
