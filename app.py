@@ -3764,8 +3764,6 @@ if __name__ == "__main__":
     port = find_free_port()
     print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
     demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
-            
-            - 💰 **Finanzas**: Facturación, conciliación, pagos, impuestos, auditoría, cuentas
             - 👥 **RRHH**: Reclutamiento, onboarding, nómina, ausencias, evaluaciones
             - 📦 **Logística**: Inventario, envíos, rutas, órdenes de compra, facturación transporte
             - 📢 **Marketing**: Leads, campañas, seguimiento, precios, análisis comportamiento
