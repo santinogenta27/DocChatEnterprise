@@ -57,6 +57,7 @@ from docchat.customer_service_agent import CustomerServiceAgent
 from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.rpa_automation import RPAAutomationEngine
+from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
 from docchat.audit import AuditLogger
 from docchat.auth import UserManager, WorkspaceManager
 
@@ -109,6 +110,7 @@ enterprise_api = EnterpriseAPIMode(config)
 enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
+rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
 chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
@@ -3060,7 +3062,538 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     outputs=[chatbots_list_output]
                 )
         
-        # Tab 4.7: Analytics y Dashboard (NUEVO)
+        # Tab 4.7: Automatización RPA (NUEVO)
+        with gr.Tab("🤖 Automatización RPA"):
+            gr.Markdown("### Automatización de Procesos con RPA + IA")
+            gr.Markdown("""
+            **🚀 Automatiza tareas repetitivas empresariales con Agentic AI**
+            
+            - 💰 **Finanzas**: Facturación, conciliación, pagos, impuestos, auditoría, cuentas
+            - 👥 **RRHH**: Reclutamiento, onboarding, nómina, ausencias, evaluaciones
+            - 📦 **Logística**: Inventario, envíos, rutas, órdenes de compra, facturación transporte
+            - 📢 **Marketing**: Leads, campañas, seguimiento, precios, análisis comportamiento
+            - 🏥 **Salud**: Registros médicos, citas, reclamaciones, diagnóstico, monitoreo
+            - 🏭 **Manufactura**: Mantenimiento predictivo, calidad, producción, proveedores, productividad
+            - 🔒 **TI**: Seguridad, contraseñas, anomalías, backups
+            - ⚖️ **Legal**: Contratos, documentos, cumplimiento, investigación
+            - 📊 **Proyectos**: Gestión, reportes, recursos, alertas
+            - 🎓 **Educación**: Evaluaciones, contenidos, inscripciones, progreso
+            - 💬 **Comunicaciones**: Emails, agendas, transcripciones
+            
+            **💡 Perfecto para empresas que quieren automatizar procesos complejos sin intervención humana**
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("🎯 Ejecutar Automatización"):
+                    gr.Markdown("### Selecciona una categoría y tipo de automatización")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            rpa_category = gr.Dropdown(
+                                label="📂 Categoría",
+                                choices=[
+                                    ("💰 Finanzas y Contabilidad", "finanzas"),
+                                    ("👥 Recursos Humanos", "rrhh"),
+                                    ("📦 Logística y Cadena de Suministro", "logistica"),
+                                    ("📢 Marketing y Ventas", "marketing"),
+                                    ("🏥 Salud", "salud"),
+                                    ("🏭 Industria y Manufactura", "manufactura"),
+                                    ("🔒 TI y Seguridad", "ti_seguridad"),
+                                    ("⚖️ Legal", "legal"),
+                                    ("📊 Gestión de Proyectos", "gestion_proyectos"),
+                                    ("🎓 Educación", "educacion"),
+                                    ("💬 Comunicaciones", "comunicaciones")
+                                ],
+                                value="finanzas",
+                                info="Selecciona el área de automatización"
+                            )
+                            
+                            rpa_task_type = gr.Dropdown(
+                                label="⚙️ Tipo de Tarea",
+                                choices=[],
+                                value=None,
+                                info="Selecciona la tarea específica a automatizar"
+                            )
+                            
+                            rpa_parameters = gr.Textbox(
+                                label="📝 Parámetros (JSON)",
+                                placeholder='{"parametro1": "valor1", "parametro2": "valor2"}',
+                                lines=10,
+                                value="{}",
+                                info="Ingresa los parámetros necesarios en formato JSON"
+                            )
+                            
+                            rpa_documents = gr.Files(
+                                label="📄 Documentos de Entrada (Opcional)",
+                                file_count="multiple",
+                                file_types=[".pdf", ".docx", ".txt", ".json", ".csv"]
+                            )
+                            
+                            execute_rpa_btn = gr.Button("🚀 Ejecutar Automatización", variant="primary", size="lg")
+                        
+                        with gr.Column(scale=1):
+                            rpa_output = gr.Markdown("")
+                            rpa_execution_time = gr.Markdown("")
+                    
+                    def update_task_types(category):
+                        """Actualiza los tipos de tarea según la categoría seleccionada."""
+                        if not rpa_engine:
+                            return gr.Dropdown(choices=[], value=None)
+                        
+                        categories = rpa_engine.get_available_categories()
+                        category_data = next((c for c in categories if c["category"] == category), None)
+                        
+                        if category_data:
+                            choices = [(task["name"], task["id"]) for task in category_data["tasks"]]
+                            return gr.Dropdown(choices=choices, value=choices[0][1] if choices else None)
+                        return gr.Dropdown(choices=[], value=None)
+                    
+                    def execute_rpa_automation(category, task_type, parameters_json, documents):
+                        """Ejecuta una automatización RPA."""
+                        if not rpa_engine:
+                            return "❌ RPA Engine no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true", ""
+                        
+                        if not category or not task_type:
+                            return "⚠️ Por favor, selecciona una categoría y tipo de tarea.", ""
+                        
+                        try:
+                            # Parsear parámetros JSON
+                            try:
+                                parameters = json.loads(parameters_json) if parameters_json.strip() else {}
+                            except json.JSONDecodeError:
+                                return "❌ Error: Los parámetros deben estar en formato JSON válido.", ""
+                            
+                            # Procesar documentos si hay
+                            docs = None
+                            if documents:
+                                from docchat.document_processor import DocumentProcessor
+                                processor = DocumentProcessor(rpa_engine.config)
+                                docs = processor.process(documents)
+                            
+                            # Ejecutar automatización
+                            result = rpa_engine.execute_automation(
+                                category=category,
+                                task_type=task_type,
+                                parameters=parameters,
+                                documents=docs
+                            )
+                            
+                            # Formatear salida
+                            output = f"""
+## ✅ Automatización Completada
+
+**ID:** {result.automation_id}
+**Categoría:** {result.category}
+**Tipo:** {result.task_type}
+**Estado:** {'✅ Éxito' if result.success else '❌ Error'}
+**Tiempo de Ejecución:** {result.execution_time:.2f} segundos
+
+### 📊 Resultado:
+```json
+{json.dumps(result.data, indent=2, ensure_ascii=False)}
+```
+
+### 💬 Mensaje:
+{result.message}
+
+### 🔧 Herramientas Usadas:
+{', '.join(result.tools_used) if result.tools_used else 'Ninguna'}
+"""
+                            
+                            time_info = f"⏱️ **Tiempo de ejecución:** {result.execution_time:.2f} segundos"
+                            
+                            return output, time_info
+                        
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando automatización: {str(e)}", ""
+                    
+                    rpa_category.change(
+                        fn=update_task_types,
+                        inputs=[rpa_category],
+                        outputs=[rpa_task_type]
+                    )
+                    
+                    execute_rpa_btn.click(
+                        fn=execute_rpa_automation,
+                        inputs=[rpa_category, rpa_task_type, rpa_parameters, rpa_documents],
+                        outputs=[rpa_output, rpa_execution_time]
+                    )
+                    
+                    # Cargar tipos de tarea iniciales
+                    if rpa_engine:
+                        initial_tasks = update_task_types("finanzas")
+                        if hasattr(initial_tasks, 'choices') and initial_tasks.choices:
+                            rpa_task_type.choices = initial_tasks.choices
+                            rpa_task_type.value = initial_tasks.value
+                
+                with gr.Tab("📋 Categorías Disponibles"):
+                    gr.Markdown("### Todas las Categorías y Tareas de Automatización")
+                    
+                    categories_info = gr.Markdown("")
+                    
+                    def load_categories_info():
+                        if not rpa_engine:
+                            return "❌ RPA Engine no está habilitado."
+                        
+                        categories = rpa_engine.get_available_categories()
+                        
+                        info = "## 📚 Categorías de Automatización RPA\n\n"
+                        
+                        for cat in categories:
+                            info += f"### {cat['name']}\n\n"
+                            info += f"**Categoría ID:** `{cat['category']}`\n\n"
+                            info += "**Tareas disponibles:**\n"
+                            for task in cat['tasks']:
+                                info += f"- **{task['name']}** (ID: `{task['id']}`)\n"
+                            info += "\n---\n\n"
+                        
+                        return info
+                    
+                    if rpa_engine:
+                        categories_info.value = load_categories_info()
+                    else:
+                        categories_info.value = "❌ RPA Engine no está habilitado."
+                
+                with gr.Tab("📊 Estadísticas"):
+                    gr.Markdown("### Estadísticas de Automatizaciones RPA")
+                    
+                    rpa_stats_output = gr.Markdown("")
+                    refresh_rpa_stats_btn = gr.Button("🔄 Actualizar Estadísticas", variant="secondary")
+                    
+                    def get_rpa_stats():
+                        if not rpa_engine:
+                            return "❌ RPA Engine no está habilitado."
+                        
+                        try:
+                            stats = rpa_engine.get_stats()
+                            
+                            return f"""
+## 📊 Estadísticas de Automatización RPA
+
+### 📈 Métricas Generales:
+- **Total de Tareas:** {stats['total_tasks']}
+- **Completadas:** {stats['completed_tasks']}
+- **Fallidas:** {stats['failed_tasks']}
+- **Tasa de Éxito:** {stats.get('success_rate', 0):.1f}%
+- **Tiempo Promedio:** {stats.get('average_execution_time', 0):.2f} segundos
+
+### 📂 Por Categoría:
+{chr(10).join([f"- **{cat}**: {count} tareas" for cat, count in stats.get('by_category', {}).items()]) if stats.get('by_category') else "Ninguna"}
+
+### 📊 Total de Automatizaciones:
+- **Ejecutadas:** {stats.get('total_automations', 0)}
+"""
+                        except Exception as e:
+                            return f"❌ Error obteniendo estadísticas: {str(e)}"
+                    
+                    refresh_rpa_stats_btn.click(
+                        fn=get_rpa_stats,
+                        outputs=[rpa_stats_output]
+                    )
+                    
+                    if rpa_engine:
+                        rpa_stats_output.value = get_rpa_stats()
+                    else:
+                        rpa_stats_output.value = "❌ RPA Engine no está habilitado."
+                
+                with gr.Tab("🔌 API y Conexiones Enterprise"):
+                    gr.Markdown("### Conecta tu Sistema Enterprise por API")
+                    gr.Markdown("""
+                    **🚀 Integra tu sistema empresarial con Automatización RPA**
+                    
+                    Conecta tu ERP, CRM, o cualquier sistema empresarial para que los Agentic AI procesen datos automáticamente en tiempo real.
+                    
+                    **Características:**
+                    - 📡 **Webhooks en Tiempo Real**: Recibe datos de tu empresa automáticamente
+                    - 🤖 **Procesamiento Automático**: Los Agentic AI procesan datos sin intervención
+                    - 🔄 **Integración Continua**: Datos fluyen automáticamente desde tu sistema
+                    - 📊 **Monitoreo en Tiempo Real**: Ve el estado de todas las automatizaciones
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📝 Registrar Conexión Enterprise")
+                            
+                            enterprise_name = gr.Textbox(
+                                label="🏢 Nombre de la Empresa/App",
+                                placeholder="Mi Empresa S.A.",
+                                value=""
+                            )
+                            
+                            enterprise_api_key = gr.Textbox(
+                                label="🔑 API Key (se generará automáticamente)",
+                                value="",
+                                interactive=False
+                            )
+                            
+                            enterprise_webhook_url = gr.Textbox(
+                                label="📡 Webhook URL de tu Sistema",
+                                placeholder="https://tu-sistema.com/webhook",
+                                value="",
+                                info="URL donde tu sistema enviará datos en tiempo real"
+                            )
+                            
+                            enterprise_categories = gr.CheckboxGroup(
+                                label="📂 Categorías de Automatización",
+                                choices=[
+                                    "Finanzas",
+                                    "RRHH",
+                                    "Logística",
+                                    "Marketing",
+                                    "Salud",
+                                    "Manufactura",
+                                    "TI y Seguridad",
+                                    "Legal",
+                                    "Gestión de Proyectos",
+                                    "Educación",
+                                    "Comunicaciones"
+                                ],
+                                value=[],
+                                info="Selecciona las categorías que tu empresa usará"
+                            )
+                            
+                            register_enterprise_btn = gr.Button("✅ Registrar Conexión Enterprise", variant="primary")
+                            enterprise_status = gr.Markdown("")
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📋 Conexiones Registradas")
+                            
+                            enterprise_connections = gr.Dataframe(
+                                label="Conexiones Activas",
+                                headers=["Empresa", "Enterprise ID", "Estado", "Total Requests", "Éxito"],
+                                interactive=False,
+                                wrap=True
+                            )
+                            
+                            refresh_connections_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                            
+                            def refresh_connections_list():
+                                """Actualiza la lista de conexiones."""
+                                if not rpa_enterprise:
+                                    return None, "❌ RPA Enterprise Integration no está habilitado."
+                                
+                                try:
+                                    connections = rpa_enterprise.get_all_connections()
+                                    
+                                    if not connections:
+                                        return None, "📝 No hay conexiones registradas aún."
+                                    
+                                    data = []
+                                    for conn in connections:
+                                        success_rate = (
+                                            (conn.get("successful_automations", 0) / conn.get("total_requests", 1) * 100)
+                                            if conn.get("total_requests", 0) > 0 else 0
+                                        )
+                                        data.append([
+                                            conn.get("name", ""),
+                                            conn.get("enterprise_id", "")[:20] + "...",
+                                            "✅ Activa" if conn.get("status") == "active" else "⏸️ Pausada",
+                                            str(conn.get("total_requests", 0)),
+                                            f"{success_rate:.1f}%"
+                                        ])
+                                    
+                                    return data, f"✅ {len(connections)} conexiones encontradas"
+                                except Exception as e:
+                                    return None, f"❌ Error: {str(e)}"
+                            
+                            refresh_connections_btn.click(
+                                fn=refresh_connections_list,
+                                outputs=[enterprise_connections, enterprise_status]
+                            )
+                            
+                            # Cargar conexiones iniciales
+                            if rpa_enterprise:
+                                initial_data, initial_msg = refresh_connections_list()
+                                if initial_data:
+                                    enterprise_connections.value = initial_data
+                            
+                            gr.Markdown("### 📡 Endpoint de Webhook")
+                            webhook_endpoint_info = gr.Markdown("""
+                            **URL del Webhook para recibir datos:**
+                            
+                            ```
+                            POST http://tu-servidor:8000/api/v1/rpa/webhook/{enterprise_id}
+                            ```
+                            
+                            **Headers requeridos:**
+                            - `X-API-Key`: Tu API Key
+                            - `Content-Type`: application/json
+                            
+                            **Body (JSON):**
+                            ```json
+                            {
+                              "category": "finanzas",
+                              "task_type": "generar_factura",
+                              "data": {
+                                "parametro1": "valor1",
+                                "parametro2": "valor2"
+                              }
+                            }
+                            ```
+                            """)
+                    
+                    def register_enterprise_connection(name, webhook_url, categories):
+                        """Registra una nueva conexión enterprise."""
+                        if not rpa_enterprise:
+                            return "❌ RPA Enterprise Integration no está habilitado.", None, ""
+                        
+                        if not name or not name.strip():
+                            return "⚠️ Ingresa el nombre de la empresa.", None, ""
+                        
+                        try:
+                            # Registrar conexión
+                            connection = rpa_enterprise.register_enterprise_connection(
+                                name=name,
+                                webhook_url=webhook_url if webhook_url else None,
+                                categories=categories if categories else None
+                            )
+                            
+                            status_msg = f"""
+✅ **Conexión registrada exitosamente!**
+
+**Enterprise ID:** `{connection.enterprise_id}`
+**API Key:** `{connection.api_key}`
+
+⚠️ **IMPORTANTE:** Guarda esta API Key de forma segura. No se mostrará nuevamente.
+
+**Endpoint de Webhook:**
+```
+POST http://tu-servidor:8000/api/v1/rpa/webhook/{connection.enterprise_id}
+Headers:
+  X-API-Key: {connection.api_key}
+  Content-Type: application/json
+
+Body:
+{{
+  "category": "finanzas",
+  "task_type": "generar_factura",
+  "data": {{ ... }}
+}}
+```
+"""
+                            
+                            return status_msg, None, connection.api_key
+                        except Exception as e:
+                            return f"❌ Error registrando conexión: {str(e)}", None, ""
+                    
+                    register_enterprise_btn.click(
+                        fn=register_enterprise_connection,
+                        inputs=[enterprise_name, enterprise_webhook_url, enterprise_categories],
+                        outputs=[enterprise_status, enterprise_connections, enterprise_api_key]
+                    )
+                
+                with gr.Tab("📖 Guía y Ejemplos"):
+                    gr.Markdown("""
+                    ### 📖 Guía de Uso de Automatización RPA
+                    
+                    ## 🎯 Cómo Usar
+                    
+                    1. **Selecciona una Categoría** (ej: Finanzas, RRHH, Logística)
+                    2. **Selecciona un Tipo de Tarea** (se actualiza automáticamente)
+                    3. **Ingresa los Parámetros** en formato JSON
+                    4. **Opcionalmente sube Documentos** relacionados
+                    5. **Ejecuta** y recibe el resultado automáticamente
+                    
+                    ## 💰 Ejemplo: Finanzas - Generar Factura
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "orden_compra": "OC-12345",
+                      "cliente": {
+                        "nombre": "Empresa ABC",
+                        "email": "contacto@empresaabc.com",
+                        "direccion": "Calle 123"
+                      },
+                      "items": [
+                        {"descripcion": "Producto A", "cantidad": 2, "precio": 100},
+                        {"descripcion": "Producto B", "cantidad": 1, "precio": 200}
+                      ]
+                    }
+                    ```
+                    
+                    ## 👥 Ejemplo: RRHH - Filtrar CVs
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "cvs": [
+                        {
+                          "nombre": "Juan Pérez",
+                          "contenido": "Ingeniero con 5 años de experiencia en Python, SQL, Machine Learning..."
+                        }
+                      ],
+                      "requisitos": {
+                        "experiencia_minima": 3,
+                        "educacion": "universitaria",
+                        "habilidades": ["Python", "SQL", "Machine Learning"]
+                      }
+                    }
+                    ```
+                    
+                    ## 📦 Ejemplo: Logística - Gestión de Inventario
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "productos": [
+                        {"id": "PROD-001", "nombre": "Producto A", "stock": 5, "stock_maximo": 100, "proveedor": "Proveedor X"},
+                        {"id": "PROD-002", "nombre": "Producto B", "stock": 15, "stock_maximo": 50, "proveedor": "Proveedor Y"}
+                      ],
+                      "umbral_minimo": 10
+                    }
+                    ```
+                    
+                    ## 🏥 Ejemplo: Salud - Gestión de Citas
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "solicitudes": [
+                        {
+                          "paciente": "María García",
+                          "fecha_preferida": "2025-01-25T10:00:00",
+                          "tipo": "consulta"
+                        }
+                      ],
+                      "doctores": [
+                        {"id": "DOC-001", "nombre": "Dr. López", "especialidad": "General"}
+                      ]
+                    }
+                    ```
+                    
+                    ## ⚖️ Ejemplo: Legal - Revisar Contrato
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "contrato": "Texto del contrato aquí..."
+                    }
+                    ```
+                    
+                    O sube un documento PDF/DOCX con el contrato.
+                    
+                    ## 🔒 Ejemplo: TI - Gestión de Contraseñas
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "sistemas": [
+                        {"nombre": "Sistema ERP", "usuario": "admin"},
+                        {"nombre": "Sistema CRM", "usuario": "admin"}
+                      ],
+                      "longitud": 16
+                    }
+                    ```
+                    
+                    ---
+                    
+                    **💡 Tip:** Consulta la documentación completa en `GUIA_RPA_AUTOMATION.md`
+                    """)
+        
+        # Tab 4.8: Analytics y Dashboard (NUEVO)
         with gr.Tab("📊 Analytics y Dashboard"):
             gr.Markdown("### 📊 Analytics y Business Intelligence")
             gr.Markdown("""
@@ -3100,7 +3633,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 outputs=[analytics_output, frequent_questions_output, roi_output]
             )
         
-        # Tab 4.7: Cloud Storage Integration (NUEVO)
+        # Tab 4.6: Cloud Storage Integration (NUEVO)
         with gr.Tab("☁️ Cloud Storage"):
             gr.Markdown("### Conecta tu Cloud Storage para Procesamiento Automático")
             gr.Markdown("""
@@ -3380,390 +3913,12 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     5. URL: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
                     """)
         
-        # Tab 4.8: Automatización RPA (NUEVO)
-        with gr.Tab("🤖 Automatización RPA"):
+        # Tab 4.8: Automatización RPA - Movido arriba, eliminar duplicado
             gr.Markdown("### Automatización de Procesos con RPA + IA")
             gr.Markdown("""
             **🚀 Automatiza tareas repetitivas empresariales con Agentic AI**
             
             - 💰 **Finanzas**: Facturación, conciliación, pagos, impuestos, auditoría, cuentas
-            - 👥 **RRHH**: Reclutamiento, onboarding, nómina, ausencias, evaluaciones
-            - 📦 **Logística**: Inventario, envíos, rutas, órdenes de compra, facturación transporte
-            - 📢 **Marketing**: Leads, campañas, seguimiento, precios, análisis comportamiento
-            - 🏥 **Salud**: Registros médicos, citas, reclamaciones, diagnóstico, monitoreo
-            - 🏭 **Manufactura**: Mantenimiento predictivo, calidad, producción, proveedores, productividad
-            - 🔒 **TI**: Seguridad, contraseñas, anomalías, backups
-            - ⚖️ **Legal**: Contratos, documentos, cumplimiento, investigación
-            - 📊 **Proyectos**: Gestión, reportes, recursos, alertas
-            - 🎓 **Educación**: Evaluaciones, contenidos, inscripciones, progreso
-            - 💬 **Comunicaciones**: Emails, agendas, transcripciones
-            
-            **💡 Perfecto para empresas que quieren automatizar procesos complejos sin intervención humana**
-            """)
-            
-            with gr.Tabs():
-                with gr.Tab("🎯 Ejecutar Automatización"):
-                    gr.Markdown("### Selecciona una categoría y tipo de automatización")
-                    
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            rpa_category = gr.Dropdown(
-                                label="📂 Categoría",
-                                choices=[
-                                    ("💰 Finanzas y Contabilidad", "finanzas"),
-                                    ("👥 Recursos Humanos", "rrhh"),
-                                    ("📦 Logística y Cadena de Suministro", "logistica"),
-                                    ("📢 Marketing y Ventas", "marketing"),
-                                    ("🏥 Salud", "salud"),
-                                    ("🏭 Industria y Manufactura", "manufactura"),
-                                    ("🔒 TI y Seguridad", "ti_seguridad"),
-                                    ("⚖️ Legal", "legal"),
-                                    ("📊 Gestión de Proyectos", "gestion_proyectos"),
-                                    ("🎓 Educación", "educacion"),
-                                    ("💬 Comunicaciones", "comunicaciones")
-                                ],
-                                value="finanzas",
-                                info="Selecciona el área de automatización"
-                            )
-                            
-                            rpa_task_type = gr.Dropdown(
-                                label="⚙️ Tipo de Tarea",
-                                choices=[],
-                                value=None,
-                                info="Selecciona la tarea específica a automatizar"
-                            )
-                            
-                            rpa_parameters = gr.Textbox(
-                                label="📝 Parámetros (JSON)",
-                                placeholder='{"parametro1": "valor1", "parametro2": "valor2"}',
-                                lines=10,
-                                value="{}",
-                                info="Ingresa los parámetros necesarios en formato JSON"
-                            )
-                            
-                            rpa_documents = gr.Files(
-                                label="📄 Documentos de Entrada (Opcional)",
-                                file_count="multiple",
-                                file_types=[".pdf", ".docx", ".txt", ".json", ".csv"]
-                            )
-                            
-                            execute_rpa_btn = gr.Button("🚀 Ejecutar Automatización", variant="primary", size="lg")
-                        
-                        with gr.Column(scale=1):
-                            rpa_output = gr.Markdown("")
-                            rpa_execution_time = gr.Markdown("")
-                    
-                    def update_task_types(category):
-                        """Actualiza los tipos de tarea según la categoría seleccionada."""
-                        if not rpa_engine:
-                            return gr.Dropdown(choices=[], value=None)
-                        
-                        categories = rpa_engine.get_available_categories()
-                        category_data = next((c for c in categories if c["category"] == category), None)
-                        
-                        if category_data:
-                            choices = [(task["name"], task["id"]) for task in category_data["tasks"]]
-                            return gr.Dropdown(choices=choices, value=choices[0][1] if choices else None)
-                        return gr.Dropdown(choices=[], value=None)
-                    
-                    def execute_rpa_automation(category, task_type, parameters_json, documents):
-                        """Ejecuta una automatización RPA."""
-                        if not rpa_engine:
-                            return "❌ RPA Engine no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true", ""
-                        
-                        if not category or not task_type:
-                            return "⚠️ Por favor, selecciona una categoría y tipo de tarea.", ""
-                        
-                        try:
-                            # Parsear parámetros JSON
-                            try:
-                                parameters = json.loads(parameters_json) if parameters_json.strip() else {}
-                            except json.JSONDecodeError:
-                                return "❌ Error: Los parámetros deben estar en formato JSON válido.", ""
-                            
-                            # Procesar documentos si hay
-                            docs = None
-                            if documents:
-                                from docchat.document_processor import DocumentProcessor
-                                processor = DocumentProcessor(rpa_engine.config)
-                                docs = processor.process(documents)
-                            
-                            # Ejecutar automatización
-                            result = rpa_engine.execute_automation(
-                                category=category,
-                                task_type=task_type,
-                                parameters=parameters,
-                                documents=docs
-                            )
-                            
-                            # Formatear salida
-                            output = f"""
-## ✅ Automatización Completada
-
-**ID:** {result.automation_id}
-**Categoría:** {result.category}
-**Tipo:** {result.task_type}
-**Estado:** {'✅ Éxito' if result.success else '❌ Error'}
-**Tiempo de Ejecución:** {result.execution_time:.2f} segundos
-
-### 📊 Resultado:
-```json
-{json.dumps(result.data, indent=2, ensure_ascii=False)}
-```
-
-### 💬 Mensaje:
-{result.message}
-
-### 🔧 Herramientas Usadas:
-{', '.join(result.tools_used) if result.tools_used else 'Ninguna'}
-"""
-                            
-                            time_info = f"⏱️ **Tiempo de ejecución:** {result.execution_time:.2f} segundos"
-                            
-                            return output, time_info
-                        
-                        except Exception as e:
-                            import traceback
-                            traceback.print_exc()
-                            return f"❌ Error ejecutando automatización: {str(e)}", ""
-                    
-                    rpa_category.change(
-                        fn=update_task_types,
-                        inputs=[rpa_category],
-                        outputs=[rpa_task_type]
-                    )
-                    
-                    execute_rpa_btn.click(
-                        fn=execute_rpa_automation,
-                        inputs=[rpa_category, rpa_task_type, rpa_parameters, rpa_documents],
-                        outputs=[rpa_output, rpa_execution_time]
-                    )
-                    
-                    # Cargar tipos de tarea iniciales
-                    if rpa_engine:
-                        initial_tasks = update_task_types("finanzas")
-                        if hasattr(initial_tasks, 'choices') and initial_tasks.choices:
-                            rpa_task_type.choices = initial_tasks.choices
-                            rpa_task_type.value = initial_tasks.value
-                
-                with gr.Tab("📋 Categorías Disponibles"):
-                    gr.Markdown("### Todas las Categorías y Tareas de Automatización")
-                    
-                    categories_info = gr.Markdown("")
-                    
-                    def load_categories_info():
-                        if not rpa_engine:
-                            return "❌ RPA Engine no está habilitado."
-                        
-                        categories = rpa_engine.get_available_categories()
-                        
-                        info = "## 📚 Categorías de Automatización RPA\n\n"
-                        
-                        for cat in categories:
-                            info += f"### {cat['name']}\n\n"
-                            info += f"**Categoría ID:** `{cat['category']}`\n\n"
-                            info += "**Tareas disponibles:**\n"
-                            for task in cat['tasks']:
-                                info += f"- **{task['name']}** (ID: `{task['id']}`)\n"
-                            info += "\n---\n\n"
-                        
-                        return info
-                    
-                    if rpa_engine:
-                        categories_info.value = load_categories_info()
-                    else:
-                        categories_info.value = "❌ RPA Engine no está habilitado."
-                
-                with gr.Tab("📊 Estadísticas"):
-                    gr.Markdown("### Estadísticas de Automatizaciones RPA")
-                    
-                    rpa_stats_output = gr.Markdown("")
-                    refresh_rpa_stats_btn = gr.Button("🔄 Actualizar Estadísticas", variant="secondary")
-                    
-                    def get_rpa_stats():
-                        if not rpa_engine:
-                            return "❌ RPA Engine no está habilitado."
-                        
-                        try:
-                            stats = rpa_engine.get_stats()
-                            
-                            return f"""
-## 📊 Estadísticas de Automatización RPA
-
-### 📈 Métricas Generales:
-- **Total de Tareas:** {stats['total_tasks']}
-- **Completadas:** {stats['completed_tasks']}
-- **Fallidas:** {stats['failed_tasks']}
-- **Tasa de Éxito:** {stats.get('success_rate', 0):.1f}%
-- **Tiempo Promedio:** {stats.get('average_execution_time', 0):.2f} segundos
-
-### 📂 Por Categoría:
-{chr(10).join([f"- **{cat}**: {count} tareas" for cat, count in stats.get('by_category', {}).items()]) if stats.get('by_category') else "Ninguna"}
-
-### 📊 Total de Automatizaciones:
-- **Ejecutadas:** {stats.get('total_automations', 0)}
-"""
-                        except Exception as e:
-                            return f"❌ Error obteniendo estadísticas: {str(e)}"
-                    
-                    refresh_rpa_stats_btn.click(
-                        fn=get_rpa_stats,
-                        outputs=[rpa_stats_output]
-                    )
-                    
-                    if rpa_engine:
-                        rpa_stats_output.value = get_rpa_stats()
-                    else:
-                        rpa_stats_output.value = "❌ RPA Engine no está habilitado."
-                
-                with gr.Tab("📖 Guía y Ejemplos"):
-                    gr.Markdown("""
-                    ### 📖 Guía de Uso de Automatización RPA
-                    
-                    ## 🎯 Cómo Usar
-                    
-                    1. **Selecciona una Categoría** (ej: Finanzas, RRHH, Logística)
-                    2. **Selecciona un Tipo de Tarea** (se actualiza automáticamente)
-                    3. **Ingresa los Parámetros** en formato JSON
-                    4. **Opcionalmente sube Documentos** relacionados
-                    5. **Ejecuta** y recibe el resultado automáticamente
-                    
-                    ## 💰 Ejemplo: Finanzas - Generar Factura
-                    
-                    **Parámetros:**
-                    ```json
-                    {
-                      "orden_compra": "OC-12345",
-                      "cliente": {
-                        "nombre": "Empresa ABC",
-                        "email": "contacto@empresaabc.com",
-                        "direccion": "Calle 123"
-                      },
-                      "items": [
-                        {"descripcion": "Producto A", "cantidad": 2, "precio": 100},
-                        {"descripcion": "Producto B", "cantidad": 1, "precio": 200}
-                      ]
-                    }
-                    ```
-                    
-                    ## 👥 Ejemplo: RRHH - Filtrar CVs
-                    
-                    **Parámetros:**
-                    ```json
-                    {
-                      "cvs": [
-                        {
-                          "nombre": "Juan Pérez",
-                          "contenido": "Ingeniero con 5 años de experiencia en Python, SQL, Machine Learning..."
-                        }
-                      ],
-                      "requisitos": {
-                        "experiencia_minima": 3,
-                        "educacion": "universitaria",
-                        "habilidades": ["Python", "SQL", "Machine Learning"]
-                      }
-                    }
-                    ```
-                    
-                    ## 📦 Ejemplo: Logística - Gestión de Inventario
-                    
-                    **Parámetros:**
-                    ```json
-                    {
-                      "productos": [
-                        {"id": "PROD-001", "nombre": "Producto A", "stock": 5, "stock_maximo": 100, "proveedor": "Proveedor X"},
-                        {"id": "PROD-002", "nombre": "Producto B", "stock": 15, "stock_maximo": 50, "proveedor": "Proveedor Y"}
-                      ],
-                      "umbral_minimo": 10
-                    }
-                    ```
-                    
-                    ## 🏥 Ejemplo: Salud - Gestión de Citas
-                    
-                    **Parámetros:**
-                    ```json
-                    {
-                      "solicitudes": [
-                        {
-                          "paciente": "María García",
-                          "fecha_preferida": "2025-01-25T10:00:00",
-                          "tipo": "consulta"
-                        }
-                      ],
-                      "doctores": [
-                        {"id": "DOC-001", "nombre": "Dr. López", "especialidad": "General"}
-                      ]
-                    }
-                    ```
-                    
-                    ## ⚖️ Ejemplo: Legal - Revisar Contrato
-                    
-                    **Parámetros:**
-                    ```json
-                    {
-                      "contrato": "Texto del contrato aquí..."
-                    }
-                    ```
-                    
-                    O sube un documento PDF/DOCX con el contrato.
-                    
-                    ## 🔒 Ejemplo: TI - Gestión de Contraseñas
-                    
-                    **Parámetros:**
-                    ```json
-                    {
-                      "sistemas": [
-                        {"nombre": "Sistema ERP", "usuario": "admin"},
-                        {"nombre": "Sistema CRM", "usuario": "admin"}
-                      ],
-                      "longitud": 16
-                    }
-                    ```
-                    
-                    ---
-                    
-                    **💡 Tip:** Consulta la documentación completa en `GUIA_RPA_AUTOMATION.md`
-                    """)
-        
-    
-    gr.Markdown(
-        """
-        ---
-        ### 💡 Consejos
-        
-        - **RAG Principal**: Para consultas estándar con verificación
-        - **Procesamiento Masivo**: Para analizar grandes volúmenes de documentos
-        - **Agentes Autónomos**: Para automatizar tareas complejas
-        - **Memoria**: El sistema aprende y mejora con cada consulta
-        
-        ### ⚙️ Configuración
-        
-        - Límite de documentos: hasta 1000 por lote
-        - Tamaño máximo: 5GB por lote
-        - Workers paralelos: 16 (optimizado para lotes grandes)
-        - Memoria: Habilitada por defecto (365 días de retención)
-        - Auditoría: Habilitada por defecto
-        """
-    )
-
-
-if __name__ == "__main__":
-    import socket
-    
-    # Find an available port
-    def find_free_port(start_port=7860):
-        for port in range(start_port, start_port + 10):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind(('127.0.0.1', port))
-                    return port
-            except OSError:
-                continue
-        return start_port  # Fallback
-    
-    port = find_free_port()
-    print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
-    demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
             - 👥 **RRHH**: Reclutamiento, onboarding, nómina, ausencias, evaluaciones
             - 📦 **Logística**: Inventario, envíos, rutas, órdenes de compra, facturación transporte
             - 📢 **Marketing**: Leads, campañas, seguimiento, precios, análisis comportamiento

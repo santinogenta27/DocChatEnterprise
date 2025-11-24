@@ -19,6 +19,8 @@ from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
 from docchat.customer_service_agent import CustomerServiceAgent
 from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
+from docchat.rpa_automation import RPAAutomationEngine
+from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
 from docchat.audit import AuditLogger
 
 # Cargar configuración
