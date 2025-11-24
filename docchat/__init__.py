@@ -15,6 +15,7 @@ from .customer_service_agent import CustomerServiceAgent, CustomerInquiry, Servi
 from .rpa_automation import RPAAutomationEngine, RPATask, RPAAutomation  # noqa: F401
 from .rpa_enterprise_integration import RPAEnterpriseIntegration, EnterpriseConnection, RealtimeDataEvent  # noqa: F401
 from .chatbot_mode import ChatbotMode, ChatbotConnection, RAGResponse  # noqa: F401
+from .semantic_data_engine import SemanticDataEngine, SemanticDocument, SemanticQuery, DataLineage, DataModality  # noqa: F401
 from .cloud_integrations import CloudStorageIntegration, WebhookProcessor  # noqa: F401
 from .auth import UserManager, WorkspaceManager  # noqa: F401
 from .integrations import (  # noqa: F401
@@ -70,6 +71,11 @@ __all__ = [
     "ChatbotMode",
     "ChatbotConnection",
     "RAGResponse",
+    "SemanticDataEngine",
+    "SemanticDocument",
+    "SemanticQuery",
+    "DataLineage",
+    "DataModality",
     "CloudStorageIntegration",
     "WebhookProcessor",
     "UserManager",

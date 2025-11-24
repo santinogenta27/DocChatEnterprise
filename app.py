@@ -58,6 +58,7 @@ from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.rpa_automation import RPAAutomationEngine
 from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
+from docchat.semantic_data_engine import SemanticDataEngine, DataModality
 from docchat.audit import AuditLogger
 from docchat.auth import UserManager, WorkspaceManager
 
@@ -111,6 +112,7 @@ enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
 rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
+semantic_engine = SemanticDataEngine(config)
 chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
@@ -3593,7 +3595,483 @@ Body:
                     **💡 Tip:** Consulta la documentación completa en `GUIA_RPA_AUTOMATION.md`
                     """)
         
-        # Tab 4.8: Analytics y Dashboard (NUEVO)
+        # Tab 4.8: Procesamiento Semántico de Datos (NUEVO - NVIDIA/NetApp AI Data Engine)
+        with gr.Tab("🧠 Procesamiento Semántico"):
+            gr.Markdown("### Procesamiento Semántico de Datos - AI Data Engine")
+            gr.Markdown("""
+            **🚀 Reinvención del Procesamiento de Datos con IA Semántica**
+            
+            Inspirado en la colaboración NVIDIA/NetApp, este modo implementa:
+            
+            - 🧠 **Procesamiento Semántico**: Embedding e indexación basada en redes neuronales (no hash tables)
+            - 🔍 **Base de Datos Vectorizada**: Búsqueda por nearest neighbors en espacio vectorial
+            - 📊 **Multimodal**: Soporte para texto, PDF, video, audio, imágenes, datos estructurados, químicos, proteínas
+            - 💬 **Búsqueda Conversacional**: "Solo pregunta a NetApp" - búsqueda en lenguaje natural
+            - 🔗 **Tracking de Lineage**: Rastreo completo de transformaciones y versiones de embeddings
+            - 🛡️ **Guardrails y Seguridad**: Control de acceso y políticas de seguridad
+            - ⚡ **Procesamiento Near-Data**: Procesamiento cerca de los datos, sin moverlos del storage
+            
+            **💡 Perfecto para empresas que necesitan extraer conocimiento de datos no estructurados y multimodales**
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("📤 Indexar Documentos"):
+                    gr.Markdown("### Sube y Procesa Documentos Semánticamente")
+                    gr.Markdown("""
+                    Los documentos se procesan usando **embeddings semánticos** (redes neuronales) 
+                    en lugar de indexación tradicional (hash tables, árboles).
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            semantic_files = gr.Files(
+                                label="📄 Documentos a Indexar",
+                                file_count="multiple",
+                                file_types=[".pdf", ".txt", ".md", ".docx", ".json", ".csv", ".mp4", ".mp3", ".jpg", ".png"]
+                            )
+                            
+                            semantic_modality = gr.Dropdown(
+                                label="🎯 Modalidad (Opcional - Auto-detecta si no se especifica)",
+                                choices=[
+                                    ("Auto-detectar", None),
+                                    ("📝 Texto", "text"),
+                                    ("📄 PDF", "pdf"),
+                                    ("🎥 Video", "video"),
+                                    ("🎵 Audio", "audio"),
+                                    ("🖼️ Imagen", "image"),
+                                    ("📊 Estructurado (JSON/CSV)", "structured"),
+                                    ("🧪 Químico", "chemical"),
+                                    ("🧬 Proteína", "protein"),
+                                    ("🏥 Registro de Salud", "health_record")
+                                ],
+                                value=None,
+                                info="Especifica la modalidad o deja que se auto-detecte"
+                            )
+                            
+                            index_semantic_btn = gr.Button("🚀 Indexar Semánticamente", variant="primary", size="lg")
+                        
+                        with gr.Column(scale=1):
+                            semantic_index_output = gr.Markdown("")
+                    
+                    def index_semantic_documents(files, modality_str):
+                        """Indexa documentos usando procesamiento semántico."""
+                        if not files:
+                            return "⚠️ Por favor, sube al menos un documento."
+                        
+                        try:
+                            # Convert modality string to enum
+                            modality = None
+                            if modality_str:
+                                modality = DataModality(modality_str)
+                            
+                            results = []
+                            for file in files:
+                                try:
+                                    # Read file content
+                                    if hasattr(file, 'name'):
+                                        file_path = file.name
+                                    else:
+                                        file_path = str(file)
+                                    
+                                    # Read content based on file type
+                                    if file_path.endswith('.pdf'):
+                                        from PyPDF2 import PdfReader
+                                        reader = PdfReader(file_path)
+                                        content = "\n".join([page.extract_text() for page in reader.pages])
+                                    elif file_path.endswith(('.txt', '.md')):
+                                        with open(file_path, 'r', encoding='utf-8') as f:
+                                            content = f.read()
+                                    elif file_path.endswith('.json'):
+                                        with open(file_path, 'r', encoding='utf-8') as f:
+                                            data = json.load(f)
+                                            content = json.dumps(data, indent=2)
+                                    else:
+                                        # For other types, try to read as text
+                                        try:
+                                            with open(file_path, 'r', encoding='utf-8') as f:
+                                                content = f.read()
+                                        except:
+                                            content = f"[Archivo binario: {Path(file_path).name}]"
+                                    
+                                    # Embed document
+                                    semantic_doc = semantic_engine.embed_document(
+                                        content=content,
+                                        source_path=Path(file_path).name,
+                                        modality=modality,
+                                        metadata={"file_size": len(content)}
+                                    )
+                                    
+                                    results.append({
+                                        "doc_id": semantic_doc.doc_id,
+                                        "source": semantic_doc.source_path,
+                                        "modality": semantic_doc.modality.value,
+                                        "embedding_model": semantic_doc.embedding_model,
+                                        "status": "✅ Indexado"
+                                    })
+                                
+                                except Exception as e:
+                                    results.append({
+                                        "doc_id": "Error",
+                                        "source": Path(file_path).name if 'file_path' in locals() else "Unknown",
+                                        "modality": "N/A",
+                                        "embedding_model": "N/A",
+                                        "status": f"❌ Error: {str(e)}"
+                                    })
+                            
+                            # Format output
+                            output = "## ✅ Documentos Indexados Semánticamente\n\n"
+                            output += "| Documento | Modalidad | Modelo Embedding | Estado |\n"
+                            output += "|-----------|-----------|-------------------|--------|\n"
+                            
+                            for r in results:
+                                output += f"| {r['source']} | {r['modality']} | {r['embedding_model']} | {r['status']} |\n"
+                            
+                            output += f"\n**Total:** {len([r for r in results if '✅' in r['status']])} documentos indexados exitosamente."
+                            
+                            return output
+                        
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error indexando documentos: {str(e)}"
+                    
+                    index_semantic_btn.click(
+                        fn=index_semantic_documents,
+                        inputs=[semantic_files, semantic_modality],
+                        outputs=[semantic_index_output]
+                    )
+                
+                with gr.Tab("🔍 Búsqueda Semántica"):
+                    gr.Markdown("### Búsqueda Semántica - AI Queries (No SQL)")
+                    gr.Markdown("""
+                    Realiza búsquedas usando **consultas de IA** en lugar de SQL.
+                    La búsqueda es por **nearest neighbors** en espacio vectorial.
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            semantic_query = gr.Textbox(
+                                label="🔍 Consulta Semántica",
+                                placeholder="Ej: ¿Cuáles son los procedimientos de seguridad?",
+                                lines=3
+                            )
+                            
+                            semantic_modality_filter = gr.Dropdown(
+                                label="🎯 Filtrar por Modalidad (Opcional)",
+                                choices=[
+                                    ("Todas las modalidades", None),
+                                    ("📝 Texto", "text"),
+                                    ("📄 PDF", "pdf"),
+                                    ("🎥 Video", "video"),
+                                    ("🎵 Audio", "audio"),
+                                    ("🖼️ Imagen", "image"),
+                                    ("📊 Estructurado", "structured")
+                                ],
+                                value=None
+                            )
+                            
+                            semantic_k = gr.Slider(
+                                label="📊 Número de Resultados",
+                                minimum=1,
+                                maximum=20,
+                                value=5,
+                                step=1
+                            )
+                            
+                            use_reranking = gr.Checkbox(
+                                label="🔄 Usar Re-ranking con IA",
+                                value=True
+                            )
+                            
+                            search_semantic_btn = gr.Button("🔍 Buscar Semánticamente", variant="primary", size="lg")
+                        
+                        with gr.Column(scale=1):
+                            semantic_search_output = gr.Markdown("")
+                            semantic_search_time = gr.Markdown("")
+                    
+                    def perform_semantic_search(query, modality_filter_str, k, rerank):
+                        """Realiza búsqueda semántica."""
+                        if not query.strip():
+                            return "⚠️ Por favor, ingresa una consulta.", ""
+                        
+                        try:
+                            # Convert modality filter
+                            modality_filter = None
+                            if modality_filter_str:
+                                modality_filter = DataModality(modality_filter_str)
+                            
+                            # Perform search
+                            result = semantic_engine.semantic_search(
+                                query=query,
+                                modality_filter=modality_filter,
+                                k=int(k),
+                                use_reranking=rerank
+                            )
+                            
+                            # Format output
+                            output = f"## 🔍 Resultados de Búsqueda Semántica\n\n"
+                            output += f"**Consulta:** {result.query_text}\n\n"
+                            
+                            if not result.results:
+                                output += "❌ No se encontraron resultados."
+                            else:
+                                output += f"**Resultados encontrados:** {len(result.results)}\n\n"
+                                
+                                for i, r in enumerate(result.results, 1):
+                                    output += f"### Resultado {i}\n\n"
+                                    output += f"- **Fuente:** {r['source_path']}\n"
+                                    output += f"- **Modalidad:** {r['modality']}\n"
+                                    output += f"- **Similitud:** {r['similarity_score']:.4f}\n"
+                                    output += f"- **Modelo Embedding:** {r['embedding_model']}\n"
+                                    output += f"\n**Contenido:**\n{r['content']}\n\n"
+                                    output += "---\n\n"
+                            
+                            time_info = f"⏱️ **Tiempo de ejecución:** {result.execution_time:.3f} segundos"
+                            
+                            return output, time_info
+                        
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error en búsqueda semántica: {str(e)}", ""
+                    
+                    search_semantic_btn.click(
+                        fn=perform_semantic_search,
+                        inputs=[semantic_query, semantic_modality_filter, semantic_k, use_reranking],
+                        outputs=[semantic_search_output, semantic_search_time]
+                    )
+                
+                with gr.Tab("💬 Consulta Conversacional"):
+                    gr.Markdown("### Consulta Conversacional - 'Solo Pregunta a NetApp'")
+                    gr.Markdown("""
+                    **En el futuro, simplemente preguntas al AI y encuentra la respuesta.**
+                    
+                    El AI buscará en el sistema de almacenamiento y encontrará la respuesta automáticamente.
+                    """)
+                    
+                    semantic_chat_history = gr.State([])
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            semantic_chat_input = gr.Textbox(
+                                label="💬 Pregunta",
+                                placeholder="Ej: ¿Cuáles son las políticas de seguridad de la empresa?",
+                                lines=3
+                            )
+                            
+                            semantic_chat_modality = gr.Dropdown(
+                                label="🎯 Filtrar por Modalidad (Opcional)",
+                                choices=[
+                                    ("Todas", None),
+                                    ("📝 Texto", "text"),
+                                    ("📄 PDF", "pdf"),
+                                    ("🎥 Video", "video"),
+                                    ("🎵 Audio", "audio")
+                                ],
+                                value=None
+                            )
+                            
+                            semantic_chat_btn = gr.Button("💬 Consultar", variant="primary", size="lg")
+                            clear_semantic_chat_btn = gr.Button("🗑️ Limpiar Conversación", variant="secondary")
+                        
+                        with gr.Column(scale=1):
+                            semantic_chat_output = gr.Markdown("")
+                            semantic_chat_sources = gr.Markdown("")
+                    
+                    def semantic_conversational_query(question, modality_filter_str, history):
+                        """Consulta conversacional."""
+                        if not question.strip():
+                            return "⚠️ Por favor, ingresa una pregunta.", "", []
+                        
+                        try:
+                            # Convert modality filter
+                            modality_filter = None
+                            if modality_filter_str:
+                                modality_filter = DataModality(modality_filter_str)
+                            
+                            # Convert history format
+                            chat_history = []
+                            if history:
+                                for h in history:
+                                    if isinstance(h, dict):
+                                        chat_history.append((h.get("human", ""), h.get("ai", "")))
+                                    elif isinstance(h, tuple):
+                                        chat_history.append(h)
+                            
+                            # Perform conversational query
+                            result = semantic_engine.conversational_query(
+                                question=question,
+                                chat_history=chat_history if chat_history else None,
+                                modality_filter=modality_filter
+                            )
+                            
+                            # Format response
+                            answer_output = f"## 💬 Respuesta\n\n{result['answer']}\n\n"
+                            
+                            sources_output = ""
+                            if result.get('sources'):
+                                sources_output = "### 📚 Fuentes:\n\n"
+                                for i, source in enumerate(result['sources'], 1):
+                                    sources_output += f"{i}. **{source['source']}** ({source['modality']})\n"
+                                    sources_output += f"   {source['content'][:150]}...\n\n"
+                            
+                            # Update history
+                            new_history = history.copy() if history else []
+                            new_history.append({"human": question, "ai": result['answer']})
+                            
+                            return answer_output, sources_output, new_history
+                        
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error: {str(e)}", "", history or []
+                    
+                    def clear_semantic_chat():
+                        """Limpia la conversación."""
+                        return "", "", []
+                    
+                    semantic_chat_btn.click(
+                        fn=semantic_conversational_query,
+                        inputs=[semantic_chat_input, semantic_chat_modality, semantic_chat_history],
+                        outputs=[semantic_chat_output, semantic_chat_sources, semantic_chat_history]
+                    )
+                    
+                    clear_semantic_chat_btn.click(
+                        fn=clear_semantic_chat,
+                        outputs=[semantic_chat_input, semantic_chat_output, semantic_chat_history]
+                    )
+                
+                with gr.Tab("🔗 Lineage y Metadata"):
+                    gr.Markdown("### Tracking de Lineage y Metadata Activa")
+                    gr.Markdown("""
+                    Rastrea el **lineage** (genealogía) de los datos y las transformaciones.
+                    Esto es crítico para mantener la calidad de los datos.
+                    """)
+                    
+                    lineage_doc_id = gr.Textbox(
+                        label="📄 ID del Documento",
+                        placeholder="Ingresa el doc_id para ver su lineage"
+                    )
+                    
+                    view_lineage_btn = gr.Button("🔍 Ver Lineage", variant="primary")
+                    lineage_output = gr.Markdown("")
+                    
+                    def view_document_lineage(doc_id):
+                        """Muestra el lineage de un documento."""
+                        if not doc_id.strip():
+                            return "⚠️ Por favor, ingresa un ID de documento."
+                        
+                        try:
+                            lineage_records = semantic_engine.get_data_lineage(doc_id)
+                            
+                            if not lineage_records:
+                                return f"ℹ️ No hay registros de lineage para el documento {doc_id}."
+                            
+                            output = f"## 🔗 Lineage del Documento: {doc_id}\n\n"
+                            
+                            for lineage in lineage_records:
+                                output += f"### Transformación: {lineage.transformation_type}\n\n"
+                                output += f"- **Modelo Origen:** {lineage.source_embedding_model}\n"
+                                if lineage.target_embedding_model:
+                                    output += f"- **Modelo Destino:** {lineage.target_embedding_model}\n"
+                                output += f"- **Timestamp:** {lineage.timestamp}\n"
+                                output += f"- **Metadata:** {json.dumps(lineage.metadata, indent=2)}\n\n"
+                                output += "---\n\n"
+                            
+                            return output
+                        
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    view_lineage_btn.click(
+                        fn=view_document_lineage,
+                        inputs=[lineage_doc_id],
+                        outputs=[lineage_output]
+                    )
+                    
+                    gr.Markdown("### 🔍 Verificar Consistencia de Embeddings")
+                    gr.Markdown("""
+                    Verifica qué documentos están correctamente embebidos y cuáles están desactualizados.
+                    """)
+                    
+                    check_consistency_btn = gr.Button("🔍 Verificar Consistencia", variant="secondary")
+                    consistency_output = gr.Markdown("")
+                    
+                    def check_embedding_consistency():
+                        """Verifica la consistencia de los embeddings."""
+                        try:
+                            results = semantic_engine.check_embedding_consistency()
+                            
+                            output = "## 🔍 Verificación de Consistencia de Embeddings\n\n"
+                            
+                            output += f"### ✅ Actualizados: {len(results['up_to_date'])}\n"
+                            output += f"### ⚠️ Desactualizados: {len(results['out_of_date'])}\n"
+                            output += f"### 🔄 Modelos Diferentes: {len(results['different_model'])}\n\n"
+                            
+                            if results['out_of_date']:
+                                output += "### ⚠️ Documentos Desactualizados:\n\n"
+                                for doc in results['out_of_date'][:10]:  # Show first 10
+                                    output += f"- **{doc['source']}** ({doc['modality']})\n"
+                                    output += f"  - Modelo actual: {doc['current_model']}\n"
+                                    output += f"  - Modelo esperado: {doc['expected_model']}\n\n"
+                            
+                            if results['different_model']:
+                                output += f"### 🔄 Modelos Encontrados: {', '.join(results['different_model'])}\n\n"
+                            
+                            return output
+                        
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    check_consistency_btn.click(
+                        fn=check_embedding_consistency,
+                        outputs=[consistency_output]
+                    )
+                
+                with gr.Tab("📊 Estadísticas"):
+                    gr.Markdown("### Estadísticas del Motor Semántico")
+                    
+                    semantic_stats_output = gr.Markdown("")
+                    refresh_semantic_stats_btn = gr.Button("🔄 Actualizar Estadísticas", variant="secondary")
+                    
+                    def get_semantic_stats():
+                        """Obtiene estadísticas del motor semántico."""
+                        try:
+                            stats = semantic_engine.get_statistics()
+                            
+                            output = "## 📊 Estadísticas del Procesamiento Semántico\n\n"
+                            output += f"### 📈 Métricas Generales:\n"
+                            output += f"- **Total de Documentos:** {stats['total_documents']}\n"
+                            output += f"- **Modelo Embedding Actual:** {stats['current_embedding_model']}\n"
+                            output += f"- **Total de Consultas:** {stats['total_queries']}\n"
+                            output += f"- **Registros de Lineage:** {stats['total_lineage_records']}\n"
+                            output += f"- **Tamaño Vector Store:** {stats['vector_store_size']}\n\n"
+                            
+                            if stats['by_modality']:
+                                output += "### 📂 Por Modalidad:\n"
+                                for modality, count in stats['by_modality'].items():
+                                    output += f"- **{modality}**: {count} documentos\n"
+                                output += "\n"
+                            
+                            if stats['embedding_models']:
+                                output += "### 🤖 Modelos de Embedding Usados:\n"
+                                for model, count in stats['embedding_models'].items():
+                                    output += f"- **{model}**: {count} documentos\n"
+                            
+                            return output
+                        
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    refresh_semantic_stats_btn.click(
+                        fn=get_semantic_stats,
+                        outputs=[semantic_stats_output]
+                    )
+                    
+                    # Load initial stats
+                    semantic_stats_output.value = get_semantic_stats()
+        
+        # Tab 4.9: Analytics y Dashboard (NUEVO)
         with gr.Tab("📊 Analytics y Dashboard"):
             gr.Markdown("### 📊 Analytics y Business Intelligence")
             gr.Markdown("""
