@@ -16,6 +16,7 @@ import uvicorn
 from docchat import load_config
 from docchat.enterprise_api import EnterpriseAPIMode
 from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
+from docchat.customer_service_agent import CustomerServiceAgent
 from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.audit import AuditLogger
@@ -24,6 +25,7 @@ from docchat.audit import AuditLogger
 config = load_config()
 enterprise_api = EnterpriseAPIMode(config)
 enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
+customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
@@ -32,7 +34,7 @@ audit_logger = AuditLogger(config.audit_log_dir, config.enable_audit_logs)
 # Crear app FastAPI
 app = FastAPI(
     title="DocChat Enterprise API",
-    description="API para procesamiento automático de documentos con Agentic AI",
+    description="API para procesamiento automático de documentos con Agentic AI y Atención al Cliente 24/7",
     version="1.0.0"
 )
 
@@ -81,7 +83,12 @@ async def root():
         "endpoints": {
             "POST /api/v1/process": "Procesar documentos",
             "GET /api/v1/health": "Health check",
-            "GET /api/v1/stats": "Estadísticas del sistema"
+            "GET /api/v1/stats": "Estadísticas del sistema",
+            "POST /api/v1/customer-service/inquiry": "Procesar consulta de cliente",
+            "POST /api/v1/customer-service/webhook/{channel}": "Webhook para recibir mensajes en tiempo real",
+            "POST /api/v1/customer-service/connect-channel": "Conectar canal externo (Gmail, WhatsApp, etc.)",
+            "POST /api/v1/customer-service/load-knowledge": "Cargar base de conocimiento",
+            "GET /api/v1/customer-service/stats": "Estadísticas de atención al cliente"
         }
     }
 
