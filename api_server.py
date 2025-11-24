@@ -28,6 +28,8 @@ config = load_config()
 enterprise_api = EnterpriseAPIMode(config)
 enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
+rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
+rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
 chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
@@ -1104,6 +1106,166 @@ async def get_customer_service_stats(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo estadísticas: {str(e)}")
+
+
+# ============================================================================
+# ENDPOINTS PARA AUTOMATIZACIÓN RPA - INTEGRACIÓN ENTERPRISE
+# ============================================================================
+
+class RegisterEnterpriseRequest(BaseModel):
+    name: str = Field(..., description="Nombre de la empresa/app")
+    webhook_url: Optional[str] = Field(None, description="URL del webhook para notificaciones")
+    categories: Optional[List[str]] = Field(None, description="Categorías de automatización")
+
+class RegisterEnterpriseResponse(BaseModel):
+    enterprise_id: str
+    api_key: str
+    message: str
+
+class RPAWebhookRequest(BaseModel):
+    category: str = Field(..., description="Categoría de automatización")
+    task_type: str = Field(..., description="Tipo de tarea")
+    data: Dict[str, Any] = Field(..., description="Datos para procesar")
+
+class RPAWebhookResponse(BaseModel):
+    event_id: str
+    status: str
+    message: str
+    automation_id: Optional[str] = None
+
+@app.post("/api/v1/rpa/register-enterprise", response_model=RegisterEnterpriseResponse)
+async def register_enterprise_connection(
+    request: RegisterEnterpriseRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Registra una nueva conexión Enterprise para Automatización RPA.
+    
+    Las empresas pueden registrarse aquí para obtener un API key y conectar sus sistemas.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    try:
+        connection = rpa_enterprise.register_enterprise_connection(
+            name=request.name,
+            webhook_url=request.webhook_url,
+            categories=request.categories or []
+        )
+        
+        return RegisterEnterpriseResponse(
+            enterprise_id=connection.enterprise_id,
+            api_key=connection.api_key,
+            message=f"Conexión registrada exitosamente para {request.name}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error registrando conexión: {str(e)}")
+
+@app.post("/api/v1/rpa/webhook/{enterprise_id}", response_model=RPAWebhookResponse)
+async def rpa_webhook(
+    enterprise_id: str,
+    request: RPAWebhookRequest,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    Webhook para recibir datos en tiempo real de empresas conectadas.
+    
+    Las empresas envían datos aquí y los Agentic AI los procesan automáticamente.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    # Verificar autenticación
+    connection = rpa_enterprise.get_connection_by_api_key(x_api_key) if x_api_key else None
+    if not connection or connection.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=401, detail="API Key inválida o no autorizada")
+    
+    if connection.status != "active":
+        raise HTTPException(status_code=403, detail="Conexión no está activa")
+    
+    try:
+        # Recibir datos en tiempo real
+        event = rpa_enterprise.receive_realtime_data(
+            enterprise_id=enterprise_id,
+            category=request.category,
+            task_type=request.task_type,
+            data=request.data
+        )
+        
+        return RPAWebhookResponse(
+            event_id=event.event_id,
+            status="received",
+            message=f"Datos recibidos y agregados a cola de procesamiento. Los Agentic AI procesarán automáticamente.",
+            automation_id=None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error recibiendo datos: {str(e)}")
+
+@app.get("/api/v1/rpa/connections")
+async def list_enterprise_connections(
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Lista todas las conexiones Enterprise registradas.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    try:
+        connections = rpa_enterprise.get_all_connections()
+        return {
+            "total": len(connections),
+            "connections": connections
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo conexiones: {str(e)}")
+
+@app.get("/api/v1/rpa/stats/{enterprise_id}")
+async def get_enterprise_stats(
+    enterprise_id: str,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    Obtiene estadísticas de una conexión Enterprise específica.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    # Verificar autenticación
+    connection = rpa_enterprise.get_connection_by_api_key(x_api_key) if x_api_key else None
+    if not connection or connection.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=401, detail="API Key inválida o no autorizada")
+    
+    try:
+        stats = rpa_enterprise.get_connection_stats(enterprise_id)
+        if not stats:
+            raise HTTPException(status_code=404, detail="Conexión no encontrada")
+        
+        return stats
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo estadísticas: {str(e)}")
+
+@app.get("/api/v1/rpa/events/recent")
+async def get_recent_events(
+    limit: int = 100,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Obtiene eventos recientes procesados.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    try:
+        events = rpa_enterprise.get_recent_events(limit=limit)
+        return {
+            "total": len(events),
+            "events": events
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo eventos: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -3913,8 +3913,7 @@ Body:
                     5. URL: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
                     """)
         
-        # Tab 4.8: Automatización RPA - Movido arriba, eliminar duplicado
-            gr.Markdown("### Automatización de Procesos con RPA + IA")
+        # Tab 4.8: Automatización RPA - Ya está arriba (línea ~3063), no duplicar
             gr.Markdown("""
             **🚀 Automatiza tareas repetitivas empresariales con Agentic AI**
             

@@ -184,7 +184,7 @@ class RPAEnterpriseIntegration:
         self.connections[enterprise_id] = connection
         self._save_data()
         
-        print(f"✅ Conexión Enterprise registrada: {name} (ID: {enterprise_id})")
+        print(f"[RPA] Conexion Enterprise registrada: {name} (ID: {enterprise_id})")
         
         return connection
     
@@ -243,7 +243,7 @@ class RPAEnterpriseIntegration:
         
         self._save_data()
         
-        print(f"📡 Datos recibidos de {connection.name}: {category}/{task_type}")
+        print(f"[RPA] Datos recibidos de {connection.name}: {category}/{task_type}")
         
         return event
     
@@ -255,14 +255,14 @@ class RPAEnterpriseIntegration:
         self.processing_active = True
         self.processing_thread = Thread(target=self._process_events_loop, daemon=True)
         self.processing_thread.start()
-        print("🚀 Procesamiento en tiempo real iniciado")
+        print("[RPA] Procesamiento en tiempo real iniciado")
     
     def stop_realtime_processing(self):
         """Detiene el procesamiento en tiempo real."""
         self.processing_active = False
         if self.processing_thread:
             self.processing_thread.join(timeout=5)
-        print("⏹️ Procesamiento en tiempo real detenido")
+        print("[RPA] Procesamiento en tiempo real detenido")
     
     def _process_events_loop(self):
         """Loop principal para procesar eventos en tiempo real."""
@@ -290,7 +290,7 @@ class RPAEnterpriseIntegration:
             event: Evento a procesar
         """
         print(f"\n{'='*60}")
-        print(f"🤖 PROCESANDO EVENTO EN TIEMPO REAL")
+        print(f"[RPA] PROCESANDO EVENTO EN TIEMPO REAL")
         print(f"{'='*60}")
         print(f"Event ID: {event.event_id}")
         print(f"Enterprise: {self.connections.get(event.enterprise_id, {}).name}")
@@ -331,12 +331,12 @@ class RPAEnterpriseIntegration:
             
             self._save_data()
             
-            print(f"✅ Evento procesado exitosamente")
+            print(f"[RPA] Evento procesado exitosamente")
             print()
         
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ Error procesando evento: {error_msg}")
+            print(f"[RPA] Error procesando evento: {error_msg}")
             print()
             
             event.processed = True
@@ -381,12 +381,12 @@ class RPAEnterpriseIntegration:
             )
             
             if response.status_code == 200:
-                print(f"✅ Notificación enviada a webhook de {connection.name}")
+                print(f"[RPA] Notificacion enviada a webhook de {connection.name}")
             else:
-                print(f"⚠️ Error enviando webhook: {response.status_code}")
+                print(f"[RPA] Error enviando webhook: {response.status_code}")
         
         except Exception as e:
-            print(f"⚠️ Error enviando webhook: {e}")
+            print(f"[RPA] Error enviando webhook: {e}")
     
     def get_connection_stats(self, enterprise_id: str) -> Optional[Dict[str, Any]]:
         """Obtiene estadísticas de una conexión."""
