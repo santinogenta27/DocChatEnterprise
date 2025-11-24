@@ -3100,7 +3100,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 outputs=[analytics_output, frequent_questions_output, roi_output]
             )
         
-        # Tab 4.6: Cloud Storage Integration (NUEVO)
+        # Tab 4.7: Cloud Storage Integration (NUEVO)
         with gr.Tab("☁️ Cloud Storage"):
             gr.Markdown("### Conecta tu Cloud Storage para Procesamiento Automático")
             gr.Markdown("""
@@ -3380,8 +3380,45 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     5. URL: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
                     """)
         
-        # Tab 4.8: Automatización RPA (NUEVO)
-        with gr.Tab("🤖 Automatización RPA"):
+    
+    gr.Markdown(
+        """
+        ---
+        ### 💡 Consejos
+        
+        - **RAG Principal**: Para consultas estándar con verificación
+        - **Procesamiento Masivo**: Para analizar grandes volúmenes de documentos
+        - **Agentes Autónomos**: Para automatizar tareas complejas
+        - **Memoria**: El sistema aprende y mejora con cada consulta
+        
+        ### ⚙️ Configuración
+        
+        - Límite de documentos: hasta 1000 por lote
+        - Tamaño máximo: 5GB por lote
+        - Workers paralelos: 16 (optimizado para lotes grandes)
+        - Memoria: Habilitada por defecto (365 días de retención)
+        - Auditoría: Habilitada por defecto
+        """
+    )
+
+
+if __name__ == "__main__":
+    import socket
+    
+    # Find an available port
+    def find_free_port(start_port=7860):
+        for port in range(start_port, start_port + 10):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('127.0.0.1', port))
+                    return port
+            except OSError:
+                continue
+        return start_port  # Fallback
+    
+    port = find_free_port()
+    print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
+    demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
             gr.Markdown("### Automatización de Procesos con RPA + IA")
             gr.Markdown("""
             **🚀 Automatiza tareas repetitivas empresariales con Agentic AI**
