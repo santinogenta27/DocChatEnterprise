@@ -41,10 +41,16 @@ class AdvertisingTool(BaseTool):
         
         # APIs (usar credenciales del usuario desde .env)
         self.tiktok_access_token = os.getenv("TIKTOK_ACCESS_TOKEN", "")
+        self.tiktok_advertiser_id = os.getenv("TIKTOK_ADVERTISER_ID", "")
         self.meta_access_token = os.getenv("META_ACCESS_TOKEN", "")
         self.meta_ad_account_id = os.getenv("META_AD_ACCOUNT_ID", "")
         self.google_ads_customer_id = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "")
         self.google_ads_developer_token = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+        self.google_ads_client_id = os.getenv("GOOGLE_ADS_CLIENT_ID", "")
+        self.google_ads_client_secret = os.getenv("GOOGLE_ADS_CLIENT_SECRET", "")
+        self.google_ads_refresh_token = os.getenv("GOOGLE_ADS_REFRESH_TOKEN", "")
+        self.linkedin_access_token = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
+        self.linkedin_account_id = os.getenv("LINKEDIN_ACCOUNT_ID", "")
         
         # Inicializar archivos
         self._initialize_data_files()
@@ -121,7 +127,7 @@ class AdvertisingTool(BaseTool):
         Args:
             action: Acción a realizar (create_campaign, optimize_campaign, generate_creative, etc.)
             campaign_name: Nombre de la campaña
-            platform: Plataforma (tiktok, meta, google_ads)
+            platform: Plataforma (tiktok, meta, google_ads, linkedin)
             budget: Presupuesto
             objective: Objetivo (awareness, conversions, installs, etc.)
             audience: Datos de audiencia

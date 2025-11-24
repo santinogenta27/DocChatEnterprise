@@ -25,7 +25,8 @@ from .document_processor import DocumentProcessor
 from .retriever_builder import RetrieverBuilder
 from .tools import (
     EmailTool, ReportTool, DatabaseTool, PresentationTool,
-    IntegrationTool, TableAnalysisTool, SchedulerTool
+    IntegrationTool, TableAnalysisTool, SchedulerTool,
+    CRMTool, EmailMarketingTool, AnalyticsTool
 )
 from .tools.advanced_email_tool import AdvancedEmailTool
 from .tools.advertising_tool import AdvertisingTool
@@ -92,8 +93,12 @@ class EnterpriseAgenticAI:
         self.tools = {
             "email": AdvancedEmailTool(config),  # Email avanzado con todas las funcionalidades
             "advanced_email": AdvancedEmailTool(config),  # Alias para acceso directo
-            "advertising": AdvertisingTool(config),  # Advertising y Marketing avanzado
+            "advertising": AdvertisingTool(config),  # Advertising y Marketing avanzado (Meta, TikTok, Google Ads, LinkedIn)
             "marketing": AdvertisingTool(config),  # Alias para marketing
+            "crm": CRMTool(config),  # CRM: Salesforce, Pipedrive, Zoho
+            "crm_manager": CRMTool(config),  # Alias para CRM
+            "email_marketing": EmailMarketingTool(config),  # Email Marketing: Mailchimp, HubSpot, ActiveCampaign
+            "analytics": AnalyticsTool(config),  # Analytics: Google Analytics, Hotjar
             "report": ReportTool(config),
             "database": DatabaseTool(config),
             "presentation": PresentationTool(config),

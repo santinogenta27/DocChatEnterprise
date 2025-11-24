@@ -36,9 +36,9 @@ class CustomerInquiry:
     inquiry_id: str
     channel: str  # email, whatsapp, chat, phone
     customer_email: str
+    message: str
     customer_phone: Optional[str] = None
     subject: Optional[str] = None
-    message: str
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     status: str = "pending"  # pending, processing, resolved, escalated
     ticket_id: Optional[str] = None
