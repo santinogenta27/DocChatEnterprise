@@ -60,6 +60,32 @@ from docchat.rpa_automation import RPAAutomationEngine
 from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
 from docchat.semantic_data_engine import SemanticDataEngine, DataModality
 from docchat.audit import AuditLogger
+
+# Check for vector store availability
+try:
+    try:
+        from langchain_community.vectorstores import FAISS
+        FAISS_AVAILABLE = True
+    except ImportError:
+        try:
+            from langchain.vectorstores import FAISS
+            FAISS_AVAILABLE = True
+        except ImportError:
+            FAISS_AVAILABLE = False
+except Exception:
+    FAISS_AVAILABLE = False
+
+try:
+    try:
+        from langchain_community.vectorstores import Chroma
+        Chroma = Chroma  # Keep reference
+    except ImportError:
+        try:
+            from langchain.vectorstores import Chroma
+        except ImportError:
+            Chroma = None
+except ImportError:
+    Chroma = None
 from docchat.auth import UserManager, WorkspaceManager
 
 # Validar API key
@@ -3657,6 +3683,29 @@ Body:
                         """Indexa documentos usando procesamiento semántico."""
                         if not files:
                             return "⚠️ Por favor, sube al menos un documento."
+                        
+                        # Check if vector store is available
+                        if not semantic_engine.vector_store and not FAISS_AVAILABLE and not Chroma:
+                            return """❌ **Error: No hay vector store disponible.**
+
+Por favor, instala una de las siguientes opciones:
+
+**Opción 1 (Recomendada - CPU):**
+```bash
+pip install faiss-cpu
+```
+
+**Opción 2 (GPU - si tienes CUDA):**
+```bash
+pip install faiss-gpu
+```
+
+**Opción 3 (Alternativa):**
+```bash
+pip install chromadb
+```
+
+Después de instalar, reinicia la aplicación."""
                         
                         try:
                             # Convert modality string to enum

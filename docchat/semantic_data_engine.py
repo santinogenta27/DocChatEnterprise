@@ -23,11 +23,29 @@ except ImportError:
     except ImportError:
         from langchain_openai import OpenAIEmbeddings
 
+# FAISS is optional - use Chroma as fallback
+FAISS_AVAILABLE = False
 try:
-    from langchain_community.vectorstores import FAISS
-    from langchain_community.vectorstores import Chroma
+    try:
+        from langchain_community.vectorstores import FAISS
+        FAISS_AVAILABLE = True
+    except ImportError:
+        try:
+            from langchain.vectorstores import FAISS
+            FAISS_AVAILABLE = True
+        except ImportError:
+            pass
+except Exception:
+    pass
+
+# Chroma as fallback
+try:
+    try:
+        from langchain_community.vectorstores import Chroma
+    except ImportError:
+        from langchain.vectorstores import Chroma
 except ImportError:
-    from langchain.vectorstores import FAISS, Chroma
+    Chroma = None
 
 try:
     from langchain_core.documents import Document
@@ -158,9 +176,10 @@ class SemanticDataEngine:
         
         # In-memory storage
         self.documents: Dict[str, SemanticDocument] = {}
-        self.vector_store: Optional[Union[FAISS, Chroma]] = None
+        self.vector_store: Optional[Any] = None  # Can be FAISS, Chroma, or None
         self.lineage_records: Dict[str, DataLineage] = {}
         self.query_history: List[SemanticQuery] = []
+        self.use_faiss = FAISS_AVAILABLE  # Prefer FAISS if available
         
         # Embedding model tracking
         self.current_embedding_model = "text-embedding-ada-002"
@@ -221,37 +240,97 @@ class SemanticDataEngine:
     
     def _load_vector_store(self):
         """Load or create vector store."""
-        vector_store_path = self.embeddings_dir / "vector_store"
+        if len(self.documents) == 0:
+            return
         
-        if vector_store_path.exists() and len(self.documents) > 0:
-            try:
-                # Create documents for vector store
-                docs = []
-                for doc in self.documents.values():
-                    langchain_doc = Document(
-                        page_content=doc.content,
-                        metadata={
-                            "doc_id": doc.doc_id,
-                            "modality": doc.modality.value,
-                            "source_path": doc.source_path,
-                            "embedding_model": doc.embedding_model,
-                            "embedding_version": doc.embedding_version,
-                            **doc.metadata
-                        }
+        try:
+            # Create documents for vector store
+            docs = []
+            for doc in self.documents.values():
+                langchain_doc = Document(
+                    page_content=doc.content,
+                    metadata={
+                        "doc_id": doc.doc_id,
+                        "modality": doc.modality.value,
+                        "source_path": doc.source_path,
+                        "embedding_model": doc.embedding_model,
+                        "embedding_version": doc.embedding_version,
+                        **doc.metadata
+                    }
+                )
+                docs.append(langchain_doc)
+            
+            if not docs:
+                return
+            
+            # Try to load existing vector store
+            vector_store_path = self.embeddings_dir / "vector_store"
+            chroma_path = self.embeddings_dir / "chroma_db"
+            
+            if self.use_faiss and FAISS_AVAILABLE and vector_store_path.exists():
+                try:
+                    self.vector_store = FAISS.load_local(
+                        str(vector_store_path),
+                        self.embeddings,
+                        allow_dangerous_deserialization=True
                     )
-                    docs.append(langchain_doc)
-                
-                if docs:
+                    print("[Semantic Engine] Loaded FAISS vector store")
+                    return
+                except Exception as e:
+                    print(f"[Semantic Engine] Could not load FAISS, trying Chroma: {e}")
+            
+            # Try Chroma
+            if Chroma and chroma_path.exists():
+                try:
+                    self.vector_store = Chroma(
+                        persist_directory=str(chroma_path),
+                        embedding_function=self.embeddings
+                    )
+                    print("[Semantic Engine] Loaded Chroma vector store")
+                    return
+                except Exception as e:
+                    print(f"[Semantic Engine] Could not load Chroma: {e}")
+            
+            # Create new vector store
+            if self.use_faiss and FAISS_AVAILABLE:
+                try:
                     self.vector_store = FAISS.from_documents(docs, self.embeddings)
-            except Exception as e:
-                print(f"[Semantic Engine] Error loading vector store: {e}")
-                self.vector_store = None
+                    print("[Semantic Engine] Created new FAISS vector store")
+                except Exception as e:
+                    print(f"[Semantic Engine] Could not create FAISS, using Chroma: {e}")
+                    self.use_faiss = False
+            
+            if not self.vector_store and Chroma:
+                try:
+                    self.vector_store = Chroma.from_documents(
+                        documents=docs,
+                        embedding=self.embeddings,
+                        persist_directory=str(chroma_path)
+                    )
+                    print("[Semantic Engine] Created new Chroma vector store")
+                except Exception as e:
+                    print(f"[Semantic Engine] Could not create Chroma: {e}")
+            
+            if not self.vector_store:
+                print("[Semantic Engine] Warning: No vector store available. Install faiss-cpu or chromadb.")
+        
+        except Exception as e:
+            print(f"[Semantic Engine] Error loading vector store: {e}")
+            self.vector_store = None
     
     def _save_vector_store(self):
         """Save vector store to disk."""
         if self.vector_store:
-            vector_store_path = self.embeddings_dir / "vector_store"
-            self.vector_store.save_local(str(vector_store_path))
+            try:
+                if self.use_faiss and FAISS_AVAILABLE:
+                    # FAISS save
+                    vector_store_path = self.embeddings_dir / "vector_store"
+                    self.vector_store.save_local(str(vector_store_path))
+                elif Chroma and isinstance(self.vector_store, Chroma):
+                    # Chroma persists automatically, but we can call persist
+                    self.vector_store.persist()
+            except Exception as e:
+                print(f"[Semantic Engine] Error saving vector store: {e}")
     
     def _detect_modality(self, file_path: str, content: str = "") -> DataModality:
         """Detect data modality from file path and content."""
@@ -362,9 +441,28 @@ class SemanticDataEngine:
         )
         
         if self.vector_store is None:
-            self.vector_store = FAISS.from_documents([langchain_doc], self.embeddings)
+            if self.use_faiss and FAISS_AVAILABLE:
+                try:
+                    self.vector_store = FAISS.from_documents([langchain_doc], self.embeddings)
+                except Exception as e:
+                    print(f"[Semantic Engine] Could not create FAISS, using Chroma: {e}")
+                    self.use_faiss = False
+            
+            if not self.vector_store and Chroma:
+                try:
+                    vector_store_path = self.embeddings_dir / "chroma_db"
+                    self.vector_store = Chroma.from_documents(
+                        documents=[langchain_doc],
+                        embedding=self.embeddings,
+                        persist_directory=str(vector_store_path)
+                    )
+                except Exception as e:
+                    print(f"[Semantic Engine] Could not create Chroma: {e}")
         else:
-            self.vector_store.add_documents([langchain_doc])
+            try:
+                self.vector_store.add_documents([langchain_doc])
+            except Exception as e:
+                print(f"[Semantic Engine] Error adding document to vector store: {e}")
         
         # Save
         self._save_data()
@@ -605,7 +703,11 @@ Responde de manera clara y completa basándote únicamente en la información pr
             "current_embedding_model": self.current_embedding_model,
             "total_queries": len(self.query_history),
             "total_lineage_records": len(self.lineage_records),
-            "vector_store_size": len(self.vector_store.index_to_docstore_id) if self.vector_store else 0
+            "vector_store_size": (
+                len(self.vector_store.index_to_docstore_id) if self.vector_store and hasattr(self.vector_store, 'index_to_docstore_id') 
+                else (len(self.vector_store._collection.get()['ids']) if self.vector_store and hasattr(self.vector_store, '_collection') 
+                      else 0)
+            )
         }
     
     def check_embedding_consistency(self) -> Dict[str, Any]:
