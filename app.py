@@ -53,6 +53,7 @@ from docchat.autonomous_agent import AutonomousAgent
 from docchat.advanced_agent import AdvancedAutonomousAgent
 from docchat.enterprise_api import EnterpriseAPIMode
 from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
+from docchat.customer_service_agent import CustomerServiceAgent
 from docchat.chatbot_mode import ChatbotMode
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.audit import AuditLogger
@@ -105,6 +106,7 @@ autonomous_agent = AutonomousAgent(config) if config.enable_autonomous_agents el
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
 enterprise_api = EnterpriseAPIMode(config)
 enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
+customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 chatbot_mode = ChatbotMode(config)
 cloud_integration = CloudStorageIntegration(config, enterprise_api)
 webhook_processor = WebhookProcessor(config, enterprise_api)
@@ -2250,6 +2252,198 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 inputs=[enterprise_files, auto_detect_check, rules_input],
                 outputs=[enterprise_output],
             )
+        
+        # Tab 4.6: Atención al Cliente Automática (NUEVO)
+        with gr.Tab("🎧 Atención al Cliente 24/7"):
+            gr.Markdown("### Agentic AI para Atención al Cliente Automática")
+            gr.Markdown("""
+            **🚀 Soporte 24/7 Automático con Agentic AI**
+            
+            - 📧 Responde automáticamente emails, WhatsApp, mensajes
+            - 🤖 Resuelve consultas de forma autónoma usando tu base de conocimiento
+            - 🎫 Gestiona tickets automáticamente
+            - 📊 Escala a humanos solo cuando es necesario
+            - 💬 Soporte multi-canal (email, WhatsApp, chat)
+            
+            **💼 Perfecto para:**
+            - Empresas que necesitan soporte 24/7
+            - Reducir costos operativos de atención al cliente
+            - Mejorar tiempos de respuesta
+            - Escalar sin aumentar personal
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("📚 Cargar Base de Conocimiento"):
+                    gr.Markdown("""
+                    **Carga documentos que el AI usará para responder consultas de clientes:**
+                    - Manuales de producto
+                    - FAQs y políticas
+                    - Documentación técnica
+                    - Información de la empresa
+                    """)
+                    
+                    cs_knowledge_files = gr.Files(
+                        label="📂 Documentos para Base de Conocimiento (PDF, DOCX, TXT, MD)",
+                        file_count="multiple",
+                        file_types=[".pdf", ".docx", ".txt", ".md"],
+                    )
+                    
+                    load_knowledge_btn = gr.Button("📚 Cargar Base de Conocimiento", variant="primary")
+                    knowledge_status = gr.Markdown("")
+                    
+                    def load_cs_knowledge(files):
+                        if not customer_service_agent:
+                            return "❌ Customer Service Agent no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true"
+                        
+                        if not files:
+                            return "⚠️ Por favor, sube al menos un documento para la base de conocimiento."
+                        
+                        try:
+                            customer_service_agent.load_knowledge_base(files)
+                            stats = customer_service_agent.get_stats()
+                            return f"✅ Base de conocimiento cargada exitosamente!\n\n📊 Documentos en base: {stats['knowledge_base_documents']} chunks"
+                        except Exception as e:
+                            return f"❌ Error cargando base de conocimiento: {str(e)}"
+                    
+                    load_knowledge_btn.click(
+                        fn=load_cs_knowledge,
+                        inputs=[cs_knowledge_files],
+                        outputs=[knowledge_status]
+                    )
+                
+                with gr.Tab("📧 Procesar Consulta"):
+                    gr.Markdown("""
+                    **Simula una consulta de cliente y recibe respuesta automática:**
+                    """)
+                    
+                    with gr.Row():
+                        cs_channel = gr.Dropdown(
+                            label="📱 Canal de Comunicación",
+                            choices=["email", "whatsapp", "chat"],
+                            value="email",
+                            interactive=True
+                        )
+                    
+                    with gr.Row():
+                        cs_customer_email = gr.Textbox(
+                            label="📧 Email del Cliente",
+                            placeholder="cliente@ejemplo.com",
+                            value="cliente@ejemplo.com"
+                        )
+                    
+                    with gr.Row():
+                        cs_customer_phone = gr.Textbox(
+                            label="📱 Teléfono (opcional, para WhatsApp)",
+                            placeholder="+1234567890",
+                            value=""
+                        )
+                    
+                    with gr.Row():
+                        cs_subject = gr.Textbox(
+                            label="📝 Asunto (opcional, para emails)",
+                            placeholder="Consulta sobre producto",
+                            value=""
+                        )
+                    
+                    with gr.Row():
+                        cs_message = gr.Textbox(
+                            label="💬 Mensaje del Cliente",
+                            placeholder="Hola, tengo una pregunta sobre...",
+                            lines=5
+                        )
+                    
+                    process_inquiry_btn = gr.Button("🚀 Procesar Consulta", variant="primary")
+                    cs_response_output = gr.Markdown("")
+                    
+                    def process_customer_inquiry(channel, email, phone, subject, message):
+                        if not customer_service_agent:
+                            return "❌ Customer Service Agent no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true"
+                        
+                        if not message or not message.strip():
+                            return "⚠️ Por favor, ingresa un mensaje del cliente."
+                        
+                        if not email or not email.strip():
+                            return "⚠️ Por favor, ingresa el email del cliente."
+                        
+                        try:
+                            response = customer_service_agent.process_inquiry(
+                                channel=channel,
+                                customer_email=email,
+                                message=message,
+                                customer_phone=phone if phone else None,
+                                subject=subject if subject else None,
+                                use_knowledge_base=True
+                            )
+                            
+                            output = f"""
+## ✅ Consulta Procesada
+
+**ID de Consulta:** {response.inquiry_id}
+
+### 📤 Respuesta Generada:
+{response.response_text}
+
+### 📊 Detalles:
+- **Canal:** {response.channel}
+- **Enviada:** {'✅ Sí' if response.sent else '❌ No'}
+- **Ticket Creado:** {'✅ Sí' if response.ticket_created else '❌ No'}
+- **Ticket ID:** {response.ticket_id or 'N/A'}
+- **Confianza:** {response.confidence:.1%}
+- **Escalado:** {'⚠️ Sí' if response.escalated else '✅ No'}
+- **Herramientas Usadas:** {', '.join(response.tools_used) if response.tools_used else 'Ninguna'}
+"""
+                            return output
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error procesando consulta: {str(e)}"
+                    
+                    process_inquiry_btn.click(
+                        fn=process_customer_inquiry,
+                        inputs=[cs_channel, cs_customer_email, cs_customer_phone, cs_subject, cs_message],
+                        outputs=[cs_response_output]
+                    )
+                
+                with gr.Tab("📊 Estadísticas"):
+                    gr.Markdown("""
+                    **Estadísticas del servicio de atención al cliente:**
+                    """)
+                    
+                    cs_stats_output = gr.Markdown("")
+                    refresh_stats_btn = gr.Button("🔄 Actualizar Estadísticas", variant="secondary")
+                    
+                    def get_cs_stats():
+                        if not customer_service_agent:
+                            return "❌ Customer Service Agent no está habilitado."
+                        
+                        try:
+                            stats = customer_service_agent.get_stats()
+                            return f"""
+## 📊 Estadísticas de Atención al Cliente
+
+### 📈 Métricas Generales:
+- **Total de Consultas:** {stats['total_inquiries']}
+- **Resueltas Autónomamente:** {stats['resolved_autonomously']}
+- **Escaladas a Humanos:** {stats['escalated']}
+- **Tickets Creados:** {stats['tickets_created']}
+
+### 📊 Tasas:
+- **Tasa de Resolución:** {stats['resolution_rate']}
+- **Tasa de Escalación:** {stats['escalation_rate']}
+
+### 📚 Base de Conocimiento:
+- **Documentos Cargados:** {stats['knowledge_base_documents']} chunks
+"""
+                        except Exception as e:
+                            return f"❌ Error obteniendo estadísticas: {str(e)}"
+                    
+                    refresh_stats_btn.click(
+                        fn=get_cs_stats,
+                        outputs=[cs_stats_output]
+                    )
+                    
+                    # Cargar estadísticas iniciales
+                    cs_stats_output.value = get_cs_stats()
         
         # Tab 4.5: Chat Conversacional (NUEVO)
         with gr.Tab("💬 Chat Conversacional"):

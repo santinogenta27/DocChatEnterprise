@@ -9,6 +9,8 @@ from .presentation_tool import PresentationTool
 from .integration_tool import IntegrationTool
 from .table_analysis_tool import TableAnalysisTool
 from .scheduler_tool import SchedulerTool
+from .whatsapp_tool import WhatsAppTool
+from .ticket_tool import TicketTool
 
 __all__ = [
     "EmailTool",
@@ -20,6 +22,8 @@ __all__ = [
     "IntegrationTool",
     "TableAnalysisTool",
     "SchedulerTool",
+    "WhatsAppTool",
+    "TicketTool",
 ]
 
 

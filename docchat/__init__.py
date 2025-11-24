@@ -11,6 +11,7 @@ from .autonomous_agent import AutonomousAgent, AgentTask  # noqa: F401
 from .advanced_agent import AdvancedAutonomousAgent  # noqa: F401
 from .enterprise_api import EnterpriseAPIMode  # noqa: F401
 from .enterprise_agentic_ai import EnterpriseAgenticAI, IDPResult, AgenticTask  # noqa: F401
+from .customer_service_agent import CustomerServiceAgent, CustomerInquiry, ServiceResponse  # noqa: F401
 from .chatbot_mode import ChatbotMode, ChatbotConnection, RAGResponse  # noqa: F401
 from .cloud_integrations import CloudStorageIntegration, WebhookProcessor  # noqa: F401
 from .auth import UserManager, WorkspaceManager  # noqa: F401
@@ -55,6 +56,9 @@ __all__ = [
     "EnterpriseAgenticAI",
     "IDPResult",
     "AgenticTask",
+    "CustomerServiceAgent",
+    "CustomerInquiry",
+    "ServiceResponse",
     "ChatbotMode",
     "ChatbotConnection",
     "RAGResponse",
