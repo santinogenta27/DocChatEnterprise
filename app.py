@@ -2445,6 +2445,203 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     # Cargar estadísticas iniciales
                     cs_stats_output.value = get_cs_stats()
                 
+                with gr.Tab("🤖 Reglas Automáticas"):
+                    gr.Markdown("""
+                    ### 🤖 Configurar Respuestas Automáticas en Tiempo Real
+                    
+                    **Programa respuestas automáticas que se ejecutan cuando llegan mensajes:**
+                    
+                    - ✅ **Respuesta Fija**: Siempre responde lo mismo (ej: "Gracias por contactarnos")
+                    - ✅ **Por Palabra Clave**: Responde cuando el mensaje contiene ciertas palabras
+                    - ✅ **Por Patrón**: Responde cuando el mensaje coincide con un patrón (regex)
+                    - ✅ **Siempre**: Responde automáticamente a todos los mensajes
+                    
+                    **Ejemplo:** Si alguien escribe "hola" en WhatsApp, siempre responder "¡Hola! ¿En qué puedo ayudarte?"
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            rule_name = gr.Textbox(
+                                label="📝 Nombre de la Regla",
+                                placeholder="Ej: Saludo automático",
+                                value=""
+                            )
+                            
+                            rule_channel = gr.Dropdown(
+                                label="📱 Canal",
+                                choices=["whatsapp", "email", "chat", "all"],
+                                value="whatsapp",
+                                info="Selecciona el canal donde aplicará esta regla"
+                            )
+                            
+                            rule_trigger_type = gr.Dropdown(
+                                label="🎯 Tipo de Trigger",
+                                choices=[
+                                    ("Siempre", "always"),
+                                    ("Palabra Clave", "keyword"),
+                                    ("Patrón (Regex)", "pattern"),
+                                    ("AI Detection", "ai_detection")
+                                ],
+                                value="keyword",
+                                info="Cómo detectar cuándo aplicar esta regla"
+                            )
+                            
+                            rule_trigger_value = gr.Textbox(
+                                label="🔍 Valor del Trigger",
+                                placeholder='Ej: hola,hola,buenos días (para keyword) o regex para pattern',
+                                value="",
+                                info="Palabras clave separadas por comas, o patrón regex"
+                            )
+                            
+                            rule_response_type = gr.Dropdown(
+                                label="💬 Tipo de Respuesta",
+                                choices=[
+                                    ("Respuesta Fija", "fixed"),
+                                    ("Template con Variables", "template"),
+                                    ("Generada por AI", "ai_generated")
+                                ],
+                                value="fixed",
+                                info="Tipo de respuesta a generar"
+                            )
+                            
+                            rule_response_content = gr.Textbox(
+                                label="📝 Contenido de la Respuesta",
+                                placeholder="Ej: ¡Hola! Gracias por contactarnos. ¿En qué puedo ayudarte?",
+                                lines=5,
+                                value=""
+                            )
+                            
+                            rule_priority = gr.Slider(
+                                label="⭐ Prioridad",
+                                minimum=0,
+                                maximum=10,
+                                value=5,
+                                step=1,
+                                info="Mayor prioridad = se ejecuta primero si hay múltiples reglas"
+                            )
+                            
+                            create_rule_btn = gr.Button("✅ Crear Regla", variant="primary")
+                            rule_status = gr.Markdown("")
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📋 Reglas Existentes")
+                            
+                            rules_list = gr.Dataframe(
+                                label="Reglas Configuradas",
+                                headers=["ID", "Nombre", "Canal", "Trigger", "Estado", "Uso"],
+                                interactive=False,
+                                wrap=True
+                            )
+                            
+                            refresh_rules_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                            
+                            gr.Markdown("### 🗑️ Eliminar Regla")
+                            delete_rule_id = gr.Textbox(
+                                label="ID de Regla a Eliminar",
+                                placeholder="RULE-1234567890-0",
+                                value=""
+                            )
+                            delete_rule_btn = gr.Button("🗑️ Eliminar", variant="stop")
+                            
+                            rules_stats = gr.Markdown("")
+                    
+                    def create_auto_rule(name, channel, trigger_type, trigger_value, response_type, response_content, priority):
+                        if not customer_service_agent:
+                            return "❌ Customer Service Agent no está habilitado.", None, ""
+                        
+                        if not name or not trigger_value or not response_content:
+                            return "⚠️ Completa todos los campos requeridos.", None, ""
+                        
+                        try:
+                            rule = customer_service_agent.auto_response_manager.add_rule(
+                                name=name,
+                                channel=channel,
+                                trigger_type=trigger_type,
+                                trigger_value=trigger_value,
+                                response_type=response_type,
+                                response_content=response_content,
+                                priority=int(priority)
+                            )
+                            
+                            return f"✅ Regla '{name}' creada exitosamente!\n\n**ID:** {rule.rule_id}", None, ""
+                        except Exception as e:
+                            return f"❌ Error creando regla: {str(e)}", None, ""
+                    
+                    def refresh_rules_list():
+                        if not customer_service_agent:
+                            return None, "❌ Customer Service Agent no está habilitado."
+                        
+                        try:
+                            rules = customer_service_agent.auto_response_manager.get_all_rules()
+                            
+                            if not rules:
+                                return None, "📝 No hay reglas configuradas aún."
+                            
+                            data = []
+                            for rule in rules:
+                                status = "✅ Activa" if rule.enabled else "❌ Desactivada"
+                                data.append([
+                                    rule.rule_id[:20] + "...",
+                                    rule.name,
+                                    rule.channel,
+                                    f"{rule.trigger_type}: {rule.trigger_value[:30]}",
+                                    status,
+                                    str(rule.usage_count)
+                                ])
+                            
+                            stats = customer_service_agent.auto_response_manager.get_stats()
+                            stats_text = f"""
+### 📊 Estadísticas de Reglas:
+- **Total:** {stats['total_rules']}
+- **Activas:** {stats['enabled_rules']}
+- **Desactivadas:** {stats['disabled_rules']}
+- **Total de Usos:** {stats['total_usage']}
+"""
+                            
+                            return data, stats_text
+                        except Exception as e:
+                            return None, f"❌ Error: {str(e)}"
+                    
+                    def delete_rule(rule_id):
+                        if not customer_service_agent:
+                            return "❌ Customer Service Agent no está habilitado.", None, ""
+                        
+                        if not rule_id or not rule_id.strip():
+                            return "⚠️ Ingresa el ID de la regla a eliminar.", None, ""
+                        
+                        try:
+                            success = customer_service_agent.auto_response_manager.delete_rule(rule_id.strip())
+                            if success:
+                                return f"✅ Regla '{rule_id}' eliminada exitosamente.", None, ""
+                            else:
+                                return f"❌ No se encontró la regla '{rule_id}'.", None, ""
+                        except Exception as e:
+                            return f"❌ Error eliminando regla: {str(e)}", None, ""
+                    
+                    create_rule_btn.click(
+                        fn=create_auto_rule,
+                        inputs=[rule_name, rule_channel, rule_trigger_type, rule_trigger_value, rule_response_type, rule_response_content, rule_priority],
+                        outputs=[rule_status, rules_list, rules_stats]
+                    )
+                    
+                    refresh_rules_btn.click(
+                        fn=refresh_rules_list,
+                        outputs=[rules_list, rules_stats]
+                    )
+                    
+                    delete_rule_btn.click(
+                        fn=delete_rule,
+                        inputs=[delete_rule_id],
+                        outputs=[rule_status, rules_list, rules_stats]
+                    )
+                    
+                    # Cargar reglas iniciales
+                    initial_rules, initial_stats = refresh_rules_list()
+                    if initial_rules:
+                        rules_list.value = initial_rules
+                    if initial_stats:
+                        rules_stats.value = initial_stats
+                
                 with gr.Tab("🔌 API y Conexiones"):
                     gr.Markdown("""
                     ### 🔗 Conectar Canales Externos por API

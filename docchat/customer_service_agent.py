@@ -25,6 +25,7 @@ from langchain_core.retrievers import BaseRetriever
 from .config import AppConfig
 from .document_processor import DocumentProcessor
 from .retriever_builder import RetrieverBuilder
+from .auto_response_rules import AutoResponseManager, AutoResponseRule
 from .tools import EmailTool, AdvancedEmailTool
 from .tools.whatsapp_tool import WhatsAppTool
 from .tools.ticket_tool import TicketTool
@@ -96,6 +97,9 @@ class CustomerServiceAgent:
             "whatsapp": WhatsAppTool(config),
             "ticket": TicketTool(config),
         }
+        
+        # Sistema de reglas automáticas
+        self.auto_response_manager = AutoResponseManager(config)
         
         # Almacenamiento de consultas y documentos
         self.inquiries: Dict[str, CustomerInquiry] = {}
@@ -172,26 +176,62 @@ class CustomerServiceAgent:
         print()
         
         try:
-            # 1. Analizar la consulta y determinar intención
-            intent_analysis = self._analyze_intent(message, customer_email)
-            print(f"🎯 Intención detectada: {intent_analysis.get('intent', 'unknown')}")
-            print(f"   Urgencia: {intent_analysis.get('urgency', 'medium')}")
-            print(f"   Confianza: {intent_analysis.get('confidence', 0.0):.2f}")
+            # 0. PRIMERO: Verificar reglas automáticas de respuesta
+            customer_data = {
+                "email": customer_email,
+                "phone": customer_phone,
+                "channel": channel
+            }
             
-            # 2. Buscar información relevante en la base de conocimiento
-            context_docs = []
-            if use_knowledge_base and self.retriever:
-                context_docs = self.retriever.get_relevant_documents(message)
-                print(f"📚 Documentos relevantes encontrados: {len(context_docs)}")
-            
-            # 3. Generar respuesta usando LLM
-            response_text = self._generate_response(
+            matching_rule = self.auto_response_manager.evaluate_message(
+                channel=channel,
                 message=message,
-                customer_email=customer_email,
-                intent=intent_analysis,
-                context_docs=context_docs,
-                channel=channel
+                customer_data=customer_data
             )
+            
+            if matching_rule:
+                print(f"🤖 REGLA AUTOMÁTICA ACTIVADA: {matching_rule.name}")
+                print(f"   Trigger: {matching_rule.trigger_type} = {matching_rule.trigger_value}")
+                
+                # Usar respuesta automática
+                response_text = self.auto_response_manager.generate_response(
+                    rule=matching_rule,
+                    message=message,
+                    customer_data=customer_data
+                )
+                
+                # Si la respuesta es AI-generated, mejorarla con LLM
+                if matching_rule.response_type == "ai_generated":
+                    response_text = self._enhance_ai_response(response_text, message, context_docs=[])
+                
+                intent_analysis = {
+                    "intent": "auto_response",
+                    "urgency": "low",
+                    "confidence": 1.0,
+                    "rule_used": matching_rule.rule_id
+                }
+                context_docs = []
+            else:
+                # 1. Analizar la consulta y determinar intención
+                intent_analysis = self._analyze_intent(message, customer_email)
+                print(f"🎯 Intención detectada: {intent_analysis.get('intent', 'unknown')}")
+                print(f"   Urgencia: {intent_analysis.get('urgency', 'medium')}")
+                print(f"   Confianza: {intent_analysis.get('confidence', 0.0):.2f}")
+                
+                # 2. Buscar información relevante en la base de conocimiento
+                context_docs = []
+                if use_knowledge_base and self.retriever:
+                    context_docs = self.retriever.get_relevant_documents(message)
+                    print(f"📚 Documentos relevantes encontrados: {len(context_docs)}")
+                
+                # 3. Generar respuesta usando LLM
+                response_text = self._generate_response(
+                    message=message,
+                    customer_email=customer_email,
+                    intent=intent_analysis,
+                    context_docs=context_docs,
+                    channel=channel
+                )
             
             # 4. Determinar acciones a tomar
             actions = self._determine_actions(
