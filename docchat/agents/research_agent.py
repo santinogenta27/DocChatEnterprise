@@ -31,11 +31,26 @@ class ResearchAgent:
             temperature=temperature, 
             max_tokens=max_tokens,
             max_retries=3,  # Reintentar hasta 3 veces
-            request_timeout=120  # Timeout de 2 minutos
+            request_timeout=180  # Timeout de 3 minutos para respuestas largas
         )
         self.speed_mode = speed_mode
+        self.base_max_tokens = max_tokens
 
     def run(self, question: str, documents: List[Document], conversational_mode: bool = False) -> ResearchResult:
+        # Para modo conversacional, crear un LLM con más tokens para respuestas MUY largas
+        if conversational_mode:
+            # Crear LLM especial para modo conversacional con 8000 tokens
+            conversational_llm = ChatOpenAI(
+                model=self.llm.model_name,
+                temperature=self.llm.temperature,
+                max_tokens=8000,  # Respuestas MUY largas y completas
+                max_retries=3,
+                request_timeout=180
+            )
+            llm_to_use = conversational_llm
+        else:
+            llm_to_use = self.llm
+        
         if not documents:
             return ResearchResult(
                 answer="No encontré suficiente información en los documentos para responder.",
@@ -73,7 +88,10 @@ class ResearchAgent:
         # Fast: menos contexto, más rápido
         # Balanced: contexto moderado
         # Quality: máximo contexto
-        if self.speed_mode == "fast":
+        # Conversational: MÁXIMO contexto posible para respuestas completas
+        if conversational_mode:
+            max_context_chars = 120000  # ~30,000 tokens - MÁXIMO contexto para respuestas super completas
+        elif self.speed_mode == "fast":
             max_context_chars = 40000  # ~10,000 tokens
         elif self.speed_mode == "balanced":
             max_context_chars = 60000  # ~15,000 tokens
@@ -87,23 +105,59 @@ class ResearchAgent:
         print(f"   Analizando {num_sources} documento(s) con {len(documents)} chunks totales...")
         print(f"   Generando respuesta (esto puede tardar 2-5 minutos)...\n")
         
-        # Prompt diferente para chat conversacional (más libre y natural)
+        # Prompt SUPER MEJORADO para chat conversacional (respuestas MUY largas, completas e inteligentes)
         if conversational_mode:
             prompt = (
-                "Eres un asistente experto que ayuda a los usuarios a entender y explorar documentos. "
-                "Responde de manera natural, conversacional y directa, como si estuvieras teniendo una conversación.\n\n"
+                "Eres un asistente experto de nivel mundial con conocimiento profundo en múltiples áreas. "
+                "Tu objetivo es proporcionar respuestas EXTREMADAMENTE COMPLETAS, DETALLADAS Y PERFECTAS. "
+                "Piensa como un investigador senior, un consultor estratégico y un experto técnico combinados.\n\n"
                 f"PREGUNTA DEL USUARIO:\n{question}\n\n"
-                f"CONTEXTO DE LOS DOCUMENTOS ({num_sources} documento(s)):\n{context}\n\n"
-                "INSTRUCCIONES:\n"
-                "1. Responde de forma natural y conversacional, como en una charla\n"
-                "2. Sé directo y claro, sin estructuras rígidas\n"
-                "3. Usa el contexto de los documentos para responder la pregunta específica\n"
-                "4. Si la pregunta requiere comparar o analizar múltiples documentos, hazlo de forma fluida\n"
-                "5. Incluye información específica y relevante de los documentos\n"
-                "6. Responde en español de manera natural\n"
-                "7. NO uses formatos estructurados como 'Tema Principal', 'Puntos Clave', etc.\n"
-                "8. Simplemente responde la pregunta de manera clara y útil\n\n"
-                "RESPUESTA:"
+                f"CONTEXTO COMPLETO DE LOS DOCUMENTOS ({num_sources} documento(s) con {len(documents)} fragmentos):\n{context}\n\n"
+                "INSTRUCCIONES CRÍTICAS PARA UNA RESPUESTA PERFECTA:\n\n"
+                "1. PROFUNDIDAD Y COMPLETITUD:\n"
+                "   - Proporciona una respuesta EXTREMADAMENTE DETALLADA y COMPLETA\n"
+                "   - No te limites a responder solo la pregunta directa, EXPLORA todos los aspectos relacionados\n"
+                "   - Incluye contexto, antecedentes, implicaciones y consecuencias\n"
+                "   - Mínimo 800-1500 palabras (respuestas MUY largas y completas)\n\n"
+                "2. ANÁLISIS INTELIGENTE:\n"
+                "   - Analiza la pregunta desde múltiples perspectivas (técnica, estratégica, práctica)\n"
+                "   - Identifica patrones, conexiones y relaciones entre diferentes partes de los documentos\n"
+                "   - Extrae insights profundos que no son obvios a primera vista\n"
+                "   - Proporciona análisis comparativo si hay múltiples documentos\n\n"
+                "3. INFORMACIÓN ESPECÍFICA Y PRECISA:\n"
+                "   - Cita información específica de los documentos (números, fechas, nombres, datos concretos)\n"
+                "   - Menciona de qué documento viene cada pieza de información\n"
+                "   - Incluye ejemplos concretos y casos específicos mencionados en los documentos\n"
+                "   - Proporciona detalles técnicos cuando sean relevantes\n\n"
+                "4. ESTRUCTURA NATURAL PERO COMPLETA:\n"
+                "   - Responde de forma conversacional y natural, como un experto explicando a un colega\n"
+                "   - Organiza la información de manera lógica y fluida\n"
+                "   - Usa párrafos bien desarrollados (no listas de viñetas simples)\n"
+                "   - Conecta ideas de manera fluida y natural\n\n"
+                "5. PERSPECTIVA ESTRATÉGICA:\n"
+                "   - No solo digas QUÉ, explica POR QUÉ y CÓMO\n"
+                "   - Incluye implicaciones prácticas y recomendaciones cuando sea apropiado\n"
+                "   - Proporciona contexto sobre la importancia o relevancia de la información\n"
+                "   - Conecta la información con conceptos más amplios cuando sea relevante\n\n"
+                "6. EXHAUSTIVIDAD:\n"
+                "   - Cubre TODOS los aspectos relevantes de la pregunta\n"
+                "   - Si hay múltiples documentos, analiza información de TODOS ellos\n"
+                "   - No omitas información importante aunque la pregunta no la mencione explícitamente\n"
+                "   - Incluye información relacionada que pueda ser útil para entender mejor el tema\n\n"
+                "7. CALIDAD DE ESCRITURA:\n"
+                "   - Escribe de manera clara, profesional y sofisticada\n"
+                "   - Usa un vocabulario rico y preciso\n"
+                "   - Varía la estructura de las oraciones para mantener el interés\n"
+                "   - Asegúrate de que cada párrafo aporte valor significativo\n\n"
+                "8. VERIFICACIÓN:\n"
+                "   - Solo usa información que esté explícitamente en los documentos\n"
+                "   - Si algo no está claro en los documentos, indícalo pero proporciona el contexto disponible\n"
+                "   - No inventes información, pero sé creativo en cómo la presentas y conectas\n\n"
+                "IMPORTANTE: Esta respuesta debe ser EXTREMADAMENTE COMPLETA, DETALLADA Y PERFECTA. "
+                "Piensa como si estuvieras escribiendo un análisis profesional de nivel ejecutivo. "
+                "La respuesta debe ser tan completa que el usuario no necesite hacer preguntas de seguimiento "
+                "para entender completamente el tema.\n\n"
+                "RESPUESTA COMPLETA Y DETALLADA (mínimo 800-1500 palabras):"
             )
         else:
             # Prompt original para otros modos (Consulta RAG, etc.)
@@ -145,8 +199,14 @@ class ResearchAgent:
             try:
                 if attempt > 0:
                     print(f"   Reintentando generación de respuesta (intento {attempt + 1}/{max_retries})...")
-                answer = self.llm.invoke(prompt).content.strip()
-                print(f"   ✅ Respuesta generada exitosamente ({len(answer)} caracteres)\n")
+                if conversational_mode:
+                    print(f"   🧠 Generando respuesta SUPER COMPLETA en modo conversacional (puede tardar 3-5 minutos)...")
+                answer = llm_to_use.invoke(prompt).content.strip()
+                print(f"   ✅ Respuesta generada exitosamente ({len(answer)} caracteres)")
+                if conversational_mode:
+                    print(f"   📊 Respuesta completa generada: {len(answer.split())} palabras aproximadamente\n")
+                else:
+                    print()
                 return ResearchResult(answer=answer, context=context)
             except Exception as e:
                 error_str = str(e).lower()

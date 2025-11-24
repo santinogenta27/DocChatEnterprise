@@ -229,7 +229,12 @@ class AgentWorkflow:
         try:
             # Pasar modo conversacional al ResearchAgent
             conversational_mode = state.get("conversational_mode", False)
-            research = self.research_agent.run(state["question"], context_docs, conversational_mode=conversational_mode)
+            # Pasar conversational_mode al ResearchAgent para que ajuste max_tokens
+            research = self.research_agent.run(
+                state["question"], 
+                context_docs, 
+                conversational_mode=conversational_mode
+            )
             if research and research.answer:
                 print(f"✅ Respuesta generada exitosamente ({len(research.answer)} caracteres)\n")
                 return {**state, "draft_answer": research.answer}
