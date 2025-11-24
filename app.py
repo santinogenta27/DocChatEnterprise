@@ -2444,6 +2444,167 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     
                     # Cargar estadísticas iniciales
                     cs_stats_output.value = get_cs_stats()
+                
+                with gr.Tab("🔌 API y Conexiones"):
+                    gr.Markdown("""
+                    ### 🔗 Conectar Canales Externos por API
+                    
+                    **Conecta Gmail, WhatsApp Business, Slack y otros servicios para recibir y responder mensajes automáticamente.**
+                    """)
+                    
+                    gr.Markdown("""
+                    ## 📡 Endpoints de API Disponibles
+                    
+                    ### 1. **Webhook para Mensajes en Tiempo Real**
+                    `POST /api/v1/customer-service/webhook/{channel}`
+                    
+                    Recibe mensajes de clientes desde servicios externos y responde automáticamente.
+                    
+                    **Canales soportados:** `gmail`, `whatsapp`, `slack`, `email`, `chat`
+                    
+                    **Ejemplo Gmail:**
+                    ```json
+                    {
+                      "from": "cliente@ejemplo.com",
+                      "subject": "Consulta sobre producto",
+                      "body": "Hola, necesito información...",
+                      "message_id": "gmail_123"
+                    }
+                    ```
+                    
+                    **Ejemplo WhatsApp:**
+                    ```json
+                    {
+                      "from": "+1234567890",
+                      "message": "Hola, tengo una pregunta",
+                      "message_id": "whatsapp_123"
+                    }
+                    ```
+                    
+                    ### 2. **Procesar Consulta Manual**
+                    `POST /api/v1/customer-service/inquiry`
+                    
+                    Envía una consulta de cliente y recibe respuesta automática.
+                    
+                    ### 3. **Cargar Base de Conocimiento**
+                    `POST /api/v1/customer-service/load-knowledge`
+                    
+                    Sube documentos que el AI usará para responder consultas.
+                    
+                    ### 4. **Estadísticas**
+                    `GET /api/v1/customer-service/stats`
+                    
+                    Obtiene métricas del servicio de atención al cliente.
+                    
+                    ---
+                    
+                    ## 🔧 Cómo Conectar Gmail
+                    
+                    1. **Configura Google Cloud:**
+                       - Crea proyecto en https://console.cloud.google.com
+                       - Habilita Gmail API
+                       - Obtén OAuth 2.0 credentials
+                    
+                    2. **Monitorea bandeja de entrada:**
+                       - Usa IMAP o Google Cloud Pub/Sub
+                       - Cuando llegue un email, envía al webhook:
+                       ```python
+                       import requests
+                       
+                       webhook_url = "https://tu-servidor.com/api/v1/customer-service/webhook/gmail"
+                       payload = {
+                           "from": email.from_address,
+                           "subject": email.subject,
+                           "body": email.body,
+                           "message_id": email.id
+                       }
+                       
+                       requests.post(webhook_url, json=payload, headers={
+                           "X-Webhook-Token": "Bearer tu_token"
+                       })
+                       ```
+                    
+                    ## 📱 Cómo Conectar WhatsApp Business
+                    
+                    1. **Opción 1: Twilio (Recomendado para empezar)**
+                       - Crea cuenta en https://www.twilio.com
+                       - Configura WhatsApp Sandbox
+                       - En configuración de Twilio, apunta webhook a:
+                         `https://tu-servidor.com/api/v1/customer-service/webhook/whatsapp`
+                       - Twilio enviará mensajes automáticamente
+                    
+                    2. **Opción 2: Meta WhatsApp Business API**
+                       - Ve a https://developers.facebook.com
+                       - Crea app de WhatsApp Business
+                       - Configura webhook en Meta
+                    
+                    ## 💬 Cómo Conectar Slack
+                    
+                    1. **Crear Slack App:**
+                       - Ve a https://api.slack.com/apps
+                       - Crea nueva app
+                       - Habilita Event Subscriptions
+                    
+                    2. **Configurar webhook:**
+                       - URL: `https://tu-servidor.com/api/v1/customer-service/webhook/slack`
+                       - Slack enviará eventos automáticamente
+                    
+                    ---
+                    
+                    ## 🔒 Seguridad
+                    
+                    Configura un token secreto en tu `.env`:
+                    ```
+                    WEBHOOK_TOKEN=tu_token_secreto_muy_seguro
+                    ```
+                    
+                    Luego inclúyelo en los headers:
+                    ```
+                    X-Webhook-Token: Bearer tu_token_secreto_muy_seguro
+                    ```
+                    
+                    ---
+                    
+                    ## 📚 Documentación Completa
+                    
+                    Consulta `CUSTOMER_SERVICE_API.md` para:
+                    - Ejemplos de código completos
+                    - Guías paso a paso
+                    - Mejores prácticas
+                    - Troubleshooting
+                    """)
+                    
+                    api_base_url = gr.Textbox(
+                        label="🌐 URL Base de tu API",
+                        value="http://localhost:8000",
+                        placeholder="https://tu-servidor.com",
+                        interactive=True
+                    )
+                    
+                    webhook_token = gr.Textbox(
+                        label="🔑 Webhook Token (opcional)",
+                        value=os.getenv("WEBHOOK_TOKEN", ""),
+                        type="password",
+                        placeholder="Configura WEBHOOK_TOKEN en .env",
+                        interactive=False
+                    )
+                    
+                    gr.Markdown(f"""
+                    **📖 Documentación completa:** Ver archivo `CUSTOMER_SERVICE_API.md` en el proyecto.
+                    
+                    **🚀 Iniciar servidor API:**
+                    ```bash
+                    python api_server.py
+                    ```
+                    
+                    O usa el script:
+                    ```bash
+                    .\\INICIAR_API.bat
+                    ```
+                    
+                    Luego accede a la documentación interactiva en:
+                    **http://localhost:8000/docs**
+                    """)
         
         # Tab 4.5: Chat Conversacional (NUEVO)
         with gr.Tab("💬 Chat Conversacional"):

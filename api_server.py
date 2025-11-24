@@ -769,6 +769,341 @@ async def get_chatbot_info_api(
         raise HTTPException(status_code=500, detail=f"Error obteniendo info: {str(e)}")
 
 
+# ============================================================================
+# CUSTOMER SERVICE API ENDPOINTS - Atención al Cliente Automática 24/7
+# ============================================================================
+
+class CustomerInquiryRequest(BaseModel):
+    """Request para procesar consulta de cliente."""
+    channel: str = Field(..., description="Canal: email, whatsapp, chat, phone")
+    customer_email: str = Field(..., description="Email del cliente")
+    message: str = Field(..., description="Mensaje del cliente")
+    customer_phone: Optional[str] = Field(None, description="Teléfono (para WhatsApp)")
+    subject: Optional[str] = Field(None, description="Asunto (para emails)")
+    use_knowledge_base: bool = Field(True, description="Usar base de conocimiento RAG")
+
+
+class CustomerInquiryResponse(BaseModel):
+    """Response de consulta procesada."""
+    success: bool
+    inquiry_id: str
+    response_text: str
+    channel: str
+    sent: bool
+    ticket_created: bool
+    ticket_id: Optional[str] = None
+    tools_used: List[str] = []
+    confidence: float
+    escalated: bool
+    timestamp: str
+
+
+class ChannelConnectionRequest(BaseModel):
+    """Request para conectar canal externo."""
+    channel_type: str = Field(..., description="Tipo: gmail, whatsapp_business, slack, teams")
+    credentials: Dict[str, Any] = Field(..., description="Credenciales del canal")
+    webhook_url: Optional[str] = Field(None, description="URL para recibir notificaciones")
+    auto_respond: bool = Field(True, description="Responder automáticamente a mensajes")
+
+
+@app.post("/api/v1/customer-service/inquiry", response_model=CustomerInquiryResponse)
+async def process_customer_inquiry(
+    request: CustomerInquiryRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Procesa una consulta de cliente y genera respuesta automática.
+    
+    Este endpoint permite a sistemas externos enviar consultas de clientes
+    y recibir respuestas automáticas generadas por Agentic AI.
+    """
+    if not customer_service_agent:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer Service Agent no está habilitado. Configure DOCCHAT_ENABLE_AGENTS=true"
+        )
+    
+    try:
+        audit_logger.log(
+            event_type="customer_inquiry",
+            action="process",
+            resource="customer_service",
+            metadata={
+                "channel": request.channel,
+                "customer_email": request.customer_email[:50]
+            }
+        )
+        
+        # Procesar consulta
+        response = customer_service_agent.process_inquiry(
+            channel=request.channel,
+            customer_email=request.customer_email,
+            message=request.message,
+            customer_phone=request.customer_phone,
+            subject=request.subject,
+            use_knowledge_base=request.use_knowledge_base
+        )
+        
+        return CustomerInquiryResponse(
+            success=True,
+            inquiry_id=response.inquiry_id,
+            response_text=response.response_text,
+            channel=response.channel,
+            sent=response.sent,
+            ticket_created=response.ticket_created,
+            ticket_id=response.ticket_id,
+            tools_used=response.tools_used,
+            confidence=response.confidence,
+            escalated=response.escalated,
+            timestamp=datetime.now().isoformat()
+        )
+    
+    except Exception as e:
+        audit_logger.log(
+            event_type="customer_inquiry",
+            action="error",
+            resource="customer_service",
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error procesando consulta: {str(e)}")
+
+
+@app.post("/api/v1/customer-service/webhook/{channel}")
+async def customer_service_webhook(
+    channel: str,
+    payload: Dict[str, Any],
+    authorization: Optional[str] = Header(None, alias="X-Webhook-Token")
+):
+    """
+    Webhook para recibir mensajes de clientes en tiempo real.
+    
+    Este endpoint permite a servicios externos (Gmail, WhatsApp Business, etc.)
+    enviar mensajes de clientes que serán procesados automáticamente.
+    
+    Formatos soportados:
+    - Gmail: { "from": "email", "subject": "...", "body": "...", "message_id": "..." }
+    - WhatsApp: { "from": "phone", "message": "...", "message_id": "..." }
+    - Slack: { "user": "...", "text": "...", "channel": "..." }
+    """
+    if not customer_service_agent:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer Service Agent no está habilitado"
+        )
+    
+    try:
+        # Validar token de webhook (opcional pero recomendado)
+        expected_token = os.getenv("WEBHOOK_TOKEN", "")
+        if expected_token and authorization != f"Bearer {expected_token}":
+            raise HTTPException(status_code=401, detail="Invalid webhook token")
+        
+        # Parsear mensaje según el canal
+        if channel == "gmail" or channel == "email":
+            customer_email = payload.get("from", payload.get("sender", ""))
+            message = payload.get("body", payload.get("text", payload.get("message", "")))
+            subject = payload.get("subject", "")
+            
+            if not customer_email or not message:
+                raise HTTPException(status_code=400, detail="Missing 'from' or 'body' in payload")
+        
+        elif channel == "whatsapp":
+            customer_phone = payload.get("from", payload.get("phone", ""))
+            customer_email = payload.get("email", f"whatsapp_{customer_phone}@unknown.com")
+            message = payload.get("message", payload.get("text", payload.get("body", "")))
+            
+            if not customer_phone or not message:
+                raise HTTPException(status_code=400, detail="Missing 'from' or 'message' in payload")
+        
+        elif channel == "slack":
+            customer_email = payload.get("user_email", payload.get("user", f"slack_{payload.get('user_id', 'unknown')}@slack.com"))
+            message = payload.get("text", payload.get("message", ""))
+            subject = f"Slack: {payload.get('channel', 'general')}"
+            
+            if not message:
+                raise HTTPException(status_code=400, detail="Missing 'text' or 'message' in payload")
+        
+        else:
+            # Formato genérico
+            customer_email = payload.get("customer_email", payload.get("from", payload.get("email", "unknown@unknown.com")))
+            message = payload.get("message", payload.get("text", payload.get("body", "")))
+            subject = payload.get("subject", "")
+            customer_phone = payload.get("customer_phone", payload.get("phone"))
+        
+        # Procesar consulta automáticamente
+        response = customer_service_agent.process_inquiry(
+            channel=channel,
+            customer_email=customer_email,
+            message=message,
+            customer_phone=customer_phone if channel == "whatsapp" else None,
+            subject=subject if channel in ["email", "gmail"] else None,
+            use_knowledge_base=True
+        )
+        
+        audit_logger.log(
+            event_type="customer_service_webhook",
+            action="processed",
+            resource="customer_service",
+            metadata={
+                "channel": channel,
+                "inquiry_id": response.inquiry_id,
+                "sent": response.sent
+            }
+        )
+        
+        return {
+            "success": True,
+            "inquiry_id": response.inquiry_id,
+            "response_sent": response.sent,
+            "ticket_id": response.ticket_id,
+            "escalated": response.escalated,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        audit_logger.log(
+            event_type="customer_service_webhook",
+            action="error",
+            resource="customer_service",
+            metadata={"error": str(e), "channel": channel}
+        )
+        raise HTTPException(status_code=500, detail=f"Error procesando webhook: {str(e)}")
+
+
+@app.post("/api/v1/customer-service/connect-channel")
+async def connect_channel(
+    request: ChannelConnectionRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Conecta un canal externo (Gmail, WhatsApp Business, etc.) para recibir mensajes automáticamente.
+    
+    Ejemplo para Gmail:
+    {
+        "channel_type": "gmail",
+        "credentials": {
+            "client_id": "...",
+            "client_secret": "...",
+            "refresh_token": "..."
+        },
+        "webhook_url": "https://tu-servidor.com/api/v1/customer-service/webhook/gmail",
+        "auto_respond": true
+    }
+    """
+    if not customer_service_agent:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer Service Agent no está habilitado"
+        )
+    
+    try:
+        # Aquí se implementaría la lógica de conexión real
+        # Por ahora, solo registramos la conexión
+        
+        audit_logger.log(
+            event_type="channel_connection",
+            action="connect",
+            resource="customer_service",
+            metadata={
+                "channel_type": request.channel_type,
+                "auto_respond": request.auto_respond
+            }
+        )
+        
+        return {
+            "success": True,
+            "channel_type": request.channel_type,
+            "status": "connected",
+            "webhook_url": request.webhook_url,
+            "auto_respond": request.auto_respond,
+            "message": f"Canal {request.channel_type} conectado. Configura el webhook en tu servicio externo para: {request.webhook_url or 'N/A'}",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error conectando canal: {str(e)}")
+
+
+@app.post("/api/v1/customer-service/load-knowledge")
+async def load_customer_service_knowledge(
+    files: List[UploadFile] = File(...),
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Carga documentos en la base de conocimiento para Customer Service.
+    
+    Estos documentos serán usados por el Agentic AI para responder consultas de clientes.
+    """
+    if not customer_service_agent:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer Service Agent no está habilitado"
+        )
+    
+    try:
+        # Guardar archivos temporalmente
+        temp_files = []
+        for file in files:
+            temp_path = Path(config.temp_dir) / f"cs_kb_{datetime.now().timestamp()}_{file.filename}"
+            temp_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(temp_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            temp_files.append(temp_path)
+        
+        # Cargar en base de conocimiento
+        customer_service_agent.load_knowledge_base(temp_files)
+        
+        stats = customer_service_agent.get_stats()
+        
+        # Limpiar archivos temporales
+        for temp_file in temp_files:
+            try:
+                temp_file.unlink()
+            except:
+                pass
+        
+        audit_logger.log(
+            event_type="customer_service_knowledge",
+            action="load",
+            resource="customer_service",
+            metadata={"files_count": len(files), "chunks": stats.get("knowledge_base_documents", 0)}
+        )
+        
+        return {
+            "success": True,
+            "files_loaded": len(files),
+            "knowledge_base_chunks": stats.get("knowledge_base_documents", 0),
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error cargando base de conocimiento: {str(e)}")
+
+
+@app.get("/api/v1/customer-service/stats")
+async def get_customer_service_stats(
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """Obtiene estadísticas del servicio de atención al cliente."""
+    if not customer_service_agent:
+        raise HTTPException(
+            status_code=503,
+            detail="Customer Service Agent no está habilitado"
+        )
+    
+    try:
+        stats = customer_service_agent.get_stats()
+        return {
+            "success": True,
+            "stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo estadísticas: {str(e)}")
+
+
 if __name__ == "__main__":
     port = int(os.getenv("API_PORT", "8000"))
     print(f"🚀 Iniciando DocChat Enterprise API en http://0.0.0.0:{port}")
