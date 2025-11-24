@@ -3764,7 +3764,6 @@ if __name__ == "__main__":
     port = find_free_port()
     print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
     demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
-            gr.Markdown("### Automatización de Procesos con RPA + IA")
             gr.Markdown("""
             **🚀 Automatiza tareas repetitivas empresariales con Agentic AI**
             
