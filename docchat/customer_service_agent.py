@@ -521,4 +521,38 @@ RESPUESTA:"""
             "escalation_rate": f"{escalation_rate:.1f}%",
             "knowledge_base_documents": len(self.processed_documents)
         }
+    
+    def _enhance_ai_response(
+        self,
+        base_response: str,
+        original_message: str,
+        context_docs: List[Document] = None
+    ) -> str:
+        """Mejora una respuesta AI con contexto adicional."""
+        try:
+            context = base_response
+            if context_docs:
+                context += "\n\nContexto adicional:\n"
+                for doc in context_docs[:3]:
+                    context += f"- {doc.page_content[:200]}...\n"
+            
+            prompt = f"""Mejora esta respuesta automática para que sea más personalizada y útil:
+
+Mensaje del cliente: {original_message}
+
+Respuesta base: {base_response}
+
+Genera una respuesta mejorada que:
+1. Sea más personalizada
+2. Responda directamente al mensaje del cliente
+3. Sea amigable y profesional
+4. Mantenga el tono de la respuesta base
+
+Respuesta mejorada:"""
+            
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            return response.content.strip()
+        except Exception as e:
+            print(f"Error mejorando respuesta AI: {e}")
+            return base_response
 
