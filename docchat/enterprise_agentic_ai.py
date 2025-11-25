@@ -68,18 +68,22 @@ class EnterpriseAgenticAI:
     - Realizar las 50+ tareas listadas usando los datos procesados
     """
     
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, provider: str = "openai"):
         self.config = config
+        self.provider = provider
         
         if not config.openai_api_key:
             raise ValueError("OPENAI_API_KEY requerida para Agentic AI empresarial")
         
-        # LLM para IDP y tareas autónomas
-        self.llm = ChatOpenAI(
+        # LLM para IDP y tareas autónomas - Actualizado para context window grande (128k)
+        from docchat.utils.llm_factory import create_llm
+        self.llm = create_llm(
+            provider=provider,
             model=config.agentic_model or "gpt-4o",
             temperature=0.2,
-            api_key=config.openai_api_key,
-            max_tokens=4000
+            api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
+            max_tokens=16000,
+            request_timeout=180
         )
         
         # Procesador de documentos
@@ -193,14 +197,21 @@ class EnterpriseAgenticAI:
         
         context = "\n\n---\n\n".join(context_parts)
         
-        # Prompt para IDP
+        # Prompt para IDP con Chain of Thought reasoning
         prompt = f"""Eres un sistema de Intelligent Document Processing (IDP) experto. 
         Analiza este documento y extrae información estructurada.
+
+        🧠 MÉTODO DE RAZONAMIENTO (CHAIN OF THOUGHT):
+        DEBES razonar paso a paso:
+        1. Primero, identifica el tipo general de documento
+        2. Luego, busca entidades clave sistemáticamente
+        3. Después, identifica métricas y valores numéricos
+        4. Finalmente, estructura toda la información de manera lógica
 
         DOCUMENTO: {Path(file_name).name}
         
         CONTENIDO:
-        {context[:15000]}  # Limitar contexto
+        {context[:50000]}  # Aumentado para aprovechar context window grande
         
         INSTRUCCIONES:
         1. Clasifica el tipo de documento (factura, contrato, informe, email, etc.)
@@ -470,6 +481,13 @@ class EnterpriseAgenticAI:
         params_description = params_guide.get("description", "")
         
         prompt = f"""Eres un asistente experto que extrae parámetros específicos para herramientas de Agentic AI.
+
+🧠 MÉTODO DE RAZONAMIENTO (CHAIN OF THOUGHT):
+DEBES razonar paso a paso:
+1. Primero, identifica qué herramienta se necesita y qué hace
+2. Luego, analiza la tarea del usuario para encontrar información relevante
+3. Después, extrae cada parámetro necesario sistemáticamente
+4. Finalmente, verifica que todos los parámetros requeridos estén presentes
 
 TAREA DEL USUARIO: {task_description}
 TIPO DE TAREA: {task_type}

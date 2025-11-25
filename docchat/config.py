@@ -34,11 +34,12 @@ class AppConfig:
     max_retrieval_results: int = 100  # Aumentado para análisis de múltiples documentos
 
     # LLM defaults - Multi-model support
-    relevance_model: str = os.getenv("DOCCHAT_RELEVANCE_MODEL", "gpt-4o-mini")
-    research_model: str = os.getenv("DOCCHAT_RESEARCH_MODEL", "gpt-4o")
-    verification_model: str = os.getenv("DOCCHAT_VERIFICATION_MODEL", "gpt-4o-mini")
+    # Actualizado para usar modelos con context windows grandes (128k tokens)
+    relevance_model: str = os.getenv("DOCCHAT_RELEVANCE_MODEL", "gpt-4o")  # gpt-4o tiene 128k context window
+    research_model: str = os.getenv("DOCCHAT_RESEARCH_MODEL", "gpt-4o")  # gpt-4o tiene 128k context window
+    verification_model: str = os.getenv("DOCCHAT_VERIFICATION_MODEL", "gpt-4o")  # gpt-4o tiene 128k context window
     embedding_model: str = os.getenv("DOCCHAT_EMBEDDING_MODEL", "text-embedding-3-small")  # Cambiado a small: más rápido, calidad similar
-    agentic_model: str = os.getenv("DOCCHAT_AGENTIC_MODEL", "gpt-4o")
+    agentic_model: str = os.getenv("DOCCHAT_AGENTIC_MODEL", "gpt-4o")  # gpt-4o tiene 128k context window
     temperature: float = float(os.getenv("DOCCHAT_TEMPERATURE", "0.15"))
     
     # Speed/Quality Modes
@@ -49,7 +50,7 @@ class AppConfig:
     
     # API Keys
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "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")
 
     # Agentic AI Settings
     enable_autonomous_agents: bool = os.getenv("DOCCHAT_ENABLE_AGENTS", "true").lower() == "true"
@@ -62,7 +63,7 @@ class AppConfig:
     # Memory & Context
     enable_memory: bool = os.getenv("DOCCHAT_ENABLE_MEMORY", "true").lower() == "true"
     memory_retention_days: int = 365
-    context_window_size: int = 10000
+    context_window_size: int = 200000  # Actualizado a 200k tokens (máximo entre OpenAI 128k y Claude 200k)
 
     # Integrations
     enable_slack: bool = os.getenv("DOCCHAT_ENABLE_SLACK", "false").lower() == "true"

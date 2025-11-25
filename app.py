@@ -115,7 +115,7 @@ config: AppConfig = load_config()
 processor = DocumentProcessor(config)
 mass_processor = MassDocumentProcessor(config)
 retriever_builder = RetrieverBuilder(config)
-workflow = AgentWorkflow(config)
+workflow = AgentWorkflow(config, provider="openai")  # Default: OpenAI
 
 # Inicializar sistemas avanzados de mejoras
 from docchat.analytics.analytics_engine import AnalyticsEngine
@@ -133,8 +133,12 @@ memory_store = MemoryStore(config.memory_dir, config.memory_retention_days) if c
 context_manager = ContextManager(memory_store, config) if memory_store else None
 autonomous_agent = AutonomousAgent(config) if config.enable_autonomous_agents else None
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
-enterprise_api = EnterpriseAPIMode(config)
-enterprise_agentic_ai = EnterpriseAgenticAI(config) if config.enable_autonomous_agents else None
+enterprise_api = EnterpriseAPIMode(config, provider="openai")  # Default: OpenAI
+enterprise_agentic_ai = EnterpriseAgenticAI(config, provider="openai") if config.enable_autonomous_agents else None
+
+# Inicializar Text-to-Action Agent
+from docchat.text_to_action import TextToActionAgent
+text_to_action_agent = TextToActionAgent(config, provider="openai")
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
 rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
@@ -187,7 +191,7 @@ def _format_comparative_analysis(analysis) -> str:
 
 
 # Funciones principales
-def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str = "balanced"):
+def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str = "balanced", provider: str = "openai"):
     """Pipeline principal de RAG - Soporta hasta 1000 documentos."""
     import time
     
@@ -311,7 +315,9 @@ def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str 
     
     # Ejecutar workflow (pasar todos los documentos para preguntas generales)
     try:
-        result = workflow.run(question.strip(), retriever, all_documents=docs)
+        # Crear workflow con el provider seleccionado
+        temp_workflow = AgentWorkflow(config, provider=provider)
+        result = temp_workflow.run(question.strip(), retriever, all_documents=docs)
         print(f"\n📊 Resultado del workflow recibido:")
         print(f"   - Respuesta: {len(result.get('answer', ''))} caracteres")
         print(f"   - Fuentes: {len(result.get('sources', []))}")
@@ -1081,7 +1087,7 @@ def get_audit_stats():
 # Estado global para chat conversacional
 chat_sessions = {}  # {session_id: {"docs": [], "retriever": None, "history": []}}
 
-def run_chat_conversational(message, history, files, session_id, speed_mode="balanced"):
+def run_chat_conversational(message, history, files, session_id, speed_mode="balanced", provider="openai"):
     """
     Maneja chat conversacional con documentos.
     Mantiene contexto entre preguntas y permite seguimiento.
@@ -1134,30 +1140,55 @@ def run_chat_conversational(message, history, files, session_id, speed_mode="bal
     if not session["retriever"]:
         return history, "⚠️ No hay documentos procesados. Carga documentos primero."
     
-    # Construir contexto de conversación desde history (formato messages)
+    # Construir contexto de conversación desde history usando CONTEXT WINDOW como memoria a corto plazo
+    # OPTIMIZADO: Aprovecha context windows grandes (128k-200k tokens) para mantener historial extenso
     conversation_context = ""
     if history:
-        # Incluir últimas 3 interacciones para contexto
-        recent_history = history[-6:] if len(history) > 6 else history  # 3 pares user/assistant
-        conversation_context = "\n\nContexto de la conversación anterior:\n"
-        for msg in recent_history:
+        # Calcular cuánto espacio tenemos para historial basado en el context window
+        # Con context windows grandes, podemos incluir MUCHO más historial
+        # OpenAI 128k tokens = ~512k caracteres, Claude 200k tokens = ~800k caracteres
+        # Reservamos espacio para documentos y respuesta, pero usamos el resto para historial
+        
+        # Incluir historial completo o extenso (no solo 3 interacciones)
+        # Con context windows grandes podemos incluir 20-50 interacciones anteriores
+        max_history_chars = 100000  # ~25k tokens para historial (aprovecha context window grande)
+        total_history_chars = 0
+        
+        conversation_context = "\n\n=== CONTEXTO DE CONVERSACIÓN ANTERIOR (MEMORIA A CORTO PLAZO) ===\n"
+        # Incluir historial completo desde el principio (context window como memoria)
+        for i, msg in enumerate(history):
             if isinstance(msg, dict):
                 role = msg.get("role", "")
                 content = msg.get("content", "")
                 if role == "user":
-                    conversation_context += f"Usuario: {content}\n"
+                    msg_text = f"Usuario: {content}\n"
                 elif role == "assistant":
-                    conversation_context += f"Asistente: {content[:200]}...\n\n"
+                    # Incluir respuesta completa (no truncar tanto) para aprovechar context window
+                    msg_text = f"Asistente: {content[:2000]}{'...' if len(content) > 2000 else ''}\n\n"
+                else:
+                    continue
             elif isinstance(msg, (tuple, list)) and len(msg) == 2:
-                # Formato antiguo (tupla)
                 user_msg, bot_msg = msg
-                conversation_context += f"Usuario: {user_msg}\n"
-                conversation_context += f"Asistente: {bot_msg[:200]}...\n\n"
+                msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
+            else:
+                continue
+            
+            if total_history_chars + len(msg_text) <= max_history_chars:
+                conversation_context += msg_text
+                total_history_chars += len(msg_text)
+            else:
+                # Si no cabe todo, incluir al menos las últimas interacciones
+                remaining = max_history_chars - total_history_chars
+                if remaining > 500:
+                    conversation_context += msg_text[:remaining] + "\n[Historial anterior truncado...]"
+                break
+        
+        conversation_context += "\n=== FIN DEL CONTEXTO DE CONVERSACIÓN ===\n"
     
-    # Enriquecer pregunta con contexto
+    # Enriquecer pregunta con contexto (context window como memoria a corto plazo)
     enriched_question = message
     if conversation_context:
-        enriched_question = f"{message}\n\n{conversation_context}"
+        enriched_question = f"{conversation_context}\n\nPREGUNTA ACTUAL:\n{message}"
     
     # Obtener contexto de memoria si está habilitado
     memory_context = {}
@@ -1174,7 +1205,9 @@ def run_chat_conversational(message, history, files, session_id, speed_mode="bal
     try:
         # Ejecutar workflow con contexto de conversación
         # Pasar conversational_mode=True para respuestas más libres y naturales
-        result = workflow.run(
+        # Crear workflow con el provider seleccionado
+        temp_workflow = AgentWorkflow(config, provider=provider)
+        result = temp_workflow.run(
             enriched_question,
             session["retriever"],
             all_documents=session["docs"],
@@ -1251,6 +1284,62 @@ def clear_chat_session(session_id):
         del chat_sessions[session_id]
     return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
 
+def run_enterprise_api_mode_streaming(files, auto_detect: bool = True, rules_json: str = "", provider: str = "openai"):
+    """Ejecuta modo Enterprise API con streaming de resultados (generador)."""
+    accumulated_output = ""
+    
+    if not files:
+        error_msg = "❌ No hay archivos subidos localmente.\n\n"
+        error_msg += "**💡 Si quieres usar archivos de Google Drive:**\n"
+        error_msg += "1. Ve a la sección '📁 Usar archivos de Google Drive' arriba\n"
+        error_msg += "2. Ingresa el Session ID\n"
+        error_msg += "3. Selecciona los archivos con los checkboxes\n"
+        error_msg += "4. Click en **'📂 Procesar Archivos Seleccionados'** (NO este botón)\n\n"
+        error_msg += "**O sube archivos localmente:** Arrastra archivos al campo '📂 Documentos Empresariales' arriba."
+        yield error_msg
+        return
+    
+    audit_logger.log(
+        event_type="enterprise_api",
+        action="process_enterprise_documents",
+        resource="documents",
+        user_id="user",
+        metadata={"file_count": len(files), "auto_detect": auto_detect}
+    )
+    
+    try:
+        # Parsear reglas si se proporcionan
+        rules = []
+        if rules_json and rules_json.strip():
+            try:
+                rules = json.loads(rules_json)
+            except:
+                rules = []
+        
+        # Crear Enterprise API con el provider seleccionado
+        temp_enterprise_api = EnterpriseAPIMode(config, provider=provider)
+        
+        # Procesar con Enterprise API usando streaming
+        for chunk in temp_enterprise_api.process_enterprise_documents_streaming(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules
+        ):
+            accumulated_output += chunk
+            yield accumulated_output
+        
+    except Exception as e:
+        error_msg = f"Error en modo Enterprise API: {str(e)}"
+        audit_logger.log(
+            event_type="error",
+            action="enterprise_api",
+            resource="documents",
+            result="error",
+            metadata={"error": str(e)}
+        )
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
 def run_enterprise_api_mode(files, auto_detect: bool = True, rules_json: str = ""):
     """Ejecuta modo Enterprise API con procesamiento automático (SOLO para archivos locales)."""
     if not files:
@@ -1300,10 +1389,17 @@ def run_enterprise_api_mode(files, auto_detect: bool = True, rules_json: str = "
             successful_summaries = sum(1 for s in results['summaries'].values() if s.get('summary') and s.get('summary') != 'No se pudo generar resumen')
             
             output += f"### 📄 Resúmenes Automáticos ({successful_summaries}/{total_summaries} exitosos)\n\n"
+            # Evitar duplicados: usar nombres limpios únicos
+            from pathlib import Path
+            seen_files = set()
             for file_name, summary in list(results['summaries'].items()):
                 # Extraer solo el nombre del archivo
-                from pathlib import Path
                 clean_file_name = Path(file_name).name
+                
+                # Si ya vimos este archivo, saltarlo
+                if clean_file_name in seen_files:
+                    continue
+                seen_files.add(clean_file_name)
                 
                 output += f"#### {clean_file_name}\n\n"
                 output += f"**Tipo de Documento**: {summary.get('document_type', 'N/A')}\n\n"
@@ -1991,6 +2087,12 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     value="balanced",
                     info="Rápido: menos chunks, respuestas más concisas. Balanceado: equilibrio velocidad/calidad. Máxima Calidad: análisis más profundo."
                 )
+                provider_toggle_rag = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
             
             run_button = gr.Button("🚀 Ejecutar pipeline", variant="primary")
             
@@ -2004,7 +2106,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             
             run_button.click(
                 fn=run_pipeline,
-                inputs=[file_input, question_input, use_memory_check, speed_mode],
+                inputs=[file_input, question_input, use_memory_check, speed_mode, provider_toggle_rag],
                 outputs=[answer_output, sources_output, verification_output, relevance_output],
             )
         
@@ -2225,6 +2327,12 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                         label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
                         value=True,
                     )
+                    provider_toggle_enterprise = gr.Radio(
+                        label="🤖 Motor de IA",
+                        choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                        value="openai",
+                        info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    )
             
             drive_enterprise_output = gr.Markdown(
                 label="📊 Resultados desde Google Drive",
@@ -2280,9 +2388,206 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             )
             
             enterprise_button.click(
-                fn=run_enterprise_api_mode,
-                inputs=[enterprise_files, auto_detect_check, rules_input],
+                fn=run_enterprise_api_mode_streaming,
+                inputs=[enterprise_files, auto_detect_check, rules_input, provider_toggle_enterprise],
                 outputs=[enterprise_output],
+                show_progress="full"
+            )
+        
+        # Tab 4.5.5: Text-to-Action (NUEVO - Convierte lenguaje natural en código Python ejecutable)
+        with gr.Tab("⚡ Text-to-Action"):
+            gr.Markdown("### ⚡ Text-to-Action - Crea Código Python desde Lenguaje Natural")
+            gr.Markdown("""
+            **🚀 Convierte tus ideas en código Python ejecutable**
+            
+            - 💬 Describe lo que quieres hacer en lenguaje natural
+            - 🤖 El sistema genera código Python automáticamente
+            - ✅ Ejecuta el código en un sandbox seguro
+            - 🔄 Corrige errores automáticamente
+            - 📊 Visualiza resultados en tiempo real
+            
+            **💡 Ejemplos:**
+            - "Analiza estos datos y crea un gráfico de barras"
+            - "Genera una lista de números primos del 1 al 100"
+            - "Calcula el promedio de ventas del último mes"
+            - "Crea una función que valide emails"
+            - "Procesa este JSON y extrae información específica"
+            
+            **🔒 Seguridad:**
+            - Código ejecutado en sandbox seguro
+            - Sin acceso peligroso al sistema
+            - Verificación automática de seguridad
+            """)
+            
+            with gr.Row():
+                provider_toggle_text_action = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado para generar código"
+                )
+            
+            with gr.Row():
+                with gr.Column(scale=2):
+                    action_description = gr.Textbox(
+                        label="💬 Describe lo que quieres hacer",
+                        placeholder="Ejemplo: Analiza estos datos [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] y calcula la media, mediana y desviación estándar. Muestra los resultados formateados.",
+                        lines=5,
+                        info="Describe en lenguaje natural lo que quieres que el código haga"
+                    )
+                    
+                    context_data = gr.Textbox(
+                        label="📊 Contexto/Datos (JSON opcional)",
+                        placeholder='{"data": [1, 2, 3, 4, 5], "name": "ventas"}',
+                        lines=3,
+                        info="Opcional: Proporciona datos o variables en formato JSON que el código puede usar"
+                    )
+                    
+                    example_actions = gr.Examples(
+                        examples=[
+                            [
+                                "Analiza estos datos [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] y calcula la media, mediana, desviación estándar y rango. Muestra los resultados formateados.",
+                                '{"data": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}'
+                            ],
+                            [
+                                "Genera una lista de los primeros 20 números primos y muéstralos en formato de lista.",
+                                ""
+                            ],
+                            [
+                                "Crea una función que valide si un email es válido usando expresiones regulares. Prueba con 'test@example.com' y 'invalid-email'.",
+                                '{"test_emails": ["test@example.com", "invalid-email"]}'
+                            ],
+                            [
+                                "Procesa este JSON y extrae todos los nombres y edades. Luego calcula el promedio de edad.",
+                                '{"personas": [{"nombre": "Juan", "edad": 25}, {"nombre": "María", "edad": 30}, {"nombre": "Pedro", "edad": 35}]}'
+                            ],
+                            [
+                                "Crea un diccionario con las palabras más comunes en este texto y cuenta cuántas veces aparece cada una.",
+                                '{"texto": "python es genial python es poderoso python es fácil"}'
+                            ],
+                        ],
+                        inputs=[action_description, context_data],
+                        label="💡 Ejemplos Rápidos (Click para cargar)"
+                    )
+                    
+                    max_iterations = gr.Slider(
+                        label="🔄 Máximo de intentos de corrección",
+                        minimum=1,
+                        maximum=5,
+                        value=3,
+                        step=1,
+                        info="Número de veces que el sistema intentará corregir errores automáticamente"
+                    )
+                
+                with gr.Column(scale=1):
+                    action_button = gr.Button("⚡ Generar y Ejecutar Código", variant="primary", size="lg")
+                    clear_action_btn = gr.Button("🗑️ Limpiar", variant="secondary")
+            
+            with gr.Row():
+                with gr.Column():
+                    code_output = gr.Code(
+                        label="📝 Código Generado",
+                        language="python",
+                        lines=15,
+                        interactive=False
+                    )
+                    
+                    explanation_output = gr.Markdown(
+                        label="💡 Explicación del Código",
+                        value=""
+                    )
+                
+                with gr.Column():
+                    execution_output = gr.Textbox(
+                        label="📊 Resultado de Ejecución",
+                        lines=10,
+                        interactive=False
+                    )
+                    
+                    result_output = gr.JSON(
+                        label="📦 Resultado (si aplica)",
+                        visible=True
+                    )
+            
+            status_output = gr.Markdown(label="ℹ️ Estado")
+            
+            def run_text_to_action(description, context_json, max_iter, provider):
+                """Ejecuta text-to-action: genera código y lo ejecuta."""
+                if not description or not description.strip():
+                    return "", "", "", {}, "⚠️ Escribe una descripción de lo que quieres hacer."
+                
+                # Crear agente con el provider seleccionado
+                temp_agent = TextToActionAgent(config, provider=provider)
+                
+                # Parsear contexto si está disponible
+                context = None
+                if context_json and context_json.strip():
+                    try:
+                        context = json.loads(context_json)
+                    except:
+                        context = None
+                
+                # Ejecutar acción
+                result = temp_agent.execute_action(
+                    description=description,
+                    context=context,
+                    max_iterations=int(max_iter)
+                )
+                
+                # Formatear salida
+                code_display = result.get('code', '')
+                explanation = result.get('explanation', '')
+                output_text = result.get('output', '')
+                result_data = result.get('result')
+                error = result.get('error')
+                
+                # Construir status
+                if result['success']:
+                    status = f"✅ **Código ejecutado exitosamente**\n\n"
+                    status += f"- Iteraciones: {len(result.get('iterations', []))}\n"
+                    if output_text:
+                        status += f"- Output generado: ✅\n"
+                    if result_data is not None:
+                        status += f"- Resultado guardado: ✅\n"
+                else:
+                    status = f"❌ **Error ejecutando código**\n\n"
+                    status += f"- Iteraciones intentadas: {len(result.get('iterations', []))}\n"
+                    if error:
+                        status += f"- Error: {error[:200]}...\n"
+                
+                # Agregar información de iteraciones
+                iterations = result.get('iterations', [])
+                if len(iterations) > 1:
+                    status += f"\n**Proceso de corrección:**\n"
+                    for iter_info in iterations:
+                        iter_num = iter_info.get('iteration', 0)
+                        exec_result = iter_info.get('execution', {})
+                        if exec_result.get('success'):
+                            status += f"- Iteración {iter_num}: ✅ Éxito\n"
+                        else:
+                            status += f"- Iteración {iter_num}: ❌ Error corregido\n"
+                
+                # Formatear output con error si hay
+                full_output = output_text
+                if error:
+                    full_output = f"{output_text}\n\n❌ ERROR:\n{error}"
+                
+                return code_display, explanation, full_output, result_data if result_data is not None else {}, status
+            
+            def clear_text_action():
+                """Limpia todos los campos de text-to-action."""
+                return "", "", "", "", {}, "✅ Campos limpiados. Listo para nueva acción."
+            
+            action_button.click(
+                fn=run_text_to_action,
+                inputs=[action_description, context_data, max_iterations, provider_toggle_text_action],
+                outputs=[code_output, explanation_output, execution_output, result_output, status_output],
+                show_progress="full"
+            )
+            
+            clear_action_btn.click(
+                fn=clear_text_action,
+                outputs=[action_description, context_data, code_output, explanation_output, execution_output, status_output]
             )
         
         # Tab 4.6: Atención al Cliente Automática (NUEVO)
@@ -2346,7 +2651,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 with gr.Tab("📧 Procesar Consulta"):
                     gr.Markdown("""
                     **Simula una consulta de cliente y recibe respuesta automática:**
-                    """)
+                """)
                     
                     with gr.Row():
                         cs_channel = gr.Dropdown(
@@ -2576,7 +2881,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                             delete_rule_btn = gr.Button("🗑️ Eliminar", variant="stop")
                             
                             rules_stats = gr.Markdown("")
-                    
+
                     def create_auto_rule(name, channel, trigger_type, trigger_value, response_type, response_content, priority):
                         if not customer_service_agent:
                             return "❌ Customer Service Agent no está habilitado.", None, ""
@@ -2872,6 +3177,12 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                     ],
                     value="balanced",
                 )
+                provider_toggle_chat = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
             
             # Chatbot component
             chatbot = gr.Chatbot(
@@ -2898,14 +3209,14 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             chat_status = gr.Markdown(label="ℹ️ Estado del Chat")
             
             # Event handlers
-            def chat_submit(message, history, files, session_id, speed_mode):
+            def chat_submit(message, history, files, session_id, speed_mode, provider):
                 if not message.strip():
                     return history, history, "⚠️ Escribe una pregunta."
                 if not files:
                     return history, history, "⚠️ Primero carga documentos."
                 
                 new_history, error = run_chat_conversational(
-                    message, history, files, session_id, speed_mode
+                    message, history, files, session_id, speed_mode, provider
                 )
                 status = f"✅ {len(new_history)} mensajes en la conversación"
                 if error:
@@ -2925,7 +3236,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             
             chat_submit_btn.click(
                 fn=chat_submit,
-                inputs=[chat_input, chatbot, chat_files, chat_session_id, chat_speed_mode],
+                inputs=[chat_input, chatbot, chat_files, chat_session_id, chat_speed_mode, provider_toggle_chat],
                 outputs=[chatbot, chatbot, chat_status],
             ).then(
                 lambda: "", None, chat_input
@@ -2933,7 +3244,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             
             chat_input.submit(
                 fn=chat_submit,
-                inputs=[chat_input, chatbot, chat_files, chat_session_id, chat_speed_mode],
+                inputs=[chat_input, chatbot, chat_files, chat_session_id, chat_speed_mode, provider_toggle_chat],
                 outputs=[chatbot, chatbot, chat_status],
             ).then(
                 lambda: "", None, chat_input
@@ -4463,6 +4774,22 @@ Después de instalar, reinicia la aplicación."""
 
 
 if __name__ == "__main__":
+    import socket
+    
+    # Find an available port
+    def find_free_port(start_port=7860):
+        for port in range(start_port, start_port + 10):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('127.0.0.1', port))
+                    return port
+            except OSError:
+                continue
+        return start_port  # Fallback
+    
+    port = find_free_port()
+    print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
+    demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
     import socket
     
     # Find an available port

@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import os
+import time
+import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import uvicorn
+import json
+import asyncio
 
 from docchat import load_config
 from docchat.enterprise_api import EnterpriseAPIMode
@@ -22,6 +26,9 @@ from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.rpa_automation import RPAAutomationEngine
 from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
 from docchat.audit import AuditLogger
+
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 # Cargar configuración
 config = load_config()
@@ -1266,6 +1273,283 @@ async def get_recent_events(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error obteniendo eventos: {str(e)}")
+
+
+@app.get("/api/v1/rpa/metrics")
+async def get_processing_metrics(
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Obtiene métricas de procesamiento en tiempo real.
+    Incluye: eventos procesados, tasa de éxito, tiempo promedio, eventos/segundo, etc.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    try:
+        metrics = rpa_enterprise.get_processing_metrics()
+        return metrics
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo métricas: {str(e)}")
+
+
+@app.get("/api/v1/rpa/agent-context/{enterprise_id}")
+async def get_agent_context(
+    enterprise_id: str,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    Obtiene el contexto y memoria de un agente para una empresa específica.
+    Incluye: memoria de corto plazo, memoria de largo plazo, estadísticas de acciones.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    # Verificar autenticación
+    connection = rpa_enterprise.get_connection_by_api_key(x_api_key) if x_api_key else None
+    if not connection or connection.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=401, detail="API Key inválida o no autorizada")
+    
+    try:
+        context = rpa_enterprise.get_agent_context(enterprise_id)
+        if not context:
+            raise HTTPException(status_code=404, detail="Contexto de agente no encontrado")
+        
+        return context
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo contexto: {str(e)}")
+
+
+@app.get("/api/v1/rpa/stream/{enterprise_id}")
+async def stream_realtime_updates(
+    enterprise_id: str,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    Endpoint de streaming (Server-Sent Events) para recibir actualizaciones en tiempo real.
+    Las empresas pueden conectarse aquí para recibir notificaciones cuando sus eventos se procesen.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    # Verificar autenticación
+    connection = rpa_enterprise.get_connection_by_api_key(x_api_key) if x_api_key else None
+    if not connection or connection.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=401, detail="API Key inválida o no autorizada")
+    
+    async def event_generator():
+        """Genera eventos SSE en tiempo real."""
+        import queue as thread_queue
+        
+        # Cola thread-safe para eventos de esta conexión
+        event_queue = thread_queue.Queue()
+        
+        def streaming_callback(event, result):
+            """Callback que se ejecuta cuando se procesa un evento."""
+            try:
+                event_data = {
+                    "type": "event_processed",
+                    "event_id": event.event_id,
+                    "trace_id": event.trace_id,
+                    "success": result.success,
+                    "data": result.data if hasattr(result, 'data') else None,
+                    "message": result.message if hasattr(result, 'message') else None,
+                    "timestamp": datetime.now().isoformat()
+                }
+                event_queue.put(event_data)
+            except Exception as e:
+                logger.error(f"Error en streaming callback: {e}")
+        
+        # Registrar callback
+        rpa_enterprise.register_streaming_callback(enterprise_id, streaming_callback)
+        
+        try:
+            # Enviar evento inicial
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Streaming iniciado', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            # Enviar métricas periódicamente
+            last_metrics_send = time.time()
+            
+            while True:
+                try:
+                    # Verificar si hay eventos en la cola (non-blocking)
+                    try:
+                        event_data = event_queue.get_nowait()
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                    except thread_queue.Empty:
+                        pass
+                    
+                    # Enviar métricas cada 5 segundos
+                    if time.time() - last_metrics_send >= 5:
+                        metrics = rpa_enterprise.get_processing_metrics()
+                        yield f"data: {json.dumps({'type': 'metrics', 'data': metrics, 'timestamp': datetime.now().isoformat()})}\n\n"
+                        last_metrics_send = time.time()
+                    
+                    # Keep-alive y pequeño delay para no saturar
+                    yield ": keep-alive\n\n"
+                    await asyncio.sleep(0.1)  # Pequeño delay para no saturar
+                    
+                except Exception as e:
+                    logger.error(f"Error en event generator: {e}")
+                    break
+        
+        finally:
+            # Desregistrar callback
+            rpa_enterprise.unregister_streaming_callback(enterprise_id)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("API_PORT", "8000"))
+    print(f"🚀 Iniciando DocChat Enterprise API en http://0.0.0.0:{port}")
+    print(f"📚 Documentación: http://0.0.0.0:{port}/docs")
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+@app.get("/api/v1/rpa/metrics")
+async def get_processing_metrics(
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    """
+    Obtiene métricas de procesamiento en tiempo real.
+    Incluye: eventos procesados, tasa de éxito, tiempo promedio, eventos/segundo, etc.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    try:
+        metrics = rpa_enterprise.get_processing_metrics()
+        return metrics
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo métricas: {str(e)}")
+
+
+@app.get("/api/v1/rpa/agent-context/{enterprise_id}")
+async def get_agent_context(
+    enterprise_id: str,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    Obtiene el contexto y memoria de un agente para una empresa específica.
+    Incluye: memoria de corto plazo, memoria de largo plazo, estadísticas de acciones.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    # Verificar autenticación
+    connection = rpa_enterprise.get_connection_by_api_key(x_api_key) if x_api_key else None
+    if not connection or connection.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=401, detail="API Key inválida o no autorizada")
+    
+    try:
+        context = rpa_enterprise.get_agent_context(enterprise_id)
+        if not context:
+            raise HTTPException(status_code=404, detail="Contexto de agente no encontrado")
+        
+        return context
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error obteniendo contexto: {str(e)}")
+
+
+@app.get("/api/v1/rpa/stream/{enterprise_id}")
+async def stream_realtime_updates(
+    enterprise_id: str,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
+):
+    """
+    Endpoint de streaming (Server-Sent Events) para recibir actualizaciones en tiempo real.
+    Las empresas pueden conectarse aquí para recibir notificaciones cuando sus eventos se procesen.
+    """
+    if not rpa_enterprise:
+        raise HTTPException(status_code=503, detail="RPA Enterprise Integration no está habilitado")
+    
+    # Verificar autenticación
+    connection = rpa_enterprise.get_connection_by_api_key(x_api_key) if x_api_key else None
+    if not connection or connection.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=401, detail="API Key inválida o no autorizada")
+    
+    async def event_generator():
+        """Genera eventos SSE en tiempo real."""
+        import queue as thread_queue
+        
+        # Cola thread-safe para eventos de esta conexión
+        event_queue = thread_queue.Queue()
+        
+        def streaming_callback(event, result):
+            """Callback que se ejecuta cuando se procesa un evento."""
+            try:
+                event_data = {
+                    "type": "event_processed",
+                    "event_id": event.event_id,
+                    "trace_id": event.trace_id,
+                    "success": result.success,
+                    "data": result.data if hasattr(result, 'data') else None,
+                    "message": result.message if hasattr(result, 'message') else None,
+                    "timestamp": datetime.now().isoformat()
+                }
+                event_queue.put(event_data)
+            except Exception as e:
+                logger.error(f"Error en streaming callback: {e}")
+        
+        # Registrar callback
+        rpa_enterprise.register_streaming_callback(enterprise_id, streaming_callback)
+        
+        try:
+            # Enviar evento inicial
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Streaming iniciado', 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            # Enviar métricas periódicamente
+            last_metrics_send = time.time()
+            
+            while True:
+                try:
+                    # Verificar si hay eventos en la cola (non-blocking)
+                    try:
+                        event_data = event_queue.get_nowait()
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                    except thread_queue.Empty:
+                        pass
+                    
+                    # Enviar métricas cada 5 segundos
+                    if time.time() - last_metrics_send >= 5:
+                        metrics = rpa_enterprise.get_processing_metrics()
+                        yield f"data: {json.dumps({'type': 'metrics', 'data': metrics, 'timestamp': datetime.now().isoformat()})}\n\n"
+                        last_metrics_send = time.time()
+                    
+                    # Keep-alive y pequeño delay para no saturar
+                    yield ": keep-alive\n\n"
+                    await asyncio.sleep(0.1)  # Pequeño delay para no saturar
+                    
+                except Exception as e:
+                    logger.error(f"Error en event generator: {e}")
+                    break
+        
+        finally:
+            # Desregistrar callback
+            rpa_enterprise.unregister_streaming_callback(enterprise_id)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 if __name__ == "__main__":

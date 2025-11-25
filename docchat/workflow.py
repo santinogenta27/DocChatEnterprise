@@ -29,6 +29,7 @@ class AgentState(TypedDict, total=False):
 @dataclass
 class AgentWorkflow:
     config: AppConfig
+    provider: str = "openai"  # "openai" o "claude"
     relevance_checker: RelevanceChecker = field(init=False)
     research_agent: ResearchAgent = field(init=False)
     verification_agent: VerificationAgent = field(init=False)
@@ -40,7 +41,9 @@ class AgentWorkflow:
         self.research_agent = ResearchAgent(
             model_name=self.config.research_model, 
             temperature=self.config.temperature,
-            speed_mode=self.config.speed_mode
+            speed_mode=self.config.speed_mode,
+            provider=self.provider,
+            config=self.config
         )
         self.verification_agent = VerificationAgent(
             model_name=self.config.verification_model, temperature=0.0

@@ -4,7 +4,7 @@ import os
 import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Sequence, Optional
 
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.vectorstores import Chroma
@@ -110,7 +110,7 @@ class RetrieverBuilder:
             request_timeout=120  # Timeout más largo
         )
 
-    def build_hybrid_retriever(self, docs: Iterable[Document]) -> HybridRetriever:
+    def build_hybrid_retriever(self, docs: Iterable[Document], namespace: Optional[str] = None) -> HybridRetriever:
         docs = list(docs)
         if not docs:
             raise ValueError("No hay documentos procesados para indexar.")
@@ -121,17 +121,41 @@ class RetrieverBuilder:
             print(f"Generando embeddings para {total_docs} chunks... Esto puede tardar varios minutos.")
             print("El sistema maneja rate limits automáticamente, por favor espera...")
 
-        namespace = uuid.uuid4().hex
+        # Usar namespace proporcionado o generar uno nuevo
+        if namespace is None:
+            namespace = uuid.uuid4().hex
         persist_dir = Path(self.config.persist_dir) / namespace
+        
+        # Limpiar directorio persistente si existe para evitar mezclar con documentos previos
+        # Esto asegura que cada sesión solo use los documentos actuales
+        if persist_dir.exists():
+            import shutil
+            try:
+                shutil.rmtree(persist_dir)
+            except Exception as e:
+                print(f"   ⚠️ No se pudo limpiar directorio persistente: {e}")
         
         # Chroma.from_documents genera embeddings automáticamente
         # Con muchos documentos, esto puede tardar pero funciona correctamente
+        # IMPORTANTE: Solo usa los documentos pasados como parámetro, no carga documentos previos
         vector_store = Chroma.from_documents(
-            documents=docs,
+            documents=docs,  # Solo estos documentos, no documentos previos
             embedding=self.embeddings,
             persist_directory=str(persist_dir),
         )
         # Chroma 0.4.x+ persists automatically, no need to call persist()
+
+        vector_retriever = vector_store.as_retriever(search_kwargs={"k": self.config.vector_k})
+        bm25 = BM25Retriever.from_documents(docs)
+        bm25.k = self.config.bm25_k
+
+        hybrid = HybridRetriever(
+            bm25_retriever=bm25,
+            vector_retriever=vector_retriever,
+            weights=self.config.hybrid_weights,
+        )
+        return hybrid
+
 
         vector_retriever = vector_store.as_retriever(search_kwargs={"k": self.config.vector_k})
         bm25 = BM25Retriever.from_documents(docs)

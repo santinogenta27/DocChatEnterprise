@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterator
 from datetime import datetime
 from pathlib import Path
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
@@ -34,8 +35,9 @@ class EnterpriseAPIMode:
     - Aprende continuamente
     """
     
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, provider: str = "openai"):
         self.config = config
+        self.provider = provider
         self.processor = DocumentProcessor(config)
         self.retriever_builder = RetrieverBuilder(config)
         self.workflow = AgentWorkflow(config)
@@ -45,11 +47,26 @@ class EnterpriseAPIMode:
         self.memory_store = MemoryStore(config.memory_dir, config.memory_retention_days) if config.enable_memory else None
         self.context_manager = ContextManager(self.memory_store, config) if self.memory_store else None
         
-        # LLM para detección automática
-        self.llm = ChatOpenAI(
+        # LLM para detección automática - Optimizado para velocidad
+        from docchat.utils.llm_factory import create_llm
+        self.llm = create_llm(
+            provider=provider,
             model=config.agentic_model,
             temperature=0.2,
-            api_key=config.openai_api_key
+            api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
+            max_tokens=8000,
+            request_timeout=120
+        )
+        
+        # LLM rápido para tareas simples (detección, insights)
+        fast_model = "gpt-4o-mini" if provider == "openai" else "claude-3-5-haiku-20241022"
+        self.fast_llm = create_llm(
+            provider=provider,
+            model=fast_model,
+            temperature=0.2,
+            api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
+            max_tokens=4000,
+            request_timeout=60
         )
         
         # Herramientas Agentic AI avanzadas
@@ -63,11 +80,140 @@ class EnterpriseAPIMode:
             "scheduler": SchedulerTool(config),
         }
     
-    def process_enterprise_documents(
+    def process_enterprise_documents_streaming(
         self,
         files: List,
         auto_detect: bool = True,
         rules: Optional[List[Dict]] = None
+    ) -> Iterator[str]:
+        """Procesa documentos con streaming de resultados (generador)."""
+        yield "## 🚀 Procesamiento Enterprise API Iniciado\n\n"
+        yield "📄 Procesando documentos...\n\n"
+        
+        try:
+            # 1. Procesar documentos
+            docs = self.processor.process(files)
+            yield f"✅ **Documentos procesados**: {len(files)}\n"
+            yield f"✅ **Chunks generados**: {len(docs)}\n\n"
+            
+            # 2. Generar resúmenes automáticos con streaming
+            yield "### 📄 Generando Resúmenes Automáticos...\n\n"
+            import uuid
+            session_namespace = f"enterprise_api_{uuid.uuid4().hex[:8]}"
+            retriever = self.retriever_builder.build_hybrid_retriever(docs, namespace=session_namespace)
+            
+            # Agrupar documentos por archivo (código similar al método original)
+            from collections import defaultdict
+            docs_by_file = defaultdict(list)
+            file_key_to_original_name = {}
+            
+            for doc in docs:
+                source = doc.metadata.get("source", "")
+                if source:
+                    doc_hash = doc.metadata.get("hash", "")
+                    if doc_hash:
+                        file_key = f"hash_{doc_hash}"
+                    else:
+                        source_path = Path(source)
+                        file_key = source_path.name
+                    docs_by_file[file_key].append(doc)
+                    if file_key not in file_key_to_original_name:
+                        file_key_to_original_name[file_key] = source
+            
+            # Generar resúmenes en paralelo y emitir mientras se completan
+            processed_clean_names = set()
+            summary_tasks = []
+            for file_key, file_docs_list in docs_by_file.items():
+                original_file_name = file_key_to_original_name.get(file_key, file_docs_list[0].metadata.get("source", ""))
+                clean_file_name = Path(original_file_name).name
+                if clean_file_name in processed_clean_names:
+                    continue
+                processed_clean_names.add(clean_file_name)
+                summary_tasks.append((original_file_name, file_docs_list, clean_file_name))
+            
+            summaries = {}
+            max_workers = min(3, len(summary_tasks))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_file = {
+                    executor.submit(self._generate_automatic_summary, original_file_name, file_docs_list, retriever): 
+                    (original_file_name, clean_file_name) 
+                    for original_file_name, file_docs_list, clean_file_name in summary_tasks
+                }
+                
+                for future in as_completed(future_to_file):
+                    original_file_name, clean_file_name = future_to_file[future]
+                    try:
+                        summary = future.result()
+                        summaries[original_file_name] = summary
+                        # Emitir resumen inmediatamente
+                        yield f"#### {clean_file_name}\n\n"
+                        yield f"**Tipo de Documento**: {summary.get('document_type', 'N/A')}\n\n"
+                        yield f"**Resumen Ejecutivo**:\n{summary.get('summary', 'N/A')}\n\n"
+                        if summary.get('key_points'):
+                            yield f"**Puntos Clave** ({len(summary['key_points'])}):\n"
+                            for i, point in enumerate(summary['key_points'][:10], 1):
+                                yield f"{i}. {point}\n"
+                            yield "\n"
+                        if summary.get('topics'):
+                            yield f"**Temas**: {', '.join(summary['topics'][:5])}\n\n"
+                        if summary.get('business_value'):
+                            yield f"**Valor para el Negocio**: {summary.get('business_value')}\n\n"
+                        if summary.get('entities'):
+                            yield f"**Entidades Principales**: {', '.join(summary['entities'][:5])}\n\n"
+                        yield "---\n\n"
+                    except Exception as e:
+                        yield f"❌ Error en {clean_file_name}: {str(e)[:100]}\n\n"
+            
+            # 3. Detección automática (si está habilitada)
+            detection_results = {"problems": [], "opportunities": [], "patterns": []}
+            if auto_detect:
+                yield "### 🔍 Detectando Problemas, Oportunidades y Patrones...\n\n"
+                detection_results = self._auto_detect_issues_opportunities(docs, retriever)
+                
+                if detection_results.get('problems'):
+                    yield "### ⚠️ Problemas Detectados\n\n"
+                    for problem in detection_results['problems'][:5]:
+                        yield f"- **{problem.get('type', 'Unknown')}** ({problem.get('severity', 'N/A')}): {problem.get('description', 'N/A')[:150]}...\n"
+                    yield "\n"
+                
+                if detection_results.get('opportunities'):
+                    yield "### 💡 Oportunidades Detectadas\n\n"
+                    for opp in detection_results['opportunities'][:5]:
+                        yield f"- **{opp.get('type', 'Unknown')}** ({opp.get('impact', 'N/A')}): {opp.get('description', 'N/A')[:150]}...\n"
+                    yield "\n"
+                
+                if detection_results.get('patterns'):
+                    yield "### 🔍 Patrones Encontrados\n\n"
+                    for pattern in detection_results['patterns'][:5]:
+                        yield f"- **{pattern.get('type', 'Unknown')}**: {pattern.get('description', 'N/A')[:150]}...\n"
+                    yield "\n"
+            
+            # 4. Insights generales
+            yield "### 💡 Insights Generales\n\n"
+            insights = self._generate_insights(docs, retriever, {
+                "documents_processed": len(files),
+                "chunks_generated": len(docs),
+                "problems_detected": detection_results.get('problems', []),
+                "opportunities_detected": detection_results.get('opportunities', []),
+                "patterns_found": detection_results.get('patterns', []),
+                "summaries": summaries
+            })
+            
+            for insight in insights:
+                yield f"#### {insight.get('title', 'Insight')}\n"
+                yield f"{insight.get('content', 'N/A')}\n\n"
+            
+            yield "\n✅ **Procesamiento completado exitosamente!**\n"
+            
+        except Exception as e:
+            yield f"\n❌ **Error**: {str(e)}\n"
+    
+    def process_enterprise_documents(
+        self,
+        files: List,
+        auto_detect: bool = True,
+        rules: Optional[List[Dict]] = None,
+        stream: bool = False
     ) -> Dict[str, Any]:
         """
         Procesa documentos empresariales con detección automática.
@@ -102,52 +248,175 @@ class EnterpriseAPIMode:
             
             # 2. Generar resúmenes automáticos
             print("Generando resumenes automaticos...")
-            retriever = self.retriever_builder.build_hybrid_retriever(docs)
+            # Usar un namespace único para esta sesión para evitar mezclar con documentos previos
+            import uuid
+            session_namespace = f"enterprise_api_{uuid.uuid4().hex[:8]}"
+            retriever = self.retriever_builder.build_hybrid_retriever(docs, namespace=session_namespace)
             
             # Obtener todos los archivos únicos procesados desde los documentos
             from pathlib import Path
             from collections import defaultdict
             
-            # Agrupar documentos por archivo fuente
-            docs_by_file = defaultdict(list)
-            for doc in docs:
-                source = doc.metadata.get("source", "")
-                if source:
-                    # Normalizar el nombre del archivo
-                    source_path = Path(source)
-                    file_key = source_path.name  # Solo el nombre, sin ruta completa
-                    docs_by_file[file_key].append(doc)
+            # Función para normalizar nombres de archivo (remover variaciones como "- copia", " - copy", etc.)
+            def normalize_filename(name):
+                """Normaliza el nombre del archivo removiendo variaciones comunes de duplicados."""
+                name_lower = name.lower()
+                # Remover variaciones comunes de "copia"
+                variations = [" - copia", "- copia", " - copy", "- copy", " (copia)", "(copia)", " (copy)", "(copy)", " - copia.pdf", "- copia.pdf"]
+                for variation in variations:
+                    if name_lower.endswith(variation):
+                        # Remover la variación pero mantener la extensión
+                        base = name[:-len(variation)]
+                        ext = Path(name).suffix
+                        return base + ext
+                return name
             
-            # También crear un mapeo desde los archivos originales a sus nombres limpios
-            # Priorizar el nombre original de Google Drive si está disponible
-            file_name_mapping = {}
+            # Crear mapeo de archivos: hash -> nombre original preferido
+            # Esto permite detectar archivos duplicados con diferentes nombres
+            file_hash_to_original_name = {}
+            normalized_name_to_original = {}  # Mapeo de nombre normalizado a nombre original preferido
+            
             for file_obj in files:
                 # Obtener nombre original de Google Drive si está disponible
                 original_name = getattr(file_obj, "original_name", None)
                 if not original_name:
                     original_name = getattr(file_obj, "name", "documento")
-                clean_name = Path(original_name).name
-                file_name_mapping[clean_name] = original_name
                 
-                # También mapear el nombre temporal al original (para archivos de Drive)
-                temp_name = getattr(file_obj, "name", "")
-                if temp_name and temp_name != original_name:
-                    temp_clean = Path(temp_name).name
-                    file_name_mapping[temp_clean] = original_name
+                # Normalizar el nombre
+                normalized = normalize_filename(Path(original_name).name)
+                
+                # Guardar mapeo de nombre normalizado a original (preferir nombres sin "- copia")
+                if normalized not in normalized_name_to_original:
+                    normalized_name_to_original[normalized] = original_name
+                else:
+                    # Preferir nombres sin variaciones de "copia" o "copy"
+                    existing = normalized_name_to_original[normalized]
+                    existing_lower = existing.lower()
+                    original_lower = original_name.lower()
+                    if ("copia" in existing_lower or "copy" in existing_lower) and ("copia" not in original_lower and "copy" not in original_lower):
+                        normalized_name_to_original[normalized] = original_name
+                    elif "drive_" in existing and "drive_" not in original_name:
+                        normalized_name_to_original[normalized] = original_name
+                
+                # Intentar obtener hash del archivo para detectar duplicados
+                try:
+                    from docchat.utils import read_bytes, sha256_bytes
+                    data = read_bytes(file_obj)
+                    file_hash = sha256_bytes(data)
+                    # Siempre preferir el nombre original sobre el temporal
+                    if file_hash not in file_hash_to_original_name:
+                        file_hash_to_original_name[file_hash] = original_name
+                    else:
+                        # Si ya existe, mantener el que tiene nombre más descriptivo (no drive_xxx, sin "- copia")
+                        existing = file_hash_to_original_name[file_hash]
+                        existing_lower = existing.lower()
+                        original_lower = original_name.lower()
+                        if ("copia" in existing_lower or "copy" in existing_lower) and ("copia" not in original_lower and "copy" not in original_lower):
+                            file_hash_to_original_name[file_hash] = original_name
+                        elif "drive_" in existing and "drive_" not in original_name:
+                            file_hash_to_original_name[file_hash] = original_name
+                except:
+                    pass
+            
+            # Agrupar documentos por hash del archivo (mejor) o por nombre (fallback)
+            docs_by_file = defaultdict(list)
+            file_key_to_original_name = {}  # Mapeo de clave de agrupación a nombre original
+            
+            for doc in docs:
+                source = doc.metadata.get("source", "")
+                if source:
+                    source_path = Path(source)
+                    source_name = source_path.name
+                    
+                    # Intentar usar hash primero para detectar duplicados
+                    doc_hash = doc.metadata.get("hash", "")
+                    if doc_hash and doc_hash in file_hash_to_original_name:
+                        # Agrupar por hash para detectar archivos duplicados
+                        file_key = f"hash_{doc_hash}"
+                        original_name = file_hash_to_original_name[doc_hash]
+                    else:
+                        # Fallback: agrupar por nombre normalizado del archivo
+                        normalized_source = normalize_filename(source_name)
+                        file_key = f"normalized_{normalized_source}"
+                        
+                        # Buscar nombre original en el mapeo de nombres normalizados
+                        if normalized_source in normalized_name_to_original:
+                            original_name = normalized_name_to_original[normalized_source]
+                        else:
+                            # Buscar en los archivos originales
+                            original_name = None
+                            for file_obj in files:
+                                temp_name = getattr(file_obj, "name", "")
+                                temp_normalized = normalize_filename(Path(temp_name).name)
+                                if temp_normalized == normalized_source:
+                                    original_name = getattr(file_obj, "original_name", None) or temp_name
+                                    break
+                            if not original_name:
+                                original_name = source
+                            # Guardar en el mapeo
+                            normalized_name_to_original[normalized_source] = original_name
+                    
+                    docs_by_file[file_key].append(doc)
+                    # Guardar el nombre original preferido para esta clave
+                    if file_key not in file_key_to_original_name:
+                        file_key_to_original_name[file_key] = original_name
+                    else:
+                        # Preferir nombres descriptivos sobre nombres temporales (drive_xxx) y sin "- copia"
+                        existing = file_key_to_original_name[file_key]
+                        existing_lower = existing.lower()
+                        original_lower = original_name.lower()
+                        if ("copia" in existing_lower or "copy" in existing_lower) and ("copia" not in original_lower and "copy" not in original_lower):
+                            file_key_to_original_name[file_key] = original_name
+                        elif "drive_" in existing and "drive_" not in original_name:
+                            file_key_to_original_name[file_key] = original_name
             
             # Generar resumen para CADA archivo único encontrado en los documentos
             print(f"   Encontrados {len(docs_by_file)} archivos únicos en los documentos procesados")
             
+            # Track de archivos ya procesados por nombre limpio para evitar duplicados
+            processed_clean_names = set()
+            
+            # Preparar lista de tareas para paralelización
+            summary_tasks = []
             for file_key, file_docs_list in docs_by_file.items():
-                print(f"   Generando resumen para: {file_key} ({len(file_docs_list)} chunks)")
+                # Obtener nombre original preferido para este archivo
+                original_file_name = file_key_to_original_name.get(file_key, file_docs_list[0].metadata.get("source", ""))
+                clean_file_name = Path(original_file_name).name
                 
-                # Usar el source del primer documento como referencia
-                source_path = file_docs_list[0].metadata.get("source", "")
-                original_file_name = file_name_mapping.get(file_key, source_path)
+                # Evitar duplicados: si ya procesamos este archivo por nombre limpio, saltarlo
+                if clean_file_name in processed_clean_names:
+                    print(f"   ⚠️ Saltando {clean_file_name} (ya procesado como duplicado)")
+                    continue
+                processed_clean_names.add(clean_file_name)
                 
-                # Generar resumen usando los documentos de este archivo
-                summary = self._generate_automatic_summary(original_file_name, file_docs_list, retriever)
-                results["summaries"][original_file_name] = summary
+                summary_tasks.append((original_file_name, file_docs_list, clean_file_name))
+            
+            # Paralelizar generación de resúmenes para mayor velocidad
+            max_workers = min(3, len(summary_tasks))  # Máximo 3 workers para no sobrecargar API
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_file = {
+                    executor.submit(self._generate_automatic_summary, original_file_name, file_docs_list, retriever): 
+                    (original_file_name, clean_file_name) 
+                    for original_file_name, file_docs_list, clean_file_name in summary_tasks
+                }
+                
+                for future in as_completed(future_to_file):
+                    original_file_name, clean_file_name = future_to_file[future]
+                    try:
+                        summary = future.result()
+                        results["summaries"][original_file_name] = summary
+                        print(f"   ✅ Resumen completado: {clean_file_name}")
+                    except Exception as e:
+                        print(f"   ❌ Error generando resumen para {clean_file_name}: {str(e)[:100]}")
+                        results["summaries"][original_file_name] = {
+                            "summary": f"Error generando resumen: {str(e)[:200]}",
+                            "key_points": [],
+                            "document_type": "unknown",
+                            "relevant_date": "N/A",
+                            "entities": [],
+                            "topics": [],
+                            "business_value": "N/A"
+                        }
             
             # Verificar que todos los archivos subidos tengan resumen
             missing_summaries = []
@@ -161,12 +430,17 @@ class EnterpriseAPIMode:
                 temp_name = getattr(file_obj, "name", "")
                 temp_clean_name = Path(temp_name).name if temp_name else None
                 
-                # Verificar si ya tenemos un resumen para este archivo
+                # Verificar si ya tenemos un resumen para este archivo (por nombre limpio)
                 found = False
-                for summary_file_name in results["summaries"].keys():
-                    if Path(summary_file_name).name == clean_name:
-                        found = True
-                        break
+                if clean_name in processed_clean_names:
+                    found = True
+                else:
+                    # Verificar también en los resúmenes ya generados
+                    for summary_file_name in results["summaries"].keys():
+                        if Path(summary_file_name).name == clean_name:
+                            found = True
+                            processed_clean_names.add(clean_name)
+                            break
                 
                 if not found:
                     missing_summaries.append(file_name)
@@ -270,20 +544,25 @@ class EnterpriseAPIMode:
         
         file_docs = docs
         
-        # Construir contexto más completo (más chunks, más contenido)
-        # Tomar hasta 20 chunks y hasta 1000 caracteres por chunk
+        # Construir contexto optimizado para soportar documentos grandes
+        # OPTIMIZADO para aprovechar context windows grandes (128k OpenAI, 200k Claude)
         context_parts = []
         total_chars = 0
-        max_chars = 15000  # Aumentar contexto para resúmenes mejores
+        # Aumentado significativamente para aprovechar context windows grandes
+        # 128k tokens = ~512k caracteres, 200k tokens = ~800k caracteres
+        max_chars = 50000 if self.provider == "openai" else 80000  # Claude puede manejar más
         
-        for doc in file_docs[:25]:  # Más chunks
-            content = doc.page_content[:1000]  # Más contenido por chunk
+        # Aumentar número de chunks para documentos grandes
+        max_chunks = 50 if self.provider == "openai" else 80  # Claude puede procesar más
+        
+        for doc in file_docs[:max_chunks]:
+            content = doc.page_content[:2000]  # Aumentado a 2000 chars por chunk
             if total_chars + len(content) <= max_chars:
                 context_parts.append(content)
                 total_chars += len(content)
             else:
                 remaining = max_chars - total_chars
-                if remaining > 100:
+                if remaining > 200:
                     context_parts.append(content[:remaining])
                 break
         
@@ -525,7 +804,254 @@ Responde en formato JSON:
 }}"""
         
         try:
-            response = self.llm.invoke(prompt).content.strip()
+            # Usar LLM rápido para detección (optimización de velocidad)
+            response = self.fast_llm.invoke(prompt).content.strip()
+            if response.startswith("```json"):
+                response = response.replace("```json", "").replace("```", "").strip()
+            elif response.startswith("```"):
+                response = response.replace("```", "").strip()
+            
+            detection_data = json.loads(response)
+            return detection_data
+        except Exception as e:
+            print(f"ERROR en deteccion automatica: {e}")
+            return {"problems": [], "opportunities": [], "patterns": []}
+    
+    def _apply_rules(
+        self,
+        docs: List[Document],
+        retriever,
+        rules: List[Dict],
+        results: Dict
+    ) -> List[Dict]:
+        """Aplica reglas y automatizaciones definidas."""
+        actions_taken = []
+        
+        for rule in rules:
+            rule_type = rule.get("type", "condition")
+            condition = rule.get("condition")
+            action = rule.get("action")
+            
+            # Evaluar condición
+            if self._evaluate_condition(condition, docs, results):
+                # Ejecutar acción
+                action_result = self._execute_action(action, docs, results)
+                actions_taken.append({
+                    "rule": rule.get("name", "unnamed"),
+                    "condition_met": True,
+                    "action_executed": action_result
+                })
+        
+        return actions_taken
+    
+    def _evaluate_condition(
+        self,
+        condition: Dict,
+        docs: List[Document],
+        results: Dict
+    ) -> bool:
+        """Evalúa una condición de regla."""
+        condition_type = condition.get("type")
+        
+        if condition_type == "keyword":
+            keyword = condition.get("keyword", "").lower()
+            for doc in docs:
+                if keyword in doc.page_content.lower():
+                    return True
+        
+        elif condition_type == "problem_detected":
+            problem_type = condition.get("problem_type")
+            for problem in results.get("problems_detected", []):
+                if problem.get("type") == problem_type:
+                    return True
+        
+        elif condition_type == "pattern":
+            pattern_name = condition.get("pattern_name")
+            for pattern in results.get("patterns_found", []):
+                if pattern.get("type") == pattern_name:
+                    return True
+        
+        return False
+    
+    def _execute_action(
+        self,
+        action: Dict,
+        docs: List[Document],
+        results: Dict
+    ) -> Dict:
+        """Ejecuta una acción de automatización."""
+        action_type = action.get("type")
+        
+        if action_type == "notify":
+            # Notificar (email, Slack, etc.)
+            return {"status": "notified", "channel": action.get("channel")}
+        
+        elif action_type == "generate_report":
+            # Generar reporte automático usando herramienta avanzada
+            report_tool = self.tools.get("report")
+            if report_tool:
+                from datetime import datetime
+                report_data = {
+                    "summary": "Reporte automático generado por Enterprise API",
+                    "timestamp": datetime.now().isoformat(),
+                    "documents_analyzed": len(docs),
+                    "problems": results.get("problems_detected", []),
+                    "opportunities": results.get("opportunities_detected", [])
+                }
+                result = report_tool.execute(
+                    data=report_data,
+                    format="excel",
+                    title="Reporte Automático Enterprise API"
+                )
+                if result.success:
+                    return {"status": "report_generated", "path": str(result.data) if result.data else None}
+                return {"status": "report_failed", "error": result.message}
+            return {"status": "report_failed", "error": "Report tool not available"}
+        
+        elif action_type == "flag_for_review":
+            # Marcar para revisión
+            return {"status": "flagged", "priority": action.get("priority", "medium")}
+        
+        return {"status": "executed", "action_type": action_type}
+    
+    def _generate_insights(
+        self,
+        docs: List[Document],
+        retriever,
+        results: Dict
+    ) -> List[Dict]:
+        """Genera insights generales del procesamiento."""
+        insights = []
+        
+        # Insight 1: Resumen general
+        insights.append({
+            "type": "summary",
+            "title": "Resumen General",
+            "content": f"Se procesaron {results['documents_processed']} documentos generando {results['chunks_generated']} chunks de información."
+        })
+        
+        # Insight 2: Problemas críticos
+        critical_problems = [p for p in results.get("problems_detected", []) if p.get("severity") == "alta"]
+        if critical_problems:
+            insights.append({
+                "type": "alert",
+                "title": "Problemas Críticos Detectados",
+                "content": f"Se detectaron {len(critical_problems)} problemas de alta severidad que requieren atención inmediata.",
+                "items": critical_problems[:5]
+            })
+        
+        # Insight 3: Oportunidades
+        high_impact_opps = [o for o in results.get("opportunities_detected", []) if o.get("impact") == "alto"]
+        if high_impact_opps:
+            insights.append({
+                "type": "opportunity",
+                "title": "Oportunidades de Alto Impacto",
+                "content": f"Se identificaron {len(high_impact_opps)} oportunidades con alto potencial de impacto.",
+                "items": high_impact_opps[:5]
+            })
+        
+        return insights
+    
+    def _save_to_memory(
+        self,
+        docs: List[Document],
+        results: Dict
+    ):
+        """Guarda información en memoria para aprendizaje continuo."""
+        if not self.context_manager:
+            return
+        
+        # Guardar resúmenes
+        for file_name, summary in results.get("summaries", {}).items():
+            self.context_manager.add_query(
+                query=f"Resumen automático de {file_name}",
+                answer=summary.get("summary", ""),
+                sources=[file_name],
+                metadata={
+                    "type": "auto_summary",
+                    "key_points": summary.get("key_points", []),
+                    "document_type": summary.get("document_type", "unknown")
+                }
+            )
+        
+        # Guardar problemas y oportunidades detectados
+        for problem in results.get("problems_detected", []):
+            self.context_manager.add_query(
+                query=f"Problema detectado: {problem.get('type', 'unknown')}",
+                answer=problem.get("description", ""),
+                sources=[],
+                metadata={
+                    "type": "auto_detection",
+                    "detection_type": "problem",
+                    "severity": problem.get("severity", "media")
+                }
+            )
+    
+    def _auto_detect_issues_opportunities(
+        self,
+        docs: List[Document],
+        retriever
+    ) -> Dict[str, List]:
+        """Detecta automáticamente problemas, oportunidades y patrones."""
+        # Obtener contexto representativo
+        sample_docs = docs[:50]  # Muestra representativa
+        context = "\n\n".join([d.page_content[:300] for d in sample_docs])
+        
+        prompt = f"""Analiza estos documentos empresariales y detecta automáticamente:
+
+1. PROBLEMAS POTENCIALES:
+   - Riesgos legales, financieros, operacionales
+   - Contradicciones o inconsistencias
+   - Fechas vencidas o próximas a vencer
+   - Valores fuera de rango esperado
+
+2. OPORTUNIDADES:
+   - Mejoras sugeridas
+   - Optimizaciones posibles
+   - Sinergias identificadas
+   - Oportunidades de negocio
+
+3. PATRONES:
+   - Tendencias identificadas
+   - Correlaciones entre documentos
+   - Comportamientos recurrentes
+
+Contenido a analizar:
+{context[:10000]}
+
+Responde en formato JSON:
+{{
+    "problems": [
+        {{
+            "type": "tipo de problema",
+            "severity": "alta/media/baja",
+            "description": "descripción",
+            "source": "documento origen",
+            "recommendation": "recomendación"
+        }}
+    ],
+    "opportunities": [
+        {{
+            "type": "tipo de oportunidad",
+            "impact": "alto/medio/bajo",
+            "description": "descripción",
+            "source": "documento origen",
+            "action": "acción sugerida"
+        }}
+    ],
+    "patterns": [
+        {{
+            "type": "tipo de patrón",
+            "description": "descripción del patrón",
+            "frequency": "alta/media/baja",
+            "implication": "implicación"
+        }}
+    ]
+}}"""
+        
+        try:
+            # Usar LLM rápido para detección (optimización de velocidad)
+            response = self.fast_llm.invoke(prompt).content.strip()
             if response.startswith("```json"):
                 response = response.replace("```json", "").replace("```", "").strip()
             elif response.startswith("```"):

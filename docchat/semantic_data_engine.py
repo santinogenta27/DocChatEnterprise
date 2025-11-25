@@ -156,7 +156,8 @@ class SemanticDataEngine:
                 self.llm = ChatOpenAI(
                     model=config.research_model,
                     temperature=0.7,
-                    openai_api_key=config.openai_api_key
+                    openai_api_key=config.openai_api_key,
+                    max_tokens=16000  # Aumentado para aprovechar context window grande (128k tokens)
                 )
             except Exception as e:
                 print(f"[Semantic Engine] Warning: Could not initialize ChatOpenAI: {e}")
@@ -742,4 +743,5 @@ Responde de manera clara y completa basándote únicamente en la información pr
         results["different_model"] = list(set(results["different_model"]))
         
         return results
+
 
