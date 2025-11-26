@@ -50,7 +50,7 @@ class AppConfig:
     
     # API Keys
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "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")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "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")
 
     # Agentic AI Settings
     enable_autonomous_agents: bool = os.getenv("DOCCHAT_ENABLE_AGENTS", "true").lower() == "true"
