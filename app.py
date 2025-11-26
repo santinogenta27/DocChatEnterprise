@@ -2232,48 +2232,11 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
         """
     )
     
-    # Verificar espacio en disco al inicio y mostrar advertencia
-    disk_warning_shown = False
-    try:
-        import shutil
-        import psutil
-        disk_usage = shutil.disk_usage(".")
-        free_space_gb = disk_usage.free / (1024 * 1024 * 1024)
-        
-        if free_space_gb < 1:
-            disk_warning_shown = True
-            gr.Markdown(
-                f"""
-                ## ⚠️ ADVERTENCIA CRÍTICA: Espacio en Disco Muy Bajo
-                
-                **Espacio libre actual**: {free_space_gb:.2f} GB
-                
-                **Problema**: No hay suficiente espacio para subir archivos. Gradio necesita espacio temporal.
-                
-                **Solución inmediata**:
-                1. Ejecuta `LIMPIAR_TEMPORALES.ps1` en PowerShell para liberar espacio
-                2. O libera espacio manualmente en:
-                   - `C:\\Users\\Random\\AppData\\Local\\Temp\\gradio`
-                   - Papelera de reciclaje
-                   - Archivos temporales de Windows
-                
-                **Recomendación**: Necesitas al menos **2-3 GB libres** para procesar PDFs.
-                
-                **💡 Alternativa**: Usa Google Drive desde el tab "☁️ Cloud Storage" para procesar archivos sin ocupar espacio local.
-                """,
-                visible=True
-            )
-        elif free_space_gb < 2:
-            gr.Markdown(
-                f"""
-                ⚠️ **Advertencia**: Espacio en disco bajo ({free_space_gb:.2f} GB libre).
-                Para procesar muchos PDFs se recomienda al menos 2-3 GB libres.
-                Ejecuta `LIMPIAR_TEMPORALES.ps1` si necesitas más espacio.
-                """,
-                visible=True
-            )
-    except Exception as e:
-        print(f"Advertencia: No se pudo verificar espacio en disco: {e}")
+    # Mensaje de carga inicial
+    gr.Markdown("## ⏳ Cargando DocChat Enterprise...")
+    
+    # Verificación de espacio en disco deshabilitada al inicio para acelerar carga
+    # Se puede verificar después cuando se necesite
     
     with gr.Tabs():
         # Tab 1: RAG Principal
@@ -2281,19 +2244,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             gr.Markdown("### Consulta estándar con verificación multi-agente")
             gr.Markdown("💡 **SOPORTA HASTA 1000 DOCUMENTOS** - Procesa grandes volúmenes con análisis inteligente")
             
-            # Advertencia sobre espacio en disco
-            try:
-                import shutil
-                disk_usage = shutil.disk_usage(".")
-                free_space_gb = disk_usage.free / (1024 * 1024 * 1024)
-                if free_space_gb < 2:
-                    gr.Markdown(
-                        f"⚠️ **ADVERTENCIA**: Espacio en disco bajo ({free_space_gb:.2f} GB libre). "
-                        f"Para procesar muchos PDFs necesitas al menos 2-3 GB libres. "
-                        f"Ejecuta `LIMPIAR_TEMPORALES.ps1` para liberar espacio."
-                    )
-            except:
-                pass
+            # Advertencia sobre espacio en disco - deshabilitada para acelerar carga inicial
             
             with gr.Row():
                 file_input = gr.Files(
@@ -6496,11 +6447,14 @@ if __name__ == "__main__":
     
     # Lanzar sin queue inicial para carga más rápida
     # El queue se puede agregar después si es necesario
+    # Lanzar con configuración optimizada para carga rápida
+    print("✅ Iniciando interfaz Gradio...")
     demo.launch(
         server_name=server_name, 
         server_port=port, 
         show_api=False,
         share=False,
         inbrowser=False,
-        show_error=True
+        show_error=True,
+        prevent_thread_lock=False  # No bloquear el thread principal
     )
