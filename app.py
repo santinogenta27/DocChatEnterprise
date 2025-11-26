@@ -1145,6 +1145,12 @@ def get_audit_stats():
 # Estado global para chat conversacional
 chat_sessions = {}  # {session_id: {"docs": [], "retriever": None, "history": []}}
 
+# Estado global para guía experto
+expert_sessions = {}  # {session_id: {"docs": [], "retriever": None, "processed_files": set(), "history": [], "business_type": None}}
+
+# Estado global para guía experto
+expert_sessions = {}  # {session_id: {"docs": [], "retriever": None, "processed_files": set(), "history": [], "business_type": None}}
+
 def run_chat_conversational(message, history, files, session_id, speed_mode="balanced", provider="openai"):
     """
     Maneja chat conversacional con documentos.
@@ -1547,6 +1553,258 @@ def clear_multi_format_session(session_id):
     if session_id in multi_format_sessions:
         del multi_format_sessions[session_id]
     return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+
+def run_expert_guide(message, history, files, session_id, speed_mode="balanced", provider="openai"):
+    """
+    Guía Experto: Consejero empresarial super inteligente que analiza documentos
+    y da recomendaciones específicas y accionables.
+    
+    No solo analiza, sino que GUÍA y dice QUÉ HACER:
+    - Empresa de finanzas: "Invierte en X, diversifica en Y, NO inviertas en Z"
+    - Ecommerce: "Elimina a este empleado, vende este producto, haz esto"
+    - Cualquier empresa: Recomendaciones específicas basadas en datos
+    """
+    if not files:
+        return history, "⚠️ Primero carga documentos empresariales para que el guía experto los analice."
+    
+    # Asegurar que history esté en formato tuples
+    if history and isinstance(history[0], dict):
+        tuple_history = []
+        for i in range(0, len(history) - 1, 2):
+            if i + 1 < len(history):
+                user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                tuple_history.append((user_msg, bot_msg))
+        history = tuple_history
+    elif history and not (isinstance(history[0], (tuple, list)) and len(history[0]) == 2):
+        history = []
+    
+    # Inicializar o recuperar sesión
+    if session_id not in expert_sessions:
+        expert_sessions[session_id] = {
+            "docs": [],
+            "retriever": None,
+            "processed_files": set(),
+            "history": [],
+            "business_type": None
+        }
+    
+    session = expert_sessions[session_id]
+    
+    # Procesar nuevos archivos si hay
+    new_files = []
+    for file_obj in files:
+        file_name = getattr(file_obj, "name", "")
+        if file_name not in session["processed_files"]:
+            new_files.append(file_obj)
+            session["processed_files"].add(file_name)
+    
+    if new_files:
+        try:
+            print(f"📄 [Guía Experto] Procesando {len(new_files)} nuevos documentos...")
+            new_docs = processor.process(new_files)
+            session["docs"].extend(new_docs)
+            
+            # Reconstruir retriever con todos los documentos
+            if session["docs"]:
+                session["retriever"] = retriever_builder.build_hybrid_retriever(session["docs"])
+                print(f"✅ [Guía Experto] Retriever actualizado con {len(session['docs'])} chunks totales")
+                
+                # Identificar tipo de negocio si es la primera vez
+                if not session["business_type"]:
+                    print("🔍 [Guía Experto] Identificando tipo de negocio...")
+                    business_type_prompt = """
+Analiza los documentos proporcionados y determina el TIPO DE NEGOCIO o INDUSTRIA.
+
+Responde SOLO con una de estas categorías:
+- finanzas (bancos, inversiones, fintech, seguros)
+- ecommerce (venta online, retail digital, marketplace)
+- tecnologia (software, SaaS, hardware, IT)
+- salud (hospitales, clínicas, farmacéuticas, salud digital)
+- educacion (universidades, cursos online, e-learning)
+- manufactura (producción, fábricas, supply chain)
+- servicios (consultoría, servicios profesionales)
+- retail (tiendas físicas, comercio tradicional)
+- real_estate (inmobiliaria, construcción, desarrollo)
+- marketing (agencia, publicidad, marketing digital)
+- legal (bufetes, servicios legales)
+- otros (si no encaja en ninguna categoría)
+
+Responde SOLO con la categoría, sin explicaciones adicionales.
+"""
+                    try:
+                        temp_workflow = AgentWorkflow(config, provider=provider)
+                        business_result = temp_workflow.run(
+                            business_type_prompt,
+                            session["retriever"],
+                            all_documents=session["docs"],
+                            conversational_mode=False
+                        )
+                        business_type = business_result.get("answer", "otros").lower().strip()
+                        # Limpiar respuesta para extraer solo la categoría
+                        for cat in ["finanzas", "ecommerce", "tecnologia", "salud", "educacion", 
+                                   "manufactura", "servicios", "retail", "real_estate", "marketing", "legal", "otros"]:
+                            if cat in business_type:
+                                session["business_type"] = cat
+                                break
+                        if not session["business_type"]:
+                            session["business_type"] = "otros"
+                        print(f"✅ [Guía Experto] Tipo de negocio identificado: {session['business_type']}")
+                    except Exception as e:
+                        print(f"⚠️ [Guía Experto] Error identificando tipo de negocio: {e}")
+                        session["business_type"] = "otros"
+        except Exception as e:
+            return history, f"❌ Error procesando documentos: {str(e)}"
+    
+    if not session["retriever"]:
+        return history, "⚠️ No hay documentos procesados. Carga documentos primero."
+    
+    # Construir prompt especializado para el guía experto
+    business_type = session.get("business_type", "otros")
+    
+    # Mapeo de tipos de negocio a instrucciones específicas
+    expert_instructions = {
+        "finanzas": """
+Eres un CONSEJERO FINANCIERO SUPER EXPERTO. Tu trabajo es:
+- Analizar documentos financieros (balances, estados de cuenta, inversiones, etc.)
+- Dar recomendaciones ESPECÍFICAS y ACCIONABLES sobre inversiones
+- Decir EXACTAMENTE: "INVIERTE en X", "DIVERSIFICA en Y", "NO INVIERTAS en Z"
+- Identificar oportunidades de inversión y riesgos
+- Recomendar estrategias financieras concretas
+- Ser directo, claro y accionable
+""",
+        "ecommerce": """
+Eres un CONSEJERO DE ECOMMERCE SUPER EXPERTO. Tu trabajo es:
+- Analizar documentos de ecommerce (ventas, inventario, empleados, productos, etc.)
+- Dar recomendaciones ESPECÍFICAS y ACCIONABLES sobre operaciones
+- Decir EXACTAMENTE: "ELIMINA a este empleado", "VENDE este producto", "HAZ esto", "NO HAGAS lo otro"
+- Identificar productos que vender/eliminar
+- Recomendar cambios en personal, inventario, marketing
+- Ser directo, claro y accionable
+""",
+        "tecnologia": """
+Eres un CONSEJERO DE TECNOLOGÍA SUPER EXPERTO. Tu trabajo es:
+- Analizar documentos técnicos (código, arquitectura, productos, etc.)
+- Dar recomendaciones ESPECÍFICAS y ACCIONABLES sobre tecnología
+- Decir EXACTAMENTE: "IMPLEMENTA X", "ELIMINA Y", "OPTIMIZA Z", "NO USES esto"
+- Identificar mejoras técnicas y oportunidades
+- Recomendar cambios en productos, procesos, arquitectura
+- Ser directo, claro y accionable
+""",
+        "salud": """
+Eres un CONSEJERO DE SALUD SUPER EXPERTO. Tu trabajo es:
+- Analizar documentos de salud (protocolos, pacientes, recursos, etc.)
+- Dar recomendaciones ESPECÍFICAS y ACCIONABLES sobre operaciones de salud
+- Decir EXACTAMENTE: "IMPLEMENTA X protocolo", "CONTRATA Y especialistas", "OPTIMIZA Z proceso"
+- Identificar mejoras en atención y eficiencia
+- Recomendar cambios en recursos, procesos, protocolos
+- Ser directo, claro y accionable
+""",
+        "educacion": """
+Eres un CONSEJERO DE EDUCACIÓN SUPER EXPERTO. Tu trabajo es:
+- Analizar documentos educativos (cursos, estudiantes, programas, etc.)
+- Dar recomendaciones ESPECÍFICAS y ACCIONABLES sobre educación
+- Decir EXACTAMENTE: "CREA X curso", "ELIMINA Y programa", "MEJORA Z proceso"
+- Identificar oportunidades educativas
+- Recomendar cambios en programas, contenido, metodología
+- Ser directo, claro y accionable
+""",
+        "otros": """
+Eres un CONSEJERO EMPRESARIAL SUPER EXPERTO. Tu trabajo es:
+- Analizar documentos empresariales
+- Dar recomendaciones ESPECÍFICAS y ACCIONABLES
+- Decir EXACTAMENTE qué hacer: "HAZ X", "NO HAGAS Y", "IMPLEMENTA Z"
+- Identificar oportunidades y problemas
+- Recomendar acciones concretas y directas
+- Ser directo, claro y accionable
+"""
+    }
+    
+    expert_system_prompt = expert_instructions.get(business_type, expert_instructions["otros"])
+    
+    # Construir contexto de conversación
+    conversation_context = ""
+    if history:
+        conversation_context = "\n\n=== CONTEXTO DE CONVERSACIÓN ANTERIOR ===\n"
+        for user_msg, bot_msg in history:
+            conversation_context += f"Usuario: {user_msg}\nGuía Experto: {bot_msg[:1000]}{'...' if len(bot_msg) > 1000 else ''}\n\n"
+        conversation_context += "=== FIN DEL CONTEXTO ===\n"
+    
+    # Enriquecer pregunta con contexto y instrucciones del guía experto
+    enriched_question = f"""{expert_system_prompt}
+
+{conversation_context}
+
+PREGUNTA/SITUACIÓN DEL USUARIO:
+{message}
+
+INSTRUCCIONES:
+1. Analiza los documentos proporcionados
+2. Da recomendaciones ESPECÍFICAS y ACCIONABLES
+3. Sé DIRECTO: di exactamente QUÉ HACER
+4. Usa formato claro: "HAZ X", "NO HAGAS Y", "INVIERTE en Z", etc.
+5. Sé un GUÍA EXPERTO, no solo un analizador
+6. Da RESULTADOS y ACCIONES concretas
+
+Responde como un consejero experto que guía y dice qué hacer:
+"""
+    
+    # Aplicar modo de velocidad temporalmente
+    original_speed_mode = config.speed_mode
+    config.speed_mode = speed_mode
+    
+    try:
+        # Ejecutar workflow con el prompt especializado
+        temp_workflow = AgentWorkflow(config, provider=provider)
+        result = temp_workflow.run(
+            enriched_question,
+            session["retriever"],
+            all_documents=session["docs"],
+            conversational_mode=False  # Modo directo, no conversacional
+        )
+        
+        answer = result.get("answer", result.get("draft_answer", "No se pudo generar respuesta."))
+        sources = result.get("sources", [])
+        
+        # Formatear respuesta con fuentes
+        formatted_answer = answer
+        if sources:
+            sources_list = []
+            for s in sources[:3]:  # Máximo 3 fuentes
+                if isinstance(s, dict):
+                    source_name = s.get("source", s.get("file", "Documento"))
+                    from pathlib import Path
+                    clean_name = Path(source_name).name
+                    sources_list.append(f"- {clean_name}")
+                else:
+                    from pathlib import Path
+                    clean_name = Path(str(s)).name
+                    sources_list.append(f"- {clean_name}")
+            
+            if sources_list:
+                formatted_answer += f"\n\n📚 **Fuentes:**\n" + "\n".join(sources_list)
+        
+        # Guardar en historial de sesión
+        session["history"].append({
+            "question": message,
+            "answer": answer,
+            "sources": sources,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Actualizar historial de Gradio en formato tuples
+        history.append((message, formatted_answer))
+        
+        return history, None
+        
+    except Exception as e:
+        error_msg = f"❌ Error en guía experto: {str(e)}"
+        history.append((message, error_msg))
+        return history, None
+        
+    finally:
+        # Restaurar modo original
+        config.speed_mode = original_speed_mode
 
 def run_enterprise_api_mode_streaming(files, auto_detect: bool = True, rules_json: str = "", provider: str = "openai"):
     """Ejecuta modo Enterprise API con streaming de resultados (generador)."""
@@ -2327,35 +2585,126 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 outputs=[answer_output, sources_output, verification_output, relevance_output],
             )
         
-        # Tab 2: Procesamiento Masivo
-        with gr.Tab("📚 Procesamiento Masivo"):
-            gr.Markdown("### Procesa hasta 1000 documentos con análisis comparativo")
-            gr.Markdown("💡 **NUEVO**: Arrastra carpetas completas o selecciona múltiples archivos")
-            gr.Markdown("🚀 **ESCALABLE**: Soporta hasta 1000 documentos por lote con procesamiento paralelo optimizado")
+        # Tab 2: Guía Experto - Consejero Empresarial Inteligente
+        with gr.Tab("🎯 Guía Experto"):
+            gr.Markdown("### 🧠 Tu Consejero Empresarial Super Inteligente")
+            gr.Markdown("""
+            **🚀 Guía Experto que te dice QUÉ HACER**
+            
+            - 📊 Analiza tus documentos empresariales
+            - 🎯 Identifica tu tipo de negocio automáticamente
+            - 💡 Te da recomendaciones específicas y accionables
+            - ✅ Te dice exactamente qué hacer: invierte aquí, elimina esto, vende aquello
+            - 🧠 Super inteligencia: no solo analiza, te guía y aconseja
+            
+            **Ejemplos:**
+            - 💰 **Finanzas**: "Invierte en X, diversifica en Y, NO inviertas en Z"
+            - 🛒 **Ecommerce**: "Elimina a este empleado, vende este producto, haz esto"
+            - 🏢 **Cualquier empresa**: Recomendaciones específicas basadas en tus datos
+            """)
+            
+            # Generar session_id único para el guía experto
+            expert_session_id = gr.State(value=str(uuid.uuid4()))
             
             with gr.Row():
-                mass_files = gr.Files(
-                    label="📂 Documentos (hasta 1000) - Arrastra carpetas o selecciona múltiples",
+                expert_files = gr.Files(
+                    label="📂 Sube tus Documentos Empresariales (PDF, DOCX, TXT, MD)",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
-                comparison_check = gr.Checkbox(
-                    label="Habilitar análisis comparativo",
-                    value=True,
+                expert_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+                expert_provider = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Motor Alternativo = Claude (mayor precisión)"
                 )
             
-            mass_process_button = gr.Button("🚀 Procesar Masivamente", variant="primary")
+            # Chatbot para el guía experto
+            expert_chatbot = gr.Chatbot(
+                label="💬 Conversación con tu Guía Experto",
+                height=500,
+                show_copy_button=True,
+            )
             
             with gr.Row():
-                mass_summary = gr.Markdown(label="📊 Resumen")
-                mass_metadata = gr.Markdown(label="📄 Detalles por Documento")
+                expert_input = gr.Textbox(
+                    label="Escribe tu pregunta o situación",
+                    placeholder="Ejemplo: Analiza mis documentos y dime qué debo hacer para mejorar mi negocio",
+                    lines=3,
+                    scale=4,
+                )
+                expert_submit_btn = gr.Button("📤 Consultar Guía", variant="primary", scale=1)
             
-            mass_process_button.click(
-                fn=run_massive_processing,
-                inputs=[mass_files, comparison_check],
-                outputs=[mass_summary, mass_metadata],
+            with gr.Row():
+                expert_clear_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                expert_clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+            
+            expert_status = gr.Markdown(label="ℹ️ Estado")
+            
+            # Event handlers
+            def expert_chat_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta o solicita análisis."
+                if not files:
+                    return history, history, "⚠️ Primero sube documentos empresariales para que el guía experto los analice."
+                
+                new_history, error = run_expert_guide(
+                    message, history, files, session_id, speed_mode, provider
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+            
+            def expert_clear_chat(history, session_id):
+                if session_id in expert_sessions:
+                    del expert_sessions[session_id]
+                return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+            
+            def expert_clear_files(files, session_id):
+                if session_id in expert_sessions:
+                    expert_sessions[session_id]["processed_files"].clear()
+                    expert_sessions[session_id]["docs"] = []
+                    expert_sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+            
+            expert_submit_btn.click(
+                fn=expert_chat_submit,
+                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+                outputs=[expert_chatbot, expert_chatbot, expert_status],
+            ).then(
+                lambda: "", None, expert_input
+            )
+            
+            expert_input.submit(
+                fn=expert_chat_submit,
+                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+                outputs=[expert_chatbot, expert_chatbot, expert_status],
+            ).then(
+                lambda: "", None, expert_input
+            )
+            
+            expert_clear_btn.click(
+                fn=expert_clear_chat,
+                inputs=[expert_chatbot, expert_session_id],
+                outputs=[expert_chatbot, expert_status],
+            )
+            
+            expert_clear_files_btn.click(
+                fn=expert_clear_files,
+                inputs=[expert_files, expert_session_id],
+                outputs=[expert_files, expert_status],
             )
         
         # Tab 3: Agentes Autónomos (Enterprise Agentic AI con IDP)
