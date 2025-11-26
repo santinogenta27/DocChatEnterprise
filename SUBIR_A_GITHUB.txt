@@ -1,0 +1,55 @@
+========================================
+  SUBIR PROYECTO A GITHUB
+========================================
+
+✅ REPOSITORIO REMOTO CONFIGURADO
+   Usuario: santinogenta27
+   Repositorio: DocChat-Enterprise
+
+========================================
+  PASOS PARA SUBIR:
+========================================
+
+1. CREA EL REPOSITORIO EN GITHUB:
+   - Ve a: https://github.com/new
+   - Nombre: DocChat-Enterprise
+   - Descripción: "Sistema avanzado de análisis de documentos con IA agentic"
+   - Público o Privado (tu elección)
+   - ⚠️ NO marques "Initialize with README"
+   - Click "Create repository"
+
+2. SUBE LA VERSIÓN ESTABLE (main):
+   git push -u origin main
+
+3. SUBE LA RAMA DE DESARROLLO:
+   git push -u origin desarrollo
+
+========================================
+  COMANDOS COMPLETOS:
+========================================
+
+# Subir versión estable
+git checkout main
+git push -u origin main
+
+# Subir rama de desarrollo
+git checkout desarrollo
+git push -u origin desarrollo
+
+========================================
+  DESPUÉS DE SUBIR:
+========================================
+
+✅ Tu código estará en:
+   https://github.com/santinogenta27/DocChat-Enterprise
+
+✅ Puedes clonarlo en cualquier lugar:
+   git clone https://github.com/santinogenta27/DocChat-Enterprise.git
+
+✅ Para actualizar cambios:
+   git add .
+   git commit -m "Descripción"
+   git push
+
+========================================
+
