@@ -1154,14 +1154,20 @@ def run_chat_conversational(message, history, files, session_id, speed_mode="bal
     if not files:
         return history, "⚠️ Primero carga documentos para comenzar el chat."
     
-    # Convertir history a formato messages si viene en formato antiguo (tuplas)
-    if history and isinstance(history[0], (tuple, list)) and len(history[0]) == 2:
-        # Convertir de formato (user_msg, bot_msg) a formato messages
-        messages_history = []
-        for user_msg, bot_msg in history:
-            messages_history.append({"role": "user", "content": user_msg})
-            messages_history.append({"role": "assistant", "content": bot_msg})
-        history = messages_history
+    # Asegurar que history esté en formato tuples (compatible con Gradio)
+    # No convertir a messages, mantener en formato tuples
+    if history and isinstance(history[0], dict):
+        # Convertir de formato messages a tuples
+        tuple_history = []
+        for i in range(0, len(history) - 1, 2):
+            if i + 1 < len(history):
+                user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                tuple_history.append((user_msg, bot_msg))
+        history = tuple_history
+    elif history and not (isinstance(history[0], (tuple, list)) and len(history[0]) == 2):
+        # Si no es formato válido, inicializar vacío
+        history = []
     
     # Inicializar o recuperar sesión
     if session_id not in chat_sessions:
@@ -1214,22 +1220,12 @@ def run_chat_conversational(message, history, files, session_id, speed_mode="bal
         
         conversation_context = "\n\n=== CONTEXTO DE CONVERSACIÓN ANTERIOR (MEMORIA A CORTO PLAZO) ===\n"
         # Incluir historial completo desde el principio (context window como memoria)
-        for i, msg in enumerate(history):
-            if isinstance(msg, dict):
-                role = msg.get("role", "")
-                content = msg.get("content", "")
-                if role == "user":
-                    msg_text = f"Usuario: {content}\n"
-                elif role == "assistant":
-                    # Incluir respuesta completa (no truncar tanto) para aprovechar context window
-                    msg_text = f"Asistente: {content[:2000]}{'...' if len(content) > 2000 else ''}\n\n"
-                else:
-                    continue
-            elif isinstance(msg, (tuple, list)) and len(msg) == 2:
-                user_msg, bot_msg = msg
-                msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
-            else:
-                continue
+        # History está en formato tuples: [(user_msg, bot_msg), ...]
+        for user_msg, bot_msg in history:
+            if isinstance(user_msg, (tuple, list)) and len(user_msg) == 2:
+                # Si es una tupla anidada, extraer
+                user_msg, bot_msg = user_msg
+            msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
             
             if total_history_chars + len(msg_text) <= max_history_chars:
                 conversation_context += msg_text
@@ -1316,20 +1312,37 @@ def run_chat_conversational(message, history, files, session_id, speed_mode="bal
                 }
             )
         
-        # Actualizar historial de Gradio en formato messages
-        # Agregar mensaje del usuario
-        history.append({"role": "user", "content": message})
-        # Agregar respuesta del asistente
-        history.append({"role": "assistant", "content": formatted_answer})
+        # Actualizar historial de Gradio en formato tuples (compatible con formato antiguo)
+        # Convertir history a formato tuples si está en formato messages
+        if history and isinstance(history[0], dict):
+            # Convertir de messages a tuples
+            tuple_history = []
+            for i in range(0, len(history) - 1, 2):
+                if i + 1 < len(history):
+                    user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                    bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                    tuple_history.append((user_msg, bot_msg))
+            history = tuple_history
+        
+        # Agregar nuevo mensaje en formato tuple
+        history.append((message, formatted_answer))
         
         return history, None
         
     except Exception as e:
         error_msg = f"❌ Error en chat: {str(e)}"
-        # Agregar mensaje del usuario
-        history.append({"role": "user", "content": message})
-        # Agregar mensaje de error
-        history.append({"role": "assistant", "content": error_msg})
+        # Convertir history a formato tuples si está en formato messages
+        if history and isinstance(history[0], dict):
+            tuple_history = []
+            for i in range(0, len(history) - 1, 2):
+                if i + 1 < len(history):
+                    user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                    bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                    tuple_history.append((user_msg, bot_msg))
+            history = tuple_history
+        
+        # Agregar mensaje de error en formato tuple
+        history.append((message, error_msg))
         return history, None
         
     finally:
@@ -1353,13 +1366,18 @@ def run_chat_multi_format(message, history, files, session_id, speed_mode="balan
     if not files:
         return history, "⚠️ Primero carga documentos para comenzar el chat."
     
-    # Convertir history a formato messages si viene en formato antiguo
-    if history and isinstance(history[0], (tuple, list)) and len(history[0]) == 2:
-        messages_history = []
-        for user_msg, bot_msg in history:
-            messages_history.append({"role": "user", "content": user_msg})
-            messages_history.append({"role": "assistant", "content": bot_msg})
-        history = messages_history
+    # Asegurar que history esté en formato tuples (compatible con Gradio)
+    if history and isinstance(history[0], dict):
+        # Convertir de formato messages a tuples
+        tuple_history = []
+        for i in range(0, len(history) - 1, 2):
+            if i + 1 < len(history):
+                user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                tuple_history.append((user_msg, bot_msg))
+        history = tuple_history
+    elif history and not (isinstance(history[0], (tuple, list)) and len(history[0]) == 2):
+        history = []
     
     # Inicializar o recuperar sesión
     if session_id not in multi_format_sessions:
@@ -1403,21 +1421,12 @@ def run_chat_multi_format(message, history, files, session_id, speed_mode="balan
         total_history_chars = 0
         
         conversation_context = "\n\n=== CONTEXTO DE CONVERSACIÓN ANTERIOR (MEMORIA A CORTO PLAZO) ===\n"
-        for i, msg in enumerate(history):
-            if isinstance(msg, dict):
-                role = msg.get("role", "")
-                content = msg.get("content", "")
-                if role == "user":
-                    msg_text = f"Usuario: {content}\n"
-                elif role == "assistant":
-                    msg_text = f"Asistente: {content[:2000]}{'...' if len(content) > 2000 else ''}\n\n"
-                else:
-                    continue
-            elif isinstance(msg, (tuple, list)) and len(msg) == 2:
-                user_msg, bot_msg = msg
-                msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
-            else:
-                continue
+        # History está en formato tuples: [(user_msg, bot_msg), ...]
+        for user_msg, bot_msg in history:
+            if isinstance(user_msg, (tuple, list)) and len(user_msg) == 2:
+                # Si es una tupla anidada, extraer
+                user_msg, bot_msg = user_msg
+            msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
             
             if total_history_chars + len(msg_text) <= max_history_chars:
                 conversation_context += msg_text
@@ -1498,16 +1507,36 @@ def run_chat_multi_format(message, history, files, session_id, speed_mode="balan
                 }
             )
         
-        # Actualizar historial de Gradio
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": formatted_answer})
+        # Actualizar historial de Gradio en formato tuples
+        # Convertir history a formato tuples si está en formato messages
+        if history and isinstance(history[0], dict):
+            tuple_history = []
+            for i in range(0, len(history) - 1, 2):
+                if i + 1 < len(history):
+                    user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                    bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                    tuple_history.append((user_msg, bot_msg))
+            history = tuple_history
+        
+        # Agregar nuevo mensaje en formato tuple
+        history.append((message, formatted_answer))
         
         return history, None
         
     except Exception as e:
         error_msg = f"❌ Error en chat: {str(e)}"
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": error_msg})
+        # Convertir history a formato tuples si está en formato messages
+        if history and isinstance(history[0], dict):
+            tuple_history = []
+            for i in range(0, len(history) - 1, 2):
+                if i + 1 < len(history):
+                    user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                    bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                    tuple_history.append((user_msg, bot_msg))
+            history = tuple_history
+        
+        # Agregar mensaje de error en formato tuple
+        history.append((message, error_msg))
         return history, None
         
     finally:
@@ -2056,7 +2085,7 @@ def use_drive_files_in_enterprise(
     
     try:
         print(f"\n{'='*60}")
-        print(f"🚀 INICIANDO PROCESAMIENTO DE GOOGLE DRIVE")
+        print(f"INICIANDO PROCESAMIENTO DE GOOGLE DRIVE")
         print(f"{'='*60}\n")
         
         # Parsear IDs seleccionados
@@ -6439,22 +6468,22 @@ if __name__ == "__main__":
         # Running on Render - use the provided port and bind to 0.0.0.0
         port = int(render_port)
         server_name = "0.0.0.0"
-        print(f"🚀 Starting DocChat Enterprise on Render (port {port})")
+        print(f"Starting DocChat Enterprise on Render (port {port})")
     else:
-        # Running locally - find available port and use 127.0.0.1
+        # Running locally - find available port and use 0.0.0.0 (para ngrok)
         def find_free_port(start_port=7860):
             for port in range(start_port, start_port + 10):
                 try:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.bind(('127.0.0.1', port))
+                        s.bind(('0.0.0.0', port))
                         return port
                 except OSError:
                     continue
             return start_port  # Fallback
         
         port = find_free_port()
-        server_name = "127.0.0.1"
-        print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
+        server_name = "0.0.0.0"  # Cambiado a 0.0.0.0 para que ngrok pueda conectarse
+        print(f"Starting DocChat Enterprise on http://0.0.0.0:{port}")
     
     # Lanzar con configuración optimizada para carga rápida
     print("✅ Iniciando interfaz Gradio...")
