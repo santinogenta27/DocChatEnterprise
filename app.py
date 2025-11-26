@@ -5586,7 +5586,7 @@ Después de instalar, reinicia la aplicación."""
 **Estado:** {app.status}
 
 ### 📦 Componentes Generados ({len(app.components)}):
-{chr(10).join([f"**{i+1}. {comp.name}** ({comp.type})\n   - Dependencias: {', '.join(comp.dependencies) if comp.dependencies else 'Ninguna'}\n" for i, comp in enumerate(app.components)])}
+{chr(10).join([f"**{i+1}. {comp.name}** ({comp.type}){chr(10)}   - Dependencias: {', '.join(comp.dependencies) if comp.dependencies else 'Ninguna'}{chr(10)}" for i, comp in enumerate(app.components)])}
 
 ### 🏗️ Arquitectura:
 - Tipo: {app.architecture.get('architecture_type', 'N/A')}
@@ -5594,7 +5594,7 @@ Después de instalar, reinicia la aplicación."""
 - Platform: {app.architecture.get('deployment_platform', 'N/A')}
 
 ### 📝 Componentes:
-{chr(10).join([f"**{comp.name}:**\n```\n{comp.code[:500]}...\n```\n" for comp in app.components[:3]])}
+{chr(10).join([f"**{comp.name}:**{chr(10)}```{chr(10)}{comp.code[:500]}...{chr(10)}```{chr(10)}" for comp in app.components[:3]])}
 """
                 return result, app.app_id
             except Exception as e:
@@ -5729,7 +5729,7 @@ La aplicación está lista para usar.
 {chr(10).join([f"- {fact}" for fact in update.key_facts])}
 
 ### 📚 Fuentes ({len(update.sources)}):
-{chr(10).join([f"**{i+1}. {s.title}**\n   - URL: {s.url}\n   - Relevancia: {s.relevance_score:.2f}\n" for i, s in enumerate(update.sources[:5])])}
+{chr(10).join([f"**{i+1}. {s.title}**{chr(10)}   - URL: {s.url}{chr(10)}   - Relevancia: {s.relevance_score:.2f}{chr(10)}" for i, s in enumerate(update.sources[:5])])}
 """
                 return result
             except Exception as e:
@@ -5920,7 +5920,7 @@ La aplicación está lista para usar.
 **Total de Tests:** {suite.total_tests}
 
 ### 📋 Tests Generados:
-{chr(10).join([f"**{i+1}. {t.name}** ({t.test_type})\n   - {t.description[:100]}...\n" for i, t in enumerate(suite.test_cases[:10])])}
+{chr(10).join([f"**{i+1}. {t.name}** ({t.test_type}){chr(10)}   - {t.description[:100]}...{chr(10)}" for i, t in enumerate(suite.test_cases[:10])])}
 """
                 return result, suite.suite_id
             except Exception as e:
@@ -5947,7 +5947,7 @@ La aplicación está lista para usar.
 - **📈 Tasa de Éxito:** {report['summary']['pass_rate']*100:.1f}%
 
 ### 📋 Detalles:
-{chr(10).join([f"**{t['name']}** ({t['type']}): {'✅ PASÓ' if t['passed'] else '❌ FALLÓ'} ({t['execution_time']:.2f}s)" + (f"\n   Error: {t['error']}" if t.get('error') else "") for t in report['test_details'][:20]])}
+{chr(10).join([f"**{t['name']}** ({t['type']}): {'✅ PASÓ' if t['passed'] else '❌ FALLÓ'} ({t['execution_time']:.2f}s)" + (f"{chr(10)}   Error: {t['error']}" if t.get('error') else "") for t in report['test_details'][:20]])}
 """
                 return result
             except Exception as e:
@@ -6047,7 +6047,7 @@ La aplicación está lista para usar.
 **Bajas:** {report['summary']['low_vulns']}
 
 ### 📋 Detalles de Vulnerabilidades:
-{chr(10).join([f"**{i+1}. {v['type']}** (Severidad: {v['severity']})\n   - {v['description'][:200]}...\n   - Impacto: {v['impact'][:150]}...\n   - Remediation: {v['remediation'][:150]}...\n" for i, v in enumerate(report['vulnerabilities'][:10])])}
+{chr(10).join([f"**{i+1}. {v['type']}** (Severidad: {v['severity']}){chr(10)}   - {v['description'][:200]}...{chr(10)}   - Impacto: {v['impact'][:150]}...{chr(10)}   - Remediation: {v['remediation'][:150]}...{chr(10)}" for i, v in enumerate(report['vulnerabilities'][:10])])}
 
 ### 💡 Recomendaciones:
 {chr(10).join([f"- {rec}" for rec in report['recommendations'][:5]])}
@@ -6256,7 +6256,7 @@ La aplicación está lista para usar.
 **Endpoints Descubiertos:** {len(integration.endpoints)}
 
 ### 📡 Endpoints:
-{chr(10).join([f"**{e['method']}** {e['path']}\n   - {e.get('description', 'Sin descripción')}\n" for e in integration.endpoints[:10]])}
+{chr(10).join([f"**{e['method']}** {e['path']}{chr(10)}   - {e.get('description', 'Sin descripción')}{chr(10)}" for e in integration.endpoints[:10]])}
 """
                         return result, integration.integration_id
                     except Exception as e:
