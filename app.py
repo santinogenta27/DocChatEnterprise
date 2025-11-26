@@ -6444,4 +6444,10 @@ if __name__ == "__main__":
         server_name = "127.0.0.1"
         print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
     
-    demo.queue().launch(server_name=server_name, server_port=port, show_api=False)
+    demo.queue(default_concurrency_limit=10).launch(
+        server_name=server_name, 
+        server_port=port, 
+        show_api=False,
+        share=False,
+        inbrowser=False
+    )
