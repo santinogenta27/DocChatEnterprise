@@ -157,14 +157,3 @@ class RetrieverBuilder:
         return hybrid
 
 
-        vector_retriever = vector_store.as_retriever(search_kwargs={"k": self.config.vector_k})
-        bm25 = BM25Retriever.from_documents(docs)
-        bm25.k = self.config.bm25_k
-
-        hybrid = HybridRetriever(
-            bm25_retriever=bm25,
-            vector_retriever=vector_retriever,
-            weights=self.config.hybrid_weights,
-        )
-        return hybrid
-

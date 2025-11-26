@@ -13,7 +13,7 @@ ENV/
 .docchat_vectordb/
 .docchat_memory/
 .docchat_audit/
-cache/
+/cache/
 uploaded_files/
 
 # Variables de entorno
