@@ -6416,6 +6416,17 @@ La aplicación está lista para usar.
             fn=get_integration_status,
             outputs=[integration_status_output]
         )
+    
+    # Función para ocultar mensaje de carga cuando la app esté lista
+    def hide_loading():
+        return gr.Markdown(visible=False)
+    
+    # Ocultar mensaje de carga después de que se cargue la interfaz
+    demo.load(
+        fn=hide_loading,
+        inputs=[],
+        outputs=[loading_msg]
+    )
 
 
 if __name__ == "__main__":
@@ -6444,17 +6455,6 @@ if __name__ == "__main__":
         port = find_free_port()
         server_name = "127.0.0.1"
         print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
-    
-    # Función para ocultar mensaje de carga cuando la app esté lista
-    def hide_loading():
-        return gr.Markdown(visible=False)
-    
-    # Ocultar mensaje de carga después de que se cargue la interfaz
-    demo.load(
-        fn=hide_loading,
-        inputs=[],
-        outputs=[loading_msg]
-    )
     
     # Lanzar con configuración optimizada para carga rápida
     print("✅ Iniciando interfaz Gradio...")
