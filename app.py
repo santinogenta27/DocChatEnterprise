@@ -163,14 +163,21 @@ collaborative_agents = CollaborativeAgentsSystem(config, provider="openai") if c
 advanced_integration = AdvancedIntegrationSystem(config, provider="openai") if config.enable_autonomous_agents else None
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 # Inicializar componentes pesados de forma segura con manejo de errores
-# Esto evita que errores en la inicialización bloqueen el inicio de la app
-try:
-    rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
-    rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
-except Exception as e:
-    print(f"Advertencia: Error inicializando RPA: {e}")
-    rpa_engine = None
-    rpa_enterprise = None
+# RPA se inicializa lazy para evitar bloqueos en el inicio
+rpa_engine = None
+rpa_enterprise = None
+
+def _init_rpa():
+    """Inicializar RPA solo cuando se necesite."""
+    global rpa_engine, rpa_enterprise
+    if rpa_engine is None and config.enable_autonomous_agents:
+        try:
+            rpa_engine = RPAAutomationEngine(config)
+            rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine)
+        except Exception as e:
+            print(f"Advertencia: Error inicializando RPA: {e}")
+            rpa_engine = None
+            rpa_enterprise = None
 
 try:
     semantic_engine = SemanticDataEngine(config)
@@ -4103,6 +4110,9 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                         if not rpa_engine:
                             return gr.Dropdown(choices=[], value=None)
                         
+                        _init_rpa()
+                        if rpa_engine is None:
+                            raise gr.Error("RPA no está disponible")
                         categories = rpa_engine.get_available_categories()
                         category_data = next((c for c in categories if c["category"] == category), None)
                         
@@ -4130,10 +4140,16 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                             docs = None
                             if documents:
                                 from docchat.document_processor import DocumentProcessor
-                                processor = DocumentProcessor(rpa_engine.config)
+                                _init_rpa()
+                            if rpa_engine is None:
+                                raise gr.Error("RPA no está disponible")
+                            processor = DocumentProcessor(rpa_engine.config)
                                 docs = processor.process(documents)
                             
                             # Ejecutar automatización
+                            _init_rpa()
+                            if rpa_engine is None:
+                                raise gr.Error("RPA no está disponible")
                             result = rpa_engine.execute_automation(
                                 category=category,
                                 task_type=task_type,
@@ -4200,6 +4216,9 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                         if not rpa_engine:
                             return "❌ RPA Engine no está habilitado."
                         
+                        _init_rpa()
+                        if rpa_engine is None:
+                            raise gr.Error("RPA no está disponible")
                         categories = rpa_engine.get_available_categories()
                         
                         info = "## 📚 Categorías de Automatización RPA\n\n"
@@ -6475,10 +6494,13 @@ if __name__ == "__main__":
         server_name = "127.0.0.1"
         print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
     
-    demo.queue(default_concurrency_limit=10).launch(
+    # Lanzar sin queue inicial para carga más rápida
+    # El queue se puede agregar después si es necesario
+    demo.launch(
         server_name=server_name, 
         server_port=port, 
         show_api=False,
         share=False,
-        inbrowser=False
+        inbrowser=False,
+        show_error=True
     )
