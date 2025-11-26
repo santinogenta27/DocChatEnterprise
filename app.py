@@ -6424,33 +6424,28 @@ La aplicación está lista para usar.
 if __name__ == "__main__":
     import socket
     
-    # Find an available port
-    def find_free_port(start_port=7860):
-        for port in range(start_port, start_port + 10):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind(('127.0.0.1', port))
-                    return port
-            except OSError:
-                continue
-        return start_port  # Fallback
+    # Check if running on Render (has PORT environment variable)
+    render_port = os.environ.get("PORT")
     
-    port = find_free_port()
-    print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
-    demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
-    import socket
+    if render_port:
+        # Running on Render - use the provided port and bind to 0.0.0.0
+        port = int(render_port)
+        server_name = "0.0.0.0"
+        print(f"🚀 Starting DocChat Enterprise on Render (port {port})")
+    else:
+        # Running locally - find available port and use 127.0.0.1
+        def find_free_port(start_port=7860):
+            for port in range(start_port, start_port + 10):
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.bind(('127.0.0.1', port))
+                        return port
+                except OSError:
+                    continue
+            return start_port  # Fallback
+        
+        port = find_free_port()
+        server_name = "127.0.0.1"
+        print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
     
-    # Find an available port
-    def find_free_port(start_port=7860):
-        for port in range(start_port, start_port + 10):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind(('127.0.0.1', port))
-                    return port
-            except OSError:
-                continue
-        return start_port  # Fallback
-    
-    port = find_free_port()
-    print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
-    demo.queue().launch(server_name="127.0.0.1", server_port=port, show_api=False)
+    demo.queue().launch(server_name=server_name, server_port=port, show_api=False)
