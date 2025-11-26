@@ -162,12 +162,39 @@ adversarial_ai = AdversarialAISystem(config, provider="openai") if config.enable
 collaborative_agents = CollaborativeAgentsSystem(config, provider="openai") if config.enable_autonomous_agents else None
 advanced_integration = AdvancedIntegrationSystem(config, provider="openai") if config.enable_autonomous_agents else None
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
-rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
-rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
-semantic_engine = SemanticDataEngine(config)
-chatbot_mode = ChatbotMode(config)
-cloud_integration = CloudStorageIntegration(config, enterprise_api)
-webhook_processor = WebhookProcessor(config, enterprise_api)
+# Inicializar componentes pesados de forma segura con manejo de errores
+# Esto evita que errores en la inicialización bloqueen el inicio de la app
+try:
+    rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
+    rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
+except Exception as e:
+    print(f"Advertencia: Error inicializando RPA: {e}")
+    rpa_engine = None
+    rpa_enterprise = None
+
+try:
+    semantic_engine = SemanticDataEngine(config)
+except Exception as e:
+    print(f"Advertencia: Error inicializando Semantic Engine: {e}")
+    semantic_engine = None
+
+try:
+    chatbot_mode = ChatbotMode(config)
+except Exception as e:
+    print(f"Advertencia: Error inicializando Chatbot Mode: {e}")
+    chatbot_mode = None
+
+try:
+    cloud_integration = CloudStorageIntegration(config, enterprise_api)
+except Exception as e:
+    print(f"Advertencia: Error inicializando Cloud Integration: {e}")
+    cloud_integration = None
+
+try:
+    webhook_processor = WebhookProcessor(config, enterprise_api)
+except Exception as e:
+    print(f"Advertencia: Error inicializando Webhook Processor: {e}")
+    webhook_processor = None
 audit_logger = AuditLogger(config.audit_log_dir, config.enable_audit_logs)
 
 # Inicializar sistemas de autenticación y workspace
@@ -763,6 +790,8 @@ def register_chatbot(chatbot_name: str, company_name: str):
         raise gr.Error("Ingresa el nombre de la empresa.")
     
     try:
+        if chatbot_mode is None:
+            raise gr.Error("Chatbot mode no está disponible")
         connection = chatbot_mode.register_chatbot(
             chatbot_name=chatbot_name.strip(),
             company_name=company_name.strip()
@@ -1692,6 +1721,8 @@ def connect_s3_storage(
         raise gr.Error("Por favor completa todos los campos requeridos.")
     
     try:
+        if cloud_integration is None:
+            raise gr.Error("Cloud integration no está disponible")
         result = cloud_integration.connect_s3_bucket(
             bucket_name=bucket_name,
             access_key=access_key,
