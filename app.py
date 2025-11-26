@@ -5474,7 +5474,7 @@ Después de instalar, reinicia la aplicación."""
 {chr(10).join([f"{i+1}. {p}" for i, p in enumerate(cycle.principles_discovered)])}
 
 ### 💡 Hipótesis Generadas ({len(cycle.hypotheses)}):
-{chr(10).join([f"**{i+1}. {h.description}**\n   - Estado: {'✅ PASÓ' if h.status == 'passed' else '❌ FALLÓ'}\n   - Resultado: {h.test_result[:200] if h.test_result else 'N/A'}\n" for i, h in enumerate(cycle.hypotheses)])}
+{chr(10).join([f"**{i+1}. {h.description}**{chr(10)}   - Estado: {'✅ PASÓ' if h.status == 'passed' else '❌ FALLÓ'}{chr(10)}   - Resultado: {h.test_result[:200] if h.test_result else 'N/A'}{chr(10)}" for i, h in enumerate(cycle.hypotheses)])}
 
 ### 📚 Insights Aprendidos ({len(cycle.insights_learned)}):
 {chr(10).join([f"- {insight}" for insight in cycle.insights_learned])}
