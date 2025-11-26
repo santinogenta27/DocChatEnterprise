@@ -12,10 +12,16 @@ PORT = int(os.environ.get("PORT", 10000))
 from app import demo
 
 print(f"🚀 Starting DocChat Enterprise on port {PORT}")
+print(f"🌐 Server will be available at http://0.0.0.0:{PORT}")
+
+# Launch Gradio with explicit configuration for Render
+# prevent_thread_lock=False ensures the server runs in the main thread
+# which helps Render detect the port
 demo.queue().launch(
-    server_name="0.0.0.0",
-    server_port=PORT,
+    server_name="0.0.0.0",  # Must be 0.0.0.0 for Render
+    server_port=PORT,        # Use Render's PORT variable
     share=False,
-    show_api=False
+    show_api=False,
+    prevent_thread_lock=False  # Keep in main thread so Render can detect port
 )
 
