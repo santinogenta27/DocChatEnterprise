@@ -3641,7 +3641,6 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 height=500,
                 show_copy_button=True,
                 avatar_images=(None, "🤖"),
-                type="messages",
             )
             
             with gr.Row():
@@ -3787,7 +3786,6 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 height=500,
                 show_copy_button=True,
                 avatar_images=(None, "🤖"),
-                type="messages",
             )
             
             with gr.Row():
