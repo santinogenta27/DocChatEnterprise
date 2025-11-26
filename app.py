@@ -4141,9 +4141,9 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                             if documents:
                                 from docchat.document_processor import DocumentProcessor
                                 _init_rpa()
-                            if rpa_engine is None:
-                                raise gr.Error("RPA no está disponible")
-                            processor = DocumentProcessor(rpa_engine.config)
+                                if rpa_engine is None:
+                                    raise gr.Error("RPA no está disponible")
+                                processor = DocumentProcessor(rpa_engine.config)
                                 docs = processor.process(documents)
                             
                             # Ejecutar automatización
