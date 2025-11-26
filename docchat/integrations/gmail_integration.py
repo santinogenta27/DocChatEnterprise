@@ -14,8 +14,11 @@ from googleapiclient.errors import HttpError
 class GmailIntegration:
     """Gmail integration for email operations."""
     
-    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 
-              'https://www.googleapis.com/auth/gmail.send']
+    SCOPES = [
+        'https://www.googleapis.com/auth/gmail.readonly', 
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.modify'  # Para marcar como leído
+    ]
     
     def __init__(self, credentials_path: Optional[str] = None):
         self.credentials_path = credentials_path

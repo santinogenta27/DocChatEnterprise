@@ -55,6 +55,17 @@ from docchat.enterprise_api import EnterpriseAPIMode
 from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
 from docchat.customer_service_agent import CustomerServiceAgent
 from docchat.chatbot_mode import ChatbotMode
+from docchat.text_to_action import TextToActionAgent
+from docchat.email_autonomous_agent import EmailAutonomousAgent
+from docchat.multi_format_processor import MultiFormatProcessor
+from docchat.iterative_learning_agent import IterativeLearningAgent
+from docchat.fullstack_text_to_action import FullStackTextToAction
+from docchat.web_recency_agent import WebRecencyAgent
+from docchat.deep_chain_of_thought import DeepChainOfThoughtAgent
+from docchat.automated_testing_system import AutomatedTestingSystem
+from docchat.adversarial_ai_system import AdversarialAISystem
+from docchat.collaborative_agents import CollaborativeAgentsSystem
+from docchat.advanced_integration_system import AdvancedIntegrationSystem
 from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.rpa_automation import RPAAutomationEngine
 from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
@@ -113,6 +124,7 @@ if not api_key:
 # Inicializar configuración y componentes
 config: AppConfig = load_config()
 processor = DocumentProcessor(config)
+multi_format_processor = MultiFormatProcessor(config)
 mass_processor = MassDocumentProcessor(config)
 retriever_builder = RetrieverBuilder(config)
 workflow = AgentWorkflow(config, provider="openai")  # Default: OpenAI
@@ -136,9 +148,19 @@ advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_age
 enterprise_api = EnterpriseAPIMode(config, provider="openai")  # Default: OpenAI
 enterprise_agentic_ai = EnterpriseAgenticAI(config, provider="openai") if config.enable_autonomous_agents else None
 
-# Inicializar Text-to-Action Agent
-from docchat.text_to_action import TextToActionAgent
+# Inicializar Text-to-Action Agent y Email Autonomous Agent
 text_to_action_agent = TextToActionAgent(config, provider="openai")
+email_autonomous_agent = EmailAutonomousAgent(config, provider="openai") if config.enable_autonomous_agents else None
+
+# Nuevos sistemas avanzados (Eric Schmidt)
+iterative_learning_agent = IterativeLearningAgent(config, provider="openai") if config.enable_autonomous_agents else None
+fullstack_text_to_action = FullStackTextToAction(config, provider="openai") if config.enable_autonomous_agents else None
+web_recency_agent = WebRecencyAgent(config, provider="openai") if config.enable_autonomous_agents else None
+deep_cot_agent = DeepChainOfThoughtAgent(config, provider="openai") if config.enable_autonomous_agents else None
+automated_testing = AutomatedTestingSystem(config, provider="openai") if config.enable_autonomous_agents else None
+adversarial_ai = AdversarialAISystem(config, provider="openai") if config.enable_autonomous_agents else None
+collaborative_agents = CollaborativeAgentsSystem(config, provider="openai") if config.enable_autonomous_agents else None
+advanced_integration = AdvancedIntegrationSystem(config, provider="openai") if config.enable_autonomous_agents else None
 customer_service_agent = CustomerServiceAgent(config) if config.enable_autonomous_agents else None
 rpa_engine = RPAAutomationEngine(config) if config.enable_autonomous_agents else None
 rpa_enterprise = RPAEnterpriseIntegration(config, rpa_engine) if rpa_engine else None
@@ -1284,6 +1306,183 @@ def clear_chat_session(session_id):
         del chat_sessions[session_id]
     return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
 
+# Estado global para chat multi-formato
+multi_format_sessions = {}  # {session_id: {"docs": [], "retriever": None, "history": []}}
+
+def run_chat_multi_format(message, history, files, session_id, speed_mode="balanced", provider="openai"):
+    """
+    Maneja chat conversacional con documentos de múltiples formatos.
+    Similar a run_chat_conversational pero usa MultiFormatProcessor.
+    """
+    if not files:
+        return history, "⚠️ Primero carga documentos para comenzar el chat."
+    
+    # Convertir history a formato messages si viene en formato antiguo
+    if history and isinstance(history[0], (tuple, list)) and len(history[0]) == 2:
+        messages_history = []
+        for user_msg, bot_msg in history:
+            messages_history.append({"role": "user", "content": user_msg})
+            messages_history.append({"role": "assistant", "content": bot_msg})
+        history = messages_history
+    
+    # Inicializar o recuperar sesión
+    if session_id not in multi_format_sessions:
+        multi_format_sessions[session_id] = {
+            "docs": [],
+            "retriever": None,
+            "processed_files": set(),
+            "history": []
+        }
+    
+    session = multi_format_sessions[session_id]
+    
+    # Procesar nuevos archivos si hay
+    new_files = []
+    for file_obj in files:
+        file_name = getattr(file_obj, "name", "")
+        if file_name not in session["processed_files"]:
+            new_files.append(file_obj)
+            session["processed_files"].add(file_name)
+    
+    if new_files:
+        try:
+            print(f"📄 Procesando {len(new_files)} nuevos documentos (multi-formato)...")
+            new_docs = multi_format_processor.process(new_files)
+            session["docs"].extend(new_docs)
+            
+            # Reconstruir retriever con todos los documentos
+            if session["docs"]:
+                session["retriever"] = retriever_builder.build_hybrid_retriever(session["docs"])
+                print(f"✅ Retriever actualizado con {len(session['docs'])} chunks totales")
+        except Exception as e:
+            return history, f"❌ Error procesando documentos: {str(e)}"
+    
+    if not session["retriever"]:
+        return history, "⚠️ No hay documentos procesados. Carga documentos primero."
+    
+    # Construir contexto de conversación desde history
+    conversation_context = ""
+    if history:
+        max_history_chars = 100000
+        total_history_chars = 0
+        
+        conversation_context = "\n\n=== CONTEXTO DE CONVERSACIÓN ANTERIOR (MEMORIA A CORTO PLAZO) ===\n"
+        for i, msg in enumerate(history):
+            if isinstance(msg, dict):
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role == "user":
+                    msg_text = f"Usuario: {content}\n"
+                elif role == "assistant":
+                    msg_text = f"Asistente: {content[:2000]}{'...' if len(content) > 2000 else ''}\n\n"
+                else:
+                    continue
+            elif isinstance(msg, (tuple, list)) and len(msg) == 2:
+                user_msg, bot_msg = msg
+                msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
+            else:
+                continue
+            
+            if total_history_chars + len(msg_text) <= max_history_chars:
+                conversation_context += msg_text
+                total_history_chars += len(msg_text)
+            else:
+                remaining = max_history_chars - total_history_chars
+                if remaining > 500:
+                    conversation_context += msg_text[:remaining] + "\n[Historial anterior truncado...]"
+                break
+        
+        conversation_context += "\n=== FIN DEL CONTEXTO DE CONVERSACIÓN ===\n"
+    
+    # Enriquecer pregunta con contexto
+    enriched_question = message
+    if conversation_context:
+        enriched_question = f"{conversation_context}\n\nPREGUNTA ACTUAL:\n{message}"
+    
+    # Obtener contexto de memoria si está habilitado
+    memory_context = {}
+    if context_manager:
+        memory_context = context_manager.get_context_for_query(message)
+        if session["history"]:
+            memory_context["chat_history"] = session["history"][-5:]
+    
+    # Aplicar modo de velocidad temporalmente
+    original_speed_mode = config.speed_mode
+    config.speed_mode = speed_mode
+    
+    try:
+        # Ejecutar workflow con contexto de conversación
+        temp_workflow = AgentWorkflow(config, provider=provider)
+        result = temp_workflow.run(
+            enriched_question,
+            session["retriever"],
+            all_documents=session["docs"],
+            conversational_mode=True
+        )
+        
+        answer = result.get("answer", result.get("draft_answer", "No se pudo generar respuesta."))
+        sources = result.get("sources", [])
+        
+        # Formatear respuesta con fuentes
+        formatted_answer = answer
+        if sources:
+            sources_list = []
+            for s in sources[:5]:
+                if isinstance(s, dict):
+                    source_name = s.get("source", s.get("file", "Documento"))
+                    from pathlib import Path
+                    clean_name = Path(source_name).name
+                    sources_list.append(f"- {clean_name}")
+                else:
+                    from pathlib import Path
+                    clean_name = Path(str(s)).name
+                    sources_list.append(f"- {clean_name}")
+            
+            if sources_list:
+                formatted_answer += f"\n\n📚 **Fuentes:**\n" + "\n".join(sources_list)
+        
+        # Guardar en historial de sesión
+        session["history"].append({
+            "question": message,
+            "answer": answer,
+            "sources": sources,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Guardar en memoria persistente
+        if context_manager:
+            context_manager.add_query(
+                query=message,
+                answer=answer,
+                sources=[getattr(f, "name", "") for f in files],
+                metadata={
+                    "mode": "chat_multi_format",
+                    "session_id": session_id,
+                    "conversation_turn": len(session["history"])
+                }
+            )
+        
+        # Actualizar historial de Gradio
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": formatted_answer})
+        
+        return history, None
+        
+    except Exception as e:
+        error_msg = f"❌ Error en chat: {str(e)}"
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": error_msg})
+        return history, None
+        
+    finally:
+        config.speed_mode = original_speed_mode
+
+def clear_multi_format_session(session_id):
+    """Limpia la sesión de chat multi-formato."""
+    if session_id in multi_format_sessions:
+        del multi_format_sessions[session_id]
+    return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+
 def run_enterprise_api_mode_streaming(files, auto_detect: bool = True, rules_json: str = "", provider: str = "openai"):
     """Ejecuta modo Enterprise API con streaming de resultados (generador)."""
     accumulated_output = ""
@@ -2231,6 +2430,258 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 fn=run_enterprise_agentic_task,
                 inputs=[task_input, task_type, context_input],
                 outputs=[agent_output]
+            )
+            
+            # Sección de Email Autónomo
+            gr.Markdown("---")
+            gr.Markdown("### 📧 Respuestas Automáticas de Emails en Tiempo Real")
+            gr.Markdown("""
+            **🚀 Funcionalidad:**
+            - Conecta tu cuenta de email (Gmail, IMAP)
+            - El Agentic AI recibe emails en tiempo real
+            - Responde automáticamente sin intervención humana
+            - Sigue las reglas profesionales de Eric Schmidt (Google)
+            
+            **📋 Reglas aplicadas:**
+            - Responder rápidamente (respuestas inmediatas)
+            - Ser conciso y claro
+            - Limpiar inbox constantemente
+            - Manejar emails en orden LIFO
+            - Actuar como router de información
+            - No gritar (evitar mayúsculas)
+            - Facilitar seguimiento
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 🔌 Paso 1: Conectar Email")
+                    
+                    email_provider = gr.Radio(
+                        label="Proveedor de Email",
+                        choices=[
+                            ("Gmail (OAuth2)", "gmail"),
+                            ("IMAP (Gmail, Outlook, etc.)", "imap")
+                        ],
+                        value="gmail",
+                        info="Selecciona tu proveedor de email"
+                    )
+                    
+                    # Gmail OAuth2
+                    gmail_credentials_json = gr.Textbox(
+                        label="📋 Credenciales Gmail (JSON)",
+                        placeholder='{"token": "...", "refresh_token": "...", ...}',
+                        lines=5,
+                        visible=True,
+                        info="Pega las credenciales OAuth2 de Gmail aquí"
+                    )
+                    
+                    # IMAP
+                    with gr.Group(visible=False) as imap_group:
+                        imap_server = gr.Textbox(
+                            label="Servidor IMAP",
+                            placeholder="imap.gmail.com",
+                            value="imap.gmail.com"
+                        )
+                        imap_port = gr.Number(
+                            label="Puerto IMAP",
+                            value=993,
+                            precision=0
+                        )
+                        imap_username = gr.Textbox(
+                            label="Usuario/Email",
+                            placeholder="tu-email@gmail.com"
+                        )
+                        imap_password = gr.Textbox(
+                            label="Contraseña/App Password",
+                            type="password",
+                            placeholder="Tu contraseña o app password"
+                        )
+                        smtp_server = gr.Textbox(
+                            label="Servidor SMTP (para enviar)",
+                            placeholder="smtp.gmail.com",
+                            value="smtp.gmail.com"
+                        )
+                        smtp_port = gr.Number(
+                            label="Puerto SMTP",
+                            value=587,
+                            precision=0
+                        )
+                    
+                    connect_email_btn = gr.Button("🔌 Conectar Email", variant="primary")
+                    email_connection_status = gr.Markdown(label="📊 Estado de Conexión")
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("### ⚙️ Paso 2: Configurar Monitoreo")
+                    
+                    email_poll_interval = gr.Slider(
+                        label="Intervalo de Monitoreo (segundos)",
+                        minimum=10,
+                        maximum=300,
+                        value=30,
+                        step=10,
+                        info="Cada cuántos segundos revisar nuevos emails"
+                    )
+                    
+                    email_auto_respond = gr.Checkbox(
+                        label="Responder Automáticamente",
+                        value=True,
+                        info="Si está activado, el Agentic AI responderá automáticamente"
+                    )
+                    
+                    email_provider_toggle = gr.Radio(
+                        label="🤖 Motor de IA para Respuestas",
+                        choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                        value="openai",
+                        info="Motor de IA que generará las respuestas automáticas"
+                    )
+                    
+                    start_monitoring_btn = gr.Button("🚀 Iniciar Monitoreo", variant="primary")
+                    stop_monitoring_btn = gr.Button("⏹️ Detener Monitoreo", variant="stop")
+                    
+                    email_monitoring_status = gr.Markdown(label="📊 Estado del Monitoreo")
+            
+            with gr.Row():
+                email_response_history = gr.Markdown(
+                    label="📧 Historial de Respuestas",
+                    value="**Historial de respuestas automáticas aparecerá aquí**"
+                )
+            
+            # Funciones para manejar emails
+            def toggle_email_provider_ui(provider):
+                """Muestra/oculta campos según proveedor."""
+                if provider == "gmail":
+                    return gr.update(visible=True), gr.update(visible=False)
+                else:
+                    return gr.update(visible=False), gr.update(visible=True)
+            
+            def connect_email_handler(provider, gmail_json, imap_srv, imap_prt, imap_user, imap_pwd, smtp_srv, smtp_prt):
+                """Conecta email según proveedor."""
+                if not email_autonomous_agent:
+                    return "❌ Agentes autónomos no están habilitados. Configura DOCCHAT_ENABLE_AGENTS=true"
+                
+                try:
+                    if provider == "gmail":
+                        if not gmail_json or not gmail_json.strip():
+                            return "❌ Por favor, ingresa las credenciales JSON de Gmail"
+                        credentials = json.loads(gmail_json)
+                        result = email_autonomous_agent.connect_gmail(credentials)
+                        return result.get('message', '✅ Gmail conectado')
+                    else:  # IMAP
+                        if not all([imap_srv, imap_user, imap_pwd]):
+                            return "❌ Por favor, completa todos los campos de IMAP"
+                        # Guardar SMTP para envío
+                        email_autonomous_agent.email_config['smtp_server'] = smtp_srv
+                        email_autonomous_agent.email_config['smtp_port'] = int(smtp_prt) if smtp_prt else 587
+                        email_autonomous_agent.email_config['imap_password'] = imap_pwd
+                        result = email_autonomous_agent.connect_imap(
+                            server=imap_srv,
+                            port=int(imap_prt) if imap_prt else 993,
+                            username=imap_user,
+                            password=imap_pwd
+                        )
+                        return result.get('message', '✅ Email IMAP conectado')
+                except json.JSONDecodeError:
+                    return "❌ Error: Las credenciales Gmail deben ser JSON válido"
+                except Exception as e:
+                    return f"❌ Error conectando email: {str(e)}"
+            
+            def start_email_monitoring_handler(poll_interval, auto_respond, provider_ai):
+                """Inicia monitoreo de emails."""
+                from docchat.utils.llm_factory import create_llm
+                
+                if not email_autonomous_agent:
+                    return "❌ Agentes autónomos no están habilitados"
+                
+                if not email_autonomous_agent.email_config.get('connected'):
+                    return "❌ Primero debes conectar tu email"
+                
+                # Cambiar provider del LLM si es necesario
+                if provider_ai != email_autonomous_agent.provider:
+                    email_autonomous_agent.provider = provider_ai
+                    email_autonomous_agent.llm = create_llm(
+                        provider=provider_ai,
+                        model=email_autonomous_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.3,
+                        api_key=email_autonomous_agent.config.openai_api_key if provider_ai == "openai" else email_autonomous_agent.config.anthropic_api_key,
+                        max_tokens=4000,
+                        request_timeout=60
+                    )
+                
+                result = email_autonomous_agent.start_monitoring(
+                    poll_interval=int(poll_interval),
+                    auto_respond=auto_respond
+                )
+                return result.get('message', '✅ Monitoreo iniciado')
+            
+            def stop_email_monitoring_handler():
+                """Detiene monitoreo de emails."""
+                if not email_autonomous_agent:
+                    return "❌ Agentes autónomos no están habilitados"
+                
+                result = email_autonomous_agent.stop_monitoring()
+                return result.get('message', '✅ Monitoreo detenido')
+            
+            def get_email_status():
+                """Obtiene estado actual del email agent."""
+                if not email_autonomous_agent:
+                    return "❌ Agente de email no disponible"
+                
+                status = email_autonomous_agent.get_status()
+                history = email_autonomous_agent.get_response_history(limit=10)
+                
+                status_text = f"""
+**Estado del Agente de Email:**
+- **Conectado:** {'✅ Sí' if status['is_connected'] else '❌ No'}
+- **Proveedor:** {status.get('provider', 'N/A')}
+- **Monitoreando:** {'✅ Sí' if status['is_monitoring'] else '❌ No'}
+- **Polling cada:** {status.get('poll_interval', 30)}s
+- **Respuestas automáticas:** {'✅ Activadas' if status.get('auto_respond') else '❌ Desactivadas'}
+- **Emails procesados:** {status.get('processed_count', 0)}
+
+**Últimas Respuestas:**
+"""
+                if history:
+                    for resp in reversed(history[-5:]):
+                        original = resp.get('original_email', {})
+                        status_text += f"\n- **{original.get('subject', 'Sin asunto')}** de {original.get('from', 'Desconocido')}\n"
+                else:
+                    status_text += "\n*No hay respuestas aún*"
+                
+                return status_text
+            
+            # Event handlers
+            email_provider.change(
+                fn=toggle_email_provider_ui,
+                inputs=[email_provider],
+                outputs=[gmail_credentials_json, imap_group]
+            )
+            
+            connect_email_btn.click(
+                fn=connect_email_handler,
+                inputs=[email_provider, gmail_credentials_json, imap_server, imap_port, imap_username, imap_password, smtp_server, smtp_port],
+                outputs=[email_connection_status]
+            )
+            
+            start_monitoring_btn.click(
+                fn=start_email_monitoring_handler,
+                inputs=[email_poll_interval, email_auto_respond, email_provider_toggle],
+                outputs=[email_monitoring_status]
+            )
+            
+            stop_monitoring_btn.click(
+                fn=stop_email_monitoring_handler,
+                outputs=[email_monitoring_status]
+            )
+            
+            # Actualizar estado cuando se inicia/detiene monitoreo
+            start_monitoring_btn.click(
+                fn=get_email_status,
+                outputs=[email_response_history]
+            )
+            
+            stop_monitoring_btn.click(
+                fn=get_email_status,
+                outputs=[email_response_history]
             )
         
         # Tab 4.5: Enterprise API Mode (NUEVO)
@@ -3260,6 +3711,152 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 fn=clear_files,
                 inputs=[chat_files, chat_session_id],
                 outputs=[chat_files, chat_status],
+            )
+        
+        # Tab 4.6: Chat Multi-Formato (NUEVO - Soporta todos los formatos)
+        with gr.Tab("📚 Chat Multi-Formato"):
+            gr.Markdown("### Chat Conversacional con Todos los Formatos")
+            gr.Markdown("""
+            **🚀 Conversación Natural con CUALQUIER Tipo de Documento**
+            
+            - 💬 Haz preguntas de seguimiento sin repetir contexto
+            - 📚 Carga documentos de CUALQUIER formato (PDF, Word, Excel, CSV, JSON, XML, Logs, Emails, etc.)
+            - 🧠 El sistema recuerda la conversación anterior
+            - 🔄 Ideal para explorar documentos en profundidad
+            
+            **📋 Formatos Soportados:**
+            - **Documentos:** PDF, DOC/DOCX, ODT, RTF, TXT, MD, LaTeX, HTML, EPUB, MOBI
+            - **Datos:** CSV, TSV, JSON, XML, YAML, INI, LOG
+            - **Presentaciones:** PPT/PPTX, ODP, Keynote
+            - **Hojas de cálculo:** XLS/XLSX
+            - **Y más...**
+            
+            **💡 Ejemplo:** 
+            - "¿Qué información importante hay en estos documentos?"
+            - "Analiza los datos del CSV"
+            - "Compara los logs de error"
+            """)
+            
+            # Generar session_id único
+            multi_format_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                multi_format_files = gr.Files(
+                    label="📂 Documentos Multi-Formato (Todos los formatos soportados) - Hasta 1000 documentos",
+                    file_count="multiple",
+                    file_types=[
+                        # Documentos
+                        ".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md", ".tex", ".html", ".htm",
+                        ".epub", ".mobi",
+                        # Datos estructurados
+                        ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".ini", ".log",
+                        # Presentaciones
+                        ".ppt", ".pptx", ".odp", ".key",
+                        # Hojas de cálculo
+                        ".xls", ".xlsx",
+                        # Subtítulos y transcripciones
+                        ".srt", ".vtt",
+                        # Código fuente
+                        ".py", ".js", ".ts", ".java", ".cpp", ".c", ".h", ".cs", ".php", ".rb", ".go", ".rs",
+                        ".sh", ".bash", ".ps1", ".bat", ".cmd", ".r", ".R", ".m", ".matlab",
+                        # Otros
+                        ".gdoc", ".zip", ".eml", ".msg", ".sql"
+                    ],
+                )
+            
+            with gr.Row():
+                multi_format_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+                multi_format_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
+            
+            # Chatbot component
+            multi_format_chatbot = gr.Chatbot(
+                label="💬 Conversación Multi-Formato",
+                height=500,
+                show_copy_button=True,
+                avatar_images=(None, "🤖"),
+                type="messages",
+            )
+            
+            with gr.Row():
+                multi_format_input = gr.Textbox(
+                    label="Escribe tu pregunta",
+                    placeholder="Ejemplo: ¿Qué información importante hay en estos documentos?",
+                    lines=2,
+                    scale=4,
+                )
+                multi_format_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_multi_format_chat_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                clear_multi_format_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+            
+            multi_format_status = gr.Markdown(label="ℹ️ Estado del Chat")
+            
+            # Event handlers
+            def multi_format_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta."
+                if not files:
+                    return history, history, "⚠️ Primero carga documentos."
+                
+                new_history, error = run_chat_multi_format(
+                    message, history, files, session_id, speed_mode, provider
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+            
+            def clear_multi_format_chat(history, session_id):
+                new_history, status = clear_multi_format_session(session_id)
+                return new_history, status
+            
+            def clear_multi_format_files(files, session_id):
+                if session_id in multi_format_sessions:
+                    multi_format_sessions[session_id]["processed_files"].clear()
+                    multi_format_sessions[session_id]["docs"] = []
+                    multi_format_sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+            
+            multi_format_submit_btn.click(
+                fn=multi_format_submit,
+                inputs=[multi_format_input, multi_format_chatbot, multi_format_files, multi_format_session_id, multi_format_speed_mode, multi_format_provider_toggle],
+                outputs=[multi_format_chatbot, multi_format_chatbot, multi_format_status],
+            ).then(
+                lambda: "", None, multi_format_input
+            )
+            
+            multi_format_input.submit(
+                fn=multi_format_submit,
+                inputs=[multi_format_input, multi_format_chatbot, multi_format_files, multi_format_session_id, multi_format_speed_mode, multi_format_provider_toggle],
+                outputs=[multi_format_chatbot, multi_format_chatbot, multi_format_status],
+            ).then(
+                lambda: "", None, multi_format_input
+            )
+            
+            clear_multi_format_chat_btn.click(
+                fn=clear_multi_format_chat,
+                inputs=[multi_format_chatbot, multi_format_session_id],
+                outputs=[multi_format_chatbot, multi_format_status],
+            )
+            
+            clear_multi_format_files_btn.click(
+                fn=clear_multi_format_files,
+                inputs=[multi_format_files, multi_format_session_id],
+                outputs=[multi_format_files, multi_format_status],
             )
         
         # Tab 4.7: Chatbot Mode (NUEVO - Para conectar chatbots externos)
@@ -4771,6 +5368,1057 @@ Después de instalar, reinicia la aplicación."""
         - Auditoría: Habilitada por defecto
         """
     )
+    
+    # ============================================
+    # NUEVOS MODOS AVANZADOS (Eric Schmidt)
+    # ============================================
+    
+    # Tab 5.1: Agentes de Aprendizaje Iterativo
+    with gr.Tab("🧠 Aprendizaje Iterativo"):
+        gr.Markdown("### 🧠 Agentes de Aprendizaje Iterativo")
+        gr.Markdown("""
+        **🚀 Sistema que aprende iterativamente siguiendo el método científico**
+        
+        Basado en el concepto de Eric Schmidt sobre agentes que:
+        - Leen y descubren principios
+        - Generan hipótesis
+        - Prueban hipótesis
+        - Aprenden de resultados
+        - Actualizan su entendimiento
+        
+        **💡 Ejemplo:** Como ChemCrow que aprende química probando hipótesis en laboratorio
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                il_topic = gr.Textbox(
+                    label="📚 Tema de Investigación",
+                    placeholder="Ej: Principios de química orgánica, Análisis de mercado, etc.",
+                    lines=2
+                )
+                
+                il_domain = gr.Textbox(
+                    label="🔬 Dominio",
+                    placeholder="Ej: chemistry, physics, business, etc.",
+                    value="general"
+                )
+                
+                il_max_hypotheses = gr.Slider(
+                    label="Máximo de Hipótesis",
+                    minimum=3,
+                    maximum=20,
+                    value=5,
+                    step=1
+                )
+                
+                il_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                il_start_btn = gr.Button("🚀 Iniciar Ciclo de Aprendizaje", variant="primary")
+            
+            with gr.Column(scale=1):
+                il_files = gr.Files(
+                    label="📄 Documentos para Analizar (opcional)",
+                    file_count="multiple"
+                )
+                
+                il_output = gr.Markdown(label="📊 Resultado del Ciclo de Aprendizaje")
+        
+        # Funciones
+        def run_iterative_learning(topic, domain, max_hyp, provider, files):
+            if not iterative_learning_agent:
+                return "❌ Agentes autónomos no están habilitados"
+            
+            if not topic.strip():
+                return "❌ Ingresa un tema de investigación"
+            
+            try:
+                # Procesar documentos si hay
+                documents = []
+                if files:
+                    docs = multi_format_processor.process(files)
+                    documents = docs
+                
+                # Cambiar provider si es necesario
+                if provider != iterative_learning_agent.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    iterative_learning_agent.provider = provider
+                    iterative_learning_agent.llm = create_llm(
+                        provider=provider,
+                        model=iterative_learning_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.3,
+                        api_key=iterative_learning_agent.config.openai_api_key if provider == "openai" else iterative_learning_agent.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=180
+                    )
+                
+                # Ejecutar ciclo de aprendizaje
+                cycle = iterative_learning_agent.start_learning_cycle(
+                    topic=topic,
+                    documents=documents,
+                    domain=domain,
+                    max_hypotheses=int(max_hyp)
+                )
+                
+                # Formatear resultado
+                result = f"""## 🧠 Ciclo de Aprendizaje Completado
+
+**Tema:** {cycle.topic}
+**Dominio:** {domain}
+**Ciclo ID:** {cycle.cycle_id}
+
+### 📖 Principios Descubiertos ({len(cycle.principles_discovered)}):
+{chr(10).join([f"{i+1}. {p}" for i, p in enumerate(cycle.principles_discovered)])}
+
+### 💡 Hipótesis Generadas ({len(cycle.hypotheses)}):
+{chr(10).join([f"**{i+1}. {h.description}**\n   - Estado: {'✅ PASÓ' if h.status == 'passed' else '❌ FALLÓ'}\n   - Resultado: {h.test_result[:200] if h.test_result else 'N/A'}\n" for i, h in enumerate(cycle.hypotheses)])}
+
+### 📚 Insights Aprendidos ({len(cycle.insights_learned)}):
+{chr(10).join([f"- {insight}" for insight in cycle.insights_learned])}
+
+### 🔄 Entendimiento Actualizado:
+{cycle.updated_understanding[:1000]}...
+"""
+                return result
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        il_start_btn.click(
+            fn=run_iterative_learning,
+            inputs=[il_topic, il_domain, il_max_hypotheses, il_provider_toggle, il_files],
+            outputs=[il_output]
+        )
+    
+    # Tab 5.2: Text-to-Action Full-Stack
+    with gr.Tab("🚀 Text-to-Action Full-Stack"):
+        gr.Markdown("### 🚀 Text-to-Action Full-Stack - Construye Aplicaciones Completas")
+        gr.Markdown("""
+        **🚀 Convierte lenguaje natural en aplicaciones full-stack completas**
+        
+        Basado en el concepto de Eric Schmidt:
+        - "Make me a copy of TikTok. Produce this program in the next 30 seconds"
+        - Construye aplicaciones completas (frontend + backend + APIs)
+        - Deployment automático
+        - Cada humano tiene su propio programador
+        
+        **💡 Ejemplo:** "Crea una aplicación de gestión de tareas con API REST y UI moderna"
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                fsta_description = gr.Textbox(
+                    label="📝 Descripción de la Aplicación",
+                    placeholder="Ej: Crea una aplicación web de gestión de tareas con API REST, base de datos y UI moderna",
+                    lines=4
+                )
+                
+                fsta_name = gr.Textbox(
+                    label="📱 Nombre de la Aplicación (opcional)",
+                    placeholder="Mi App"
+                )
+                
+                fsta_tech_stack = gr.Textbox(
+                    label="🛠️ Stack Tecnológico (opcional)",
+                    placeholder="Ej: React, Flask, PostgreSQL (o déjalo vacío para auto-selección)",
+                    lines=2
+                )
+                
+                fsta_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                fsta_build_btn = gr.Button("🏗️ Construir Aplicación", variant="primary")
+                fsta_deploy_btn = gr.Button("🚀 Desplegar Aplicación", variant="primary")
+            
+            with gr.Column(scale=1):
+                fsta_output = gr.Markdown(label="📊 Estado de la Aplicación")
+                fsta_app_id = gr.State(value=None)
+        
+        # Funciones
+        def build_fullstack_app(description, name, tech_stack, provider):
+            if not fullstack_text_to_action:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not description.strip():
+                return "❌ Ingresa una descripción de la aplicación", None
+            
+            try:
+                # Cambiar provider si es necesario
+                if provider != fullstack_text_to_action.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    fullstack_text_to_action.provider = provider
+                    fullstack_text_to_action.architect_llm = create_llm(
+                        provider=provider,
+                        model=fullstack_text_to_action.config.agentic_model or "gpt-4o",
+                        temperature=0.2,
+                        api_key=fullstack_text_to_action.config.openai_api_key if provider == "openai" else fullstack_text_to_action.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=180
+                    )
+                    fullstack_text_to_action.code_llm = create_llm(
+                        provider=provider,
+                        model=fullstack_text_to_action.config.agentic_model or "gpt-4o",
+                        temperature=0.1,
+                        api_key=fullstack_text_to_action.config.openai_api_key if provider == "openai" else fullstack_text_to_action.config.anthropic_api_key,
+                        max_tokens=16000,
+                        request_timeout=300
+                    )
+                
+                # Parsear tech stack
+                tech_list = [t.strip() for t in tech_stack.split(',')] if tech_stack.strip() else None
+                
+                # Construir aplicación
+                app = fullstack_text_to_action.build_application(
+                    description=description,
+                    app_name=name if name.strip() else None,
+                    tech_stack=tech_list
+                )
+                
+                result = f"""## 🚀 Aplicación Construida Exitosamente
+
+**Nombre:** {app.name}
+**ID:** {app.app_id}
+**Estado:** {app.status}
+
+### 📦 Componentes Generados ({len(app.components)}):
+{chr(10).join([f"**{i+1}. {comp.name}** ({comp.type})\n   - Dependencias: {', '.join(comp.dependencies) if comp.dependencies else 'Ninguna'}\n" for i, comp in enumerate(app.components)])}
+
+### 🏗️ Arquitectura:
+- Tipo: {app.architecture.get('architecture_type', 'N/A')}
+- Stack: {', '.join(app.architecture.get('tech_stack', []))}
+- Platform: {app.architecture.get('deployment_platform', 'N/A')}
+
+### 📝 Componentes:
+{chr(10).join([f"**{comp.name}:**\n```\n{comp.code[:500]}...\n```\n" for comp in app.components[:3]])}
+"""
+                return result, app.app_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        def deploy_fullstack_app(app_id):
+            if not fullstack_text_to_action or not app_id:
+                return "❌ No hay aplicación para desplegar"
+            
+            try:
+                result = fullstack_text_to_action.deploy_application(app_id)
+                if result["success"]:
+                    return f"""## ✅ Aplicación Desplegada
+
+**URL:** {result.get('deployment_url', 'N/A')}
+**Ruta:** {result.get('deployment_path', 'N/A')}
+
+La aplicación está lista para usar.
+"""
+                else:
+                    return f"❌ Error en deployment: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        fsta_build_btn.click(
+            fn=build_fullstack_app,
+            inputs=[fsta_description, fsta_name, fsta_tech_stack, fsta_provider_toggle],
+            outputs=[fsta_output, fsta_app_id]
+        )
+        
+        fsta_deploy_btn.click(
+            fn=deploy_fullstack_app,
+            inputs=[fsta_app_id],
+            outputs=[fsta_output]
+        )
+    
+    # Tab 5.3: Web Recency / Información Actualizada
+    with gr.Tab("🌐 Recency / Info Actualizada"):
+        gr.Markdown("### 🌐 Web Recency Agent - Información Actualizada en Tiempo Real")
+        gr.Markdown("""
+        **🚀 Resuelve el problema de "recency" mencionado por Eric Schmidt**
+        
+        - Los modelos toman 18 meses en entrenarse, siempre están desactualizados
+        - Context windows permiten alimentar información reciente
+        - Este agente busca y actualiza información en tiempo real
+        
+        **💡 Ejemplo:** Pregunta sobre eventos recientes, noticias actuales, información actualizada
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                recency_query = gr.Textbox(
+                    label="🔍 Query de Búsqueda",
+                    placeholder="Ej: Guerra Israel-Hamas, Últimas noticias de IA, etc.",
+                    lines=2
+                )
+                
+                recency_topic = gr.Textbox(
+                    label="📚 Tema General (opcional)",
+                    placeholder="Ej: conflictos internacionales, tecnología, etc."
+                )
+                
+                recency_time_range = gr.Dropdown(
+                    label="⏰ Rango de Tiempo",
+                    choices=[
+                        ("Últimas 24 horas", "1 day"),
+                        ("Última semana", "1 week"),
+                        ("Último mes", "1 month")
+                    ],
+                    value="1 week"
+                )
+                
+                recency_max_sources = gr.Slider(
+                    label="Máximo de Fuentes",
+                    minimum=3,
+                    maximum=10,
+                    value=5,
+                    step=1
+                )
+                
+                recency_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                recency_search_btn = gr.Button("🔍 Buscar Información Reciente", variant="primary")
+            
+            with gr.Column(scale=1):
+                recency_output = gr.Markdown(label="📊 Información Reciente Encontrada")
+        
+        # Funciones
+        def search_recent_info(query, topic, time_range, max_sources, provider):
+            if not web_recency_agent:
+                return "❌ Agentes autónomos no están habilitados"
+            
+            if not query.strip():
+                return "❌ Ingresa una query de búsqueda"
+            
+            try:
+                # Cambiar provider si es necesario
+                if provider != web_recency_agent.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    web_recency_agent.provider = provider
+                    web_recency_agent.llm = create_llm(
+                        provider=provider,
+                        model=web_recency_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.2,
+                        api_key=web_recency_agent.config.openai_api_key if provider == "openai" else web_recency_agent.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=180
+                    )
+                
+                # Buscar información reciente
+                update = web_recency_agent.get_recent_information(
+                    query=query,
+                    topic=topic if topic.strip() else None,
+                    max_sources=int(max_sources),
+                    time_range=time_range
+                )
+                
+                result = f"""## 🌐 Información Reciente Encontrada
+
+**Query:** {update.query}
+**Tema:** {update.topic}
+**Actualizado:** {update.timestamp}
+
+### 📊 Resumen:
+{update.summary}
+
+### 🔑 Hechos Clave:
+{chr(10).join([f"- {fact}" for fact in update.key_facts])}
+
+### 📚 Fuentes ({len(update.sources)}):
+{chr(10).join([f"**{i+1}. {s.title}**\n   - URL: {s.url}\n   - Relevancia: {s.relevance_score:.2f}\n" for i, s in enumerate(update.sources[:5])])}
+"""
+                return result
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        recency_search_btn.click(
+            fn=search_recent_info,
+            inputs=[recency_query, recency_topic, recency_time_range, recency_max_sources, recency_provider_toggle],
+            outputs=[recency_output]
+        )
+    
+    # Tab 5.4: Chain of Thought Profundo (1000 pasos)
+    with gr.Tab("🧠 Chain of Thought Profundo"):
+        gr.Markdown("### 🧠 Deep Chain of Thought - Razonamiento de hasta 1000 Pasos")
+        gr.Markdown("""
+        **🚀 Razonamiento profundo estructurado**
+        
+        Basado en el concepto de Eric Schmidt:
+        - Genera hasta 1000 pasos de razonamiento
+        - Cada paso es verificable
+        - Como construir "recetas" que se pueden ejecutar y probar
+        - Razonamiento paso a paso estructurado
+        
+        **💡 Ejemplo:** Problemas complejos que requieren razonamiento profundo
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                cot_problem = gr.Textbox(
+                    label="❓ Problema a Resolver",
+                    placeholder="Ej: ¿Cómo optimizar el proceso de producción de una fábrica?",
+                    lines=4
+                )
+                
+                cot_max_steps = gr.Slider(
+                    label="Máximo de Pasos",
+                    minimum=10,
+                    maximum=1000,
+                    value=100,
+                    step=10
+                )
+                
+                cot_verify_steps = gr.Checkbox(
+                    label="Verificar Cada Paso",
+                    value=True
+                )
+                
+                cot_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                cot_solve_btn = gr.Button("🧠 Resolver con Chain of Thought", variant="primary")
+            
+            with gr.Column(scale=1):
+                cot_output = gr.Markdown(label="📊 Proceso de Razonamiento")
+                cot_chain_id = gr.State(value=None)
+        
+        # Funciones
+        def solve_with_deep_cot(problem, max_steps, verify_steps, provider):
+            if not deep_cot_agent:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not problem.strip():
+                return "❌ Ingresa un problema a resolver", None
+            
+            try:
+                # Cambiar provider si es necesario
+                if provider != deep_cot_agent.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    deep_cot_agent.provider = provider
+                    deep_cot_agent.llm = create_llm(
+                        provider=provider,
+                        model=deep_cot_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.1,
+                        api_key=deep_cot_agent.config.openai_api_key if provider == "openai" else deep_cot_agent.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=300
+                    )
+                
+                # Resolver con Chain of Thought
+                chain = deep_cot_agent.solve_with_deep_cot(
+                    problem=problem,
+                    max_steps=int(max_steps),
+                    verify_steps=verify_steps
+                )
+                
+                # Formatear resultado
+                steps_summary = "\n".join([
+                    f"**Paso {s.step_number}:** {s.description}\n   - {s.reasoning[:150]}...\n   - Verificado: {'✅' if s.verified else '❌'}\n"
+                    for s in chain.steps[:20]  # Primeros 20 pasos
+                ])
+                
+                if len(chain.steps) > 20:
+                    steps_summary += f"\n... y {len(chain.steps) - 20} pasos más\n"
+                
+                result = f"""## 🧠 Chain of Thought Completado
+
+**Problema:** {chain.problem}
+**Total de Pasos:** {len(chain.steps)}
+**Pasos Verificados:** {sum(chain.verification_results.values())}/{len(chain.verification_results)}
+**Estado:** {chain.status}
+
+### 📝 Pasos de Razonamiento:
+{steps_summary}
+
+### ✅ Respuesta Final:
+{chain.final_answer or "Respuesta no generada"}
+"""
+                return result, chain.chain_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        cot_solve_btn.click(
+            fn=solve_with_deep_cot,
+            inputs=[cot_problem, cot_max_steps, cot_verify_steps, cot_provider_toggle],
+            outputs=[cot_output, cot_chain_id]
+        )
+    
+    # Tab 5.5: Testing Automático
+    with gr.Tab("🧪 Testing Automático"):
+        gr.Markdown("### 🧪 Sistema de Testing y Verificación Automática")
+        gr.Markdown("""
+        **🚀 Tests automáticos de eficacia**
+        
+        Basado en el concepto de Eric Schmidt:
+        - Tests automáticos para verificar que algo funcionó
+        - Verificación de resultados
+        - Tests adversariales
+        - Tests de eficacia (efficacy tests)
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                test_target = gr.Textbox(
+                    label="🎯 Objetivo a Probar",
+                    placeholder="Código, aplicación, modelo, API, etc.",
+                    lines=3
+                )
+                
+                test_target_type = gr.Dropdown(
+                    label="Tipo de Objetivo",
+                    choices=["code", "application", "model", "api", "system"],
+                    value="code"
+                )
+                
+                test_types = gr.CheckboxGroup(
+                    label="Tipos de Tests",
+                    choices=["unit", "integration", "functional", "adversarial"],
+                    value=["unit", "functional"]
+                )
+                
+                test_custom_req = gr.Textbox(
+                    label="Requisitos Específicos (opcional)",
+                    placeholder="Ej: Probar casos edge, validar seguridad, etc.",
+                    lines=2
+                )
+                
+                test_create_btn = gr.Button("📝 Crear Suite de Pruebas", variant="primary")
+                test_run_btn = gr.Button("🚀 Ejecutar Tests", variant="primary")
+            
+            with gr.Column(scale=1):
+                test_output = gr.Markdown(label="📊 Resultados de Tests")
+                test_suite_id = gr.State(value=None)
+        
+        # Funciones
+        def create_test_suite(target, target_type, test_types_list, custom_req):
+            if not automated_testing:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not target.strip():
+                return "❌ Ingresa un objetivo a probar", None
+            
+            try:
+                suite = automated_testing.create_test_suite(
+                    target=target,
+                    target_type=target_type,
+                    test_types=test_types_list if test_types_list else None,
+                    custom_requirements=custom_req if custom_req.strip() else None
+                )
+                
+                result = f"""## 🧪 Suite de Pruebas Creada
+
+**ID:** {suite.suite_id}
+**Nombre:** {suite.name}
+**Objetivo:** {suite.target[:100]}...
+**Total de Tests:** {suite.total_tests}
+
+### 📋 Tests Generados:
+{chr(10).join([f"**{i+1}. {t.name}** ({t.test_type})\n   - {t.description[:100]}...\n" for i, t in enumerate(suite.test_cases[:10])])}
+"""
+                return result, suite.suite_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        def run_test_suite(suite_id):
+            if not automated_testing or not suite_id:
+                return "❌ No hay suite de pruebas para ejecutar"
+            
+            try:
+                suite = automated_testing.run_test_suite(suite_id)
+                report = automated_testing.get_test_report(suite_id)
+                
+                result = f"""## 🧪 Resultados de Tests
+
+**Suite:** {report['name']}
+**Estado:** {report['status']}
+**Tiempo de Ejecución:** {report['execution_time']:.2f}s
+
+### 📊 Resumen:
+- **Total:** {report['summary']['total']}
+- **✅ Pasaron:** {report['summary']['passed']}
+- **❌ Fallaron:** {report['summary']['failed']}
+- **📈 Tasa de Éxito:** {report['summary']['pass_rate']*100:.1f}%
+
+### 📋 Detalles:
+{chr(10).join([f"**{t['name']}** ({t['type']}): {'✅ PASÓ' if t['passed'] else '❌ FALLÓ'} ({t['execution_time']:.2f}s)" + (f"\n   Error: {t['error']}" if t.get('error') else "") for t in report['test_details'][:20]])}
+"""
+                return result
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        test_create_btn.click(
+            fn=create_test_suite,
+            inputs=[test_target, test_target_type, test_types, test_custom_req],
+            outputs=[test_output, test_suite_id]
+        )
+        
+        test_run_btn.click(
+            fn=run_test_suite,
+            inputs=[test_suite_id],
+            outputs=[test_output]
+        )
+    
+    # Tab 5.6: Adversarial AI / Red Teaming
+    with gr.Tab("🔴 Red Teaming / Adversarial AI"):
+        gr.Markdown("### 🔴 Adversarial AI System - Red Teaming Automatizado")
+        gr.Markdown("""
+        **🚀 Sistema de red teaming y testing adversarial**
+        
+        Basado en el concepto de Eric Schmidt:
+        - Sistemas AI que atacan otros sistemas AI
+        - Encuentran vulnerabilidades
+        - Red teaming automatizado
+        - Testing de límites y casos edge
+        
+        **💡 Ejemplo:** Probar un modelo AI para encontrar vulnerabilidades de seguridad
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                adv_target = gr.Textbox(
+                    label="🎯 Sistema a Atacar",
+                    placeholder="Modelo AI, API, aplicación, etc.",
+                    lines=3
+                )
+                
+                adv_target_type = gr.Dropdown(
+                    label="Tipo de Objetivo",
+                    choices=["model", "api", "application", "system"],
+                    value="model"
+                )
+                
+                adv_attack_types = gr.CheckboxGroup(
+                    label="Tipos de Ataques",
+                    choices=["prompt_injection", "jailbreak", "adversarial_example", "data_poisoning", "privacy_attack"],
+                    value=["prompt_injection", "jailbreak"]
+                )
+                
+                adv_max_attacks = gr.Slider(
+                    label="Máximo de Ataques",
+                    minimum=5,
+                    maximum=50,
+                    value=20,
+                    step=5
+                )
+                
+                adv_start_btn = gr.Button("🔴 Iniciar Red Teaming", variant="stop")
+            
+            with gr.Column(scale=1):
+                adv_output = gr.Markdown(label="📊 Resultados del Red Teaming")
+                adv_session_id = gr.State(value=None)
+        
+        # Funciones
+        def start_red_team(target, target_type, attack_types, max_attacks):
+            if not adversarial_ai:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not target.strip():
+                return "❌ Ingresa un sistema a atacar", None
+            
+            try:
+                session = adversarial_ai.start_red_team_session(
+                    target=target,
+                    target_type=target_type,
+                    attack_types=attack_types if attack_types else None,
+                    max_attacks=int(max_attacks)
+                )
+                
+                report = adversarial_ai.generate_security_report(session.session_id)
+                
+                result = f"""## 🔴 Sesión de Red Teaming Completada
+
+**Objetivo:** {session.target[:100]}...
+**Tipo:** {session.target_type}
+**Total de Ataques:** {len(session.attack_vectors)}
+**Tasa de Éxito:** {session.success_rate*100:.1f}%
+
+### 🔴 Vulnerabilidades Encontradas: {len(session.vulnerabilities_found)}
+
+**Críticas:** {report['summary']['critical_vulns']}
+**Altas:** {report['summary']['high_vulns']}
+**Medias:** {report['summary']['medium_vulns']}
+**Bajas:** {report['summary']['low_vulns']}
+
+### 📋 Detalles de Vulnerabilidades:
+{chr(10).join([f"**{i+1}. {v['type']}** (Severidad: {v['severity']})\n   - {v['description'][:200]}...\n   - Impacto: {v['impact'][:150]}...\n   - Remediation: {v['remediation'][:150]}...\n" for i, v in enumerate(report['vulnerabilities'][:10])])}
+
+### 💡 Recomendaciones:
+{chr(10).join([f"- {rec}" for rec in report['recommendations'][:5]])}
+"""
+                return result, session.session_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        adv_start_btn.click(
+            fn=start_red_team,
+            inputs=[adv_target, adv_target_type, adv_attack_types, adv_max_attacks],
+            outputs=[adv_output, adv_session_id]
+        )
+    
+    # Tab 5.7: Agentes Colaborativos
+    with gr.Tab("👥 Agentes Colaborativos"):
+        gr.Markdown("### 👥 Sistema de Agentes Colaborativos")
+        gr.Markdown("""
+        **🚀 Múltiples agentes trabajando juntos**
+        
+        Basado en el concepto de Eric Schmidt:
+        - Múltiples agentes trabajando en equipo
+        - Colaboración en código y tareas complejas
+        - División automática de trabajo
+        - Coordinación entre agentes
+        
+        **💡 Ejemplo:** Equipo de agentes desarrollando una aplicación completa
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                collab_team_name = gr.Textbox(
+                    label="👥 Nombre del Equipo",
+                    placeholder="Ej: Equipo de Desarrollo Alpha",
+                    value="Equipo Colaborativo"
+                )
+                
+                collab_project = gr.Textbox(
+                    label="📋 Descripción del Proyecto",
+                    placeholder="Ej: Desarrollar una aplicación web completa de gestión de proyectos",
+                    lines=3
+                )
+                
+                collab_team_size = gr.Slider(
+                    label="Tamaño del Equipo",
+                    minimum=3,
+                    maximum=10,
+                    value=5,
+                    step=1
+                )
+                
+                collab_create_btn = gr.Button("👥 Crear Equipo", variant="primary")
+                collab_task_btn = gr.Button("🚀 Ejecutar Tarea Colaborativa", variant="primary")
+            
+            with gr.Column(scale=1):
+                collab_task_description = gr.Textbox(
+                    label="📝 Tarea a Ejecutar",
+                    placeholder="Ej: Crear una API REST completa con autenticación y base de datos",
+                    lines=3
+                )
+                
+                collab_output = gr.Markdown(label="📊 Resultado de la Colaboración")
+                collab_team_id = gr.State(value=None)
+        
+        # Funciones
+        def create_collaborative_team(team_name, project, team_size):
+            if not collaborative_agents:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not project.strip():
+                return "❌ Ingresa una descripción del proyecto", None
+            
+            try:
+                team = collaborative_agents.create_team(
+                    team_name=team_name if team_name.strip() else "Equipo Colaborativo",
+                    project_description=project,
+                    team_size=int(team_size)
+                )
+                
+                agents_info = "\n".join([
+                    f"**{a.name}** ({a.role.value}): {a.specialization}\n   - Capacidades: {', '.join(a.capabilities)}\n"
+                    for a in team.agents
+                ])
+                
+                result = f"""## 👥 Equipo Creado Exitosamente
+
+**Nombre:** {team.name}
+**ID:** {team.team_id}
+**Tamaño:** {len(team.agents)} agentes
+
+### 🤖 Agentes del Equipo:
+{agents_info}
+"""
+                return result, team.team_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        def execute_collaborative_task(team_id, task_description):
+            if not collaborative_agents or not team_id:
+                return "❌ Crea un equipo primero o ingresa una tarea"
+            
+            if not task_description.strip():
+                return "❌ Ingresa una descripción de la tarea"
+            
+            try:
+                result = collaborative_agents.execute_collaborative_task(
+                    team_id=team_id,
+                    task_description=task_description
+                )
+                
+                if result["success"]:
+                    output = f"""## ✅ Tarea Colaborativa Completada
+
+**Tarea:** {result['task']}
+**Subtareas:** {result['subtasks']}
+**Agentes Usados:** {result['agents_used']}
+**Verificado:** {'✅ Sí' if result['verified'] else '⚠️ Requiere revisión'}
+
+### 📊 Resultado Final:
+{result['final_result'][:2000]}...
+"""
+                    return output
+                else:
+                    return f"❌ Error: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        collab_create_btn.click(
+            fn=create_collaborative_team,
+            inputs=[collab_team_name, collab_project, collab_team_size],
+            outputs=[collab_output, collab_team_id]
+        )
+        
+        collab_task_btn.click(
+            fn=execute_collaborative_task,
+            inputs=[collab_team_id, collab_task_description],
+            outputs=[collab_output]
+        )
+    
+    # Tab 5.8: Integración Avanzada
+    with gr.Tab("🔌 Integración Avanzada"):
+        gr.Markdown("### 🔌 Sistema de Integración Avanzada")
+        gr.Markdown("""
+        **🚀 Integración con APIs, deployment y cloud**
+        
+        Basado en el concepto de Eric Schmidt:
+        - Integración con APIs externas
+        - Deployment automático a múltiples plataformas
+        - Integración con servicios cloud (AWS, GCP, Azure)
+        - Conectividad con sistemas externos
+        
+        **💡 Ejemplo:** Conectar APIs, desplegar aplicaciones, integrar servicios cloud
+        """)
+        
+        with gr.Tabs():
+            # Sub-tab: API Integration
+            with gr.Tab("📡 Integración de APIs"):
+                gr.Markdown("### Conectar APIs Externas")
+                
+                with gr.Row():
+                    with gr.Column():
+                        api_name = gr.Textbox(
+                            label="Nombre de la API",
+                            placeholder="Ej: OpenAI API, Stripe API, etc."
+                        )
+                        api_url = gr.Textbox(
+                            label="URL Base de la API",
+                            placeholder="https://api.example.com"
+                        )
+                        api_key = gr.Textbox(
+                            label="API Key (opcional)",
+                            type="password",
+                            placeholder="sk-..."
+                        )
+                        api_auto_discover = gr.Checkbox(
+                            label="Descubrir Endpoints Automáticamente",
+                            value=True
+                        )
+                        api_connect_btn = gr.Button("🔌 Conectar API", variant="primary")
+                    
+                    with gr.Column():
+                        api_output = gr.Markdown(label="📊 Estado de Integración")
+                        api_integration_id = gr.State(value=None)
+                
+                # Funciones
+                def connect_api(name, url, key, auto_discover):
+                    if not advanced_integration:
+                        return "❌ Agentes autónomos no están habilitados", None
+                    
+                    if not name.strip() or not url.strip():
+                        return "❌ Completa nombre y URL de la API", None
+                    
+                    try:
+                        integration = advanced_integration.integrate_api(
+                            api_name=name,
+                            api_url=url,
+                            api_key=key if key.strip() else None,
+                            auto_discover=auto_discover
+                        )
+                        
+                        result = f"""## ✅ API Integrada
+
+**Nombre:** {integration.api_name}
+**URL:** {integration.api_url}
+**Estado:** {integration.status}
+**Endpoints Descubiertos:** {len(integration.endpoints)}
+
+### 📡 Endpoints:
+{chr(10).join([f"**{e['method']}** {e['path']}\n   - {e.get('description', 'Sin descripción')}\n" for e in integration.endpoints[:10]])}
+"""
+                        return result, integration.integration_id
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}", None
+                
+                api_connect_btn.click(
+                    fn=connect_api,
+                    inputs=[api_name, api_url, api_key, api_auto_discover],
+                    outputs=[api_output, api_integration_id]
+                )
+            
+            # Sub-tab: Deployment
+            with gr.Tab("🚀 Deployment"):
+                gr.Markdown("### Desplegar Aplicaciones")
+                
+                with gr.Row():
+                    with gr.Column():
+                        deploy_app_path = gr.Textbox(
+                            label="Ruta de la Aplicación",
+                            placeholder="/path/to/application"
+                        )
+                        deploy_platform = gr.Dropdown(
+                            label="Plataforma",
+                            choices=["vercel", "heroku", "aws", "docker", "local"],
+                            value="local"
+                        )
+                        deploy_env_vars = gr.Textbox(
+                            label="Variables de Entorno (JSON)",
+                            placeholder='{"KEY": "value"}',
+                            lines=3
+                        )
+                        deploy_btn = gr.Button("🚀 Desplegar", variant="primary")
+                    
+                    with gr.Column():
+                        deploy_output = gr.Markdown(label="📊 Estado del Deployment")
+                
+                # Funciones
+                def deploy_app(app_path, platform, env_vars):
+                    if not advanced_integration:
+                        return "❌ Agentes autónomos no están habilitados"
+                    
+                    if not app_path.strip():
+                        return "❌ Ingresa la ruta de la aplicación"
+                    
+                    try:
+                        env_dict = {}
+                        if env_vars.strip():
+                            env_dict = json.loads(env_vars)
+                        
+                        config = advanced_integration.deploy_application(
+                            application_path=app_path,
+                            platform=platform,
+                            environment_vars=env_dict
+                        )
+                        
+                        result = f"""## 🚀 Deployment Configurado
+
+**Plataforma:** {config.platform}
+**Estado:** {config.status}
+**URL:** {config.deployment_url or 'Pendiente'}
+
+### ⚙️ Configuración:
+**Comandos de Build:**
+{chr(10).join([f"- {cmd}" for cmd in config.build_commands])}
+
+**Comandos de Start:**
+{chr(10).join([f"- {cmd}" for cmd in config.start_commands])}
+
+**Variables de Entorno:** {len(config.environment_variables)} configuradas
+"""
+                        return result
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                deploy_btn.click(
+                    fn=deploy_app,
+                    inputs=[deploy_app_path, deploy_platform, deploy_env_vars],
+                    outputs=[deploy_output]
+                )
+            
+            # Sub-tab: Cloud Services
+            with gr.Tab("☁️ Servicios Cloud"):
+                gr.Markdown("### Integrar Servicios Cloud")
+                
+                with gr.Row():
+                    with gr.Column():
+                        cloud_service_type = gr.Dropdown(
+                            label="Tipo de Servicio",
+                            choices=["aws", "gcp", "azure"],
+                            value="aws"
+                        )
+                        cloud_service_name = gr.Textbox(
+                            label="Nombre del Servicio",
+                            placeholder="Mi Servicio Cloud"
+                        )
+                        cloud_credentials = gr.Textbox(
+                            label="Credenciales (JSON)",
+                            placeholder='{"access_key": "...", "secret_key": "..."}',
+                            lines=5
+                        )
+                        cloud_connect_btn = gr.Button("☁️ Conectar Servicio Cloud", variant="primary")
+                    
+                    with gr.Column():
+                        cloud_output = gr.Markdown(label="📊 Estado de Integración Cloud")
+                
+                # Funciones
+                def connect_cloud_service(service_type, service_name, credentials):
+                    if not advanced_integration:
+                        return "❌ Agentes autónomos no están habilitados"
+                    
+                    if not service_name.strip() or not credentials.strip():
+                        return "❌ Completa nombre y credenciales"
+                    
+                    try:
+                        creds_dict = json.loads(credentials)
+                        service = advanced_integration.integrate_cloud_service(
+                            service_type=service_type,
+                            service_name=service_name,
+                            credentials=creds_dict
+                        )
+                        
+                        result = f"""## ☁️ Servicio Cloud Integrado
+
+**Tipo:** {service.service_type}
+**Nombre:** {service.service_name}
+**Estado:** {service.status}
+**Recursos Descubiertos:** {len(service.resources)}
+
+### 📦 Recursos:
+{chr(10).join([f"- **{r['type']}**: {r['name']} ({r['status']})" for r in service.resources[:10]])}
+"""
+                        return result
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                cloud_connect_btn.click(
+                    fn=connect_cloud_service,
+                    inputs=[cloud_service_type, cloud_service_name, cloud_credentials],
+                    outputs=[cloud_output]
+                )
+        
+        # Status general
+        with gr.Row():
+            integration_status_btn = gr.Button("📊 Ver Estado de Integraciones", variant="secondary")
+            integration_status_output = gr.Markdown(label="📊 Estado General")
+        
+        def get_integration_status():
+            if not advanced_integration:
+                return "❌ Sistema no disponible"
+            
+            status = advanced_integration.get_integration_status()
+            return f"""## 🔌 Estado de Integraciones
+
+**APIs Integradas:** {status['api_integrations']} (Activas: {status['active_apis']})
+**Deployments:** {status['deployments']} (Desplegadas: {status['deployed_apps']})
+**Servicios Cloud:** {status['cloud_services']}
+"""
+        
+        integration_status_btn.click(
+            fn=get_integration_status,
+            outputs=[integration_status_output]
+        )
 
 
 if __name__ == "__main__":
