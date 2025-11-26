@@ -2232,13 +2232,13 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
         """
     )
     
-    # Mensaje de carga inicial
-    gr.Markdown("## ⏳ Cargando DocChat Enterprise...")
+    # Mensaje de carga inicial - se ocultará cuando la app esté lista
+    loading_msg = gr.Markdown("## ⏳ Cargando DocChat Enterprise... Por favor espera...", visible=True)
     
     # Verificación de espacio en disco deshabilitada al inicio para acelerar carga
     # Se puede verificar después cuando se necesite
     
-    with gr.Tabs():
+    with gr.Tabs() as main_tabs:
         # Tab 1: RAG Principal
         with gr.Tab("🔍 Consulta RAG"):
             gr.Markdown("### Consulta estándar con verificación multi-agente")
