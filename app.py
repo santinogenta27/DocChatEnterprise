@@ -6445,8 +6445,17 @@ if __name__ == "__main__":
         server_name = "127.0.0.1"
         print(f"🚀 Starting DocChat Enterprise on http://127.0.0.1:{port}")
     
-    # Lanzar sin queue inicial para carga más rápida
-    # El queue se puede agregar después si es necesario
+    # Función para ocultar mensaje de carga cuando la app esté lista
+    def hide_loading():
+        return gr.Markdown(visible=False)
+    
+    # Ocultar mensaje de carga después de que se cargue la interfaz
+    demo.load(
+        fn=hide_loading,
+        inputs=[],
+        outputs=[loading_msg]
+    )
+    
     # Lanzar con configuración optimizada para carga rápida
     print("✅ Iniciando interfaz Gradio...")
     demo.launch(
@@ -6455,6 +6464,5 @@ if __name__ == "__main__":
         show_api=False,
         share=False,
         inbrowser=False,
-        show_error=True,
-        prevent_thread_lock=False  # No bloquear el thread principal
+        show_error=True
     )
