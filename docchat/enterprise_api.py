@@ -59,8 +59,8 @@ class EnterpriseAPIMode:
         )
         
         # LLM rápido para tareas simples (detección, insights)
-        # ACTUALIZADO: Usar nombres de modelo válidos sin fecha específica
-        fast_model = "gpt-4o-mini" if provider == "openai" else "claude-3-5-haiku"
+        # ACTUALIZADO: Usar Claude Haiku 4.5 (más rápido y económico)
+        fast_model = "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
         self.fast_llm = create_llm(
             provider=provider,
             model=fast_model,
