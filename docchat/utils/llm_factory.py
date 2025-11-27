@@ -33,13 +33,13 @@ def create_llm(
     if provider.lower() == "claude":
         # Mapear modelos de OpenAI a Claude equivalentes
         # Claude 3.5 Sonnet tiene context window de 200k tokens (más grande que OpenAI)
-        # ACTUALIZADO: Usar modelo válido claude-3-5-sonnet-20240620
+        # ACTUALIZADO: Usar nombres de modelo válidos sin fecha específica
         model_mapping = {
-            "gpt-4o": "claude-3-5-sonnet-20240620",  # 200k tokens context window - MODELO CORRECTO
-            "gpt-4o-mini": "claude-3-5-haiku-20241022",  # 200k tokens context window
-            "gpt-4": "claude-3-opus-20240229",  # 200k tokens context window
+            "gpt-4o": "claude-3-5-sonnet",  # 200k tokens context window - Nombre estándar
+            "gpt-4o-mini": "claude-3-5-haiku",  # 200k tokens context window - Nombre estándar
+            "gpt-4": "claude-3-opus",  # 200k tokens context window - Nombre estándar
         }
-        claude_model = model_mapping.get(model, "claude-3-5-sonnet-20240620")
+        claude_model = model_mapping.get(model, "claude-3-5-sonnet")
         
         return ChatAnthropic(
             model=claude_model,
