@@ -1,18 +1,21 @@
-"""Enterprise integrations."""
+"""
+Sistema de Integraciones Nativas
 
-from .gmail_integration import GmailIntegration
-from .drive_integration import DriveIntegration
-from .slack_integration import SlackIntegration
-from .notion_integration import NotionIntegration
-from .teams_integration import TeamsIntegration
+Conecta DocChat Enterprise con las 10 apps más importantes:
+- Google Drive / Gmail
+- Microsoft Teams / Outlook / OneDrive
+- Slack
+- Salesforce
+- Jira
+- GitHub
+- Notion
+- Confluence
+- Zendesk
+- ServiceNow
+"""
 
-__all__ = [
-    "GmailIntegration",
-    "DriveIntegration",
-    "SlackIntegration",
-    "NotionIntegration",
-    "TeamsIntegration",
-]
+from .integration_manager import IntegrationManager
+from .unified_search import UnifiedSearch
+from .oauth_handler import OAuthHandler
 
-
-
+__all__ = ["IntegrationManager", "UnifiedSearch", "OAuthHandler"]

@@ -36,7 +36,10 @@ class AgentWorkflow:
 
     def __post_init__(self) -> None:
         self.relevance_checker = RelevanceChecker(
-            model_name=self.config.relevance_model, temperature=0.0
+            model_name=self.config.relevance_model, 
+            temperature=0.0,
+            provider=self.provider,
+            config=self.config
         )
         self.research_agent = ResearchAgent(
             model_name=self.config.research_model, 
@@ -46,7 +49,10 @@ class AgentWorkflow:
             config=self.config
         )
         self.verification_agent = VerificationAgent(
-            model_name=self.config.verification_model, temperature=0.0
+            model_name=self.config.verification_model, 
+            temperature=0.0,
+            provider=self.provider,
+            config=self.config
         )
         self.graph = self._build_graph()
 

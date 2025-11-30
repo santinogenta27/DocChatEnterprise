@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 
 from .config import AppConfig
 from .document_processor import DocumentProcessor
+from docling.document_converter import DocumentConverter
 from .retriever_builder import RetrieverBuilder
 from .workflow import AgentWorkflow
 from .memory import MemoryStore, ContextManager

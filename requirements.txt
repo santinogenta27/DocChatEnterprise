@@ -8,7 +8,7 @@ langchain-openai>=0.1.16
 langchain-anthropic>=0.1.0
 langchain-text-splitters>=0.2.2
 langgraph>=0.1.6
-gradio==4.38.1
+gradio==4.40.0
 pydantic>=2.8.0
 tiktoken>=0.7.0
 python-dotenv>=1.0.1
@@ -41,3 +41,7 @@ google-cloud-storage>=2.14.0
 azure-storage-blob>=12.19.0
 cryptography>=41.0.0
 psutil>=5.9.0
+# Dependencias opcionales para enriquecimiento de metadatos (Chatbot Mode)
+keybert>=0.8.0
+yake>=0.4.8
+spacy>=3.7.0

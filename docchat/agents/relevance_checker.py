@@ -6,6 +6,9 @@ from typing import List, Sequence
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+
+from ..utils.llm_factory import create_llm
 
 
 class RelevanceLabel:
@@ -21,8 +24,22 @@ class RelevanceResult:
 
 
 class RelevanceChecker:
-    def __init__(self, model_name: str, temperature: float = 0.0, top_k: int = 5):
-        self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+    def __init__(self, model_name: str, temperature: float = 0.0, top_k: int = 5, provider: str = "openai", config=None):
+        self.provider = provider
+        self.config = config
+        
+        # Usar create_llm para soportar ambos proveedores
+        if config:
+            api_key = config.openai_api_key if provider == "openai" else config.anthropic_api_key
+            self.llm = create_llm(
+                provider=provider,
+                model=model_name,
+                temperature=temperature,
+                api_key=api_key
+            )
+        else:
+            # Fallback a OpenAI si no hay config
+            self.llm = ChatOpenAI(model=model_name, temperature=temperature)
         self.top_k = top_k
 
     def check(self, question: str, retriever: BaseRetriever) -> RelevanceResult:

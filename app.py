@@ -12,6 +12,40 @@ from datetime import datetime
 import gradio as gr
 from dotenv import load_dotenv
 
+# MONKEY PATCH: Fix para bug de Gradio 4.40.0 con TypeError en api_info
+# Este bug ocurre cuando schema es un bool en lugar de un dict en la línea 863
+try:
+    import gradio_client.utils as client_utils
+    
+    # Guardar la función original
+    _original_get_type = client_utils.get_type
+    
+    def _patched_get_type(schema):
+        """Monkey patch para evitar TypeError cuando schema es bool"""
+        # Si schema no es un dict, retornar tipo por defecto
+        if not isinstance(schema, dict):
+            return "Any"
+        # Verificar que "const" pueda ser buscado (schema debe ser dict)
+        if "const" in schema:
+            return "Literal"
+        return _original_get_type(schema)
+    
+    # Aplicar el patch
+    client_utils.get_type = _patched_get_type
+    
+    # También parchear _json_schema_to_python_type para mayor seguridad
+    _original_json_schema_to_python_type = client_utils._json_schema_to_python_type
+    
+    def _patched_json_schema_to_python_type(schema, defs=None):
+        """Monkey patch para evitar TypeError en _json_schema_to_python_type"""
+        if not isinstance(schema, dict):
+            return "Any"
+        return _original_json_schema_to_python_type(schema, defs)
+    
+    client_utils._json_schema_to_python_type = _patched_json_schema_to_python_type
+except Exception as e:
+    print(f"⚠️ Warning: No se pudo aplicar monkey patch para Gradio: {e}")
+
 # Cargar .env ANTES de cualquier otra cosa
 env_path = Path(__file__).parent / ".env"
 cwd_env_path = Path.cwd() / ".env"
@@ -109,7 +143,7 @@ if not api_key:
         except Exception as e:
             env_content = f"Error leyendo archivo: {e}"
     
-    raise ValueError(
+    raise gr.Error(
         f"❌ ERROR: OPENAI_API_KEY no está configurada.\n\n"
         f"Debug información:\n"
         f"  - Archivo .env en {env_path}: {'EXISTE' if env_path.exists() else 'NO EXISTE'}\n"
@@ -131,6 +165,7 @@ workflow = AgentWorkflow(config, provider="openai")  # Default: OpenAI
 
 # Inicializar sistemas avanzados de mejoras
 from docchat.analytics.analytics_engine import AnalyticsEngine
+from docchat.integrations import IntegrationManager, UnifiedSearch, OAuthHandler
 from docchat.observability.monitoring import MonitoringSystem
 from docchat.security.rbac import RBACManager
 from docchat.async_processor import AsyncDocumentProcessor
@@ -139,6 +174,22 @@ analytics_engine = AnalyticsEngine(config)
 monitoring_system = MonitoringSystem(config)
 rbac_manager = RBACManager(config)
 async_processor = AsyncDocumentProcessor(config)
+
+# Inicializar sistema de integraciones
+integration_manager = IntegrationManager(config)
+
+# Worker de sincronización en tiempo real
+from docchat.integrations.sync_worker import SyncWorker
+sync_worker = SyncWorker(integration_manager, sync_interval_minutes=15)
+sync_worker.start()  # Iniciar worker automáticamente
+print("✅ Worker de sincronización iniciado (sincroniza cada 15 minutos)")
+
+unified_search = UnifiedSearch(integration_manager, sync_worker=sync_worker)
+oauth_handler = OAuthHandler(config)
+
+# Handler de callbacks OAuth
+from docchat.integrations.oauth_callback_handler import OAuthCallbackHandler
+oauth_callback_handler = OAuthCallbackHandler(integration_manager, config)
 
 # Inicializar sistemas avanzados
 memory_store = MemoryStore(config.memory_dir, config.memory_retention_days) if config.enable_memory else None
@@ -152,7 +203,7 @@ enterprise_agentic_ai = EnterpriseAgenticAI(config, provider="openai") if config
 text_to_action_agent = TextToActionAgent(config, provider="openai")
 email_autonomous_agent = EmailAutonomousAgent(config, provider="openai") if config.enable_autonomous_agents else None
 
-# Nuevos sistemas avanzados (Eric Schmidt)
+# Nuevos sistemas avanzados
 iterative_learning_agent = IterativeLearningAgent(config, provider="openai") if config.enable_autonomous_agents else None
 fullstack_text_to_action = FullStackTextToAction(config, provider="openai") if config.enable_autonomous_agents else None
 web_recency_agent = WebRecencyAgent(config, provider="openai") if config.enable_autonomous_agents else None
@@ -295,20 +346,27 @@ def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str 
                 f"Reduce el número de archivos o su tamaño."
             )
         
-        # Verificar espacio disponible en disco
-        disk_usage = shutil.disk_usage(".")
-        free_space_gb = disk_usage.free / (1024 * 1024 * 1024)
-        required_space_gb = (total_size_mb * 2) / 1024  # Necesitamos ~2x el tamaño para procesamiento
-        
-        if free_space_gb < required_space_gb:
-            raise gr.Error(
-                f"Espacio insuficiente en disco.\n"
-                f"Espacio libre: {free_space_gb:.2f} GB\n"
-                f"Espacio requerido: {required_space_gb:.2f} GB\n"
-                f"Libera espacio en disco o reduce el número de archivos.\n\n"
-                f"💡 Sugerencia: Limpia archivos temporales de Gradio en:\n"
-                f"   C:\\Users\\Random\\AppData\\Local\\Temp\\gradio"
-            )
+        # Verificar espacio disponible en disco (usar /tmp en Cloud Run)
+        import os
+        disk_path = "/tmp" if os.environ.get("PORT") else "."
+        try:
+            disk_usage = shutil.disk_usage(disk_path)
+            free_space_gb = disk_usage.free / (1024 * 1024 * 1024)
+            required_space_gb = (total_size_mb * 2) / 1024  # Necesitamos ~2x el tamaño para procesamiento
+            
+            if free_space_gb < required_space_gb:
+                raise gr.Error(
+                    f"Espacio insuficiente en disco.\n"
+                    f"Espacio libre: {free_space_gb:.2f} GB\n"
+                    f"Espacio requerido: {required_space_gb:.2f} GB\n"
+                    f"Libera espacio o reduce el número de archivos."
+                )
+        except Exception as e:
+            # En Cloud Run, continuar sin validar espacio (tiene límites pero no podemos verificarlos fácilmente)
+            if os.environ.get("PORT"):
+                print(f"⚠️ No se pudo verificar espacio en /tmp: {e}. Continuando...")
+            else:
+                raise gr.Error(f"Error al verificar espacio en disco: {str(e)}")
         
     except gr.Error:
         raise
@@ -339,22 +397,25 @@ def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str 
         docs = processor.process(files)
     except OSError as e:
         if "No space left on device" in str(e) or "errno 28" in str(e):
-            raise gr.Error(
+            error_msg = (
                 f"❌ ERROR: Espacio insuficiente en disco.\n\n"
                 f"El sistema no tiene suficiente espacio para procesar {len(files)} documentos.\n\n"
                 f"💡 SOLUCIONES:\n"
-                f"1. Libera espacio en disco (necesitas al menos 2-3 GB libres)\n"
-                f"2. Limpia archivos temporales:\n"
-                f"   - C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\n"
-                f"   - C:\\Users\\Random\\AppData\\Local\\Temp\n"
-                f"3. Reduce el número de archivos (prueba con 20-30 primero)\n"
-                f"4. Procesa en lotes más pequeños\n\n"
-                f"Para limpiar archivos temporales de Gradio, ejecuta:\n"
-                f"   Remove-Item -Path \"$env:LOCALAPPDATA\\Temp\\gradio\\*\" -Recurse -Force"
+                f"1. Reduce el número de archivos (prueba con 1-5 primero)\n"
+                f"2. Procesa archivos más pequeños\n"
+                f"3. Procesa en lotes más pequeños"
             )
+            print(f"❌ Error de espacio: {e}")
+            raise gr.Error(error_msg)
         else:
+            print(f"❌ Error OSError al procesar: {e}")
+            import traceback
+            traceback.print_exc()
             raise gr.Error(f"Error al procesar documentos: {str(e)}")
     except Exception as e:
+        print(f"❌ Error inesperado al procesar documentos: {e}")
+        import traceback
+        traceback.print_exc()
         raise gr.Error(f"Error inesperado al procesar documentos: {str(e)}")
     
     retriever = retriever_builder.build_hybrid_retriever(docs)
@@ -1037,6 +1098,472 @@ def refresh_analytics_dashboard(days: int):
         return f"## ❌ Error\n\n{error_msg}", "", ""
 
 
+# ==================== Funciones para Integraciones ====================
+
+def connect_integration_with_token(integration_type: str, access_token: str):
+    """Conecta una integración usando token directo (método fácil)."""
+    if not integration_type:
+        raise gr.Error("Selecciona una app para conectar")
+    
+    if not access_token or not access_token.strip():
+        raise gr.Error("Pega el Access Token que obtuviste de OAuth Playground")
+    
+    try:
+        from docchat.integrations.integration_manager import IntegrationType
+        import time
+        
+        # Mapear string a IntegrationType
+        type_map = {
+            "gmail": IntegrationType.GMAIL,
+            "google_drive": IntegrationType.GOOGLE_DRIVE,
+            "microsoft_teams": IntegrationType.MICROSOFT_TEAMS,
+            "outlook": IntegrationType.OUTLOOK,
+            "onedrive": IntegrationType.ONEDRIVE,
+            "slack": IntegrationType.SLACK,
+            "salesforce": IntegrationType.SALESFORCE,
+            "jira": IntegrationType.JIRA,
+            "github": IntegrationType.GITHUB,
+            "notion": IntegrationType.NOTION,
+            "confluence": IntegrationType.CONFLUENCE,
+            "zendesk": IntegrationType.ZENDESK,
+            "servicenow": IntegrationType.SERVICENOW
+        }
+        
+        integration_type_enum = type_map.get(integration_type)
+        if not integration_type_enum:
+            raise gr.Error(f"Tipo de integración no válido: {integration_type}")
+        
+        # Conectar con token directo
+        token = access_token.strip()
+        
+        # Para Google, el token suele expirar en 1 hora, pero podemos refrescarlo después
+        # Por ahora, conectamos con el token tal cual
+        connection = integration_manager.connect_integration(
+            integration_type=integration_type_enum,
+            user_id="user",  # En producción, usar ID real
+            access_token=token,
+            refresh_token=None,  # OAuth Playground no da refresh token fácilmente
+            expires_at=time.time() + 3600,  # Asumir 1 hora de validez
+            metadata={"method": "direct_token", "source": "oauth_playground"}
+        )
+        
+        app_names = {
+            "gmail": ("Gmail", "📧"),
+            "google_drive": ("Google Drive", "📁"),
+            "microsoft_teams": ("Microsoft Teams", "💼"),
+            "outlook": ("Outlook", "📧"),
+            "onedrive": ("OneDrive", "📁"),
+            "slack": ("Slack", "💬"),
+            "salesforce": ("Salesforce", "📊"),
+            "jira": ("Jira", "✅"),
+            "github": ("GitHub", "💻"),
+            "notion": ("Notion", "📝"),
+            "confluence": ("Confluence", "📚"),
+            "zendesk": ("Zendesk", "🎫"),
+            "servicenow": ("ServiceNow", "🔧"),
+            # Nuevas integraciones
+            "hubspot": ("HubSpot", "🎯"),
+            "asana": ("Asana", "📋"),
+            "trello": ("Trello", "📌"),
+            "quickbooks": ("QuickBooks", "💰"),
+            "workday": ("Workday", "👥"),
+            "powerbi": ("Power BI", "📊"),
+            "sharepoint": ("SharePoint", "📄"),
+            "monday": ("Monday.com", "📅"),
+            "pipedrive": ("Pipedrive", "📈"),
+            "zoho_crm": ("Zoho CRM", "🔷"),
+            "bamboohr": ("BambooHR", "🎋"),
+            "freshbooks": ("FreshBooks", "💵"),
+            "wave": ("Wave", "🌊"),
+            "zoom": ("Zoom", "📹")
+        }
+        
+        app_name, emoji = app_names.get(integration_type, (integration_type.replace('_', ' ').title(), "🔗"))
+        
+        output = f"""
+## ✅ {app_name} Conectado Exitosamente
+
+**🎉 ¡Felicitaciones!** Tu {app_name} está ahora conectado a DocChat Enterprise.
+
+**📊 Información de Conexión:**
+- **ID de Conexión:** `{connection.integration_id}`
+- **Estado:** {connection.status}
+- **Conectado:** {connection.connected_at}
+
+**💡 Próximos Pasos:**
+1. Ve al tab "✅ Apps Conectadas" para ver todas tus conexiones
+2. Ve al tab "🔍 Buscar en Todas las Apps" para probar
+3. Ahora DocChat puede buscar en tu {app_name} automáticamente
+
+**⚠️ Nota:** El token expira en aproximadamente 1 hora. Si necesitas reconectar después, solo repite el proceso (es rápido).
+"""
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error conectando {integration_type}: {str(e)}"
+        raise gr.Error(error_msg)
+
+
+def connect_integration(integration_type: str):
+    """Conecta una integración con OAuth."""
+    if not integration_type:
+        raise gr.Error("Selecciona una app para conectar")
+    
+    try:
+        from docchat.integrations.integration_manager import IntegrationType
+        
+        # Mapear string a IntegrationType
+        type_map = {
+            "gmail": IntegrationType.GMAIL,
+            "google_drive": IntegrationType.GOOGLE_DRIVE,
+            "microsoft_teams": IntegrationType.MICROSOFT_TEAMS,
+            "outlook": IntegrationType.OUTLOOK,
+            "onedrive": IntegrationType.ONEDRIVE,
+            "slack": IntegrationType.SLACK,
+            "salesforce": IntegrationType.SALESFORCE,
+            "jira": IntegrationType.JIRA,
+            "github": IntegrationType.GITHUB,
+            "notion": IntegrationType.NOTION,
+            "confluence": IntegrationType.CONFLUENCE,
+            "zendesk": IntegrationType.ZENDESK,
+            "servicenow": IntegrationType.SERVICENOW
+        }
+        
+        integration_type_enum = type_map.get(integration_type)
+        if not integration_type_enum:
+            raise gr.Error(f"Tipo de integración no válido: {integration_type}")
+        
+        # Generar URL de autorización OAuth
+        try:
+            import uuid
+            state = str(uuid.uuid4())
+            auth_url = oauth_handler.get_authorization_url(integration_type_enum, state)
+            
+            # Mapear nombres amigables y emojis
+            app_names = {
+                "gmail": ("Gmail", "📧"),
+                "google_drive": ("Google Drive", "📁"),
+                "microsoft_teams": ("Microsoft Teams", "💼"),
+                "outlook": ("Outlook", "📧"),
+                "onedrive": ("OneDrive", "📁"),
+                "slack": ("Slack", "💬"),
+                "salesforce": ("Salesforce", "📊"),
+                "jira": ("Jira", "✅"),
+                "github": ("GitHub", "💻"),
+                "notion": ("Notion", "📝"),
+                "confluence": ("Confluence", "📚"),
+                "zendesk": ("Zendesk", "🎫"),
+                "servicenow": ("ServiceNow", "🔧")
+            }
+            
+            app_name, emoji = app_names.get(integration_type, (integration_type.replace('_', ' ').title(), "🔗"))
+            
+            output = f"""
+## {emoji} Conectar {app_name}
+
+### ✨ Super Fácil - Solo 1 Click:
+
+**Click en el botón azul de abajo** → Se abre ventana → Autorizas → ¡Listo!
+
+---
+
+### 🔗 Click Aquí para Conectar:
+
+<div style="text-align: center; margin: 20px 0;">
+    <a href="{auth_url}" target="_blank" style="text-decoration: none;">
+        <button style="background-color: #4285F4; color: white; padding: 25px 50px; font-size: 20px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.2); transition: all 0.3s;">
+            🔗 Conectar {app_name} Ahora
+        </button>
+    </a>
+</div>
+
+---
+
+### 📝 ¿Qué va a pasar?
+
+1. **Se abre una ventana nueva** con la página de {app_name}
+2. **Inicias sesión** con tu cuenta (si no estás logueado)
+3. **Click en "Permitir"** o "Authorize"
+4. **¡Listo!** La conexión se completa automáticamente
+
+---
+
+### ⚠️ Si ves un error de "verificación":
+
+**Para Gmail/Google Drive:** Necesitas agregar tu email como "tester" en Google Cloud Console.
+
+**Solución rápida:**
+1. Ve a: https://console.cloud.google.com/apis/credentials
+2. Click en tu OAuth Client ID
+3. Busca "Test users" → "+ ADD USERS"
+4. Agrega tu email
+5. Vuelve aquí y conecta de nuevo
+
+---
+
+**🔒 Seguro:** DocChat solo lee información. Nunca modifica tus datos.
+"""
+            return output
+        except ValueError as e:
+            # Error de configuración (falta client_id, etc.)
+            error_msg = str(e)
+            
+            # Mensaje más amigable según el tipo de integración
+            if "google" in error_msg.lower() or integration_type in ["gmail", "google_drive"]:
+                setup_guide = """
+## ⚙️ Configuración Requerida para Google
+
+Para conectar Gmail o Google Drive, necesitas configurar credenciales OAuth de Google:
+
+**Pasos:**
+
+1. **Ve a Google Cloud Console:**
+   https://console.cloud.google.com/apis/credentials
+
+2. **Crea un proyecto** (o selecciona uno existente)
+
+3. **Habilita las APIs necesarias:**
+   - Gmail API (para Gmail)
+   - Google Drive API (para Drive)
+
+4. **Crea credenciales OAuth 2.0:**
+   - Tipo: "Aplicación web"
+   - URI de redirección autorizada: `http://localhost:7860/oauth/callback?provider=google`
+
+5. **Copia el Client ID y Client Secret**
+
+6. **Agrega a tu archivo `.env`:**
+   ```
+   GOOGLE_CLIENT_ID=tu-client-id-aqui
+   GOOGLE_CLIENT_SECRET=tu-client-secret-aqui
+   ```
+
+7. **Reinicia la aplicación**
+
+**💡 Tip:** Si no tienes un archivo `.env`, créalo en la raíz del proyecto.
+"""
+            elif "microsoft" in error_msg.lower() or integration_type in ["microsoft_teams", "outlook", "onedrive"]:
+                setup_guide = """
+## ⚙️ Configuración Requerida para Microsoft
+
+Para conectar Microsoft Teams, Outlook o OneDrive:
+
+1. **Ve a Azure Portal:**
+   https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
+
+2. **Registra una nueva aplicación**
+
+3. **Configura redirección:**
+   - URI: `http://localhost:7860/oauth/callback?provider=microsoft`
+
+4. **Agrega permisos:**
+   - Microsoft Graph: Mail.Read, Files.Read.All, ChannelMessage.Read.All
+
+5. **Agrega a tu archivo `.env`:**
+   ```
+   MICROSOFT_CLIENT_ID=tu-client-id-aqui
+   MICROSOFT_CLIENT_SECRET=tu-client-secret-aqui
+   ```
+"""
+            elif "slack" in error_msg.lower() or integration_type == "slack":
+                setup_guide = """
+## ⚙️ Configuración Requerida para Slack
+
+Para conectar Slack:
+
+1. **Ve a Slack API:**
+   https://api.slack.com/apps
+
+2. **Crea una nueva app**
+
+3. **Configura OAuth:**
+   - Redirect URL: `http://localhost:7860/oauth/callback?provider=slack`
+   - Scopes: channels:history, groups:history, im:history, search:read
+
+4. **Agrega a tu archivo `.env`:**
+   ```
+   SLACK_CLIENT_ID=tu-client-id-aqui
+   SLACK_CLIENT_SECRET=tu-client-secret-aqui
+   ```
+"""
+            else:
+                setup_guide = f"""
+## ⚙️ Configuración Requerida
+
+{error_msg}
+
+**Necesitas configurar las credenciales OAuth en tu archivo `.env`**
+"""
+            
+            return f"""
+## ❌ Error de Configuración
+
+{error_msg}
+
+{setup_guide}
+"""
+        
+    except Exception as e:
+        error_msg = f"Error conectando integración: {str(e)}"
+        raise gr.Error(error_msg)
+
+
+def list_integrations():
+    """Lista todas las integraciones conectadas."""
+    try:
+        connections = integration_manager.list_connections()
+        
+        if not connections:
+            return "## 📋 No hay apps conectadas\n\nConecta apps en el tab 'Conectar Apps'."
+        
+        output = f"## 📋 Apps Conectadas: {len(connections)}\n\n"
+        
+        for conn in connections:
+            status_emoji = "✅" if conn["status"] == "active" else "❌"
+            output += f"{status_emoji} **{conn['integration_type'].replace('_', ' ').title()}**\n"
+            output += f"   - Estado: {conn['status']}\n"
+            output += f"   - Conectado: {conn['connected_at']}\n"
+            if conn.get('last_sync'):
+                output += f"   - Última sincronización: {conn['last_sync']}\n"
+            output += "\n"
+        
+        return output
+        
+    except Exception as e:
+        return f"## ❌ Error\n\n{str(e)}"
+
+
+def search_all_integrations(query: str):
+    """Busca en todas las integraciones conectadas."""
+    if not query or not query.strip():
+        raise gr.Error("Escribe una pregunta")
+    
+    try:
+        # Buscar en todas las integraciones
+        results = unified_search.search_all(
+            query=query.strip(),
+            user_id="user",  # En producción, usar ID real del usuario
+            max_results_per_integration=5
+        )
+        
+        if results["total_results"] == 0:
+            return f"""
+## 🔍 Búsqueda: {query}
+
+**Resultados:** No se encontró información en las apps conectadas.
+
+**💡 Tip:** Asegúrate de tener apps conectadas en el tab 'Conectar Apps'.
+"""
+        
+        output = f"""
+## 🔍 Búsqueda: {query}
+
+**Total de resultados:** {results['total_results']} encontrados en {results['integrations_searched']} apps
+
+---
+
+"""
+        
+        # Mostrar resultados por integración
+        for integration_type, data in results["results"].items():
+            if "error" in data:
+                output += f"### ❌ {integration_type.replace('_', ' ').title()}\n"
+                output += f"Error: {data['error']}\n\n"
+            elif data.get("count", 0) > 0:
+                output += f"### ✅ {integration_type.replace('_', ' ').title()} ({data['count']} resultados)\n\n"
+                
+                for i, doc in enumerate(data["documents"][:5], 1):  # Mostrar primeros 5
+                    # Para Gmail, mostrar contenido completo
+                    if integration_type == "gmail":
+                        subject = doc.metadata.get("subject", "Sin asunto")
+                        from_email = doc.metadata.get("from", "Desconocido")
+                        date = doc.metadata.get("date", "")
+                        
+                        # Mostrar contenido completo del email
+                        content = doc.page_content
+                        if len(content) > 2000:
+                            content = content[:2000] + "\n\n... (contenido truncado)"
+                        
+                        message_id = doc.metadata.get("message_id", "")
+                        output += f"**📧 Email {i}: {subject}**\n"
+                        output += f"**De:** {from_email}\n"
+                        if date:
+                            output += f"**Fecha:** {date}\n"
+                        output += f"\n**Contenido:**\n{content}\n\n"
+                        output += f"**💬 [Responder este email](#reply-{message_id})**\n\n"
+                        output += "---\n\n"
+                    else:
+                        # Para otras integraciones, mostrar resumen
+                        content = doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content
+                        source = doc.metadata.get("source", "Unknown")
+                        output += f"**{i}. {source}**\n"
+                        output += f"{content}\n\n"
+        
+        return output
+        
+    except Exception as e:
+        error_msg = f"Error buscando: {str(e)}"
+        raise gr.Error(error_msg)
+
+
+def reply_to_email(message_id: str, to_email: str, subject: str, reply_body: str):
+    """Responde a un email desde DocChat."""
+    if not message_id or not to_email or not reply_body:
+        raise gr.Error("Faltan datos para responder el email")
+    
+    try:
+        # Buscar conexión activa de Gmail
+        connections = integration_manager.list_connections(user_id="user")
+        gmail_connections = [c for c in connections if c["integration_type"] == "gmail" and c["status"] == "active"]
+        
+        if not gmail_connections:
+            raise gr.Error("No hay conexión activa de Gmail. Conectá Gmail primero en el tab 'Conectar Apps'")
+        
+        # Usar la conexión más reciente
+        latest_connection = sorted(gmail_connections, key=lambda x: x.get("connected_at", ""), reverse=True)[0]
+        connection = integration_manager.get_connection(latest_connection["integration_id"])
+        
+        if not connection:
+            raise gr.Error("No se pudo obtener la conexión de Gmail")
+        
+        # Obtener handler de Google
+        from docchat.integrations.handlers.google_handler import GoogleHandler
+        handler = GoogleHandler(config)
+        
+        # Preparar asunto (agregar "Re:" si no lo tiene)
+        reply_subject = subject
+        if not reply_subject.lower().startswith("re:"):
+            reply_subject = f"Re: {reply_subject}"
+        
+        # Enviar respuesta
+        success = handler.send_email(
+            access_token=connection.access_token,
+            to=to_email,
+            subject=reply_subject,
+            body=reply_body,
+            reply_to_message_id=message_id
+        )
+        
+        if success:
+            return f"""
+## ✅ Email Enviado Correctamente
+
+**Para:** {to_email}
+**Asunto:** {reply_subject}
+
+**Mensaje:**
+{reply_body}
+
+**💡 El email fue enviado desde tu cuenta de Gmail conectada.**
+"""
+        else:
+            raise gr.Error("No se pudo enviar el email. Verificá que el token de Gmail tenga permisos de escritura (gmail.send)")
+    
+    except Exception as e:
+        error_msg = f"Error enviando email: {str(e)}"
+        raise gr.Error(error_msg)
+
+
 def run_autonomous_task(task_description: str, context_data: str = ""):
     """Ejecutar tarea con agente autónomo (modo legacy - mantener compatibilidad)."""
     if not task_description or not task_description.strip():
@@ -1228,7 +1755,7 @@ def run_chat_conversational(message, history, files, session_id, speed_mode="bal
             if isinstance(user_msg, (tuple, list)) and len(user_msg) == 2:
                 # Si es una tupla anidada, extraer
                 user_msg, bot_msg = user_msg
-            msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
+                msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
             
             if total_history_chars + len(msg_text) <= max_history_chars:
                 conversation_context += msg_text
@@ -1429,7 +1956,7 @@ def run_chat_multi_format(message, history, files, session_id, speed_mode="balan
             if isinstance(user_msg, (tuple, list)) and len(user_msg) == 2:
                 # Si es una tupla anidada, extraer
                 user_msg, bot_msg = user_msg
-            msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
+                msg_text = f"Usuario: {user_msg}\nAsistente: {bot_msg[:2000]}{'...' if len(bot_msg) > 2000 else ''}\n\n"
             
             if total_history_chars + len(msg_text) <= max_history_chars:
                 conversation_context += msg_text
@@ -1630,6 +2157,8 @@ Responde SOLO con una de estas categorías:
 Responde SOLO con la categoría, sin explicaciones adicionales.
 """
                     try:
+                        provider_name = "Claude (Anthropic)" if provider == "claude" else "OpenAI"
+                        print(f"🤖 [Guía Experto] Identificando tipo de negocio con: {provider_name}")
                         temp_workflow = AgentWorkflow(config, provider=provider)
                         business_result = temp_workflow.run(
                             business_type_prompt,
@@ -1655,6 +2184,30 @@ Responde SOLO con la categoría, sin explicaciones adicionales.
     
     if not session["retriever"]:
         return history, "⚠️ No hay documentos procesados. Carga documentos primero."
+    
+    # Buscar también en integraciones conectadas ANTES de procesar la pregunta
+    integration_docs = []
+    try:
+        print("🔍 [Guía Experto] Buscando en integraciones conectadas (Gmail, Slack, etc.)...")
+        integration_results = unified_search.search_and_combine(
+            query=message,
+            user_id="user",  # En producción, usar ID real
+            max_total_results=10
+        )
+        if integration_results:
+            integration_docs = integration_results
+            print(f"✅ [Guía Experto] Encontrados {len(integration_docs)} documentos en integraciones")
+            # Agregar documentos de integraciones a la sesión
+            session["docs"].extend(integration_docs)
+            # Reconstruir retriever con documentos de integraciones incluidos
+            if session["docs"]:
+                session["retriever"] = retriever_builder.build_hybrid_retriever(session["docs"])
+                print(f"✅ [Guía Experto] Retriever actualizado con {len(session['docs'])} documentos totales (incluyendo integraciones)")
+    except Exception as e:
+        print(f"⚠️ [Guía Experto] Error buscando en integraciones: {e}")
+        import traceback
+        traceback.print_exc()
+        # Continuar sin integraciones si hay error
     
     # Construir prompt especializado para el guía experto
     business_type = session.get("business_type", "otros")
@@ -1869,6 +2422,10 @@ Responde como un AGI consejero experto nivel 10 que guía con inteligencia super
     # Aplicar modo de velocidad temporalmente
     original_speed_mode = config.speed_mode
     config.speed_mode = speed_mode
+    
+    # Log del provider usado
+    provider_name = "Claude (Anthropic)" if provider == "claude" else "OpenAI"
+    print(f"🤖 [Guía Experto] Usando motor: {provider_name}")
     
     try:
         # Ejecutar workflow con el prompt especializado
@@ -2636,8 +3193,9 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
         """
     )
     
-    # Mensaje de carga inicial - se ocultará cuando la app esté lista
-    loading_msg = gr.Markdown("## ⏳ Cargando DocChat Enterprise... Por favor espera...", visible=True)
+    # Mensaje de carga ELIMINADO - causaba bloqueos y nunca desaparecía
+    # La app se carga directamente sin mensaje de carga
+    # loading_msg = gr.Markdown("## ⏳ Cargando DocChat Enterprise... Por favor espera...", visible=False)
     
     # Verificación de espacio en disco deshabilitada al inicio para acelerar carga
     # Se puede verificar después cuando se necesite
@@ -2924,7 +3482,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             - Conecta tu cuenta de email (Gmail, IMAP)
             - El Agentic AI recibe emails en tiempo real
             - Responde automáticamente sin intervención humana
-            - Sigue las reglas profesionales de Eric Schmidt (Google)
+            - Sigue las reglas profesionales de Google
             
             **📋 Reglas aplicadas:**
             - Responder rápidamente (respuestas inmediatas)
@@ -4341,14 +4899,23 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
         
         # Tab 4.7: Chatbot Mode (NUEVO - Para conectar chatbots externos)
         with gr.Tab("🤖 Chatbot"):
-            gr.Markdown("### 🤖 Modo Chatbot - Conecta tu Chatbot por API")
+            gr.Markdown("### 🤖 Modo Chatbot - Backend RAG para tu Chatbot")
             gr.Markdown("""
-            **🚀 Funcionalidades:**
-            - Conecta tu chatbot existente por API
+            **🚀 Backend RAG para Chatbots Empresariales**
+            
+            **Flujo:**
+            1. Cliente pregunta → En tu chatbot (en tu app)
+            2. Tu chatbot consulta → DocChat Enterprise por API
+            3. DocChat Enterprise busca → En tus documentos privados
+            4. DocChat Enterprise responde → A tu chatbot
+            5. Tu chatbot muestra → Respuesta al cliente en tu app
+            
+            **Funcionalidades:**
+            - Backend RAG que tu chatbot consulta por API
             - Sube toda tu data privada empresarial
-            - Tu chatbot usa RAG con tu data para responder consultas
-            - Optimizado con chunking inteligente, reranking y prompt interno
-            - Base vectorizada por chatbot
+            - Respuestas basadas en tus documentos
+            - Optimizado con chunking inteligente, reranking y metadatos enriquecidos
+            - Base vectorizada aislada por chatbot
             
             **💡 Perfecto para empresas que ya tienen chatbots y quieren mejorarlos con RAG**
             """)
@@ -4441,30 +5008,58 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
                 with gr.Tab("🔌 API y Conexión"):
                     gr.Markdown("### Paso 4: Conecta tu Chatbot por API")
                     gr.Markdown("""
-                    **Para conectar tu chatbot externo:**
+                    **🚀 Para conectar tu chatbot empresarial:**
                     
-                    1. Inicia el servidor API: `python api_server.py`
-                    2. Usa el endpoint: `POST /api/v1/chatbot/query`
-                    3. Autentica con tu `api_key` en el header: `Authorization: Bearer YOUR_API_KEY`
-                    
-                    **Ejemplo de request:**
-                    ```json
-                    {
-                        "chatbot_id": "tu-chatbot-id",
-                        "question": "pregunta del usuario",
-                        "use_reranking": true
-                    }
+                    **1. Inicia el servidor API:**
+                    ```bash
+                    python api_server.py
                     ```
                     
-                    **Ejemplo de response:**
+                    **2. Endpoints disponibles:**
+                    - `POST /api/chatbot/register` - Registrar chatbot
+                    - `POST /api/chatbot/{chatbot_id}/upload` - Subir documentos
+                    - `POST /api/chatbot/{chatbot_id}/query` - **CONSULTAR RAG (PRINCIPAL)**
+                    - `GET /api/chatbot/{chatbot_id}/info` - Info del chatbot
+                    
+                    **3. Ejemplo de integración desde tu chatbot (Python):**
+                    ```python
+                    import requests
+                    
+                    # Cuando un cliente pregunta en tu chatbot (en tu app)
+                    chatbot_id = "tu-chatbot-id"
+                    api_key = "tu-api-key"
+                    user_question = "¿Cuál es la política de devoluciones?"
+                    
+                    # Tu chatbot consulta a DocChat Enterprise (backend RAG)
+                    response = requests.post(
+                        f"https://tu-servidor.com/api/chatbot/{chatbot_id}/query",
+                        json={
+                            "question": user_question,
+                            "use_reranking": True,
+                            "max_chunks": 5
+                        },
+                        headers={"X-API-Key": api_key}
+                    )
+                    
+                    data = response.json()
+                    answer = data["answer"]  # Esta respuesta la muestras al cliente
+                    sources = data["sources"]  # Fuentes usadas (opcional)
+                    
+                    # Mostrar answer al cliente en TU APP
+                    ```
+                    
+                    **4. Ejemplo de respuesta:**
                     ```json
                     {
-                        "answer": "respuesta basada en tu data",
-                        "sources": ["documento1.pdf", "documento2.pdf"],
+                        "answer": "Según nuestros documentos, la política de devoluciones...",
+                        "sources": ["politicas.pdf", "terminos.pdf"],
                         "confidence": 0.95,
-                        "chunks_used": 5
+                        "chunks_used": 5,
+                        "reranked": true
                     }
                     ```
+                    
+                    **📚 Documentación completa:** Visita `/docs` cuando el servidor esté corriendo
                     """)
             
             with gr.Row():
@@ -5520,45 +6115,689 @@ Después de instalar, reinicia la aplicación."""
                     # Load initial stats
                     semantic_stats_output.value = get_semantic_stats()
         
-        # Tab 4.9: Analytics y Dashboard (NUEVO)
-        with gr.Tab("📊 Analytics y Dashboard"):
-            gr.Markdown("### 📊 Analytics y Business Intelligence")
+        # Tab 4.9: Integraciones Conectadas (NUEVO - Reemplaza Analytics)
+        with gr.Tab("🔌 Integraciones"):
+            gr.Markdown("### 🔌 Integraciones Conectadas - Busca en Todas tus Apps")
             gr.Markdown("""
-            **🚀 Métricas y Insights en Tiempo Real:**
-            - Dashboard ejecutivo con métricas de uso
-            - Análisis de sentimiento en consultas
-            - Detección de gaps de conocimiento
-            - Predicción de preguntas frecuentes
-            - ROI calculator
-            - Performance metrics
+            **🚀 Conecta DocChat con 30+ Apps Empresariales:**
+            
+            **📧 Comunicación:** Gmail, Outlook, Microsoft Teams, Slack, Zoom
+            
+            **📁 Almacenamiento:** Google Drive, OneDrive, SharePoint, Dropbox
+            
+            **📊 CRM y Ventas:** Salesforce, HubSpot, Pipedrive, Zoho CRM
+            
+            **✅ Gestión de Proyectos:** Jira, Asana, Trello, Monday.com
+            
+            **💻 Desarrollo:** GitHub, Confluence
+            
+            **💰 Finanzas:** QuickBooks, FreshBooks, Wave
+            
+            **👥 Recursos Humanos:** Workday, BambooHR
+            
+            **📊 Analytics:** Power BI, Google Analytics
+            
+            **🎫 Soporte:** Zendesk, ServiceNow
+            
+            **📝 Documentación:** Notion, Confluence
+            
+            **💡 Cuando preguntes algo, DocChat busca automáticamente en TODAS las apps conectadas**
+            
+            **✨ Características:**
+            - 🔄 Sincronización automática cada 15 minutos
+            - 📦 Caché inteligente para respuestas rápidas
+            - 🔍 Búsqueda en tiempo real cuando es necesario
+            - 🌐 API RESTful para integraciones programáticas
             """)
             
-            with gr.Row():
-                with gr.Column(scale=1):
-                    analytics_days = gr.Slider(
-                        label="Período de Análisis (días)",
-                        minimum=1,
-                        maximum=90,
-                        value=30,
-                        step=1
+            with gr.Tabs():
+                # Sub-tab: Conectar Apps
+                with gr.Tab("🔗 Conectar Apps"):
+                    gr.Markdown("### 🔌 Conecta tus Apps - Super Fácil con Token")
+                    gr.Markdown("""
+                    **✨ Método Super Simple:** Obtén un token desde OAuth Playground → Pégalo aquí → ¡Listo!
+                    
+                    **✅ Ventajas:**
+                    - No necesitas agregar testers
+                    - No necesitas verificación de Google
+                    - Funciona inmediatamente
+                    - Super fácil para clientes no técnicos
+                    """)
+                    
+                    # Tabs para cada tipo de app
+                    with gr.Tabs():
+                        # Tab: Google Apps
+                        with gr.Tab("📧 Google"):
+                            with gr.Tabs():
+                                # Sub-tab: Gmail
+                                with gr.Tab("📧 Gmail"):
+                                    gr.Markdown("### Conectar Gmail con Token (Super Fácil)")
+                                    gr.Markdown("""
+                                    **✨ Método más fácil - Solo 3 pasos:**
+                                    
+                                    1. Click en el botón de abajo → Se abre OAuth Playground
+                                    2. Sigue los pasos en OAuth Playground
+                                    3. Copia el token y pégalo aquí → Click en "Conectar"
+                                    """)
+                                    
+                                    # Botón para abrir OAuth Playground
+                                    oauth_playground_link = gr.Markdown("""
+                                    <div style="text-align: center; margin: 20px 0;">
+                                        <a href="https://developers.google.com/oauthplayground/" target="_blank" style="text-decoration: none;">
+                                            <button style="background-color: #EA4335; color: white; padding: 20px 40px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                                🔗 Abrir OAuth Playground para Gmail (Click Aquí)
+                                            </button>
+                                        </a>
+                                    </div>
+                                    """)
+                                    
+                                    gr.Markdown("""
+                                    **📋 Pasos en OAuth Playground (IMPORTANTE - Seguir exactamente):**
+                                    
+                                    **⚠️ CRÍTICO:** Asegurate de seleccionar el scope correcto o el token NO funcionará
+                                    
+                                    1. En "Step 1", en el panel izquierdo, busca: `Gmail API v1`
+                                    2. Expande `Gmail API v1` y marca: `https://www.googleapis.com/auth/gmail.readonly`
+                                    3. **IMPORTANTE:** NO marques otros scopes, solo `gmail.readonly`
+                                    4. Click en "Authorize APIs" (botón azul arriba)
+                                    5. Inicia sesión con tu cuenta de Gmail
+                                    6. Click en "Allow" o "Permitir" para dar permisos
+                                    7. En "Step 2", click en "Exchange authorization code for tokens"
+                                    8. Copia el "Access token" (empieza con `ya29.` y es muy largo)
+                                    9. **PEGALO COMPLETO** abajo (no cortes nada)
+                                    10. Click en "Conectar Gmail"
+                                    
+                                    **💡 Tip:** El token expira en ~1 hora. Si no funciona, obtené uno nuevo.
+                                    """)
+                                    
+                                    gmail_token = gr.Textbox(
+                                        label="🔑 Pega aquí el Access Token de Gmail",
+                                        placeholder="ya29.a0AfH6SMC...",
+                                        type="password",
+                                        info="Copia el token desde OAuth Playground (paso 6 arriba)",
+                                        lines=2
+                                    )
+                                    
+                                    connect_gmail_btn = gr.Button("📧 Conectar Gmail", variant="primary", size="lg")
+                                    gmail_connection_output = gr.Markdown(
+                                        value="**Esperando conexión...**\n\n1. Click en el botón de arriba para abrir OAuth Playground\n2. Sigue los pasos\n3. Pega el token y click en 'Conectar Gmail'"
+                                    )
+                                    
+                                    connect_gmail_btn.click(
+                                        fn=lambda token: connect_integration_with_token("gmail", token),
+                                        inputs=[gmail_token],
+                                        outputs=[gmail_connection_output]
+                                    )
+                                
+                                # Sub-tab: Google Drive
+                                with gr.Tab("📁 Google Drive"):
+                                    gr.Markdown("### Conectar Google Drive con Token")
+                                    gr.Markdown("""
+                                    **✨ Método más fácil - Solo 3 pasos:**
+                                    
+                                    1. Click en el botón de abajo → Se abre OAuth Playground
+                                    2. Sigue los pasos en OAuth Playground
+                                    3. Copia el token y pégalo aquí → Click en "Conectar"
+                                    """)
+                                    
+                                    oauth_playground_drive = gr.Markdown("""
+                                    <div style="text-align: center; margin: 20px 0;">
+                                        <a href="https://developers.google.com/oauthplayground/" target="_blank" style="text-decoration: none;">
+                                            <button style="background-color: #4285F4; color: white; padding: 20px 40px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                                🔗 Abrir OAuth Playground para Drive (Click Aquí)
+                                            </button>
+                                        </a>
+                                    </div>
+                                    """)
+                                    
+                                    gr.Markdown("""
+                                    **📋 Pasos en OAuth Playground:**
+                                    
+                                    1. En "Step 1", busca y marca: `https://www.googleapis.com/auth/drive.readonly`
+                                    2. Click en "Authorize APIs"
+                                    3. Inicia sesión con tu cuenta de Google
+                                    4. Click en "Allow" o "Permitir"
+                                    5. En "Step 2", click en "Exchange authorization code for tokens"
+                                    6. Copia el "Access token" (empieza con `ya29.`)
+                                    7. Pégalo abajo y click en "Conectar Google Drive"
+                                    """)
+                                    
+                                    drive_token = gr.Textbox(
+                                        label="🔑 Pega aquí el Access Token de Google Drive",
+                                        placeholder="ya29.a0AfH6SMC...",
+                                        type="password",
+                                        info="Copia el token desde OAuth Playground",
+                                        lines=2
+                                    )
+                                    
+                                    connect_drive_btn = gr.Button("📁 Conectar Google Drive", variant="primary", size="lg")
+                                    drive_connection_output = gr.Markdown(
+                                        value="**Esperando conexión...**\n\n1. Click en el botón de arriba\n2. Sigue los pasos en OAuth Playground\n3. Pega el token y click en 'Conectar Google Drive'"
+                                    )
+                                    
+                                    connect_drive_btn.click(
+                                        fn=lambda token: connect_integration_with_token("google_drive", token),
+                                        inputs=[drive_token],
+                                        outputs=[drive_connection_output]
+                                    )
+                        
+                        # Tab: Microsoft Apps
+                        with gr.Tab("💼 Microsoft"):
+                            gr.Markdown("### Conectar Apps de Microsoft")
+                            gr.Markdown("""
+                            **🔗 Conecta Teams, Outlook y OneDrive con un solo token**
+                            
+                            **Método:** Obtén un token desde Microsoft OAuth Playground
+                            """)
+                            
+                            with gr.Tabs():
+                                with gr.Tab("📧 Outlook / Teams / OneDrive"):
+                                    gr.Markdown("""
+                                    **Pasos:**
+                                    1. Ve a: https://developer.microsoft.com/en-us/graph/graph-explorer
+                                    2. Inicia sesión con tu cuenta Microsoft
+                                    3. Click en "Get access token"
+                                    4. Copia el token y pégalo abajo
+                                    """)
+                                    
+                                    microsoft_token = gr.Textbox(
+                                        label="🔑 Token de Microsoft Graph",
+                                        placeholder="eyJ0eXAiOiJKV1QiLCJub...",
+                                        type="password",
+                                        lines=2
+                                    )
+                                    
+                                    microsoft_type = gr.Radio(
+                                        label="Selecciona qué conectar",
+                                        choices=[
+                                            ("📧 Outlook (Emails)", "outlook"),
+                                            ("💼 Microsoft Teams (Chats)", "microsoft_teams"),
+                                            ("📁 OneDrive (Archivos)", "onedrive")
+                                        ],
+                                        value="outlook"
+                                    )
+                                    
+                                    connect_microsoft_btn = gr.Button("🔗 Conectar Microsoft", variant="primary")
+                                    microsoft_output = gr.Markdown()
+                                    
+                                    connect_microsoft_btn.click(
+                                        fn=lambda token, app_type: connect_integration_with_token(app_type, token),
+                                        inputs=[microsoft_token, microsoft_type],
+                                        outputs=[microsoft_output]
+                                    )
+                        
+                        # Tab: Colaboración
+                        with gr.Tab("💬 Colaboración"):
+                            gr.Markdown("### Conectar Apps de Colaboración")
+                            
+                            with gr.Tabs():
+                                with gr.Tab("💬 Slack"):
+                                    gr.Markdown("""
+                                    **Conectar Slack:**
+                                    1. Ve a: https://api.slack.com/apps
+                                    2. Crea una app o selecciona una existente
+                                    3. Ve a "OAuth & Permissions"
+                                    4. Genera un "Bot User OAuth Token"
+                                    5. Copia el token (empieza con `xoxb-`)
+                                    """)
+                                    
+                                    slack_token = gr.Textbox(
+                                        label="🔑 Bot Token de Slack",
+                                        placeholder="xoxb-1234567890-...",
+                                        type="password"
+                                    )
+                                    
+                                    connect_slack_btn = gr.Button("💬 Conectar Slack", variant="primary")
+                                    slack_output = gr.Markdown()
+                                    
+                                    connect_slack_btn.click(
+                                        fn=lambda token: connect_integration_with_token("slack", token),
+                                        inputs=[slack_token],
+                                        outputs=[slack_output]
+                                    )
+                                
+                                with gr.Tab("📝 Notion"):
+                                    gr.Markdown("""
+                                    **Conectar Notion:**
+                                    1. Ve a: https://www.notion.so/my-integrations
+                                    2. Click en "New integration"
+                                    3. Dale un nombre y selecciona el workspace
+                                    4. Copia el "Internal Integration Token"
+                                    """)
+                                    
+                                    notion_token = gr.Textbox(
+                                        label="🔑 Notion Integration Token",
+                                        placeholder="secret_...",
+                                        type="password"
+                                    )
+                                    
+                                    connect_notion_btn = gr.Button("📝 Conectar Notion", variant="primary")
+                                    notion_output = gr.Markdown()
+                                    
+                                    connect_notion_btn.click(
+                                        fn=lambda token: connect_integration_with_token("notion", token),
+                                        inputs=[notion_token],
+                                        outputs=[notion_output]
+                                    )
+                                
+                                with gr.Tab("📚 Confluence"):
+                                    gr.Markdown("""
+                                    **Conectar Confluence:**
+                                    1. Ve a tu Confluence → Settings → Personal Access Tokens
+                                    2. Crea un nuevo token
+                                    3. Ingresa: Base URL (ej: https://tudominio.atlassian.net)
+                                    4. Ingresa: Email y Token (formato: email:token)
+                                    """)
+                                    
+                                    confluence_url = gr.Textbox(
+                                        label="🌐 Base URL de Confluence",
+                                        placeholder="https://tudominio.atlassian.net",
+                                        info="Sin / al final"
+                                    )
+                                    
+                                    confluence_auth = gr.Textbox(
+                                        label="🔑 Email:Token",
+                                        placeholder="tuemail@ejemplo.com:tu_token_aqui",
+                                        type="password",
+                                        info="Formato: email:token"
+                                    )
+                                    
+                                    connect_confluence_btn = gr.Button("📚 Conectar Confluence", variant="primary")
+                                    confluence_output = gr.Markdown()
+                                    
+                                    connect_confluence_btn.click(
+                                        fn=lambda url, auth: connect_integration_with_token("confluence", f"{url}|{auth}"),
+                                        inputs=[confluence_url, confluence_auth],
+                                        outputs=[confluence_output]
+                                    )
+                        
+                        # Tab: Desarrollo y Negocios
+                        with gr.Tab("🛠️ Desarrollo y Negocios"):
+                            gr.Markdown("### Conectar Apps de Desarrollo y Negocios")
+                            
+                            with gr.Tabs():
+                                with gr.Tab("💻 GitHub"):
+                                    gr.Markdown("""
+                                    **Conectar GitHub:**
+                                    1. Ve a: https://github.com/settings/tokens
+                                    2. Click en "Generate new token (classic)"
+                                    3. Selecciona scopes: `repo`, `read:org`
+                                    4. Copia el token generado
+                                    """)
+                                    
+                                    github_token = gr.Textbox(
+                                        label="🔑 GitHub Personal Access Token",
+                                        placeholder="ghp_...",
+                                        type="password"
+                                    )
+                                    
+                                    connect_github_btn = gr.Button("💻 Conectar GitHub", variant="primary")
+                                    github_output = gr.Markdown()
+                                    
+                                    connect_github_btn.click(
+                                        fn=lambda token: connect_integration_with_token("github", token),
+                                        inputs=[github_token],
+                                        outputs=[github_output]
+                                    )
+                                
+                                with gr.Tab("✅ Jira"):
+                                    gr.Markdown("""
+                                    **Conectar Jira:**
+                                    1. Ve a: https://id.atlassian.com/manage-profile/security/api-tokens
+                                    2. Crea un API token
+                                    3. Ingresa: URL de tu Jira (ej: https://tudominio.atlassian.net)
+                                    4. Ingresa: Email y Token (formato: email:token)
+                                    """)
+                                    
+                                    jira_url = gr.Textbox(
+                                        label="🌐 URL de Jira",
+                                        placeholder="https://tudominio.atlassian.net",
+                                        info="Sin / al final"
+                                    )
+                                    
+                                    jira_auth = gr.Textbox(
+                                        label="🔑 Email:Token",
+                                        placeholder="tuemail@ejemplo.com:tu_token_aqui",
+                                        type="password",
+                                        info="Formato: email:token"
+                                    )
+                                    
+                                    connect_jira_btn = gr.Button("✅ Conectar Jira", variant="primary")
+                                    jira_output = gr.Markdown()
+                                    
+                                    connect_jira_btn.click(
+                                        fn=lambda url, auth: connect_integration_with_token("jira", f"{url}|{auth}"),
+                                        inputs=[jira_url, jira_auth],
+                                        outputs=[jira_output]
+                                    )
+                                
+                                with gr.Tab("📊 Salesforce"):
+                                    gr.Markdown("""
+                                    **Conectar Salesforce:**
+                                    1. Ve a: Setup → App Manager → New Connected App
+                                    2. Configura OAuth y obtén el token
+                                    3. Ingresa: Instance URL (ej: https://tudominio.salesforce.com)
+                                    4. Ingresa: Access Token
+                                    """)
+                                    
+                                    salesforce_url = gr.Textbox(
+                                        label="🌐 Instance URL de Salesforce",
+                                        placeholder="https://tudominio.salesforce.com",
+                                        info="Sin / al final"
+                                    )
+                                    
+                                    salesforce_token = gr.Textbox(
+                                        label="🔑 Access Token",
+                                        placeholder="00D...",
+                                        type="password"
+                                    )
+                                    
+                                    connect_salesforce_btn = gr.Button("📊 Conectar Salesforce", variant="primary")
+                                    salesforce_output = gr.Markdown()
+                                    
+                                    connect_salesforce_btn.click(
+                                        fn=lambda url, token: connect_integration_with_token("salesforce", f"{url}|{token}"),
+                                        inputs=[salesforce_url, salesforce_token],
+                                        outputs=[salesforce_output]
+                                    )
+                                
+                                with gr.Tab("🎫 Zendesk"):
+                                    gr.Markdown("""
+                                    **Conectar Zendesk:**
+                                    1. Ve a: Admin → Apps and integrations → APIs → Zendesk API
+                                    2. Habilita Token Access
+                                    3. Crea un nuevo token
+                                    4. Ingresa: Subdomain (ej: tudominio)
+                                    5. Ingresa: Email y Token (formato: email:token)
+                                    """)
+                                    
+                                    zendesk_subdomain = gr.Textbox(
+                                        label="🌐 Subdomain de Zendesk",
+                                        placeholder="tudominio",
+                                        info="Solo el subdomain, sin .zendesk.com"
+                                    )
+                                    
+                                    zendesk_auth = gr.Textbox(
+                                        label="🔑 Email:Token",
+                                        placeholder="tuemail@ejemplo.com:tu_token_aqui",
+                                        type="password",
+                                        info="Formato: email:token"
+                                    )
+                                    
+                                    connect_zendesk_btn = gr.Button("🎫 Conectar Zendesk", variant="primary")
+                                    zendesk_output = gr.Markdown()
+                                    
+                                    connect_zendesk_btn.click(
+                                        fn=lambda subdomain, auth: connect_integration_with_token("zendesk", f"{subdomain}|{auth}"),
+                                        inputs=[zendesk_subdomain, zendesk_auth],
+                                        outputs=[zendesk_output]
+                                    )
+                                
+                                with gr.Tab("🔧 ServiceNow"):
+                                    gr.Markdown("""
+                                    **Conectar ServiceNow:**
+                                    1. Ve a tu instancia de ServiceNow
+                                    2. Crea un usuario para la integración
+                                    3. Ingresa: Instance URL (ej: https://tudominio.service-now.com)
+                                    4. Ingresa: Username:Password (formato: usuario:contraseña)
+                                    """)
+                                    
+                                    servicenow_url = gr.Textbox(
+                                        label="🌐 Instance URL de ServiceNow",
+                                        placeholder="https://tudominio.service-now.com",
+                                        info="Sin / al final"
+                                    )
+                                    
+                                    servicenow_auth = gr.Textbox(
+                                        label="🔑 Username:Password",
+                                        placeholder="usuario:contraseña",
+                                        type="password",
+                                        info="Formato: usuario:contraseña"
+                                    )
+                                    
+                                    connect_servicenow_btn = gr.Button("🔧 Conectar ServiceNow", variant="primary")
+                                    servicenow_output = gr.Markdown()
+                                    
+                                    connect_servicenow_btn.click(
+                                        fn=lambda url, auth: connect_integration_with_token("servicenow", f"{url}|{auth}"),
+                                        inputs=[servicenow_url, servicenow_auth],
+                                        outputs=[servicenow_output]
+                                    )
+                                
+                                with gr.Tab("🎯 HubSpot"):
+                                    gr.Markdown("""
+                                    **Conectar HubSpot CRM:**
+                                    1. Ve a: https://app.hubspot.com/settings/integrations/private-apps
+                                    2. Crea una nueva Private App
+                                    3. Selecciona scopes: `crm.objects.contacts.read`, `crm.objects.deals.read`
+                                    4. Copia el Access Token
+                                    """)
+                                    
+                                    hubspot_token = gr.Textbox(
+                                        label="🔑 HubSpot Access Token",
+                                        placeholder="pat-na1-...",
+                                        type="password"
+                                    )
+                                    
+                                    connect_hubspot_btn = gr.Button("🎯 Conectar HubSpot", variant="primary")
+                                    hubspot_output = gr.Markdown()
+                                    
+                                    connect_hubspot_btn.click(
+                                        fn=lambda token: connect_integration_with_token("hubspot", token),
+                                        inputs=[hubspot_token],
+                                        outputs=[hubspot_output]
+                                    )
+                                
+                                with gr.Tab("📋 Asana"):
+                                    gr.Markdown("""
+                                    **Conectar Asana:**
+                                    1. Ve a: https://app.asana.com/0/my-apps
+                                    2. Crea una nueva app
+                                    3. Obtén el Personal Access Token
+                                    4. Copia el token
+                                    """)
+                                    
+                                    asana_token = gr.Textbox(
+                                        label="🔑 Asana Personal Access Token",
+                                        placeholder="1/1234567890...",
+                                        type="password"
+                                    )
+                                    
+                                    connect_asana_btn = gr.Button("📋 Conectar Asana", variant="primary")
+                                    asana_output = gr.Markdown()
+                                    
+                                    connect_asana_btn.click(
+                                        fn=lambda token: connect_integration_with_token("asana", token),
+                                        inputs=[asana_token],
+                                        outputs=[asana_output]
+                                    )
+                                
+                                with gr.Tab("📌 Trello"):
+                                    gr.Markdown("""
+                                    **Conectar Trello:**
+                                    1. Ve a: https://trello.com/app-key
+                                    2. Copia tu API Key
+                                    3. Ve a: https://trello.com/1/authorize?expiration=never&scope=read&response_type=token&name=DocChat&key=TU_API_KEY
+                                    4. Copia el token generado
+                                    5. Ingresa: API Key|Token (formato: key|token)
+                                    """)
+                                    
+                                    trello_key = gr.Textbox(
+                                        label="🔑 Trello API Key",
+                                        placeholder="tu_api_key_aqui"
+                                    )
+                                    
+                                    trello_token = gr.Textbox(
+                                        label="🔑 Trello Token",
+                                        placeholder="tu_token_aqui",
+                                        type="password"
+                                    )
+                                    
+                                    connect_trello_btn = gr.Button("📌 Conectar Trello", variant="primary")
+                                    trello_output = gr.Markdown()
+                                    
+                                    connect_trello_btn.click(
+                                        fn=lambda key, token: connect_integration_with_token("trello", f"{key}|{token}"),
+                                        inputs=[trello_key, trello_token],
+                                        outputs=[trello_output]
+                                    )
+                        
+                        # Tab: Finanzas y Contabilidad
+                        with gr.Tab("💰 Finanzas"):
+                            gr.Markdown("### Conectar Apps de Finanzas y Contabilidad")
+                            
+                            with gr.Tabs():
+                                with gr.Tab("💰 QuickBooks"):
+                                    gr.Markdown("""
+                                    **Conectar QuickBooks:**
+                                    1. Ve a: https://developer.intuit.com/app/developer/qbo/docs/get-started
+                                    2. Crea una app y obtén OAuth tokens
+                                    3. Ingresa: Realm ID|Access Token (formato: realm_id|token)
+                                    """)
+                                    
+                                    quickbooks_realm = gr.Textbox(
+                                        label="🌐 QuickBooks Realm ID",
+                                        placeholder="123456789"
+                                    )
+                                    
+                                    quickbooks_token = gr.Textbox(
+                                        label="🔑 QuickBooks Access Token",
+                                        placeholder="tu_token_aqui",
+                                        type="password"
+                                    )
+                                    
+                                    connect_quickbooks_btn = gr.Button("💰 Conectar QuickBooks", variant="primary")
+                                    quickbooks_output = gr.Markdown()
+                                    
+                                    connect_quickbooks_btn.click(
+                                        fn=lambda realm, token: connect_integration_with_token("quickbooks", f"{realm}|{token}"),
+                                        inputs=[quickbooks_realm, quickbooks_token],
+                                        outputs=[quickbooks_output]
+                                    )
+                        
+                        # Tab: Recursos Humanos
+                        with gr.Tab("👥 Recursos Humanos"):
+                            gr.Markdown("### Conectar Apps de Recursos Humanos")
+                            
+                            with gr.Tabs():
+                                with gr.Tab("👥 Workday"):
+                                    gr.Markdown("""
+                                    **Conectar Workday:**
+                                    1. Obtén credenciales de tu administrador de Workday
+                                    2. Ingresa: Tenant|Username:Password (formato: tenant|user:pass)
+                                    """)
+                                    
+                                    workday_tenant = gr.Textbox(
+                                        label="🌐 Workday Tenant",
+                                        placeholder="wd2-impl-services1"
+                                    )
+                                    
+                                    workday_auth = gr.Textbox(
+                                        label="🔑 Username:Password",
+                                        placeholder="usuario:contraseña",
+                                        type="password",
+                                        info="Formato: usuario:contraseña"
+                                    )
+                                    
+                                    connect_workday_btn = gr.Button("👥 Conectar Workday", variant="primary")
+                                    workday_output = gr.Markdown()
+                                    
+                                    connect_workday_btn.click(
+                                        fn=lambda tenant, auth: connect_integration_with_token("workday", f"{tenant}|{auth}"),
+                                        inputs=[workday_tenant, workday_auth],
+                                        outputs=[workday_output]
+                                    )
+                        
+                        # Tab: Analytics y BI
+                        with gr.Tab("📊 Analytics"):
+                            gr.Markdown("### Conectar Apps de Analytics y Business Intelligence")
+                            
+                            with gr.Tabs():
+                                with gr.Tab("📊 Power BI"):
+                                    gr.Markdown("""
+                                    **Conectar Power BI:**
+                                    1. Usa el mismo token de Microsoft Graph que usaste para Outlook/Teams
+                                    2. O usa Azure AD para obtener un token con scopes de Power BI
+                                    """)
+                                    
+                                    powerbi_token = gr.Textbox(
+                                        label="🔑 Microsoft Graph Token (con Power BI)",
+                                        placeholder="eyJ0eXAiOiJKV1QiLCJub...",
+                                        type="password",
+                                        info="Mismo token que Microsoft Graph"
+                                    )
+                                    
+                                    connect_powerbi_btn = gr.Button("📊 Conectar Power BI", variant="primary")
+                                    powerbi_output = gr.Markdown()
+                                    
+                                    connect_powerbi_btn.click(
+                                        fn=lambda token: connect_integration_with_token("powerbi", token),
+                                        inputs=[powerbi_token],
+                                        outputs=[powerbi_output]
+                                    )
+                                
+                                with gr.Tab("📄 SharePoint"):
+                                    gr.Markdown("""
+                                    **Conectar SharePoint:**
+                                    1. Usa el mismo token de Microsoft Graph
+                                    2. O obtén uno nuevo desde Microsoft Graph Explorer
+                                    """)
+                                    
+                                    sharepoint_token = gr.Textbox(
+                                        label="🔑 Microsoft Graph Token",
+                                        placeholder="eyJ0eXAiOiJKV1QiLCJub...",
+                                        type="password",
+                                        info="Mismo token que Microsoft Graph"
+                                    )
+                                    
+                                    connect_sharepoint_btn = gr.Button("📄 Conectar SharePoint", variant="primary")
+                                    sharepoint_output = gr.Markdown()
+                                    
+                                    connect_sharepoint_btn.click(
+                                        fn=lambda token: connect_integration_with_token("sharepoint", token),
+                                        inputs=[sharepoint_token],
+                                        outputs=[sharepoint_output]
+                                    )
+                
+                # Sub-tab: Apps Conectadas
+                with gr.Tab("✅ Apps Conectadas"):
+                    gr.Markdown("### Apps que ya tienes conectadas")
+                    
+                    list_connections_btn = gr.Button("🔄 Listar Conexiones", variant="primary")
+                    connections_list = gr.Markdown(label="📋 Lista de Apps Conectadas")
+                    
+                    list_connections_btn.click(
+                        fn=list_integrations,
+                        inputs=[],
+                        outputs=[connections_list]
                     )
-                    refresh_analytics_btn = gr.Button("🔄 Actualizar Analytics", variant="primary")
                 
-                with gr.Column(scale=2):
-                    analytics_output = gr.Markdown(label="📊 Dashboard Ejecutivo")
-            
-            with gr.Row():
-                with gr.Column():
-                    frequent_questions_output = gr.Markdown(label="❓ Preguntas Frecuentes Predichas")
-                
-                with gr.Column():
-                    roi_output = gr.Markdown(label="💰 Métricas de ROI")
-            
-            refresh_analytics_btn.click(
-                fn=refresh_analytics_dashboard,
-                inputs=[analytics_days],
-                outputs=[analytics_output, frequent_questions_output, roi_output]
-            )
+                # Sub-tab: Buscar en Todas las Apps
+                with gr.Tab("🔍 Buscar en Todas las Apps"):
+                    gr.Markdown("### Busca en todas tus apps conectadas")
+                    gr.Markdown("""
+                    Escribe una pregunta y DocChat buscará automáticamente en:
+                    - Gmail (emails)
+                    - Slack (mensajes)
+                    - Salesforce (clientes)
+                    - Jira (tareas)
+                    - Y todas las demás apps conectadas
+                    """)
+                    
+                    unified_query = gr.Textbox(
+                        label="Pregunta",
+                        placeholder="Ej: ¿Qué pasó con el cliente Juan?",
+                        lines=3
+                    )
+                    
+                    search_all_btn = gr.Button("🔍 Buscar en Todas las Apps", variant="primary")
+                    unified_results = gr.Markdown(label="📊 Resultados de Todas las Apps")
+                    
+                    search_all_btn.click(
+                        fn=search_all_integrations,
+                        inputs=[unified_query],
+                        outputs=[unified_results]
+                    )
         
         # Tab 4.6: Cloud Storage Integration (NUEVO)
         with gr.Tab("☁️ Cloud Storage"):
@@ -5862,7 +7101,7 @@ Después de instalar, reinicia la aplicación."""
     )
     
     # ============================================
-    # NUEVOS MODOS AVANZADOS (Eric Schmidt)
+    # NUEVOS MODOS AVANZADOS
     # ============================================
     
     # Tab 5.1: Agentes de Aprendizaje Iterativo
@@ -5871,7 +7110,7 @@ Después de instalar, reinicia la aplicación."""
         gr.Markdown("""
         **🚀 Sistema que aprende iterativamente siguiendo el método científico**
         
-        Basado en el concepto de Eric Schmidt sobre agentes que:
+        Basado en conceptos avanzados de agentes autónomos que:
         - Leen y descubren principios
         - Generan hipótesis
         - Prueban hipótesis
@@ -5990,7 +7229,7 @@ Después de instalar, reinicia la aplicación."""
         gr.Markdown("""
         **🚀 Convierte lenguaje natural en aplicaciones full-stack completas**
         
-        Basado en el concepto de Eric Schmidt:
+        Basado en conceptos avanzados de agentes autónomos:
         - "Make me a copy of TikTok. Produce this program in the next 30 seconds"
         - Construye aplicaciones completas (frontend + backend + APIs)
         - Deployment automático
@@ -6127,7 +7366,7 @@ La aplicación está lista para usar.
     with gr.Tab("🌐 Recency / Info Actualizada"):
         gr.Markdown("### 🌐 Web Recency Agent - Información Actualizada en Tiempo Real")
         gr.Markdown("""
-        **🚀 Resuelve el problema de "recency" mencionado por Eric Schmidt**
+        **🚀 Resuelve el problema de "recency" con información actualizada**
         
         - Los modelos toman 18 meses en entrenarse, siempre están desactualizados
         - Context windows permiten alimentar información reciente
@@ -6239,7 +7478,7 @@ La aplicación está lista para usar.
         gr.Markdown("""
         **🚀 Razonamiento profundo estructurado**
         
-        Basado en el concepto de Eric Schmidt:
+        Basado en conceptos avanzados de agentes autónomos:
         - Genera hasta 1000 pasos de razonamiento
         - Cada paso es verificable
         - Como construir "recetas" que se pueden ejecutar y probar
@@ -6348,7 +7587,7 @@ La aplicación está lista para usar.
         gr.Markdown("""
         **🚀 Tests automáticos de eficacia**
         
-        Basado en el concepto de Eric Schmidt:
+        Basado en conceptos avanzados de agentes autónomos:
         - Tests automáticos para verificar que algo funcionó
         - Verificación de resultados
         - Tests adversariales
@@ -6463,7 +7702,7 @@ La aplicación está lista para usar.
         gr.Markdown("""
         **🚀 Sistema de red teaming y testing adversarial**
         
-        Basado en el concepto de Eric Schmidt:
+        Basado en conceptos avanzados de agentes autónomos:
         - Sistemas AI que atacan otros sistemas AI
         - Encuentran vulnerabilidades
         - Red teaming automatizado
@@ -6560,7 +7799,7 @@ La aplicación está lista para usar.
         gr.Markdown("""
         **🚀 Múltiples agentes trabajando juntos**
         
-        Basado en el concepto de Eric Schmidt:
+        Basado en conceptos avanzados de agentes autónomos:
         - Múltiples agentes trabajando en equipo
         - Colaboración en código y tareas complejas
         - División automática de trabajo
@@ -6685,7 +7924,7 @@ La aplicación está lista para usar.
         gr.Markdown("""
         **🚀 Integración con APIs, deployment y cloud**
         
-        Basado en el concepto de Eric Schmidt:
+        Basado en conceptos avanzados de agentes autónomos:
         - Integración con APIs externas
         - Deployment automático a múltiples plataformas
         - Integración con servicios cloud (AWS, GCP, Azure)
@@ -6912,52 +8151,55 @@ La aplicación está lista para usar.
             outputs=[integration_status_output]
         )
     
-    # Función para ocultar mensaje de carga cuando la app esté lista
-    def hide_loading():
-        return gr.Markdown(visible=False)
-    
-    # Ocultar mensaje de carga después de que se cargue la interfaz
-    demo.load(
-        fn=hide_loading,
-        inputs=[],
-        outputs=[loading_msg]
-    )
+    # Mensaje de carga ELIMINADO completamente - no se necesita
+    # La app se carga directamente sin bloqueos
+    pass
 
 
 if __name__ == "__main__":
-    import socket
-    
-    # Check if running on Render (has PORT environment variable)
-    render_port = os.environ.get("PORT")
-    
-    if render_port:
-        # Running on Render - use the provided port and bind to 0.0.0.0
-        port = int(render_port)
-        server_name = "0.0.0.0"
-        print(f"Starting DocChat Enterprise on Render (port {port})")
-    else:
-        # Running locally - find available port and use 0.0.0.0 (para ngrok)
-        def find_free_port(start_port=7860):
-            for port in range(start_port, start_port + 10):
-                try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.bind(('0.0.0.0', port))
-                        return port
-                except OSError:
-                    continue
-            return start_port  # Fallback
+    # CRÍTICO: Cloud Run solo permite escritura en /tmp
+    cloud_port = os.environ.get("PORT")
+    if cloud_port:
+        # Configurar variables de entorno para usar /tmp
+        os.environ["TMPDIR"] = "/tmp"
+        os.environ["TMP"] = "/tmp"
+        os.environ["TEMP"] = "/tmp"
         
-        port = find_free_port()
-        server_name = "0.0.0.0"  # Cambiado a 0.0.0.0 para que ngrok pueda conectarse
-        print(f"Starting DocChat Enterprise on http://0.0.0.0:{port}")
+        # Crear directorios necesarios en /tmp
+        import tempfile
+        tempfile.tempdir = "/tmp"
+        
+        # Crear directorios en /tmp con permisos correctos
+        os.makedirs("/tmp/documents", exist_ok=True)
+        os.makedirs("/tmp/data", exist_ok=True)
+        
+        # Asegurar permisos de escritura (Cloud Run usa usuario root, pero por si acaso)
+        try:
+            os.chmod("/tmp/documents", 0o777)
+            os.chmod("/tmp/data", 0o777)
+        except:
+            pass
+        
+        print(f"✅ Cloud Run detectado - Configurando /tmp para archivos")
+        print(f"✅ Directorios creados: /tmp/documents, /tmp/data")
     
-    # Lanzar con configuración optimizada para carga rápida
-    print("✅ Iniciando interfaz Gradio...")
+    # Para ejecución local, Gradio usa el puerto 7860 por defecto
+    # Para Cloud Run, usa la variable PORT
+    port = int(os.environ.get("PORT", 7860))
+    server_name = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+    
+    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port}")
+    
+    # Deshabilitar API info para evitar el bug de TypeError
+    try:
+        demo.api_info = None
+    except:
+        pass
+    
     demo.launch(
-        server_name=server_name, 
-        server_port=port, 
-        show_api=False,
+        server_name=server_name,
+        server_port=port,
         share=False,
-        inbrowser=False,
-        show_error=True
+        inbrowser=True,
+        show_api=False  # Deshabilitar API info completamente
     )

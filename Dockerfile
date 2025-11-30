@@ -1,48 +1,30 @@
-# Multi-stage build para reducir tamaño
-FROM python:3.12-slim as builder
-
-WORKDIR /app
-
-# Instalar solo dependencias de compilación necesarias
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copiar requirements e instalar dependencias
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# Stage final: imagen mínima
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Instalar solo runtime dependencies (sin compiladores)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
-# Copiar dependencias instaladas desde builder
-COPY --from=builder /root/.local /root/.local
-
-# Asegurar que Python use las dependencias instaladas
-ENV PATH=/root/.local/bin:$PATH
-
-# Copiar solo código de la aplicación (excluye archivos grandes por .dockerignore)
-COPY docchat/ ./docchat/
-COPY app.py .
+# Copy requirements
 COPY requirements.txt .
 
-# Crear directorios necesarios
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
 RUN mkdir -p data documents .docchat_cache .docchat_vectordb .docchat_memory .docchat_audit
 
-# Exponer puerto
-EXPOSE 7860
+# Cloud Run usa PORT environment variable (normalmente 8080)
+# La aplicación detecta PORT automáticamente en app.py
+EXPOSE 8080
 
-# Ejecutar aplicación
+# Run application
 CMD ["python", "app.py"]
 
 

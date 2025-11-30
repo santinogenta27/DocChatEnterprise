@@ -21,40 +21,5 @@ venv/
 *.md
 !README.md
 
-# Archivos grandes de embeddings y vectores
-semantic_data/embeddings/
-semantic_data/vector_store/
-*.pkl
-*.faiss
-*.index
-cache/
-uploaded_files/
-*.pdf
-*.docx
-*.xlsx
-*.csv
-enron_vectors.csv
-
-# Archivos temporales y backups
-*.backup
-app.py.backup
-*.tmp
-*.temp
-
-# Directorios de desarrollo
-cool/
-agentic_system/
-api/
-*.bat
-*.ps1
-*.txt
-!requirements.txt
-
-# Archivos de documentación grandes
-GUIA_*.md
-README_*.md
-*.md
-!README.md
-
 
 

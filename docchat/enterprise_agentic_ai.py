@@ -22,6 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from .config import AppConfig
 from .document_processor import DocumentProcessor
+from docling.document_converter import DocumentConverter
 from .retriever_builder import RetrieverBuilder
 from .tools import (
     EmailTool, ReportTool, DatabaseTool, PresentationTool,

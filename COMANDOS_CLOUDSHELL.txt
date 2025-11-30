@@ -1,0 +1,14 @@
+# Comandos para ejecutar en Cloud Shell:
+
+# 1. Navegar al directorio (si no estás ahí)
+cd ~/DocChatEnterprise
+
+# 2. Actualizar el repositorio con los últimos cambios
+git pull origin main
+
+# 3. Verificar que cloudbuild.yaml existe
+ls -la cloudbuild.yaml
+
+# 4. Ejecutar el build
+gcloud builds submit --config=cloudbuild.yaml --region=us-central1
+

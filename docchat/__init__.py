@@ -2,6 +2,7 @@
 
 from .config import AppConfig, load_config  # noqa: F401
 from .document_processor import DocumentProcessor  # noqa: F401
+from docling.document_converter import DocumentConverter  # noqa: F401
 from .retriever_builder import RetrieverBuilder  # noqa: F401
 from .workflow import AgentWorkflow  # noqa: F401
 from .mass_processor import MassDocumentProcessor  # noqa: F401
@@ -18,10 +19,7 @@ from .chatbot_mode import ChatbotMode, ChatbotConnection, RAGResponse  # noqa: F
 from .semantic_data_engine import SemanticDataEngine, SemanticDocument, SemanticQuery, DataLineage, DataModality  # noqa: F401
 from .cloud_integrations import CloudStorageIntegration, WebhookProcessor  # noqa: F401
 from .auth import UserManager, WorkspaceManager  # noqa: F401
-from .integrations import (  # noqa: F401
-    GmailIntegration, DriveIntegration, SlackIntegration,
-    NotionIntegration, TeamsIntegration
-)
+from .integrations import IntegrationManager, UnifiedSearch, OAuthHandler  # noqa: F401
 from .tools import (  # noqa: F401
     EmailTool, ReportTool, DatabaseTool, PresentationTool,
     IntegrationTool, TableAnalysisTool, SchedulerTool
@@ -46,6 +44,7 @@ __all__ = [
     "AppConfig",
     "load_config",
     "DocumentProcessor",
+    "DocumentConverter",
     "RetrieverBuilder",
     "AgentWorkflow",
     "MassDocumentProcessor",
@@ -80,11 +79,9 @@ __all__ = [
     "WebhookProcessor",
     "UserManager",
     "WorkspaceManager",
-    "GmailIntegration",
-    "DriveIntegration",
-    "SlackIntegration",
-    "NotionIntegration",
-    "TeamsIntegration",
+    "IntegrationManager",
+    "UnifiedSearch",
+    "OAuthHandler",
     "EmailTool",
     "ReportTool",
     "DatabaseTool",

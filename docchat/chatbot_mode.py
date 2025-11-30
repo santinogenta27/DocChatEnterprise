@@ -8,9 +8,11 @@ from __future__ import annotations
 import json
 import time
 import uuid
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from functools import lru_cache
 
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
@@ -88,6 +90,18 @@ class ChatbotMode:
         
         # Cargar conexiones existentes
         self.connections: Dict[str, ChatbotConnection] = self._load_connections()
+        
+        # Caché de respuestas (simple en memoria, puede mejorarse con Redis)
+        self.response_cache: Dict[str, Tuple[RAGResponse, float]] = {}
+        self.cache_ttl = 3600  # 1 hora
+        
+        # LLM para relevancia previa (decidir si necesita RAG)
+        self.relevance_llm = ChatOpenAI(
+            model="gpt-4o-mini",  # Modelo más barato para relevancia
+            temperature=0.0,
+            api_key=config.openai_api_key,
+            max_tokens=50
+        )
     
     def _load_connections(self) -> Dict[str, ChatbotConnection]:
         """Carga conexiones de chatbots desde archivo."""
@@ -180,6 +194,17 @@ class ChatbotMode:
         if not documents:
             raise ValueError("No se pudieron procesar los documentos")
         
+        # Enriquecer documentos con metadatos (opcional, mejora precisión)
+        # Para documentos técnicos, activar enriquecimiento avanzado
+        try:
+            from .metadata_enricher import MetadataEnricher
+            enricher = MetadataEnricher(use_llm=False)  # use_llm=True solo para docs muy técnicos
+            documents = enricher.enrich_documents_batch(documents, use_advanced=False)
+            print(f"✅ Metadatos enriquecidos: keywords, entidades, frases representativas")
+        except Exception as e:
+            print(f"⚠️ Enriquecimiento de metadatos no disponible: {e}")
+            # Continuar sin enriquecimiento si falla
+        
         # Crear base vectorizada específica para este chatbot
         vector_store_dir = self.data_dir / chatbot_id / "vectorstore"
         vector_store_dir.mkdir(parents=True, exist_ok=True)
@@ -221,12 +246,85 @@ class ChatbotMode:
             "vector_store_path": str(vector_store_dir)
         }
     
+    def needs_rag(self, chatbot_id: str, user_question: str) -> bool:
+        """
+        Determina si la pregunta necesita consultar documentos privados.
+        
+        Preguntas que NO necesitan RAG:
+        - Saludos (hola, buenos días)
+        - Preguntas generales (qué hora es, cómo estás)
+        - Preguntas fuera de contexto de la empresa
+        
+        Preguntas que SÍ necesitan RAG:
+        - Sobre políticas, términos, productos de la empresa
+        - Información específica de la empresa
+        - Consultas técnicas relacionadas con la empresa
+        """
+        if chatbot_id not in self.connections:
+            return True  # Por defecto, usar RAG si hay error
+        
+        connection = self.connections[chatbot_id]
+        
+        # Preguntas simples que no necesitan RAG
+        simple_questions = [
+            "hola", "buenos días", "buenas tardes", "buenas noches",
+            "gracias", "de nada", "adiós", "hasta luego",
+            "qué hora es", "cómo estás", "qué tal"
+        ]
+        
+        question_lower = user_question.lower().strip()
+        
+        # Si es pregunta simple, no necesita RAG
+        if any(simple in question_lower for simple in simple_questions):
+            return False
+        
+        # Usar LLM para determinar relevancia
+        try:
+            prompt = f"""Evalúa si esta pregunta necesita consultar documentos privados de {connection.company_name}.
+
+Pregunta: {user_question}
+
+Responde SOLO con "SÍ" o "NO":
+- "SÍ" si la pregunta es sobre información específica de {connection.company_name} (políticas, productos, términos, procedimientos, etc.)
+- "NO" si es un saludo, pregunta general, o no relacionada con {connection.company_name}
+
+Respuesta:"""
+            
+            response = self.relevance_llm.invoke(prompt).content.strip().upper()
+            return "SÍ" in response or "SI" in response
+        except Exception:
+            return True  # Por defecto, usar RAG si hay error
+    
+    def _get_cache_key(self, chatbot_id: str, question: str) -> str:
+        """Genera clave de caché para una pregunta."""
+        key_string = f"{chatbot_id}:{question.lower().strip()}"
+        return hashlib.md5(key_string.encode()).hexdigest()
+    
+    def _get_cached_response(self, cache_key: str) -> Optional[RAGResponse]:
+        """Obtiene respuesta del caché si existe y no expiró."""
+        if cache_key in self.response_cache:
+            response, timestamp = self.response_cache[cache_key]
+            if time.time() - timestamp < self.cache_ttl:
+                return response
+            else:
+                del self.response_cache[cache_key]
+        return None
+    
+    def _cache_response(self, cache_key: str, response: RAGResponse):
+        """Guarda respuesta en caché."""
+        self.response_cache[cache_key] = (response, time.time())
+        # Limpiar caché viejo (mantener solo últimos 1000)
+        if len(self.response_cache) > 1000:
+            oldest_key = min(self.response_cache.keys(), key=lambda k: self.response_cache[k][1])
+            del self.response_cache[oldest_key]
+    
     def query_chatbot(
         self,
         chatbot_id: str,
         user_question: str,
         use_reranking: bool = True,
-        max_chunks: int = 5
+        max_chunks: int = 5,
+        use_cache: bool = True
     ) -> RAGResponse:
         """
         Consulta el RAG del chatbot con optimizaciones avanzadas.
@@ -245,6 +343,14 @@ class ChatbotMode:
         
         connection = self.connections[chatbot_id]
         retriever = self.retrievers[chatbot_id]
+        
+        # Verificar caché primero
+        if use_cache:
+            cache_key = self._get_cache_key(chatbot_id, user_question)
+            cached_response = self._get_cached_response(cache_key)
+            if cached_response:
+                print(f"✅ Respuesta desde caché para '{connection.chatbot_name}'")
+                return cached_response
         
         print(f"🔍 Consultando chatbot '{connection.chatbot_name}'...")
         print(f"   Pregunta: {user_question[:100]}...")
@@ -288,7 +394,7 @@ class ChatbotMode:
         
         print(f"✅ Respuesta generada usando {len(context_chunks)} chunks\n")
         
-        return RAGResponse(
+        response = RAGResponse(
             answer=answer,
             sources=sources,
             confidence=confidence,
@@ -296,9 +402,84 @@ class ChatbotMode:
             reranked=use_reranking,
             metadata={
                 "chatbot_name": connection.chatbot_name,
-                "company_name": connection.company_name
+                "company_name": connection.company_name,
+                "cached": False
             }
         )
+        
+        # Guardar en caché
+        if use_cache:
+            cache_key = self._get_cache_key(chatbot_id, user_question)
+            self._cache_response(cache_key, response)
+        
+        return response
+    
+    def query_chatbot_stream(
+        self,
+        chatbot_id: str,
+        user_question: str,
+        use_reranking: bool = True,
+        max_chunks: int = 5
+    ):
+        """
+        Consulta el RAG y genera respuesta en streaming (palabra por palabra).
+        
+        Yields:
+            Fragmentos de la respuesta mientras se genera
+        """
+        if chatbot_id not in self.connections:
+            yield "Error: Chatbot no encontrado"
+            return
+        
+        if chatbot_id not in self.retrievers:
+            yield "Error: Chatbot no tiene data procesada"
+            return
+        
+        connection = self.connections[chatbot_id]
+        retriever = self.retrievers[chatbot_id]
+        
+        # 1. Retrieval: Obtener chunks relevantes
+        retrieved_docs = retriever.invoke(user_question)
+        
+        if not retrieved_docs:
+            yield "No encontré información relevante en la base de conocimiento."
+            return
+        
+        # 2. Reranking (opcional)
+        if use_reranking and len(retrieved_docs) > max_chunks:
+            retrieved_docs = self._rerank_documents(user_question, retrieved_docs, top_k=max_chunks)
+        
+        # 3. Construir contexto
+        context_chunks = retrieved_docs[:max_chunks]
+        context = self._build_context(context_chunks)
+        
+        # 4. Generar respuesta con streaming
+        internal_prompt = f"""Eres un asistente de {connection.company_name}. Tu tarea es responder preguntas de usuarios usando ÚNICAMENTE la información proporcionada en los documentos de la empresa.
+
+INSTRUCCIONES CRÍTICAS:
+1. Usa SOLO la información de los documentos proporcionados para responder
+2. NO inventes información que no esté en los documentos
+3. Si la información no está en los documentos, di claramente: "No tengo información sobre esto en la base de conocimiento de {connection.company_name}"
+4. Sé preciso y específico
+5. Cita las fuentes cuando sea relevante
+
+DOCUMENTOS DE LA EMPRESA:
+{context}
+
+PREGUNTA DEL USUARIO:
+{user_question}
+
+RESPUESTA (usa solo información de los documentos):"""
+        
+        try:
+            # Generar con streaming usando LangChain
+            for chunk in self.llm.stream(internal_prompt):
+                if hasattr(chunk, 'content') and chunk.content:
+                    yield chunk.content
+                elif isinstance(chunk, str):
+                    yield chunk
+        except Exception as e:
+            yield f"Error generando respuesta: {str(e)}"
     
     def _rerank_documents(
         self,

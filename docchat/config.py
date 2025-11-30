@@ -71,6 +71,31 @@ class AppConfig:
     enable_webhooks: bool = os.getenv("DOCCHAT_ENABLE_WEBHOOKS", "true").lower() == "true"
     slack_webhook_url: str = os.getenv("SLACK_WEBHOOK_URL", "")
     teams_webhook_url: str = os.getenv("TEAMS_WEBHOOK_URL", "")
+    
+    # OAuth Credentials for Integrations
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    microsoft_client_id: str = os.getenv("MICROSOFT_CLIENT_ID", "")
+    microsoft_client_secret: str = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+    slack_client_id: str = os.getenv("SLACK_CLIENT_ID", "")
+    slack_client_secret: str = os.getenv("SLACK_CLIENT_SECRET", "")
+    salesforce_client_id: str = os.getenv("SALESFORCE_CLIENT_ID", "")
+    salesforce_client_secret: str = os.getenv("SALESFORCE_CLIENT_SECRET", "")
+    salesforce_instance_url: str = os.getenv("SALESFORCE_INSTANCE_URL", "")
+    jira_client_id: str = os.getenv("JIRA_CLIENT_ID", "")
+    jira_client_secret: str = os.getenv("JIRA_CLIENT_SECRET", "")
+    jira_url: str = os.getenv("JIRA_URL", "")
+    github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
+    github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    notion_client_id: str = os.getenv("NOTION_CLIENT_ID", "")
+    notion_client_secret: str = os.getenv("NOTION_CLIENT_SECRET", "")
+    zendesk_client_id: str = os.getenv("ZENDESK_CLIENT_ID", "")
+    zendesk_client_secret: str = os.getenv("ZENDESK_CLIENT_SECRET", "")
+    zendesk_url: str = os.getenv("ZENDESK_URL", "")
+    servicenow_client_id: str = os.getenv("SERVICENOW_CLIENT_ID", "")
+    servicenow_client_secret: str = os.getenv("SERVICENOW_CLIENT_SECRET", "")
+    servicenow_instance_url: str = os.getenv("SERVICENOW_INSTANCE_URL", "")
+    oauth_redirect_url: str = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:7860/oauth/callback")
 
     # Database connections
     postgres_url: str = os.getenv("POSTGRES_URL", "")
