@@ -281,16 +281,42 @@ class SemanticDataEngine:
                     print(f"[Semantic Engine] Could not load FAISS, trying Chroma: {e}")
             
             # Try Chroma
-            if Chroma and chroma_path.exists():
-                try:
-                    self.vector_store = Chroma(
-                        persist_directory=str(chroma_path),
-                        embedding_function=self.embeddings
-                    )
-                    print("[Semantic Engine] Loaded Chroma vector store")
-                    return
-                except Exception as e:
-                    print(f"[Semantic Engine] Could not load Chroma: {e}")
+            if Chroma:
+                if chroma_path.exists():
+                    try:
+                        self.vector_store = Chroma(
+                            persist_directory=str(chroma_path),
+                            embedding_function=self.embeddings
+                        )
+                        print("[Semantic Engine] Loaded Chroma vector store")
+                        return
+                    except BaseException as e:
+                        # Capturar cualquier error, incluyendo PanicException de Rust
+                        error_str = str(e).lower()
+                        error_type = type(e).__name__.lower()
+                        
+                        # Detectar errores de corrupción (PanicException, etc.)
+                        is_corrupt = any(keyword in error_str for keyword in [
+                            "panic", "corrupt", "out of range", "index", 
+                            "range start", "slice", "pyo3", "rust"
+                        ]) or "panic" in error_type or "pyo3" in error_type
+                        
+                        if is_corrupt:
+                            print(f"[Semantic Engine] ⚠️ ChromaDB corrupto detectado: {type(e).__name__}")
+                            print(f"[Semantic Engine] 🔄 Limpiando y recreando base de datos...")
+                            try:
+                                import shutil
+                                shutil.rmtree(chroma_path)
+                                chroma_path.mkdir(parents=True, exist_ok=True)
+                                print("[Semantic Engine] ✅ Base de datos Chroma limpiada. Se creará nueva al guardar documentos.")
+                                # No retornar aquí, continuar para crear nueva base de datos
+                            except Exception as cleanup_error:
+                                print(f"[Semantic Engine] ❌ Error limpiando Chroma: {cleanup_error}")
+                        else:
+                            print(f"[Semantic Engine] Could not load Chroma: {e}")
+                else:
+                    # Chroma path doesn't exist, will be created when needed
+                    pass
             
             # Create new vector store
             if self.use_faiss and FAISS_AVAILABLE:

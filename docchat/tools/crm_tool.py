@@ -1,6 +1,6 @@
 """
-CRM Tool para Agentic AI - Integración con Salesforce, Pipedrive, Zoho CRM.
-Permite gestionar leads, contactos, oportunidades y automatizar el proceso de ventas.
+CRM Tool para integración con Salesforce, HubSpot, Zoho CRM, Pipedrive, etc.
+Permite sincronizar leads, crear contactos, actualizar pipelines, etc.
 """
 
 from __future__ import annotations
@@ -8,126 +8,92 @@ from __future__ import annotations
 import json
 import os
 import requests
-from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pathlib import Path
+from datetime import datetime
 
 from .base_tool import BaseTool, ToolResult
 
 
 class CRMTool(BaseTool):
     """
-    Herramienta de CRM para gestionar:
-    - Leads y contactos
-    - Oportunidades de venta
-    - Pipeline de ventas
-    - Automatización de seguimiento
-    - Integraciones con Salesforce, Pipedrive, Zoho CRM
+    Herramienta de CRM para:
+    - Sincronizar leads con CRMs
+    - Crear/actualizar contactos
+    - Gestionar pipelines
+    - Obtener datos de leads existentes
+    - Integraciones: Salesforce, HubSpot, Zoho CRM, Pipedrive, Close.com
     """
     
     def __init__(self, config: Any):
         super().__init__(config)
         
-        # Directorios para almacenar datos
-        self.data_dir = Path(config.memory_dir) / "crm_data"
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Archivos de datos
-        self.leads_file = self.data_dir / "leads.json"
-        self.contacts_file = self.data_dir / "contacts.json"
-        self.opportunities_file = self.data_dir / "opportunities.json"
-        
         # Credenciales de APIs (desde .env)
+        # Salesforce
         self.salesforce_instance_url = os.getenv("SALESFORCE_INSTANCE_URL", "")
         self.salesforce_access_token = os.getenv("SALESFORCE_ACCESS_TOKEN", "")
+        self.salesforce_client_id = os.getenv("SALESFORCE_CLIENT_ID", "")
+        self.salesforce_client_secret = os.getenv("SALESFORCE_CLIENT_SECRET", "")
+        
+        # HubSpot
+        self.hubspot_api_key = os.getenv("HUBSPOT_API_KEY", "")
+        
+        # Zoho CRM
+        self.zoho_client_id = os.getenv("ZOHO_CLIENT_ID", "")
+        self.zoho_client_secret = os.getenv("ZOHO_CLIENT_SECRET", "")
+        self.zoho_refresh_token = os.getenv("ZOHO_REFRESH_TOKEN", "")
+        self.zoho_api_domain = os.getenv("ZOHO_API_DOMAIN", "https://www.zohoapis.com")
+        
+        # Pipedrive
         self.pipedrive_api_token = os.getenv("PIPEDRIVE_API_TOKEN", "")
         self.pipedrive_company_domain = os.getenv("PIPEDRIVE_COMPANY_DOMAIN", "")
-        self.zoho_api_token = os.getenv("ZOHO_API_TOKEN", "")
-        self.zoho_org_id = os.getenv("ZOHO_ORG_ID", "")
         
-        # Inicializar archivos
-        self._initialize_data_files()
-    
-    def _initialize_data_files(self):
-        """Inicializa archivos de datos si no existen."""
-        for file_path in [self.leads_file, self.contacts_file, self.opportunities_file]:
-            if not file_path.exists():
-                self._save_json(file_path, [])
-    
-    def _load_json(self, file_path: Path) -> List[Dict[str, Any]]:
-        """Carga datos desde JSON."""
-        try:
-            if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return []
-        except Exception:
-            return []
-    
-    def _save_json(self, file_path: Path, data: Any):
-        """Guarda datos en JSON."""
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Error guardando {file_path}: {e}")
+        # Close.com
+        self.close_api_key = os.getenv("CLOSE_API_KEY", "")
     
     def get_name(self) -> str:
-        return "crm_manager"
+        return "crm_integration"
     
     def get_description(self) -> str:
-        return """CRM management tool with:
-        - Lead and contact management
-        - Sales opportunity tracking
-        - Pipeline automation
-        - Integration with Salesforce, Pipedrive, Zoho CRM
-        - Automated follow-up and nurturing"""
+        return """CRM integration tool for:
+        - Syncing leads with CRMs (Salesforce, HubSpot, Zoho, Pipedrive, Close.com)
+        - Creating/updating contacts
+        - Managing pipelines and deals
+        - Getting lead data from CRMs"""
     
     def get_keywords(self) -> List[str]:
         return [
-            "crm", "salesforce", "pipedrive", "zoho", "lead", "contacto",
-            "oportunidad", "opportunity", "pipeline", "ventas", "sales",
-            "seguimiento", "follow-up", "nurturing"
+            "crm", "salesforce", "hubspot", "zoho", "pipedrive", "close.com",
+            "sync leads", "create contact", "update pipeline", "crm integration"
         ]
     
     def execute(
         self,
         action: str,
-        crm_platform: Optional[str] = None,
+        platform: str,
         lead_data: Optional[Dict[str, Any]] = None,
-        contact_data: Optional[Dict[str, Any]] = None,
-        opportunity_data: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> ToolResult:
         """
         Ejecuta acciones de CRM.
         
         Args:
-            action: Acción (create_lead, update_contact, create_opportunity, etc.)
-            crm_platform: Plataforma (salesforce, pipedrive, zoho, local)
+            action: Acción (sync_lead, create_contact, update_deal, get_leads, etc.)
+            platform: Plataforma (salesforce, hubspot, zoho, pipedrive, close)
             lead_data: Datos del lead
-            contact_data: Datos del contacto
-            opportunity_data: Datos de la oportunidad
         """
         try:
-            platform = crm_platform or kwargs.get("platform", "local")
-            
-            if action == "create_lead":
-                return self._create_lead(platform, lead_data or kwargs)
-            elif action == "update_lead":
-                return self._update_lead(platform, kwargs.get("lead_id"), lead_data or kwargs)
-            elif action == "create_contact":
-                return self._create_contact(platform, contact_data or kwargs)
+            if action == "sync_lead" or action == "create_contact":
+                return self._create_contact(platform, lead_data or kwargs)
             elif action == "update_contact":
-                return self._update_contact(platform, kwargs.get("contact_id"), contact_data or kwargs)
-            elif action == "create_opportunity":
-                return self._create_opportunity(platform, opportunity_data or kwargs)
-            elif action == "update_opportunity":
-                return self._update_opportunity(platform, kwargs.get("opportunity_id"), opportunity_data or kwargs)
-            elif action == "get_pipeline":
-                return self._get_pipeline(platform)
-            elif action == "automate_followup":
-                return self._automate_followup(platform, kwargs.get("contact_id"))
+                return self._update_contact(platform, kwargs.get("contact_id"), lead_data or kwargs)
+            elif action == "get_leads":
+                return self._get_leads(platform, kwargs.get("limit", 100))
+            elif action == "create_deal":
+                return self._create_deal(platform, lead_data or kwargs)
+            elif action == "update_deal":
+                return self._update_deal(platform, kwargs.get("deal_id"), lead_data or kwargs)
+            elif action == "search_contacts":
+                return self._search_contacts(platform, kwargs.get("query"))
             else:
                 return ToolResult(
                     success=False,
@@ -144,278 +110,358 @@ class CRMTool(BaseTool):
                 metadata={"error": str(e)}
             )
     
-    def _create_lead(self, platform: str, lead_data: Dict[str, Any]) -> ToolResult:
-        """Crea un nuevo lead."""
-        lead = {
-            "id": f"lead_{int(datetime.now().timestamp())}",
-            "name": lead_data.get("name", ""),
-            "email": lead_data.get("email", ""),
-            "phone": lead_data.get("phone", ""),
-            "company": lead_data.get("company", ""),
-            "status": "new",
-            "source": lead_data.get("source", "website"),
-            "created_at": datetime.now().isoformat(),
-            "notes": lead_data.get("notes", "")
-        }
-        
-        # Guardar localmente
-        leads = self._load_json(self.leads_file)
-        leads.append(lead)
-        self._save_json(self.leads_file, leads)
-        
-        # Intentar crear en plataforma real
-        platform_result = None
-        if platform == "salesforce" and self.salesforce_access_token:
-            platform_result = self._create_salesforce_lead(lead)
-        elif platform == "pipedrive" and self.pipedrive_api_token:
-            platform_result = self._create_pipedrive_person(lead)
-        elif platform == "zoho" and self.zoho_api_token:
-            platform_result = self._create_zoho_lead(lead)
-        
-        return ToolResult(
-            success=True,
-            data={"lead": lead, "platform_result": platform_result},
-            message=f"Lead '{lead['name']}' created successfully",
-            metadata={"platform": platform, "lead_id": lead["id"]}
-        )
+    def _create_contact(self, platform: str, lead_data: Dict[str, Any]) -> ToolResult:
+        """Crea un contacto en el CRM."""
+        if platform == "salesforce":
+            return self._create_salesforce_contact(lead_data)
+        elif platform == "hubspot":
+            return self._create_hubspot_contact(lead_data)
+        elif platform == "zoho":
+            return self._create_zoho_contact(lead_data)
+        elif platform == "pipedrive":
+            return self._create_pipedrive_person(lead_data)
+        elif platform == "close":
+            return self._create_close_lead(lead_data)
+        else:
+            return ToolResult(
+                success=False,
+                data=None,
+                message=f"Platform {platform} not supported",
+                metadata={}
+            )
     
-    def _create_contact(self, platform: str, contact_data: Dict[str, Any]) -> ToolResult:
-        """Crea un nuevo contacto."""
-        contact = {
-            "id": f"contact_{int(datetime.now().timestamp())}",
-            "name": contact_data.get("name", ""),
-            "email": contact_data.get("email", ""),
-            "phone": contact_data.get("phone", ""),
-            "company": contact_data.get("company", ""),
-            "title": contact_data.get("title", ""),
-            "created_at": datetime.now().isoformat(),
-            "last_contact": datetime.now().isoformat()
-        }
+    def _create_salesforce_contact(self, lead_data: Dict[str, Any]) -> ToolResult:
+        """Crea contacto en Salesforce."""
+        if not self.salesforce_instance_url or not self.salesforce_access_token:
+            return ToolResult(
+                success=False,
+                data=None,
+                message="Salesforce credentials not configured",
+                metadata={"note": "Set SALESFORCE_INSTANCE_URL and SALESFORCE_ACCESS_TOKEN"}
+            )
         
-        contacts = self._load_json(self.contacts_file)
-        contacts.append(contact)
-        self._save_json(self.contacts_file, contacts)
-        
-        return ToolResult(
-            success=True,
-            data={"contact": contact},
-            message=f"Contact '{contact['name']}' created successfully",
-            metadata={"platform": platform, "contact_id": contact["id"]}
-        )
-    
-    def _create_opportunity(self, platform: str, opportunity_data: Dict[str, Any]) -> ToolResult:
-        """Crea una nueva oportunidad de venta."""
-        opportunity = {
-            "id": f"opp_{int(datetime.now().timestamp())}",
-            "name": opportunity_data.get("name", ""),
-            "contact_id": opportunity_data.get("contact_id", ""),
-            "amount": opportunity_data.get("amount", 0.0),
-            "stage": opportunity_data.get("stage", "prospecting"),
-            "probability": opportunity_data.get("probability", 10),
-            "close_date": opportunity_data.get("close_date", ""),
-            "created_at": datetime.now().isoformat()
-        }
-        
-        opportunities = self._load_json(self.opportunities_file)
-        opportunities.append(opportunity)
-        self._save_json(self.opportunities_file, opportunities)
-        
-        return ToolResult(
-            success=True,
-            data={"opportunity": opportunity},
-            message=f"Opportunity '{opportunity['name']}' created successfully",
-            metadata={"platform": platform, "opportunity_id": opportunity["id"]}
-        )
-    
-    def _update_lead(self, platform: str, lead_id: str, updates: Dict[str, Any]) -> ToolResult:
-        """Actualiza un lead existente."""
-        leads = self._load_json(self.leads_file)
-        for lead in leads:
-            if lead["id"] == lead_id:
-                lead.update(updates)
-                lead["updated_at"] = datetime.now().isoformat()
-                self._save_json(self.leads_file, leads)
-                return ToolResult(
-                    success=True,
-                    data={"lead": lead},
-                    message=f"Lead '{lead_id}' updated successfully",
-                    metadata={"platform": platform}
-                )
-        
-        return ToolResult(
-            success=False,
-            data=None,
-            message=f"Lead '{lead_id}' not found",
-            metadata={}
-        )
-    
-    def _update_contact(self, platform: str, contact_id: str, updates: Dict[str, Any]) -> ToolResult:
-        """Actualiza un contacto existente."""
-        contacts = self._load_json(self.contacts_file)
-        for contact in contacts:
-            if contact["id"] == contact_id:
-                contact.update(updates)
-                contact["updated_at"] = datetime.now().isoformat()
-                self._save_json(self.contacts_file, contacts)
-                return ToolResult(
-                    success=True,
-                    data={"contact": contact},
-                    message=f"Contact '{contact_id}' updated successfully",
-                    metadata={"platform": platform}
-                )
-        
-        return ToolResult(
-            success=False,
-            data=None,
-            message=f"Contact '{contact_id}' not found",
-            metadata={}
-        )
-    
-    def _update_opportunity(self, platform: str, opportunity_id: str, updates: Dict[str, Any]) -> ToolResult:
-        """Actualiza una oportunidad existente."""
-        opportunities = self._load_json(self.opportunities_file)
-        for opp in opportunities:
-            if opp["id"] == opportunity_id:
-                opp.update(updates)
-                opp["updated_at"] = datetime.now().isoformat()
-                self._save_json(self.opportunities_file, opportunities)
-                return ToolResult(
-                    success=True,
-                    data={"opportunity": opp},
-                    message=f"Opportunity '{opportunity_id}' updated successfully",
-                    metadata={"platform": platform}
-                )
-        
-        return ToolResult(
-            success=False,
-            data=None,
-            message=f"Opportunity '{opportunity_id}' not found",
-            metadata={}
-        )
-    
-    def _get_pipeline(self, platform: str) -> ToolResult:
-        """Obtiene el pipeline de ventas."""
-        opportunities = self._load_json(self.opportunities_file)
-        
-        pipeline = {
-            "prospecting": [],
-            "qualification": [],
-            "proposal": [],
-            "negotiation": [],
-            "closed_won": [],
-            "closed_lost": []
-        }
-        
-        for opp in opportunities:
-            stage = opp.get("stage", "prospecting")
-            if stage in pipeline:
-                pipeline[stage].append(opp)
-        
-        total_value = sum(opp.get("amount", 0) for opp in opportunities if opp.get("stage") not in ["closed_lost"])
-        
-        return ToolResult(
-            success=True,
-            data={
-                "pipeline": pipeline,
-                "total_opportunities": len(opportunities),
-                "total_value": total_value,
-                "by_stage": {stage: len(opps) for stage, opps in pipeline.items()}
-            },
-            message=f"Pipeline retrieved: {len(opportunities)} opportunities",
-            metadata={"platform": platform}
-        )
-    
-    def _automate_followup(self, platform: str, contact_id: Optional[str] = None) -> ToolResult:
-        """Automatiza seguimiento con contactos."""
-        contacts = self._load_json(self.contacts_file)
-        
-        followups = []
-        for contact in contacts:
-            if contact_id and contact["id"] != contact_id:
-                continue
-            
-            # Verificar si necesita seguimiento (último contacto hace más de 7 días)
-            last_contact = contact.get("last_contact", "")
-            if last_contact:
-                from datetime import datetime, timedelta
-                last_date = datetime.fromisoformat(last_contact)
-                if datetime.now() - last_date > timedelta(days=7):
-                    followups.append({
-                        "contact_id": contact["id"],
-                        "name": contact["name"],
-                        "email": contact["email"],
-                        "action": "send_followup_email"
-                    })
-        
-        return ToolResult(
-            success=True,
-            data={"followups": followups},
-            message=f"Identified {len(followups)} contacts needing follow-up",
-            metadata={"platform": platform, "count": len(followups)}
-        )
-    
-    def _create_salesforce_lead(self, lead: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Crea lead en Salesforce."""
         try:
-            url = f"{self.salesforce_instance_url}/services/data/v57.0/sobjects/Lead"
+            url = f"{self.salesforce_instance_url}/services/data/v58.0/sobjects/Contact"
             headers = {
                 "Authorization": f"Bearer {self.salesforce_access_token}",
                 "Content-Type": "application/json"
             }
+            
             payload = {
-                "FirstName": lead.get("name", "").split()[0] if lead.get("name") else "",
-                "LastName": lead.get("name", "").split()[-1] if lead.get("name") else "",
-                "Email": lead.get("email", ""),
-                "Phone": lead.get("phone", ""),
-                "Company": lead.get("company", "")
+                "FirstName": lead_data.get("name", "").split()[0] if lead_data.get("name") else "",
+                "LastName": " ".join(lead_data.get("name", "").split()[1:]) if lead_data.get("name") else "",
+                "Email": lead_data.get("email", ""),
+                "Phone": lead_data.get("phone", ""),
+                "Company": lead_data.get("company", ""),
+                "Title": lead_data.get("position", ""),
+                "Industry": lead_data.get("industry", ""),
+                "LeadSource": lead_data.get("source", "API")
             }
             
             response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code == 201:
-                return response.json()
-        except Exception as e:
-            print(f"Error creating Salesforce lead: {e}")
-        return None
-    
-    def _create_pipedrive_person(self, lead: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Crea persona en Pipedrive."""
-        try:
-            url = f"https://{self.pipedrive_company_domain}.pipedrive.com/api/v1/persons"
-            params = {"api_token": self.pipedrive_api_token}
-            payload = {
-                "name": lead.get("name", ""),
-                "email": [{"value": lead.get("email", ""), "primary": True}],
-                "phone": [{"value": lead.get("phone", ""), "primary": True}]
-            }
             
-            response = requests.post(url, json=payload, params=params, timeout=10)
-            if response.status_code == 200:
-                return response.json()
+            if response.status_code in [200, 201]:
+                return ToolResult(
+                    success=True,
+                    data=response.json(),
+                    message=f"Contact created in Salesforce: {response.json().get('id')}",
+                    metadata={"platform": "salesforce", "contact_id": response.json().get("id")}
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    message=f"Salesforce API error: {response.status_code} - {response.text}",
+                    metadata={"platform": "salesforce", "status_code": response.status_code}
+                )
+        
         except Exception as e:
-            print(f"Error creating Pipedrive person: {e}")
-        return None
+            return ToolResult(
+                success=False,
+                data=None,
+                message=f"Salesforce API error: {str(e)}",
+                metadata={"platform": "salesforce", "error": str(e)}
+            )
     
-    def _create_zoho_lead(self, lead: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Crea lead en Zoho CRM."""
+    def _create_hubspot_contact(self, lead_data: Dict[str, Any]) -> ToolResult:
+        """Crea contacto en HubSpot."""
+        if not self.hubspot_api_key:
+            return ToolResult(
+                success=False,
+                data=None,
+                message="HubSpot API key not configured",
+                metadata={"note": "Set HUBSPOT_API_KEY"}
+            )
+        
         try:
-            url = f"https://www.zohoapis.com/crm/v2/Leads"
+            url = "https://api.hubapi.com/crm/v3/objects/contacts"
             headers = {
-                "Authorization": f"Zoho-oauthtoken {self.zoho_api_token}",
+                "Authorization": f"Bearer {self.hubspot_api_key}",
                 "Content-Type": "application/json"
             }
+            
+            properties = {
+                "email": lead_data.get("email", ""),
+                "firstname": lead_data.get("name", "").split()[0] if lead_data.get("name") else "",
+                "lastname": " ".join(lead_data.get("name", "").split()[1:]) if lead_data.get("name") else "",
+                "phone": lead_data.get("phone", ""),
+                "company": lead_data.get("company", ""),
+                "jobtitle": lead_data.get("position", ""),
+                "industry": lead_data.get("industry", ""),
+                "hs_lead_status": "NEW"
+            }
+            
+            payload = {"properties": properties}
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            
+            if response.status_code in [200, 201]:
+                return ToolResult(
+                    success=True,
+                    data=response.json(),
+                    message=f"Contact created in HubSpot: {response.json().get('id')}",
+                    metadata={"platform": "hubspot", "contact_id": response.json().get("id")}
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    message=f"HubSpot API error: {response.status_code} - {response.text}",
+                    metadata={"platform": "hubspot", "status_code": response.status_code}
+                )
+        
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                data=None,
+                message=f"HubSpot API error: {str(e)}",
+                metadata={"platform": "hubspot", "error": str(e)}
+            )
+    
+    def _create_zoho_contact(self, lead_data: Dict[str, Any]) -> ToolResult:
+        """Crea contacto en Zoho CRM."""
+        if not self.zoho_refresh_token:
+            return ToolResult(
+                success=False,
+                data=None,
+                message="Zoho credentials not configured",
+                metadata={"note": "Set ZOHO_REFRESH_TOKEN"}
+            )
+        
+        try:
+            # Obtener access token
+            access_token = self._get_zoho_access_token()
+            if not access_token:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    message="Failed to get Zoho access token",
+                    metadata={}
+                )
+            
+            url = f"{self.zoho_api_domain}/crm/v3/Contacts"
+            headers = {
+                "Authorization": f"Zoho-oauthtoken {access_token}",
+                "Content-Type": "application/json"
+            }
+            
+            data = [{
+                "First_Name": lead_data.get("name", "").split()[0] if lead_data.get("name") else "",
+                "Last_Name": " ".join(lead_data.get("name", "").split()[1:]) if lead_data.get("name") else "",
+                "Email": lead_data.get("email", ""),
+                "Phone": lead_data.get("phone", ""),
+                "Account_Name": {"name": lead_data.get("company", "")},
+                "Title": lead_data.get("position", ""),
+                "Industry": lead_data.get("industry", ""),
+                "Lead_Source": lead_data.get("source", "API")
+            }]
+            
+            payload = {"data": data}
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            
+            if response.status_code in [200, 201]:
+                result = response.json()
+                return ToolResult(
+                    success=True,
+                    data=result,
+                    message=f"Contact created in Zoho CRM",
+                    metadata={"platform": "zoho", "contact_id": result.get("data", [{}])[0].get("details", {}).get("id")}
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    message=f"Zoho API error: {response.status_code} - {response.text}",
+                    metadata={"platform": "zoho", "status_code": response.status_code}
+                )
+        
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                data=None,
+                message=f"Zoho API error: {str(e)}",
+                metadata={"platform": "zoho", "error": str(e)}
+            )
+    
+    def _get_zoho_access_token(self) -> Optional[str]:
+        """Obtiene access token de Zoho."""
+        try:
+            url = "https://accounts.zoho.com/oauth/v2/token"
+            params = {
+                "refresh_token": self.zoho_refresh_token,
+                "client_id": self.zoho_client_id,
+                "client_secret": self.zoho_client_secret,
+                "grant_type": "refresh_token"
+            }
+            
+            response = requests.post(url, params=params, timeout=10)
+            if response.status_code == 200:
+                return response.json().get("access_token")
+        except:
+            pass
+        return None
+    
+    def _create_pipedrive_person(self, lead_data: Dict[str, Any]) -> ToolResult:
+        """Crea persona en Pipedrive."""
+        if not self.pipedrive_api_token:
+            return ToolResult(
+                success=False,
+                data=None,
+                message="Pipedrive API token not configured",
+                metadata={"note": "Set PIPEDRIVE_API_TOKEN"}
+            )
+        
+        try:
+            url = f"https://{self.pipedrive_company_domain or 'api'}.pipedrive.com/api/v1/persons"
+            params = {"api_token": self.pipedrive_api_token}
+            
             payload = {
-                "data": [{
-                    "Last_Name": lead.get("name", ""),
-                    "Email": lead.get("email", ""),
-                    "Phone": lead.get("phone", ""),
-                    "Company": lead.get("company", "")
+                "name": lead_data.get("name", ""),
+                "email": [{"value": lead_data.get("email", ""), "primary": True}],
+                "phone": [{"value": lead_data.get("phone", ""), "primary": True}] if lead_data.get("phone") else [],
+                "org_name": lead_data.get("company", "")
+            }
+            
+            response = requests.post(url, params=params, json=payload, timeout=10)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return ToolResult(
+                    success=result.get("success", False),
+                    data=result.get("data"),
+                    message=f"Person created in Pipedrive",
+                    metadata={"platform": "pipedrive", "person_id": result.get("data", {}).get("id")}
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    message=f"Pipedrive API error: {response.status_code} - {response.text}",
+                    metadata={"platform": "pipedrive", "status_code": response.status_code}
+                )
+        
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                data=None,
+                message=f"Pipedrive API error: {str(e)}",
+                metadata={"platform": "pipedrive", "error": str(e)}
+            )
+    
+    def _create_close_lead(self, lead_data: Dict[str, Any]) -> ToolResult:
+        """Crea lead en Close.com."""
+        if not self.close_api_key:
+            return ToolResult(
+                success=False,
+                data=None,
+                message="Close.com API key not configured",
+                metadata={"note": "Set CLOSE_API_KEY"}
+            )
+        
+        try:
+            url = "https://api.close.com/api/v1/lead/"
+            headers = {
+                "Authorization": f"Bearer {self.close_api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "name": lead_data.get("company", lead_data.get("name", "")),
+                "contacts": [{
+                    "name": lead_data.get("name", ""),
+                    "emails": [{"email": lead_data.get("email", "")}],
+                    "phones": [{"phone": lead_data.get("phone", "")}] if lead_data.get("phone") else []
                 }]
             }
             
             response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code == 201:
-                return response.json()
+            
+            if response.status_code in [200, 201]:
+                return ToolResult(
+                    success=True,
+                    data=response.json(),
+                    message=f"Lead created in Close.com",
+                    metadata={"platform": "close", "lead_id": response.json().get("id")}
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    message=f"Close.com API error: {response.status_code} - {response.text}",
+                    metadata={"platform": "close", "status_code": response.status_code}
+                )
+        
         except Exception as e:
-            print(f"Error creating Zoho lead: {e}")
-        return None
-
+            return ToolResult(
+                success=False,
+                data=None,
+                message=f"Close.com API error: {str(e)}",
+                metadata={"platform": "close", "error": str(e)}
+            )
+    
+    def _update_contact(self, platform: str, contact_id: str, lead_data: Dict[str, Any]) -> ToolResult:
+        """Actualiza un contacto en el CRM."""
+        # Implementación similar a _create_contact pero con PUT/PATCH
+        return ToolResult(
+            success=False,
+            data=None,
+            message="Update contact not yet implemented",
+            metadata={}
+        )
+    
+    def _get_leads(self, platform: str, limit: int = 100) -> ToolResult:
+        """Obtiene leads del CRM."""
+        return ToolResult(
+            success=False,
+            data=None,
+            message="Get leads not yet implemented",
+            metadata={}
+        )
+    
+    def _create_deal(self, platform: str, deal_data: Dict[str, Any]) -> ToolResult:
+        """Crea un deal/oportunidad en el CRM."""
+        return ToolResult(
+            success=False,
+            data=None,
+            message="Create deal not yet implemented",
+            metadata={}
+        )
+    
+    def _update_deal(self, platform: str, deal_id: str, deal_data: Dict[str, Any]) -> ToolResult:
+        """Actualiza un deal en el CRM."""
+        return ToolResult(
+            success=False,
+            data=None,
+            message="Update deal not yet implemented",
+            metadata={}
+        )
+    
+    def _search_contacts(self, platform: str, query: str) -> ToolResult:
+        """Busca contactos en el CRM."""
+        return ToolResult(
+            success=False,
+            data=None,
+            message="Search contacts not yet implemented",
+            metadata={}
+        )

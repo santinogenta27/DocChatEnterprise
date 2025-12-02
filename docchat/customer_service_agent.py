@@ -12,7 +12,9 @@ Este módulo permite:
 from __future__ import annotations
 
 import json
+import os
 import time
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from datetime import datetime
@@ -29,6 +31,10 @@ from .auto_response_rules import AutoResponseManager, AutoResponseRule
 from .tools import EmailTool, AdvancedEmailTool
 from .tools.whatsapp_tool import WhatsAppTool
 from .tools.ticket_tool import TicketTool
+from .tools.integration_tool import IntegrationTool
+from .integrations.langgraph_integration import LangGraphIntegration
+from .integrations.crewai_integration import CrewAIIntegration
+from .integrations.composio_integration import ComposioIntegration
 
 
 @dataclass
@@ -96,6 +102,47 @@ class CustomerServiceAgent:
             "email": AdvancedEmailTool(config),
             "whatsapp": WhatsAppTool(config),
             "ticket": TicketTool(config),
+            "integration": IntegrationTool(config),
+        }
+        
+        # Integraciones avanzadas
+        try:
+            self.langgraph = LangGraphIntegration(config, llm=self.llm)
+            print("✅ LangGraph integrado en Customer Service Agent")
+        except Exception as e:
+            print(f"⚠️ LangGraph no disponible en Customer Service Agent: {e}")
+            self.langgraph = None
+        
+        try:
+            self.crewai = CrewAIIntegration(config)
+            print("✅ CrewAI integrado en Customer Service Agent")
+        except Exception as e:
+            print(f"⚠️ CrewAI no disponible en Customer Service Agent: {e}")
+            self.crewai = None
+        
+        try:
+            self.composio = ComposioIntegration(config)
+            print("✅ Composio integrado en Customer Service Agent")
+        except Exception as e:
+            print(f"⚠️ Composio no disponible en Customer Service Agent: {e}")
+            self.composio = None
+        
+        # Configuración de monitoreo continuo
+        self.monitoring_enabled = os.getenv("CS_MONITORING_ENABLED", "false").lower() == "true"
+        self.monitoring_interval = int(os.getenv("CS_MONITORING_INTERVAL", "60"))  # segundos
+        self.monitoring_active = False
+        self.monitoring_thread = None
+        
+        # Umbral de confianza para escalación
+        self.confidence_threshold = float(os.getenv("CS_CONFIDENCE_THRESHOLD", "0.5"))
+        
+        # Canales configurados para monitoreo
+        self.monitored_channels = {
+            "email": os.getenv("CS_MONITOR_EMAIL", "false").lower() == "true",
+            "whatsapp": os.getenv("CS_MONITOR_WHATSAPP", "false").lower() == "true",
+            "slack": os.getenv("CS_MONITOR_SLACK", "false").lower() == "true",
+            "teams": os.getenv("CS_MONITOR_TEAMS", "false").lower() == "true",
+            "web": os.getenv("CS_MONITOR_WEB", "false").lower() == "true"
         }
         
         # Sistema de reglas automáticas
@@ -272,10 +319,36 @@ class CustomerServiceAgent:
                     self.stats["tickets_created"] += 1
                     tools_used.append("ticket")
             
-            # Actualizar estado
-            if actions.get("escalate"):
+            # Obtener confianza del análisis de intención
+            confidence = intent_analysis.get("confidence", 0.0)
+            
+            # Actualizar estado y escalar si es necesario
+            if actions.get("escalate") or confidence < self.confidence_threshold:
                 inquiry.status = "escalated"
                 self.stats["escalated"] += 1
+                # Escalar a humano si la confianza es baja
+                if confidence < self.confidence_threshold:
+                    # Crear respuesta temporal para escalación
+                    temp_response = ServiceResponse(
+                        inquiry_id=inquiry_id,
+                        response_text=response_text,
+                        channel=channel,
+                        sent=sent,
+                        ticket_created=actions.get("create_ticket", False),
+                        ticket_id=ticket_id,
+                        tools_used=tools_used,
+                        confidence=confidence,
+                        escalated=True
+                    )
+                    self._escalate_to_human(
+                        temp_response,
+                        {
+                            "from": customer_email,
+                            "email": customer_email,
+                            "message": message,
+                            "phone": customer_phone
+                        }
+                    )
             else:
                 inquiry.status = "resolved"
                 inquiry.response = response_text
@@ -295,6 +368,9 @@ class CustomerServiceAgent:
                 "timestamp": datetime.now().isoformat()
             })
             
+            # Determinar si se escaló (puede haber cambiado después de _escalate_to_human)
+            final_escalated = actions.get("escalate", False) or confidence < self.confidence_threshold
+            
             # Crear respuesta
             service_response = ServiceResponse(
                 inquiry_id=inquiry_id,
@@ -304,8 +380,8 @@ class CustomerServiceAgent:
                 ticket_created=actions.get("create_ticket", False),
                 ticket_id=ticket_id,
                 tools_used=tools_used,
-                confidence=intent_analysis.get("confidence", 0.0),
-                escalated=actions.get("escalate", False)
+                confidence=confidence,
+                escalated=final_escalated
             )
             
             print(f"\n✅ Consulta procesada exitosamente")
@@ -462,8 +538,14 @@ RESPUESTA:"""
             actions["escalate"] = True
             actions["create_ticket"] = True
         
-        # Crear ticket si la confianza es baja
-        if intent.get("confidence", 1.0) < 0.5:
+        # Crear ticket si la confianza es baja (usar umbral configurado)
+        if intent.get("confidence", 1.0) < self.confidence_threshold:
+            actions["create_ticket"] = True
+            actions["escalate"] = True
+        
+        # Escalar si requiere escalación explícita o confianza muy baja
+        if intent.get("requires_escalation", False) or intent.get("confidence", 1.0) < (self.confidence_threshold * 0.7):
+            actions["escalate"] = True
             actions["create_ticket"] = True
         
         return actions
@@ -555,4 +637,662 @@ Respuesta mejorada:"""
         except Exception as e:
             print(f"Error mejorando respuesta AI: {e}")
             return base_response
+    
+    def start_monitoring_loop(self):
+        """
+        Inicia el loop de monitoreo continuo (Agent Loop).
+        Este loop monitorea automáticamente todos los canales configurados
+        y procesa mensajes entrantes sin intervención humana.
+        """
+        if self.monitoring_active:
+            print("⚠️ Monitoreo ya está activo")
+            return
+        
+        self.monitoring_active = True
+        self.monitoring_thread = threading.Thread(
+            target=self._monitoring_loop,
+            daemon=True,
+            name="CustomerServiceMonitoring"
+        )
+        self.monitoring_thread.start()
+        print(f"✅ Agent Loop iniciado - Monitoreando canales cada {self.monitoring_interval} segundos")
+    
+    def stop_monitoring_loop(self):
+        """Detiene el loop de monitoreo continuo."""
+        self.monitoring_active = False
+        if self.monitoring_thread:
+            self.monitoring_thread.join(timeout=5)
+        print("🛑 Agent Loop detenido")
+    
+    def _monitoring_loop(self):
+        """
+        Loop principal del agente que monitorea canales continuamente.
+        Este es el "agent loop" que procesa mensajes automáticamente.
+        """
+        print(f"\n🔄 [Agent Loop] Iniciando monitoreo continuo...")
+        print(f"   Canales activos: {[k for k, v in self.monitored_channels.items() if v]}")
+        
+        while self.monitoring_active:
+            try:
+                # Monitorear cada canal configurado
+                if self.monitored_channels.get("email"):
+                    self._monitor_email_channel()
+                
+                if self.monitored_channels.get("whatsapp"):
+                    self._monitor_whatsapp_channel()
+                
+                if self.monitored_channels.get("slack"):
+                    self._monitor_slack_channel()
+                
+                if self.monitored_channels.get("teams"):
+                    self._monitor_teams_channel()
+                
+                if self.monitored_channels.get("web"):
+                    self._monitor_web_channel()
+                
+                # Esperar antes del siguiente ciclo
+                time.sleep(self.monitoring_interval)
+            
+            except Exception as e:
+                print(f"❌ Error en Agent Loop: {e}")
+                time.sleep(self.monitoring_interval)
+    
+    def _monitor_email_channel(self):
+        """Monitorea emails entrantes y los procesa automáticamente."""
+        try:
+            # Aquí se integraría con IMAP/Gmail API para leer emails
+            # Por ahora, es un placeholder que puede ser extendido
+            # con integración real de email
+            
+            # Ejemplo: Si hay un webhook configurado, se puede usar
+            # para recibir notificaciones de nuevos emails
+            
+            pass  # Implementación específica depende de la integración de email
+            
+        except Exception as e:
+            print(f"⚠️ Error monitoreando email: {e}")
+    
+    def _monitor_whatsapp_channel(self):
+        """Monitorea mensajes de WhatsApp y los procesa automáticamente."""
+        try:
+            # Integración con WhatsApp Business API para leer mensajes
+            # Por ahora, placeholder para extensión futura
+            
+            pass  # Implementación específica depende de la integración de WhatsApp
+            
+        except Exception as e:
+            print(f"⚠️ Error monitoreando WhatsApp: {e}")
+    
+    def _monitor_slack_channel(self):
+        """Monitorea mensajes de Slack y los procesa automáticamente."""
+        try:
+            # Integración con Slack API para leer mensajes de canales
+            # Por ahora, placeholder
+            
+            pass  # Implementación específica depende de la integración de Slack
+            
+        except Exception as e:
+            print(f"⚠️ Error monitoreando Slack: {e}")
+    
+    def _monitor_teams_channel(self):
+        """Monitorea mensajes de Teams y los procesa automáticamente."""
+        try:
+            # Integración con Microsoft Teams API
+            # Por ahora, placeholder
+            
+            pass  # Implementación específica depende de la integración de Teams
+            
+        except Exception as e:
+            print(f"⚠️ Error monitoreando Teams: {e}")
+    
+    def _monitor_web_channel(self):
+        """Monitorea consultas web (formularios, chat widgets, etc.)."""
+        try:
+            # Monitoreo de formularios web, chat widgets, etc.
+            # Por ahora, placeholder
+            
+            pass  # Implementación específica depende de la integración web
+            
+        except Exception as e:
+            print(f"⚠️ Error monitoreando web: {e}")
+    
+    def process_incoming_message(
+        self,
+        channel: str,
+        message_data: Dict[str, Any]
+    ) -> ServiceResponse:
+        """
+        Procesa un mensaje entrante automáticamente (usado por el Agent Loop).
+        
+        Args:
+            channel: Canal de origen (email, whatsapp, slack, teams, web)
+            message_data: Datos del mensaje {
+                "from": email/phone/user_id,
+                "message": texto del mensaje,
+                "subject": asunto (opcional),
+                "thread_id": ID de conversación (opcional)
+            }
+        """
+        try:
+            # Extraer datos del mensaje
+            customer_email = message_data.get("from") or message_data.get("email") or message_data.get("customer_email", "unknown@example.com")
+            message = message_data.get("message") or message_data.get("text") or message_data.get("body", "")
+            subject = message_data.get("subject")
+            customer_phone = message_data.get("phone") or message_data.get("customer_phone")
+            
+            if not message or not message.strip():
+                return ServiceResponse(
+                    inquiry_id="",
+                    response_text="",
+                    channel=channel,
+                    sent=False,
+                    ticket_created=False,
+                    confidence=0.0,
+                    escalated=False
+                )
+            
+            print(f"\n📨 [Agent Loop] Nuevo mensaje recibido en {channel}")
+            print(f"   De: {customer_email}")
+            print(f"   Mensaje: {message[:100]}...")
+            
+            # Procesar la consulta usando el método existente
+            response = self.process_inquiry(
+                channel=channel,
+                customer_email=customer_email,
+                message=message,
+                customer_phone=customer_phone,
+                subject=subject,
+                use_knowledge_base=True
+            )
+            
+            # Si la confianza es baja, escalar automáticamente
+            if response.confidence < self.confidence_threshold and not response.escalated:
+                print(f"⚠️ [Agent Loop] Confianza baja ({response.confidence:.2f}), escalando a humano...")
+                self._escalate_to_human(response, message_data)
+                response.escalated = True
+            
+            return response
+        
+        except Exception as e:
+            print(f"❌ Error procesando mensaje entrante: {e}")
+            return ServiceResponse(
+                inquiry_id="",
+                response_text="",
+                channel=channel,
+                sent=False,
+                ticket_created=False,
+                confidence=0.0,
+                escalated=True
+            )
+    
+    def _escalate_to_human(
+        self,
+        response: ServiceResponse,
+        original_message_data: Dict[str, Any]
+    ):
+        """
+        Escala una consulta a un agente humano.
+        Envía notificaciones a Slack/Teams y crea ticket de alta prioridad.
+        """
+        try:
+            escalation_message = f"""
+🚨 **ESCALACIÓN A HUMANO REQUERIDA**
+
+**Consulta ID:** {response.inquiry_id}
+**Canal:** {response.channel}
+**Confianza:** {response.confidence:.1%}
+**Cliente:** {original_message_data.get('from', 'Unknown')}
+
+**Mensaje Original:**
+{original_message_data.get('message', '')[:500]}
+
+**Respuesta Generada (baja confianza):**
+{response.response_text[:300]}
+
+**Acción Requerida:** Revisar y responder manualmente
+"""
+            
+            # Enviar notificación a Slack si está configurado
+            slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
+            if slack_webhook:
+                self.tools["integration"].execute(
+                    platform="slack",
+                    message=escalation_message,
+                    title="Escalación de Soporte",
+                    webhook_url=slack_webhook
+                )
+            
+            # Enviar notificación a Teams si está configurado
+            teams_webhook = os.getenv("TEAMS_WEBHOOK_URL")
+            if teams_webhook:
+                self.tools["integration"].execute(
+                    platform="teams",
+                    message=escalation_message,
+                    title="Escalación de Soporte",
+                    webhook_url=teams_webhook
+                )
+            
+            # Crear ticket de alta prioridad
+            if not response.ticket_created:
+                ticket_result = self.tools["ticket"].execute(
+                    action="create",
+                    customer_email=original_message_data.get("from", "unknown@example.com"),
+                    subject=f"[ESCALADO] Consulta requiere atención humana - {response.inquiry_id}",
+                    description=escalation_message,
+                    priority="high"
+                )
+                if ticket_result.success:
+                    response.ticket_id = ticket_result.data.get("ticket_id")
+                    response.ticket_created = True
+            
+            print(f"✅ Escalación completada - Notificaciones enviadas")
+        
+        except Exception as e:
+            print(f"⚠️ Error en escalación: {e}")
+    
+    def receive_webhook_message(self, webhook_data: Dict[str, Any]) -> ServiceResponse:
+        """
+        Recibe mensajes vía webhook (para integración con sistemas externos).
+        
+        Formato esperado:
+        {
+            "channel": "email|whatsapp|slack|teams|web",
+            "from": "email/phone/user_id",
+            "message": "texto del mensaje",
+            "subject": "asunto (opcional)",
+            "phone": "teléfono (opcional)",
+            "metadata": {}
+        }
+        """
+        try:
+            channel = webhook_data.get("channel", "web")
+            message_data = {
+                "from": webhook_data.get("from"),
+                "email": webhook_data.get("from"),  # Para compatibilidad
+                "message": webhook_data.get("message") or webhook_data.get("text") or webhook_data.get("body"),
+                "subject": webhook_data.get("subject"),
+                "phone": webhook_data.get("phone"),
+                "customer_phone": webhook_data.get("phone"),
+                "metadata": webhook_data.get("metadata", {})
+            }
+            
+            return self.process_incoming_message(channel, message_data)
+        
+        except Exception as e:
+            print(f"❌ Error procesando webhook: {e}")
+            return ServiceResponse(
+                inquiry_id="",
+                response_text="",
+                channel=webhook_data.get("channel", "web"),
+                sent=False,
+                ticket_created=False,
+                confidence=0.0,
+                escalated=True
+            )
+    
+    # ============================================
+    # MÉTODOS CON LANGRAPH - Workflows Avanzados
+    # ============================================
+    
+    def create_support_resolution_workflow(self, inquiry_id: str) -> Dict[str, Any]:
+        """
+        Crea un workflow LangGraph para resolución de consultas.
+        
+        Workflow:
+        1. Analizar intención
+        2. Buscar en conocimiento
+        3. Generar respuesta
+        4. Evaluar confianza
+        5. Enviar respuesta o escalar
+        """
+        if not self.langgraph:
+            return {"success": False, "error": "LangGraph no está disponible"}
+        
+        try:
+            inquiry = self.inquiries.get(inquiry_id)
+            if not inquiry:
+                return {"success": False, "error": "Consulta no encontrada"}
+            
+            def analyze_intent_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Analizar intención"""
+                intent = self._analyze_intent(
+                    state["data"]["message"],
+                    state["data"]["customer_email"]
+                )
+                state["data"]["intent"] = intent
+                return state
+            
+            def search_knowledge_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Buscar en base de conocimiento"""
+                if self.retriever:
+                    docs = self.retriever.get_relevant_documents(state["data"]["message"])
+                    state["data"]["knowledge_docs"] = [doc.page_content for doc in docs[:5]]
+                return state
+            
+            def generate_response_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Generar respuesta"""
+                response = self._generate_response(
+                    message=state["data"]["message"],
+                    customer_email=state["data"]["customer_email"],
+                    intent=state["data"].get("intent", {}),
+                    context_docs=[Document(page_content=d) for d in state["data"].get("knowledge_docs", [])],
+                    channel=state["data"]["channel"]
+                )
+                state["data"]["response"] = response
+                return state
+            
+            def evaluate_confidence_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Evaluar confianza"""
+                confidence = state["data"].get("intent", {}).get("confidence", 0.0)
+                state["data"]["confidence"] = confidence
+                state["data"]["should_escalate"] = confidence < self.confidence_threshold
+                return state
+            
+            def send_or_escalate_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Enviar respuesta o escalar"""
+                if state["data"].get("should_escalate"):
+                    # Escalar
+                    self._escalate_to_human(
+                        ServiceResponse(
+                            inquiry_id=inquiry_id,
+                            response_text=state["data"].get("response", ""),
+                            channel=state["data"]["channel"],
+                            sent=False,
+                            ticket_created=True,
+                            confidence=state["data"].get("confidence", 0.0),
+                            escalated=True
+                        ),
+                        {
+                            "from": state["data"]["customer_email"],
+                            "message": state["data"]["message"]
+                        }
+                    )
+                    state["data"]["escalated"] = True
+                else:
+                    # Enviar respuesta
+                    self._send_response(
+                        channel=state["data"]["channel"],
+                        to=state["data"]["customer_email"],
+                        subject=state["data"].get("subject", "Respuesta a tu consulta"),
+                        message=state["data"].get("response", ""),
+                        tools_used=[]
+                    )
+                    state["data"]["sent"] = True
+                return state
+            
+            # Crear workflow
+            nodes = {
+                "analyze": analyze_intent_node,
+                "search": search_knowledge_node,
+                "generate": generate_response_node,
+                "evaluate": evaluate_confidence_node,
+                "send_or_escalate": send_or_escalate_node
+            }
+            
+            edges = [
+                ("analyze", "search"),
+                ("search", "generate"),
+                ("generate", "evaluate"),
+                ("evaluate", "send_or_escalate")
+            ]
+            
+            workflow_id = f"support_{inquiry_id}"
+            workflow = self.langgraph.create_workflow(
+                workflow_id=workflow_id,
+                nodes=nodes,
+                edges=edges,
+                entry_point="analyze",
+                exit_point="send_or_escalate"
+            )
+            
+            # Ejecutar workflow
+            result = self.langgraph.execute_workflow(
+                workflow_id=workflow_id,
+                initial_data={
+                    "inquiry_id": inquiry_id,
+                    "message": inquiry.message,
+                    "customer_email": inquiry.customer_email,
+                    "channel": inquiry.channel,
+                    "subject": inquiry.subject
+                }
+            )
+            
+            return result
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # ============================================
+    # MÉTODOS CON CREWAI - Multi-Agent Collaboration
+    # ============================================
+    
+    def create_support_crew(self) -> Dict[str, Any]:
+        """
+        Crea un crew de agentes CrewAI para soporte al cliente.
+        
+        Agentes:
+        - Intent Analyzer: Analiza intención y urgencia
+        - Knowledge Researcher: Busca en base de conocimiento
+        - Response Generator: Genera respuestas personalizadas
+        - Quality Validator: Valida calidad de respuesta
+        """
+        if not self.crewai:
+            return {"success": False, "error": "CrewAI no está disponible"}
+        
+        try:
+            # Crear agentes especializados
+            intent_analyzer = self.crewai.create_agent(
+                agent_id="intent_analyzer",
+                role="Customer Intent Analyst",
+                goal="Analyze customer inquiries to understand intent, urgency, and emotion",
+                backstory="""You are an expert at understanding customer needs. You can 
+                identify what customers really want, how urgent their request is, and 
+                what emotion they're expressing. You help route inquiries appropriately.""",
+                verbose=True
+            )
+            
+            knowledge_researcher = self.crewai.create_agent(
+                agent_id="knowledge_researcher",
+                role="Knowledge Base Researcher",
+                goal="Find relevant information from knowledge base to answer customer questions",
+                backstory="""You are an expert at searching and finding information. You 
+                know how to use knowledge bases, documentation, and FAQs to find accurate 
+                answers to customer questions.""",
+                verbose=True
+            )
+            
+            response_generator = self.crewai.create_agent(
+                agent_id="response_generator",
+                role="Customer Support Response Specialist",
+                goal="Generate empathetic, accurate, and helpful responses to customer inquiries",
+                backstory="""You are an expert customer support agent. You write clear, 
+                empathetic responses that solve customer problems. You're professional, 
+                friendly, and always aim to help.""",
+                verbose=True
+            )
+            
+            quality_validator = self.crewai.create_agent(
+                agent_id="quality_validator",
+                role="Response Quality Validator",
+                goal="Validate that responses are accurate, complete, and appropriate",
+                backstory="""You are an expert at quality assurance. You review responses 
+                to ensure they're accurate, complete, helpful, and appropriate. You catch 
+                errors and suggest improvements.""",
+                verbose=True
+            )
+            
+            # Crear tareas
+            analysis_task = self.crewai.create_task(
+                description="Analyze the customer inquiry to understand intent, urgency, and emotion",
+                agent=intent_analyzer,
+                expected_output="Intent analysis with urgency level and emotion detected"
+            )
+            
+            research_task = self.crewai.create_task(
+                description="Search knowledge base for relevant information to answer the customer",
+                agent=knowledge_researcher,
+                expected_output="Relevant information from knowledge base"
+            )
+            
+            generation_task = self.crewai.create_task(
+                description="Generate a helpful, empathetic response to the customer inquiry",
+                agent=response_generator,
+                expected_output="Complete response ready to send to customer"
+            )
+            
+            validation_task = self.crewai.create_task(
+                description="Validate the response for accuracy, completeness, and quality",
+                agent=quality_validator,
+                expected_output="Validated response with quality score"
+            )
+            
+            # Crear crew
+            crew = self.crewai.create_crew(
+                crew_id="support_crew",
+                agents=[intent_analyzer, knowledge_researcher, response_generator, quality_validator],
+                tasks=[analysis_task, research_task, generation_task, validation_task],
+                process="sequential",
+                verbose=True
+            )
+            
+            return {
+                "success": True,
+                "crew_id": "support_crew",
+                "agents": ["intent_analyzer", "knowledge_researcher", "response_generator", "quality_validator"],
+                "message": "Support crew creado exitosamente"
+            }
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def execute_support_crew(self, customer_message: str, customer_email: str) -> Dict[str, Any]:
+        """Ejecuta el crew de soporte para responder una consulta."""
+        if not self.crewai:
+            return {"success": False, "error": "CrewAI no está disponible"}
+        
+        try:
+            # Asegurar que el crew existe
+            if "support_crew" not in self.crewai.crews:
+                self.create_support_crew()
+            
+            # Ejecutar crew
+            result = self.crewai.execute_crew(
+                crew_id="support_crew",
+                inputs={
+                    "customer_message": customer_message,
+                    "customer_email": customer_email,
+                    "knowledge_base_available": self.retriever is not None
+                }
+            )
+            
+            return result
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # ============================================
+    # MÉTODOS CON COMPOSIO - 250+ Integraciones
+    # ============================================
+    
+    def connect_support_system(self, system_name: str) -> Dict[str, Any]:
+        """Conecta un sistema de soporte usando Composio."""
+        if not self.composio:
+            return {"success": False, "error": "Composio no está disponible"}
+        
+        try:
+            # Mapear sistemas de soporte
+            system_map = {
+                "zendesk": "zendesk",
+                "freshdesk": "freshdesk",
+                "servicenow": "servicenow",
+                "jira": "jira",
+                "salesforce": "salesforce",
+                "hubspot": "hubspot"
+            }
+            
+            app_name = system_map.get(system_name.lower(), system_name.lower())
+            result = self.composio.connect_app(app_name)
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def create_ticket_via_composio(
+        self,
+        inquiry_id: str,
+        system: str = "zendesk"
+    ) -> Dict[str, Any]:
+        """
+        Crea un ticket en un sistema de soporte usando Composio.
+        
+        Args:
+            inquiry_id: ID de la consulta
+            system: Sistema (zendesk, freshdesk, servicenow, jira)
+        """
+        if not self.composio:
+            return {"success": False, "error": "Composio no está disponible"}
+        
+        try:
+            inquiry = self.inquiries.get(inquiry_id)
+            if not inquiry:
+                return {"success": False, "error": "Consulta no encontrada"}
+            
+            # Conectar sistema si no está conectado
+            if system not in self.composio.connected_apps:
+                connect_result = self.connect_support_system(system)
+                if not connect_result.get("success"):
+                    return connect_result
+            
+            # Mapear acciones según sistema
+            action_map = {
+                "zendesk": "create_ticket",
+                "freshdesk": "create_ticket",
+                "servicenow": "create_incident",
+                "jira": "create_issue"
+            }
+            
+            action_name = action_map.get(system, "create_ticket")
+            
+            # Preparar parámetros
+            parameters = {
+                "subject": inquiry.subject or f"Support Request - {inquiry_id}",
+                "description": inquiry.message,
+                "requester_email": inquiry.customer_email,
+                "priority": "normal"
+            }
+            
+            # Ejecutar acción
+            result = self.composio.execute_action(
+                app_name=system,
+                action_name=action_name,
+                parameters=parameters
+            )
+            
+            if result.get("success"):
+                # Actualizar inquiry con ticket ID
+                if "result" in result and isinstance(result["result"], dict):
+                    ticket_id = result["result"].get("id") or result["result"].get("ticket_id")
+                    if ticket_id:
+                        inquiry.ticket_id = str(ticket_id)
+            
+            return result
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def get_composio_support_apps(self) -> List[Dict[str, Any]]:
+        """Obtiene apps de soporte disponibles en Composio."""
+        if not self.composio:
+            return []
+        
+        try:
+            all_apps = self.composio.get_available_apps()
+            support_apps = [
+                app for app in all_apps
+                if any(keyword in app.get("name", "").lower() for keyword in 
+                       ["zendesk", "freshdesk", "servicenow", "jira", "support", "ticket", "helpdesk"])
+            ]
+            return support_apps
+        except Exception as e:
+            print(f"Error obteniendo apps de soporte: {e}")
+            return []
 

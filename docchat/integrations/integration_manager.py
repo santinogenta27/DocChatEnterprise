@@ -15,6 +15,18 @@ from enum import Enum
 
 from langchain_core.documents import Document
 
+# Importar integraciones avanzadas
+try:
+    from .langgraph_integration import LangGraphIntegration
+    from .crewai_integration import CrewAIIntegration
+    from .composio_integration import ComposioIntegration
+    ADVANCED_INTEGRATIONS_AVAILABLE = True
+except ImportError:
+    ADVANCED_INTEGRATIONS_AVAILABLE = False
+    LangGraphIntegration = None
+    CrewAIIntegration = None
+    ComposioIntegration = None
+
 
 class IntegrationType(str, Enum):
     """Tipos de integraciones disponibles."""
@@ -88,6 +100,39 @@ class IntegrationManager:
         
         # Importar handlers de cada integración
         self._load_integration_handlers()
+        
+        # Integraciones avanzadas
+        if ADVANCED_INTEGRATIONS_AVAILABLE:
+            try:
+                from ..utils.llm_factory import create_llm
+                llm = create_llm(
+                    provider="openai",
+                    model=config.agentic_model or "gpt-4o",
+                    api_key=config.openai_api_key
+                )
+                self.langgraph = LangGraphIntegration(config, llm=llm)
+                print("✅ LangGraph integrado en Integration Manager")
+            except Exception as e:
+                print(f"⚠️ LangGraph no disponible: {e}")
+                self.langgraph = None
+            
+            try:
+                self.crewai = CrewAIIntegration(config)
+                print("✅ CrewAI integrado en Integration Manager")
+            except Exception as e:
+                print(f"⚠️ CrewAI no disponible: {e}")
+                self.crewai = None
+            
+            try:
+                self.composio = ComposioIntegration(config)
+                print("✅ Composio integrado en Integration Manager")
+            except Exception as e:
+                print(f"⚠️ Composio no disponible: {e}")
+                self.composio = None
+        else:
+            self.langgraph = None
+            self.crewai = None
+            self.composio = None
     
     def _load_connections(self) -> Dict[str, IntegrationConnection]:
         """Carga conexiones desde archivo."""
@@ -433,5 +478,262 @@ class IntegrationManager:
             
             import traceback
             traceback.print_exc()
+            return []
+    
+    # ============================================
+    # MÉTODOS CON LANGRAPH - Workflows Avanzados
+    # ============================================
+    
+    def create_integration_sync_workflow(self, integration_id: str) -> Dict[str, Any]:
+        """
+        Crea un workflow LangGraph para sincronización de integraciones.
+        
+        Workflow:
+        1. Verificar conexión
+        2. Obtener datos
+        3. Procesar datos
+        4. Sincronizar
+        """
+        if not self.langgraph:
+            return {"success": False, "error": "LangGraph no está disponible"}
+        
+        try:
+            def verify_connection_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Verificar conexión"""
+                connection = self.get_connection(state["data"]["integration_id"])
+                state["data"]["connected"] = connection is not None and connection.status == "active"
+                return state
+            
+            def fetch_data_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Obtener datos"""
+                if state["data"].get("connected"):
+                    # Simular obtención de datos
+                    state["data"]["data_fetched"] = True
+                return state
+            
+            def process_data_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Procesar datos"""
+                if state["data"].get("data_fetched"):
+                    state["data"]["data_processed"] = True
+                return state
+            
+            def sync_node(state: Dict[str, Any]) -> Dict[str, Any]:
+                """Nodo: Sincronizar"""
+                if state["data"].get("data_processed"):
+                    # Actualizar last_sync
+                    connection = self.get_connection(state["data"]["integration_id"])
+                    if connection:
+                        connection.last_sync = time.strftime("%Y-%m-%d %H:%M:%S")
+                        self._save_connections()
+                    state["data"]["synced"] = True
+                return state
+            
+            # Crear workflow
+            nodes = {
+                "verify": verify_connection_node,
+                "fetch": fetch_data_node,
+                "process": process_data_node,
+                "sync": sync_node
+            }
+            
+            edges = [
+                ("verify", "fetch"),
+                ("fetch", "process"),
+                ("process", "sync")
+            ]
+            
+            workflow_id = f"sync_{integration_id}"
+            workflow = self.langgraph.create_workflow(
+                workflow_id=workflow_id,
+                nodes=nodes,
+                edges=edges,
+                entry_point="verify",
+                exit_point="sync"
+            )
+            
+            # Ejecutar workflow
+            result = self.langgraph.execute_workflow(
+                workflow_id=workflow_id,
+                initial_data={"integration_id": integration_id}
+            )
+            
+            return result
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # ============================================
+    # MÉTODOS CON CREWAI - Multi-Agent Collaboration
+    # ============================================
+    
+    def create_integration_crew(self) -> Dict[str, Any]:
+        """
+        Crea un crew de agentes CrewAI para gestión de integraciones.
+        
+        Agentes:
+        - Integration Specialist: Especialista en conectar sistemas
+        - Data Synchronizer: Sincroniza datos entre sistemas
+        - Security Validator: Valida seguridad de conexiones
+        """
+        if not self.crewai:
+            return {"success": False, "error": "CrewAI no está disponible"}
+        
+        try:
+            # Crear agentes especializados
+            integration_specialist = self.crewai.create_agent(
+                agent_id="integration_specialist",
+                role="Integration Specialist",
+                goal="Connect and configure integrations with external systems",
+                backstory="""You are an expert at integrating different systems. You understand 
+                APIs, OAuth flows, authentication, and how to connect systems securely.""",
+                verbose=True
+            )
+            
+            data_synchronizer = self.crewai.create_agent(
+                agent_id="data_synchronizer",
+                role="Data Synchronization Specialist",
+                goal="Synchronize data between integrated systems efficiently",
+                backstory="""You are an expert at data synchronization. You understand how to 
+                map data between systems, handle conflicts, and ensure data consistency.""",
+                verbose=True
+            )
+            
+            security_validator = self.crewai.create_agent(
+                agent_id="security_validator",
+                role="Security Validation Specialist",
+                goal="Validate that integrations are secure and compliant",
+                backstory="""You are an expert at security and compliance. You validate that 
+                integrations follow security best practices and meet compliance requirements.""",
+                verbose=True
+            )
+            
+            # Crear tareas
+            connection_task = self.crewai.create_task(
+                description="Connect and configure a new integration",
+                agent=integration_specialist,
+                expected_output="Integration connected and configured successfully"
+            )
+            
+            sync_task = self.crewai.create_task(
+                description="Synchronize data between integrated systems",
+                agent=data_synchronizer,
+                expected_output="Data synchronized successfully"
+            )
+            
+            validation_task = self.crewai.create_task(
+                description="Validate security and compliance of integration",
+                agent=security_validator,
+                expected_output="Security validation report"
+            )
+            
+            # Crear crew
+            crew = self.crewai.create_crew(
+                crew_id="integration_crew",
+                agents=[integration_specialist, data_synchronizer, security_validator],
+                tasks=[connection_task, sync_task, validation_task],
+                process="sequential",
+                verbose=True
+            )
+            
+            return {
+                "success": True,
+                "crew_id": "integration_crew",
+                "agents": ["integration_specialist", "data_synchronizer", "security_validator"],
+                "message": "Integration crew creado exitosamente"
+            }
+        
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # ============================================
+    # MÉTODOS CON COMPOSIO - 250+ Integraciones
+    # ============================================
+    
+    def connect_via_composio(self, app_name: str) -> Dict[str, Any]:
+        """
+        Conecta una app usando Composio (250+ apps disponibles).
+        
+        Args:
+            app_name: Nombre de la app (gmail, slack, salesforce, hubspot, etc.)
+        """
+        if not self.composio:
+            return {"success": False, "error": "Composio no está disponible"}
+        
+        try:
+            result = self.composio.connect_app(app_name)
+            
+            if result.get("success"):
+                # Crear conexión en IntegrationManager
+                integration_id = f"composio_{app_name}_{int(time.time())}"
+                connection = IntegrationConnection(
+                    integration_id=integration_id,
+                    integration_type=IntegrationType.SLACK,  # Default, se puede mejorar
+                    user_id="user",
+                    access_token=result.get("connection_id", ""),
+                    status="active",
+                    metadata={"composio_app": app_name, "composio_connection": True}
+                )
+                self.connections[integration_id] = connection
+                self._save_connections()
+            
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def get_composio_apps(self) -> List[Dict[str, Any]]:
+        """Obtiene todas las apps disponibles en Composio."""
+        if not self.composio:
+            return []
+        
+        try:
+            return self.composio.get_available_apps()
+        except Exception as e:
+            print(f"Error obteniendo apps de Composio: {e}")
+            return []
+    
+    def execute_composio_action(
+        self,
+        app_name: str,
+        action_name: str,
+        parameters: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Ejecuta una acción en una app de Composio.
+        
+        Args:
+            app_name: Nombre de la app
+            action_name: Nombre de la acción
+            parameters: Parámetros de la acción
+        """
+        if not self.composio:
+            return {"success": False, "error": "Composio no está disponible"}
+        
+        try:
+            # Conectar app si no está conectada
+            if app_name not in self.composio.connected_apps:
+                connect_result = self.composio.connect_app(app_name)
+                if not connect_result.get("success"):
+                    return connect_result
+            
+            # Ejecutar acción
+            result = self.composio.execute_action(
+                app_name=app_name,
+                action_name=action_name,
+                parameters=parameters
+            )
+            
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def get_composio_app_actions(self, app_name: str) -> List[Dict[str, Any]]:
+        """Obtiene acciones disponibles para una app de Composio."""
+        if not self.composio:
+            return []
+        
+        try:
+            return self.composio.get_app_actions(app_name)
+        except Exception as e:
+            print(f"Error obteniendo acciones de {app_name}: {e}")
             return []
 

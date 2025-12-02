@@ -24,7 +24,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from .config import AppConfig
 from .utils.llm_factory import create_llm
-from .text_to_action import CodeSandbox, TextToActionAgent
+from .text_to_action import TextToAction, CodeSafetyChecker
 
 
 @dataclass
@@ -89,7 +89,8 @@ class FullStackTextToAction:
         )
         
         # Sandbox para ejecutar código
-        self.sandbox = CodeSandbox(timeout=60)
+        # Usar TextToAction para ejecución segura de código
+        self.text_to_action = TextToAction(config, sandbox_enabled=True)
         
         # Directorio para aplicaciones
         self.apps_dir = Path(config.memory_dir) / "fullstack_apps"

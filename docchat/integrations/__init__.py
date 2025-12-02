@@ -1,21 +1,33 @@
-"""
-Sistema de Integraciones Nativas
+"""Integrations module for LangGraph, CrewAI, and Composio."""
 
-Conecta DocChat Enterprise con las 10 apps más importantes:
-- Google Drive / Gmail
-- Microsoft Teams / Outlook / OneDrive
-- Slack
-- Salesforce
-- Jira
-- GitHub
-- Notion
-- Confluence
-- Zendesk
-- ServiceNow
-"""
+from .langgraph_integration import LangGraphIntegration, WorkflowState
+from .crewai_integration import CrewAIIntegration
+from .composio_integration import ComposioIntegration
 
-from .integration_manager import IntegrationManager
-from .unified_search import UnifiedSearch
-from .oauth_handler import OAuthHandler
+# Exportar también los módulos existentes de integrations
+try:
+    from .integration_manager import IntegrationManager, IntegrationType, IntegrationConnection
+except ImportError:
+    pass
 
-__all__ = ["IntegrationManager", "UnifiedSearch", "OAuthHandler"]
+try:
+    from .unified_search import UnifiedSearch
+except ImportError:
+    pass
+
+try:
+    from .oauth_handler import OAuthHandler
+except ImportError:
+    pass
+
+__all__ = [
+    "LangGraphIntegration",
+    "WorkflowState",
+    "CrewAIIntegration",
+    "ComposioIntegration",
+    "IntegrationManager",
+    "IntegrationType",
+    "IntegrationConnection",
+    "UnifiedSearch",
+    "OAuthHandler"
+]

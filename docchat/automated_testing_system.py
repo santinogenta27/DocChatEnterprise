@@ -291,9 +291,25 @@ Genera los tests ahora:"""
         if test_case.test_code:
             try:
                 # Ejecutar en sandbox seguro
-                from .text_to_action import CodeSandbox
-                sandbox = CodeSandbox(timeout=30)
-                result = sandbox.execute(test_case.test_code, {"target": target})
+                from .text_to_action import TextToAction
+                # Usar TextToAction para ejecución segura
+                text_to_action = TextToAction(self.config, sandbox_enabled=True)
+                # Crear un ActionPlan temporal para ejecutar el código
+                from .text_to_action import ActionPlan, ActionType
+                action_plan = ActionPlan(
+                    action_id="test_execution",
+                    action_type=ActionType.CODE_EXECUTION,
+                    description="Test code execution",
+                    code=test_case.test_code,
+                    parameters={"target": target}
+                )
+                import asyncio
+                result_obj = asyncio.run(text_to_action.execute_action(action_plan, confirm=True))
+                result = {
+                    "success": result_obj.success,
+                    "output": result_obj.output,
+                    "error": result_obj.error
+                }
                 
                 if result["success"]:
                     # Verificar resultado
