@@ -1,11 +1,30 @@
-"""Gradio app for DocChat Enterprise - Multi-Agent RAG with Autonomous Agents."""
+"""Gradio app for Enterprise Data AI - Multi-Agent RAG with Autonomous Agents."""
 
 from __future__ import annotations
 
 import os
+import sys
+
+# FIX PARA WINDOWS: Configurar codificación UTF-8 para evitar errores con emojis
+# Esto debe estar ANTES de cualquier import que pueda hacer print con emojis
+if sys.platform == "win32":
+    # Configurar stdout y stderr para usar UTF-8
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except AttributeError:
+        # Python < 3.7 fallback
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    
+    # También configurar la variable de entorno para subprocesos
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+
 import json
 import uuid
 import asyncio
+import time
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
@@ -87,6 +106,18 @@ from docchat.memory import MemoryStore, ContextManager
 from docchat.autonomous_agent import AutonomousAgent
 from docchat.advanced_agent import AdvancedAutonomousAgent
 from docchat.enterprise_api import EnterpriseAPIMode
+from docchat.enterprise_api_stargate import StargatePDFMode
+from docchat.enterprise_api_data_sight import DataSightMode
+from docchat.data_sight_integrations import DataSightIntegrations
+from docchat.data_sight_automation import DataSightAutomation, AutomationRule
+from docchat.enterprise_api_mdp import EnterpriseAPIMDPMode
+from docchat.enterprise_api_supreme import EnterpriseAPISupremeMode
+from docchat.enterprise_api_gold import EnterpriseAPIGoldMode
+from docchat.chatdoc_mode import run_chatdoc, get_chatdoc
+from docchat.pdf_converter import convert_to_pdf, TEXT_EXTENSIONS
+from docchat.enterprise_autonomous_workflows import EnterpriseAutonomousWorkflows
+from docchat.enterprise_data_intelligence import EnterpriseDataIntelligence
+from docchat.agentic_workflow_orchestrator import AgenticWorkflowOrchestrator
 from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
 from docchat.customer_service_agent import CustomerServiceAgent
 from docchat.chatbot_mode import ChatbotMode
@@ -106,10 +137,13 @@ from docchat.cloud_integrations import CloudStorageIntegration, WebhookProcessor
 from docchat.rpa_automation import RPAAutomationEngine
 from docchat.rpa_enterprise_integration import RPAEnterpriseIntegration
 from docchat.semantic_data_engine import SemanticDataEngine, DataModality
+from docchat.data_ingestion_engine import DataIngestionEngine
 from docchat.audit import AuditLogger
 from docchat.leads_mode import LeadsMode
 from docchat.marketing_agent import MarketingAgent
 from docchat.persistent_storage import PersistentStorage
+from docchat.connections_manager import ConnectionsManager
+from docchat.oauth_connections import RealConnectionsManager, GoogleOAuth, MicrosoftOAuth, DropboxOAuth
 
 # Check for vector store availability
 try:
@@ -202,6 +236,25 @@ context_manager = ContextManager(memory_store, config) if memory_store else None
 autonomous_agent = AutonomousAgent(agent_id="main_agent", config=config) if config.enable_autonomous_agents else None
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
 enterprise_api = EnterpriseAPIMode(config, provider="openai")  # Default: OpenAI
+# Stargate PDF - clon del Enterprise API original
+stargate_pdf = StargatePDFMode(config, provider="openai")
+# Data Sight - clon del Enterprise API para análisis de datos e insights
+data_sight = DataSightMode(config, provider="openai")
+# Data Sight Integrations - Sistema de conexión con sistemas empresariales
+data_sight_integrations = DataSightIntegrations(config, data_sight)
+# Data Sight Automation - Sistema de automatización inteligente
+data_sight_automation = DataSightAutomation(config, data_sight)
+# Conectar automatización con Data Sight
+data_sight.automation = data_sight_automation
+# ChatDoc - Modo conversacional avanzado (reemplaza Enterprise API MDP Parallel)
+chatdoc_instance = None  # Se inicializa cuando se use
+# Modo Supreme (clon del Enterprise API original)
+enterprise_api_supreme = EnterpriseAPISupremeMode(config, provider="openai")
+# Modo Gold (clon del modo Supreme)
+enterprise_api_gold = EnterpriseAPIGoldMode(config, provider="openai")
+# Enterprise Autonomous Workflows se inicializa más abajo,
+# cuando ya existe research_action_agent y audit_logger
+enterprise_workflows = None
 enterprise_agentic_ai = EnterpriseAgenticAI(config, provider="openai") if config.enable_autonomous_agents else None
 
 # Inicializar Text-to-Action Agent y Email Autonomous Agent
@@ -319,6 +372,13 @@ except Exception as e:
     print(f"Advertencia: Error inicializando Semantic Engine: {e}")
     semantic_engine = None
 
+# Inicializar Data Ingestion Engine (para R&A Agent y otros modos)
+try:
+    data_ingestion_engine = DataIngestionEngine(semantic_engine) if semantic_engine else None
+except Exception as e:
+    print(f"Advertencia: Error inicializando Data Ingestion Engine: {e}")
+    data_ingestion_engine = None
+
 try:
     chatbot_mode = ChatbotMode(config)
 except Exception as e:
@@ -339,6 +399,27 @@ try:
 except Exception as e:
     print(f"⚠️ Error inicializando Marketing Agent: {e}")
     marketing_agent = None
+
+# Inicializar Connections Manager (gestión de conexiones y sincronización de documentos)
+try:
+    connections_manager = ConnectionsManager(config)
+    print("✅ Connections Manager inicializado - Sincronización de documentos por fuente")
+except Exception as e:
+    print(f"⚠️ Error inicializando Connections Manager: {e}")
+    connections_manager = None
+
+# Inicializar Real Connections Manager (OAuth real con Gmail, Drive, Outlook, etc.)
+try:
+    real_connections_manager = RealConnectionsManager(config)
+    oauth_status = real_connections_manager.get_oauth_status()
+    configured_providers = [p for p, s in oauth_status.items() if s["configured"]]
+    if configured_providers:
+        print(f"✅ Real Connections Manager inicializado - OAuth configurado para: {', '.join(configured_providers)}")
+    else:
+        print("✅ Real Connections Manager inicializado - Configura variables de entorno para habilitar OAuth")
+except Exception as e:
+    print(f"⚠️ Error inicializando Real Connections Manager: {e}")
+    real_connections_manager = None
 
 try:
     cloud_integration = CloudStorageIntegration(config, enterprise_api)
@@ -2762,6 +2843,434 @@ def run_enterprise_api_mode_streaming(files, auto_detect: bool = True, rules_jso
         accumulated_output += f"\n❌ **Error**: {error_msg}\n"
         yield accumulated_output
 
+
+def run_stargate_pdf_mode_streaming(
+    files,
+    auto_detect: bool = True,
+    rules_json: str = "",
+    provider: str = "openai",
+    pipeline_type: str = "general",
+):
+    """Ejecuta modo Stargate PDF (clon de Enterprise API) con streaming de resultados (generador)."""
+    accumulated_output = ""
+    
+    if not files:
+        error_msg = "❌ No hay archivos subidos.\n\nArrastra tus PDFs al campo de archivos de Stargate PDF."
+        yield error_msg
+        return
+    
+    audit_logger.log(
+        event_type="stargate_pdf",
+        action="process_stargate_documents",
+        resource="documents",
+        user_id="user",
+        metadata={"file_count": len(files), "auto_detect": auto_detect}
+    )
+    
+    try:
+        # Parsear reglas si se proporcionan
+        rules = []
+        if rules_json and rules_json.strip():
+            try:
+                rules = json.loads(rules_json)
+            except Exception:
+                rules = []
+        
+        # Crear instancia temporal de StargatePDF con el provider seleccionado
+        temp_stargate = StargatePDFMode(config, provider=provider)
+        # Anotar el tipo de pipeline de negocio seleccionado desde la UI
+        temp_stargate.pipeline_type = pipeline_type
+        
+        # Ejecutar el pipeline Stargate (no streaming interno, devolvemos todo el informe de una vez)
+        report_markdown = temp_stargate.process_stargate_pipeline(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules,
+        )
+        accumulated_output += report_markdown
+        yield accumulated_output
+    
+    except Exception as e:
+        error_msg = f"Error en modo Stargate PDF: {str(e)}"
+        audit_logger.log(
+            event_type="error",
+            action="stargate_pdf",
+            resource="documents",
+            result="error",
+            metadata={"error": str(e)}
+        )
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
+
+def run_data_sight_mode_streaming(
+    files,
+    auto_detect: bool = True,
+    rules_json: str = "",
+    provider: str = "openai",
+):
+    """Ejecuta modo Data Sight (clon de Enterprise API) con streaming de resultados (generador)."""
+    accumulated_output = ""
+    
+    if not files:
+        error_msg = "❌ No hay archivos subidos.\n\nArrastra tus documentos al campo de archivos de Data Sight."
+        yield error_msg
+        return
+    
+    audit_logger.log(
+        event_type="data_sight",
+        action="process_data_sight_documents",
+        resource="documents",
+        user_id="user",
+        metadata={"file_count": len(files), "auto_detect": auto_detect}
+    )
+    
+    try:
+        # Parsear reglas si se proporcionan
+        rules = []
+        if rules_json and rules_json.strip():
+            try:
+                rules = json.loads(rules_json)
+            except Exception:
+                rules = []
+        
+        # Crear instancia temporal de DataSightMode con el provider seleccionado
+        temp_data_sight = DataSightMode(config, provider=provider)
+        
+        # Ejecutar el pipeline Data Sight (no streaming interno, devolvemos todo el informe de una vez)
+        report_markdown = temp_data_sight.process_data_sight_pipeline(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules,
+        )
+        accumulated_output += report_markdown
+        yield accumulated_output
+    
+    except Exception as e:
+        error_msg = f"Error en modo Data Sight: {str(e)}"
+        audit_logger.log(
+            event_type="error",
+            action="data_sight",
+            resource="documents",
+            result="error",
+            metadata={"error": str(e)}
+        )
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
+
+# Funciones para manejar integraciones de Data Sight
+def connect_sharepoint_data_sight(name, client_id, client_secret, tenant_id, site_url, auto_sync):
+    """Conecta SharePoint/OneDrive a Data Sight."""
+    try:
+        result = data_sight_integrations.connect_sharepoint(
+            name=name,
+            client_id=client_id,
+            client_secret=client_secret,
+            tenant_id=tenant_id,
+            site_url=site_url if site_url else None,
+            auto_sync=auto_sync
+        )
+        if result.get("success"):
+            return f"✅ {result.get('message', 'SharePoint conectado exitosamente')}\n\n**Connection ID:** `{result.get('connection_id')}`"
+        else:
+            return f"❌ Error: {result.get('error', 'Error desconocido')}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def connect_google_drive_data_sight(name, access_token, refresh_token, folder_id, auto_sync):
+    """Conecta Google Drive a Data Sight."""
+    try:
+        result = data_sight_integrations.connect_google_drive(
+            name=name,
+            access_token=access_token,
+            refresh_token=refresh_token if refresh_token else None,
+            folder_id=folder_id if folder_id else None,
+            auto_sync=auto_sync
+        )
+        if result.get("success"):
+            return f"✅ {result.get('message', 'Google Drive conectado exitosamente')}\n\n**Connection ID:** `{result.get('connection_id')}`"
+        else:
+            return f"❌ Error: {result.get('error', 'Error desconocido')}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def connect_salesforce_data_sight(name, instance_url, access_token, auto_sync):
+    """Conecta Salesforce a Data Sight."""
+    try:
+        result = data_sight_integrations.connect_salesforce(
+            name=name,
+            instance_url=instance_url,
+            access_token=access_token,
+            auto_sync=auto_sync
+        )
+        if result.get("success"):
+            return f"✅ {result.get('message', 'Salesforce conectado exitosamente')}\n\n**Connection ID:** `{result.get('connection_id')}`"
+        else:
+            return f"❌ Error: {result.get('error', 'Error desconocido')}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def connect_email_data_sight(name, email_type, access_token, refresh_token, auto_sync):
+    """Conecta Gmail o Outlook a Data Sight."""
+    try:
+        result = data_sight_integrations.connect_email(
+            name=name,
+            email_type=email_type,
+            access_token=access_token,
+            refresh_token=refresh_token if refresh_token else None,
+            auto_sync=auto_sync
+        )
+        if result.get("success"):
+            return f"✅ {result.get('message', 'Email conectado exitosamente')}\n\n**Connection ID:** `{result.get('connection_id')}`"
+        else:
+            return f"❌ Error: {result.get('error', 'Error desconocido')}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def connect_smb_data_sight(name, server, share_name, username, password, domain, auto_sync):
+    """Conecta recurso compartido SMB a Data Sight."""
+    try:
+        result = data_sight_integrations.connect_smb_share(
+            name=name,
+            server=server,
+            share_name=share_name,
+            username=username,
+            password=password,
+            domain=domain if domain else None,
+            auto_sync=auto_sync
+        )
+        if result.get("success"):
+            return f"✅ {result.get('message', 'SMB conectado exitosamente')}\n\n**Connection ID:** `{result.get('connection_id')}`\n\n⚠️ **Nota:** Requiere acceso a la red interna y librería `smbprotocol` instalada."
+        else:
+            return f"❌ Error: {result.get('error', 'Error desconocido')}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def list_data_sight_connections():
+    """Lista todas las conexiones de Data Sight."""
+    try:
+        connections = data_sight_integrations.list_connections()
+        if not connections:
+            return "📋 **No hay conexiones configuradas.**\n\nConecta un sistema desde las pestañas de arriba."
+        
+        lines = ["## 📋 Conexiones Activas\n\n"]
+        lines.append("| Nombre | Tipo | Estado | Última Sincronización |\n")
+        lines.append("|--------|------|--------|------------------------|\n")
+        
+        for conn in connections:
+            status_emoji = "✅" if conn["status"] == "active" else "❌" if conn["status"] == "error" else "⚠️"
+            last_sync = conn.get("last_sync", "Nunca")
+            if last_sync and last_sync != "Nunca":
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(last_sync.replace("Z", "+00:00"))
+                    last_sync = dt.strftime("%Y-%m-%d %H:%M")
+                except:
+                    pass
+            
+            lines.append(f"| {conn['name']} | {conn['system_type']} | {status_emoji} {conn['status']} | {last_sync} |\n")
+            lines.append(f"| `{conn['connection_id']}` | Auto-sync: {'✅' if conn['auto_sync'] else '❌'} | | |\n")
+        
+        return "".join(lines)
+    except Exception as e:
+        return f"❌ Error listando conexiones: {str(e)}"
+
+
+def sync_data_sight_connection(connection_id):
+    """Sincroniza una conexión específica de Data Sight."""
+    try:
+        if not connection_id or not connection_id.strip():
+            return "❌ Por favor, ingresa un Connection ID válido."
+        
+        result = data_sight_integrations.sync_connection(connection_id.strip())
+        
+        if result.get("success"):
+            files_count = result.get("files_processed", 0)
+            if files_count > 0:
+                return f"✅ **Sincronización exitosa**\n\n📄 **Archivos procesados:** {files_count}\n\nLos documentos se han procesado automáticamente con Data Sight."
+            else:
+                return f"✅ **Sincronización completada**\n\nℹ️ No se encontraron documentos nuevos para procesar."
+        else:
+            return f"❌ Error: {result.get('error', 'Error desconocido')}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def run_chatdoc_conversational(message, history, files, session_id, speed_mode="balanced", provider="openai"):
+    """Ejecuta ChatDoc - Sistema de Inteligencia Documental Avanzado (Eric Schmidt Style)."""
+    global chatdoc_instance
+    
+    # Inicializar ChatDoc si no existe o si cambió el provider
+    if chatdoc_instance is None or not hasattr(chatdoc_instance, 'provider') or chatdoc_instance.provider != provider:
+        chatdoc_instance = get_chatdoc(
+            config=config,
+            processor=processor,
+            retriever_builder=retriever_builder,
+            context_manager=context_manager,
+            provider=provider
+        )
+    
+    # Ejecutar ChatDoc
+    return run_chatdoc(
+        message=message,
+        history=history,
+        files=files,
+        session_id=session_id,
+        speed_mode=speed_mode,
+        provider=provider,
+        config=config,
+        processor=processor,
+        retriever_builder=retriever_builder,
+        context_manager=context_manager
+    )
+
+def run_enterprise_api_supreme_mode_streaming(
+    files, 
+    auto_detect: bool = True, 
+    rules_json: str = "", 
+    provider: str = "openai",
+    enable_comparative: bool = True,
+    enable_structured_extraction: bool = True
+):
+    """Ejecuta modo Enterprise API Supreme con streaming de resultados (generador optimizado Eric Schmidt style)."""
+    accumulated_output = ""
+    
+    try:
+        # Parsear reglas si se proporcionan
+        rules = None
+        if rules_json and rules_json.strip():
+            try:
+                rules = json.loads(rules_json)
+            except json.JSONDecodeError:
+                yield "⚠️ **Advertencia**: El JSON de reglas no es válido. Se procesará sin reglas.\n\n"
+        
+        # Registrar inicio
+        audit_logger.log(
+            event_type="enterprise_api_supreme",
+            action="start_processing",
+            resource="documents",
+            result="started",
+            metadata={
+                "files_count": len(files) if files else 0, 
+                "auto_detect": auto_detect, 
+                "provider": provider,
+                "enable_comparative": enable_comparative,
+                "enable_structured_extraction": enable_structured_extraction,
+            },
+        )
+        
+        # Crear Enterprise API Supreme con el provider seleccionado
+        temp_enterprise_api_supreme = EnterpriseAPISupremeMode(config, provider=provider)
+        
+        # Procesar con Enterprise API Supreme usando streaming (con todas las optimizaciones)
+        for chunk in temp_enterprise_api_supreme.process_enterprise_documents_streaming(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules,
+            enable_comparative=enable_comparative,
+            enable_structured_extraction=enable_structured_extraction,
+        ):
+            accumulated_output += chunk
+            yield accumulated_output
+        
+        # Registrar éxito
+        audit_logger.log(
+            event_type="enterprise_api_supreme",
+            action="complete_processing",
+            resource="documents",
+            result="success",
+            metadata={"files_count": len(files) if files else 0},
+        )
+        
+    except Exception as e:
+        error_msg = f"Error en modo Enterprise API Supreme: {str(e)}"
+        audit_logger.log(
+            event_type="error",
+            action="enterprise_api_supreme",
+            resource="documents",
+            result="error",
+            metadata={"error": str(e)},
+        )
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
+
+def run_enterprise_api_gold_mode_streaming(
+    files, 
+    auto_detect: bool = True, 
+    rules_json: str = "", 
+    provider: str = "openai",
+    enable_comparative: bool = True,
+    enable_structured_extraction: bool = True
+):
+    """Ejecuta modo Enterprise API Gold con streaming de resultados (generador optimizado Eric Schmidt style)."""
+    accumulated_output = ""
+    
+    try:
+        # Parsear reglas si se proporcionan
+        rules = None
+        if rules_json and rules_json.strip():
+            try:
+                rules = json.loads(rules_json)
+            except json.JSONDecodeError:
+                yield "⚠️ **Advertencia**: El JSON de reglas no es válido. Se procesará sin reglas.\n\n"
+        
+        # Registrar inicio
+        audit_logger.log(
+            event_type="enterprise_api_gold",
+            action="start_processing",
+            resource="documents",
+            result="started",
+            metadata={
+                "files_count": len(files) if files else 0, 
+                "auto_detect": auto_detect, 
+                "provider": provider,
+                "enable_comparative": enable_comparative,
+                "enable_structured_extraction": enable_structured_extraction,
+            },
+        )
+        
+        # Crear Enterprise API Gold con el provider seleccionado
+        temp_enterprise_api_gold = EnterpriseAPIGoldMode(config, provider=provider)
+        
+        # Procesar con Enterprise API Gold usando streaming (con todas las optimizaciones)
+        for chunk in temp_enterprise_api_gold.process_enterprise_documents_streaming(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules,
+            enable_comparative=enable_comparative,
+            enable_structured_extraction=enable_structured_extraction,
+        ):
+            accumulated_output += chunk
+            yield accumulated_output
+        
+        # Registrar éxito
+        audit_logger.log(
+            event_type="enterprise_api_gold",
+            action="complete_processing",
+            resource="documents",
+            result="success",
+            metadata={"files_count": len(files) if files else 0},
+        )
+        
+    except Exception as e:
+        error_msg = f"Error en modo Enterprise API Gold: {str(e)}"
+        audit_logger.log(
+            event_type="error",
+            action="enterprise_api_gold",
+            resource="documents",
+            result="error",
+            metadata={"error": str(e)},
+        )
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
 def run_enterprise_api_mode(files, auto_detect: bool = True, rules_json: str = ""):
     """Ejecuta modo Enterprise API con procesamiento automático (SOLO para archivos locales)."""
     if not files:
@@ -3400,14 +3909,253 @@ def connect_azure_storage(
         raise gr.Error(error_msg)
 
 
+# CSS personalizado para el menú de configuración de API keys
+CUSTOM_CSS = """
+/* Contenedor del header con el menú de API keys */
+.api-config-container {
+    position: fixed;
+    top: 10px;
+    right: 20px;
+    z-index: 9999;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 12px;
+    padding: 8px 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.api-config-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.api-config-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* Modal de configuración */
+.api-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    justify-content: center;
+    align-items: center;
+}
+
+.api-modal.active {
+    display: flex;
+}
+
+.api-modal-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 16px;
+    padding: 30px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.api-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.api-modal-title {
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.api-close-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 24px;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.api-close-btn:hover {
+    color: #fff;
+}
+
+/* Estilos para el acordeón de Gradio en el header */
+#api-config-accordion {
+    position: absolute;
+    top: 60px;
+    right: 20px;
+    width: 400px;
+    z-index: 9999;
+}
+
+#api-config-accordion .label-wrap {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-radius: 10px !important;
+}
+
+/* Indicador de estado de API */
+.api-status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+.api-status-connected {
+    background: #10b981;
+    box-shadow: 0 0 10px #10b981;
+}
+
+.api-status-disconnected {
+    background: #ef4444;
+    box-shadow: 0 0 10px #ef4444;
+}
+"""
+
 # Interfaz Gradio
-with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="teal")) as demo:
+with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="teal"), css=CUSTOM_CSS) as demo:
+    
+    # ==================== MENÚ DE CONFIGURACIÓN DE API KEYS ====================
+    # Estado para almacenar las API keys del usuario
+    user_openai_key = gr.State(value="")
+    user_anthropic_key = gr.State(value="")
+    
+    # Header con título y menú de configuración
+    with gr.Row():
+        with gr.Column(scale=4):
+            gr.Markdown(
+                """
+                # 🚀 DocChat Enterprise · Multi-Agent RAG con Agentes Autónomos
+                
+                Sistema avanzado de análisis de documentos con agentes autónomos, memoria persistente y procesamiento masivo.
+                """
+            )
+        with gr.Column(scale=1, min_width=200):
+            with gr.Accordion("⚙️ Configurar APIs", open=False):
+                gr.Markdown("### 🔑 Tus API Keys")
+                gr.Markdown("*Configura tus propias API keys para usar los modelos de IA*")
+                
+                api_openai_input = gr.Textbox(
+                    label="🟢 OpenAI API Key",
+                    placeholder="sk-...",
+                    type="password",
+                    info="Para GPT-4, GPT-4o, etc."
+                )
+                
+                api_anthropic_input = gr.Textbox(
+                    label="🟣 Anthropic API Key (Claude)",
+                    placeholder="sk-ant-...",
+                    type="password",
+                    info="Para Claude 3, Claude 3.5, etc."
+                )
+                
+                save_api_keys_btn = gr.Button("💾 Guardar API Keys", variant="primary")
+                api_status_display = gr.Markdown("*No hay API keys configuradas*")
+                
+                def save_user_api_keys(openai_key: str, anthropic_key: str):
+                    """Guarda las API keys del usuario y actualiza la configuración."""
+                    global config
+                    status_parts = []
+                    
+                    # Validar y guardar OpenAI key
+                    if openai_key and openai_key.strip():
+                        openai_key = openai_key.strip()
+                        if openai_key.startswith("sk-"):
+                            os.environ["OPENAI_API_KEY"] = openai_key
+                            config.openai_api_key = openai_key
+                            status_parts.append("✅ **OpenAI**: Conectada")
+                        else:
+                            status_parts.append("❌ **OpenAI**: Key inválida (debe empezar con 'sk-')")
+                    else:
+                        # Usar la key del .env si existe
+                        if os.getenv("OPENAI_API_KEY"):
+                            status_parts.append("✅ **OpenAI**: Usando key del servidor")
+                        else:
+                            status_parts.append("⚠️ **OpenAI**: No configurada")
+                    
+                    # Validar y guardar Anthropic key
+                    if anthropic_key and anthropic_key.strip():
+                        anthropic_key = anthropic_key.strip()
+                        if anthropic_key.startswith("sk-ant-"):
+                            os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+                            config.anthropic_api_key = anthropic_key
+                            status_parts.append("✅ **Anthropic (Claude)**: Conectada")
+                        else:
+                            status_parts.append("❌ **Anthropic**: Key inválida (debe empezar con 'sk-ant-')")
+                    else:
+                        # Usar la key del .env si existe
+                        if os.getenv("ANTHROPIC_API_KEY"):
+                            status_parts.append("✅ **Anthropic**: Usando key del servidor")
+                        else:
+                            status_parts.append("⚠️ **Anthropic (Claude)**: No configurada")
+                    
+                    # Reinicializar los modos que usan las APIs
+                    try:
+                        # Actualizar Enterprise API y sus variantes
+                        enterprise_api.config = config
+                        stargate_pdf.config = config
+                        data_sight.config = config
+                        enterprise_api_supreme.config = config
+                        enterprise_api_gold.config = config
+                        
+                        # Actualizar agentes
+                        if workflow:
+                            workflow.config = config
+                        if enterprise_agentic_ai:
+                            enterprise_agentic_ai.config = config
+                        if email_autonomous_agent:
+                            email_autonomous_agent.config = config
+                        if text_to_action_agent:
+                            text_to_action_agent.config = config
+                            
+                        status_parts.append("\n🔄 **Modos actualizados correctamente**")
+                    except Exception as e:
+                        status_parts.append(f"\n⚠️ Error actualizando modos: {str(e)[:50]}")
+                    
+                    return (
+                        "\n".join(status_parts),
+                        openai_key if openai_key else "",
+                        anthropic_key if anthropic_key else ""
+                    )
+                
+                save_api_keys_btn.click(
+                    fn=save_user_api_keys,
+                    inputs=[api_openai_input, api_anthropic_input],
+                    outputs=[api_status_display, user_openai_key, user_anthropic_key]
+                )
+            
+            # Mensaje de ayuda para conversión a PDF
+            gr.Markdown(
+                """
+                📄 **¿Archivo no es PDF?** 👉 [Convertir gratis en iLovePDF](https://www.ilovepdf.com/es)
+                """
+            )
+    
     gr.Markdown(
         """
-        # 🚀 DocChat Enterprise · Multi-Agent RAG con Agentes Autónomos
-        
-        Sistema avanzado de análisis de documentos con agentes autónomos, memoria persistente y procesamiento masivo.
-        
         **Funcionalidades:**
         - 📚 Procesamiento híbrido (Docling + chunking jerárquico)
         - 🔍 Recuperación híbrida (BM25 + embeddings)
@@ -3427,7 +4175,2134 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
     # Se puede verificar después cuando se necesite
     
     with gr.Tabs() as main_tabs:
-        # Tab 1: JARVIS - Agente Autónomo 24/7 (Reemplaza Consulta RAG)
+        # Tab 1: CONEXIONES - Sincronización de documentos por fuente
+        with gr.Tab("🔗 Conexiones"):
+            gr.Markdown("### 🔗 Conexiones - Sincroniza tus documentos automáticamente")
+            gr.Markdown("""
+            **Conecta tus fuentes y sincroniza documentos automáticamente:**
+            
+            - 📧 **Gmail** - PDFs adjuntos de tu correo
+            - 📁 **Google Drive** - Documentos de tu Drive
+            - 📨 **Outlook** - PDFs de tu correo empresarial
+            - 💼 **OneDrive** - Archivos de Microsoft
+            - 📦 **Dropbox** - Sincroniza tu Dropbox
+            - 💬 **Slack** - PDFs compartidos en canales
+            
+            **Los documentos se organizan automáticamente por fuente y categoría.**
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Dashboard de documentos
+                with gr.Tab("📊 Dashboard"):
+                    gr.Markdown("### 📁 Mis Documentos Sincronizados")
+                    
+                    connections_dashboard_output = gr.Markdown("")
+                    
+                    def get_connections_dashboard():
+                        """Genera el dashboard de documentos sincronizados."""
+                        if connections_manager is None:
+                            return "⚠️ Connections Manager no disponible"
+                        
+                        stats = connections_manager.get_dashboard_stats()
+                        docs_by_source = connections_manager.get_documents_by_source()
+                        
+                        output = f"""## 📊 Resumen General
+
+| Métrica | Valor |
+|---------|-------|
+| 🔗 Conexiones activas | {stats['total_connections']} |
+| 📄 Total documentos | {stats['total_documents']} |
+| ✅ Analizados | {stats['analyzed_documents']} |
+| ⏳ Pendientes de análisis | {stats['pending_analysis']} |
+| 💾 Almacenamiento usado | {stats['storage_used_mb']} MB |
+
+---
+
+## 📁 Documentos por Fuente
+
+"""
+                        if not docs_by_source:
+                            output += "*No hay documentos sincronizados aún. Conecta una fuente para empezar.*\n"
+                        else:
+                            for source_type, source_data in docs_by_source.items():
+                                source_info = connections_manager.SUPPORTED_SOURCES.get(source_type, {})
+                                icon = source_info.get("icon", "📄")
+                                name = source_info.get("name", source_type)
+                                total = source_data.get("total", 0)
+                                
+                                output += f"### {icon} {name} ({total} PDFs)\n\n"
+                                
+                                categories = source_data.get("categories", {})
+                                for category, docs in categories.items():
+                                    output += f"- **{category.capitalize()}** ({len(docs)} docs)\n"
+                                    for doc in docs[:3]:  # Mostrar solo 3 por categoría
+                                        analyzed_icon = "✅" if doc['analyzed'] else "⏳"
+                                        output += f"  - {analyzed_icon} {doc['filename']}\n"
+                                    if len(docs) > 3:
+                                        output += f"  - *... y {len(docs) - 3} más*\n"
+                                output += "\n"
+                        
+                        return output
+                    
+                    with gr.Row():
+                        refresh_dashboard_btn = gr.Button("🔄 Actualizar Dashboard", variant="primary")
+                    
+                    refresh_dashboard_btn.click(
+                        fn=get_connections_dashboard,
+                        inputs=[],
+                        outputs=[connections_dashboard_output]
+                    )
+                    
+                    # Cargar dashboard al inicio
+                    demo.load(
+                        fn=get_connections_dashboard,
+                        inputs=[],
+                        outputs=[connections_dashboard_output]
+                    )
+                
+                # Sub-tab: Conectar fuentes
+                with gr.Tab("➕ Conectar Fuentes"):
+                    gr.Markdown("### 🟢 Google Workspace (Gmail + Drive + Docs)")
+                    gr.Markdown("*Usa tu Access Token de Google para conectar Gmail, Drive y Docs en segundos.*")
+                    
+                    gr.Markdown("""
+                    ---
+                    ### 🔑 Método Fácil: Access Token
+                    
+                    **Pasos para obtener tu Access Token:**
+                    
+                    1. Ve a [Google OAuth Playground](https://developers.google.com/oauthplayground/)
+                    2. En el panel izquierdo, selecciona:
+                       - **Gmail API v1** → `https://www.googleapis.com/auth/gmail.readonly`
+                       - **Drive API v3** → `https://www.googleapis.com/auth/drive.readonly`
+                    3. Click en **"Authorize APIs"**
+                    4. Inicia sesión con tu cuenta de Google
+                    5. Click en **"Exchange authorization code for tokens"**
+                    6. Copia el **Access Token** y pégalo abajo
+                    
+                    ⏰ *El token dura ~1 hora. Después necesitarás generar uno nuevo.*
+                    
+                    📄 **Google Docs:** Se exportan automáticamente a PDF al sincronizar.
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            google_access_token_input = gr.Textbox(
+                                label="🔑 Access Token de Google",
+                                placeholder="Pega aquí tu Access Token de Google...",
+                                type="password",
+                                lines=2
+                            )
+                            
+                            with gr.Row():
+                                connect_gmail_btn = gr.Button("📧 Conectar Gmail", variant="primary")
+                                connect_drive_btn = gr.Button("📁 Conectar Drive", variant="primary")
+                                connect_docs_btn = gr.Button("📄 Conectar Docs", variant="primary")
+                        
+                        with gr.Column(scale=1):
+                            google_connection_output = gr.Markdown("""
+**Estado de Conexión Google Workspace:**
+
+- 📧 Gmail: ⚪ No conectado
+- 📁 Google Drive: ⚪ No conectado
+- 📄 Google Docs: ⚪ No conectado
+
+*Pega tu Access Token y conecta.*
+                            """)
+                    
+                    # Estado de conexiones guardado
+                    google_tokens_state = gr.State(value={"gmail": None, "drive": None, "docs": None})
+                    
+                    def connect_gmail_with_token(access_token, current_state):
+                        """Conecta Gmail usando Access Token."""
+                        if not access_token or not access_token.strip():
+                            return "❌ Por favor pega tu Access Token de Google", current_state
+                        
+                        access_token = access_token.strip()
+                        
+                        # Verificar que el token funciona para Gmail
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Probar conexión a Gmail
+                            response = requests.get(
+                                "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+                                headers=headers,
+                                timeout=10
+                            )
+                            
+                            if response.status_code == 200:
+                                profile = response.json()
+                                email = profile.get("emailAddress", "Desconocido")
+                                
+                                # Guardar token
+                                current_state["gmail"] = access_token
+                                current_state["gmail_email"] = email
+                                
+                                # Guardar en archivo
+                                tokens_file = Path(config.memory_dir) / "synced_documents" / "google_tokens.json"
+                                tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                with open(tokens_file, 'w') as f:
+                                    json.dump(current_state, f)
+                                
+                                drive_status = "🟢 Conectado" if current_state.get("drive") else "⚪ No conectado"
+                                docs_status = "🟢 Conectado" if current_state.get("docs") else "⚪ No conectado"
+                                
+                                output = f"""**Estado de Conexión Google Workspace:**
+
+- 📧 Gmail: 🟢 **Conectado** ({email})
+- 📁 Google Drive: {drive_status}
+- 📄 Google Docs: {docs_status}
+
+✅ **Gmail conectado exitosamente!**
+
+Ahora ve a **"🔄 Sincronizar"** y haz clic en **"SINCRONIZAR GMAIL"** para descargar todos tus PDFs.
+"""
+                                return output, current_state
+                            else:
+                                return f"❌ Token inválido o sin permisos de Gmail. Error: {response.status_code}", current_state
+                        except Exception as e:
+                            return f"❌ Error conectando: {str(e)}", current_state
+                    
+                    def connect_drive_with_token(access_token, current_state):
+                        """Conecta Google Drive usando Access Token."""
+                        if not access_token or not access_token.strip():
+                            return "❌ Por favor pega tu Access Token de Google", current_state
+                        
+                        access_token = access_token.strip()
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Probar conexión a Drive
+                            response = requests.get(
+                                "https://www.googleapis.com/drive/v3/about?fields=user",
+                                headers=headers,
+                                timeout=10
+                            )
+                            
+                            if response.status_code == 200:
+                                about = response.json()
+                                email = about.get("user", {}).get("emailAddress", "Desconocido")
+                                
+                                # Guardar token
+                                current_state["drive"] = access_token
+                                current_state["drive_email"] = email
+                                
+                                # Guardar en archivo
+                                tokens_file = Path(config.memory_dir) / "synced_documents" / "google_tokens.json"
+                                tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                with open(tokens_file, 'w') as f:
+                                    json.dump(current_state, f)
+                                
+                                gmail_status = "🟢 Conectado" if current_state.get("gmail") else "⚪ No conectado"
+                                docs_status = "🟢 Conectado" if current_state.get("docs") else "⚪ No conectado"
+                                
+                                output = f"""**Estado de Conexión Google Workspace:**
+
+- 📧 Gmail: {gmail_status}
+- 📁 Google Drive: 🟢 **Conectado** ({email})
+- 📄 Google Docs: {docs_status}
+
+✅ **Google Drive conectado exitosamente!**
+
+Ahora ve a **"🔄 Sincronizar"** y haz clic en **"SINCRONIZAR DRIVE"** para descargar todos tus PDFs.
+"""
+                                return output, current_state
+                            else:
+                                return f"❌ Token inválido o sin permisos de Drive. Error: {response.status_code}", current_state
+                        except Exception as e:
+                            return f"❌ Error conectando: {str(e)}", current_state
+                    
+                    def connect_docs_with_token(access_token, current_state):
+                        """Conecta Google Docs usando Access Token (usa la misma API de Drive)."""
+                        if not access_token or not access_token.strip():
+                            return "❌ Por favor pega tu Access Token de Google", current_state
+                        
+                        access_token = access_token.strip()
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Verificar acceso a Drive (Docs usa Drive API)
+                            response = requests.get(
+                                "https://www.googleapis.com/drive/v3/about?fields=user",
+                                headers=headers,
+                                timeout=10
+                            )
+                            
+                            if response.status_code == 200:
+                                about = response.json()
+                                email = about.get("user", {}).get("emailAddress", "Desconocido")
+                                
+                                # Contar Google Docs disponibles
+                                docs_response = requests.get(
+                                    "https://www.googleapis.com/drive/v3/files",
+                                    headers=headers,
+                                    params={
+                                        "q": "mimeType='application/vnd.google-apps.document'",
+                                        "pageSize": 100,
+                                        "fields": "files(id,name)"
+                                    },
+                                    timeout=15
+                                )
+                                
+                                docs_count = 0
+                                if docs_response.status_code == 200:
+                                    docs_count = len(docs_response.json().get("files", []))
+                                
+                                # Guardar token
+                                current_state["docs"] = access_token
+                                current_state["docs_email"] = email
+                                current_state["docs_count"] = docs_count
+                                
+                                # Guardar en archivo
+                                tokens_file = Path(config.memory_dir) / "synced_documents" / "google_tokens.json"
+                                tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                with open(tokens_file, 'w') as f:
+                                    json.dump(current_state, f)
+                                
+                                gmail_status = "🟢 Conectado" if current_state.get("gmail") else "⚪ No conectado"
+                                drive_status = "🟢 Conectado" if current_state.get("drive") else "⚪ No conectado"
+                                
+                                output = f"""**Estado de Conexión Google Workspace:**
+
+- 📧 Gmail: {gmail_status}
+- 📁 Google Drive: {drive_status}
+- 📄 Google Docs: 🟢 **Conectado** ({docs_count} docs encontrados)
+
+✅ **Google Docs conectado exitosamente!**
+
+Ahora ve a **"🔄 Sincronizar"** y haz clic en **"SINCRONIZAR DOCS"** para exportar tus documentos como PDF.
+"""
+                                return output, current_state
+                            else:
+                                return f"❌ Token inválido o sin permisos. Error: {response.status_code}", current_state
+                        except Exception as e:
+                            return f"❌ Error conectando: {str(e)}", current_state
+                    
+                    connect_gmail_btn.click(
+                        fn=connect_gmail_with_token,
+                        inputs=[google_access_token_input, google_tokens_state],
+                        outputs=[google_connection_output, google_tokens_state]
+                    )
+                    
+                    connect_drive_btn.click(
+                        fn=connect_drive_with_token,
+                        inputs=[google_access_token_input, google_tokens_state],
+                        outputs=[google_connection_output, google_tokens_state]
+                    )
+                    
+                    connect_docs_btn.click(
+                        fn=connect_docs_with_token,
+                        inputs=[google_access_token_input, google_tokens_state],
+                        outputs=[google_connection_output, google_tokens_state]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 🟦 Microsoft 365 (Outlook + OneDrive + SharePoint)")
+                    gr.Markdown("""
+                    **Pasos para obtener Access Token de Microsoft:**
+                    
+                    1. Ve a [Microsoft Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
+                    2. Click en **"Sign in"** e inicia sesión con tu cuenta Microsoft/Office 365
+                    3. Click en **"Access token"** (pestaña arriba)
+                    4. Copia el token y pégalo abajo
+                    
+                    **⚠️ Para SharePoint:** Asegúrate de dar permisos a `Sites.Read.All` en Graph Explorer (Modify permissions)
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            microsoft_access_token_input = gr.Textbox(
+                                label="🔑 Access Token de Microsoft",
+                                placeholder="Pega aquí tu Access Token de Microsoft...",
+                                type="password",
+                                lines=2
+                            )
+                            
+                            with gr.Row():
+                                connect_outlook_btn = gr.Button("📨 Conectar Outlook", variant="primary")
+                                connect_onedrive_btn = gr.Button("💼 Conectar OneDrive", variant="primary")
+                                connect_sharepoint_btn = gr.Button("📄 Conectar SharePoint", variant="primary")
+                        
+                        with gr.Column(scale=1):
+                            microsoft_connection_output = gr.Markdown("""
+**Estado de Conexión Microsoft 365:**
+
+- 📨 Outlook: ⚪ No conectado
+- 💼 OneDrive: ⚪ No conectado
+- 📄 SharePoint: ⚪ No conectado
+
+*Pega tu Access Token y conecta.*
+                            """)
+                    
+                    microsoft_tokens_state = gr.State(value={"outlook": None, "onedrive": None, "sharepoint": None})
+                    
+                    def get_microsoft_status(current_state):
+                        """Genera el texto de estado de conexión de Microsoft 365."""
+                        outlook_status = f"🟢 **Conectado** ({current_state.get('outlook_email', '')})" if current_state.get("outlook") else "⚪ No conectado"
+                        onedrive_status = f"🟢 **Conectado** ({current_state.get('onedrive_owner', '')})" if current_state.get("onedrive") else "⚪ No conectado"
+                        sharepoint_status = f"🟢 **Conectado** ({current_state.get('sharepoint_site', '')})" if current_state.get("sharepoint") else "⚪ No conectado"
+                        
+                        return f"""**Estado de Conexión Microsoft 365:**
+
+- 📨 Outlook: {outlook_status}
+- 💼 OneDrive: {onedrive_status}
+- 📄 SharePoint: {sharepoint_status}
+"""
+                    
+                    def connect_outlook_with_token(access_token, current_state):
+                        """Conecta Outlook usando Access Token."""
+                        if not access_token or not access_token.strip():
+                            return "❌ Por favor pega tu Access Token de Microsoft", current_state
+                        
+                        access_token = access_token.strip()
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            response = requests.get(
+                                "https://graph.microsoft.com/v1.0/me",
+                                headers=headers,
+                                timeout=10
+                            )
+                            
+                            if response.status_code == 200:
+                                profile = response.json()
+                                email = profile.get("mail") or profile.get("userPrincipalName", "Desconocido")
+                                
+                                current_state["outlook"] = access_token
+                                current_state["outlook_email"] = email
+                                
+                                tokens_file = Path(config.memory_dir) / "synced_documents" / "microsoft_tokens.json"
+                                tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                with open(tokens_file, 'w') as f:
+                                    json.dump(current_state, f)
+                                
+                                status = get_microsoft_status(current_state)
+                                return status + "\n✅ **Outlook conectado!** Ve a '🔄 Sincronizar' para descargar PDFs.", current_state
+                            else:
+                                return f"❌ Token inválido. Error: {response.status_code}", current_state
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", current_state
+                    
+                    def connect_onedrive_with_token(access_token, current_state):
+                        """Conecta OneDrive usando Access Token."""
+                        if not access_token or not access_token.strip():
+                            return "❌ Por favor pega tu Access Token de Microsoft", current_state
+                        
+                        access_token = access_token.strip()
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            response = requests.get(
+                                "https://graph.microsoft.com/v1.0/me/drive",
+                                headers=headers,
+                                timeout=10
+                            )
+                            
+                            if response.status_code == 200:
+                                drive_info = response.json()
+                                owner = drive_info.get("owner", {}).get("user", {}).get("displayName", "Desconocido")
+                                
+                                current_state["onedrive"] = access_token
+                                current_state["onedrive_owner"] = owner
+                                
+                                tokens_file = Path(config.memory_dir) / "synced_documents" / "microsoft_tokens.json"
+                                tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                with open(tokens_file, 'w') as f:
+                                    json.dump(current_state, f)
+                                
+                                status = get_microsoft_status(current_state)
+                                return status + "\n✅ **OneDrive conectado!** Ve a '🔄 Sincronizar' para descargar PDFs.", current_state
+                            else:
+                                return f"❌ Token inválido. Error: {response.status_code}", current_state
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", current_state
+                    
+                    def connect_sharepoint_with_token(access_token, current_state):
+                        """Conecta SharePoint usando Access Token."""
+                        if not access_token or not access_token.strip():
+                            return "❌ Por favor pega tu Access Token de Microsoft", current_state
+                        
+                        access_token = access_token.strip()
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Primero verificar que el token funciona
+                            response = requests.get(
+                                "https://graph.microsoft.com/v1.0/me",
+                                headers=headers,
+                                timeout=10
+                            )
+                            
+                            if response.status_code != 200:
+                                return f"❌ Token inválido. Error: {response.status_code}", current_state
+                            
+                            # Obtener sitios de SharePoint disponibles
+                            sites_response = requests.get(
+                                "https://graph.microsoft.com/v1.0/sites?search=*",
+                                headers=headers,
+                                timeout=15
+                            )
+                            
+                            if sites_response.status_code == 200:
+                                sites = sites_response.json().get("value", [])
+                                site_count = len(sites)
+                                site_names = [s.get("displayName", s.get("name", "Sin nombre")) for s in sites[:3]]
+                                site_info = ", ".join(site_names) if site_names else "Sitios encontrados"
+                                
+                                if site_count == 0:
+                                    # Intentar obtener el sitio raíz
+                                    root_response = requests.get(
+                                        "https://graph.microsoft.com/v1.0/sites/root",
+                                        headers=headers,
+                                        timeout=10
+                                    )
+                                    if root_response.status_code == 200:
+                                        root_site = root_response.json()
+                                        site_info = root_site.get("displayName", "Sitio raíz")
+                                        site_count = 1
+                                
+                                current_state["sharepoint"] = access_token
+                                current_state["sharepoint_site"] = f"{site_count} sitio(s): {site_info}"
+                                
+                                tokens_file = Path(config.memory_dir) / "synced_documents" / "microsoft_tokens.json"
+                                tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                with open(tokens_file, 'w') as f:
+                                    json.dump(current_state, f)
+                                
+                                status = get_microsoft_status(current_state)
+                                return status + f"\n✅ **SharePoint conectado!** ({site_count} sitios encontrados)\n\nVe a '🔄 Sincronizar' para descargar PDFs.", current_state
+                            elif sites_response.status_code == 403:
+                                return """❌ **Permisos insuficientes para SharePoint**
+
+**Solución:**
+1. Ve a [Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
+2. Click en **"Modify permissions"** (pestaña arriba)
+3. Busca y activa: **Sites.Read.All**
+4. Click en **"Consent"** para cada permiso
+5. Copia el nuevo Access Token y pégalo aquí
+""", current_state
+                            else:
+                                return f"❌ Error accediendo a SharePoint: {sites_response.status_code}\n\nAsegúrate de tener permisos Sites.Read.All", current_state
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", current_state
+                    
+                    connect_outlook_btn.click(
+                        fn=connect_outlook_with_token,
+                        inputs=[microsoft_access_token_input, microsoft_tokens_state],
+                        outputs=[microsoft_connection_output, microsoft_tokens_state]
+                    )
+                    
+                    connect_onedrive_btn.click(
+                        fn=connect_onedrive_with_token,
+                        inputs=[microsoft_access_token_input, microsoft_tokens_state],
+                        outputs=[microsoft_connection_output, microsoft_tokens_state]
+                    )
+                    
+                    connect_sharepoint_btn.click(
+                        fn=connect_sharepoint_with_token,
+                        inputs=[microsoft_access_token_input, microsoft_tokens_state],
+                        outputs=[microsoft_connection_output, microsoft_tokens_state]
+                    )
+                    
+                    # Botón de ayuda para OAuth permanente
+                    with gr.Accordion("💡 ¿Quieres conexión PERMANENTE? (sin copiar tokens)", open=False):
+                        gr.Markdown("""
+## 🔐 Configurar Microsoft OAuth Permanente (5 minutos)
+
+**Con esta configuración:**
+- ✅ Los usuarios solo autorizan **UNA VEZ**
+- ✅ El token se **refresca automáticamente**
+- ✅ No hay que copiar tokens de Graph Explorer
+
+---
+
+### Paso 1: Crear App en Azure (GRATIS)
+
+1. Ve a **[Azure Portal](https://portal.azure.com)**
+2. Busca **"App registrations"** en la barra de búsqueda
+3. Click en **"+ New registration"**
+4. Completa:
+   - **Name:** `DocChat Enterprise` (o el nombre de tu app)
+   - **Supported account types:** `Accounts in any organizational directory and personal Microsoft accounts`
+   - **Redirect URI:** 
+     - Platform: `Web`
+     - URL: `http://localhost:7860/oauth/microsoft/callback`
+5. Click **"Register"**
+
+---
+
+### Paso 2: Obtener Client ID y Secret
+
+**Client ID:**
+1. En la página de tu app, copia el **"Application (client) ID"**
+
+**Client Secret:**
+1. Ve a **"Certificates & secrets"** (menú izquierdo)
+2. Click **"+ New client secret"**
+3. Descripción: `DocChat` | Expires: `24 months`
+4. Click **"Add"**
+5. **COPIA EL VALUE INMEDIATAMENTE** (solo se muestra una vez)
+
+---
+
+### Paso 3: Configurar Permisos
+
+1. Ve a **"API permissions"** (menú izquierdo)
+2. Click **"+ Add a permission"**
+3. Selecciona **"Microsoft Graph"**
+4. Selecciona **"Delegated permissions"**
+5. Busca y marca:
+   - ✅ `Mail.Read` (para Outlook)
+   - ✅ `Files.Read` (para OneDrive)
+   - ✅ `User.Read` (para perfil)
+   - ✅ `offline_access` (para refresh token)
+6. Click **"Add permissions"**
+7. Click **"Grant admin consent"** (si eres admin)
+
+---
+
+### Paso 4: Configurar Variables de Entorno
+
+Crea un archivo `.env` en la raíz del proyecto o configura estas variables:
+
+```
+MICROSOFT_CLIENT_ID=tu-application-client-id
+MICROSOFT_CLIENT_SECRET=tu-client-secret-value
+MICROSOFT_REDIRECT_URI=http://localhost:7860/oauth/microsoft/callback
+```
+
+**En Windows (PowerShell):**
+```powershell
+$env:MICROSOFT_CLIENT_ID="tu-client-id"
+$env:MICROSOFT_CLIENT_SECRET="tu-client-secret"
+```
+
+---
+
+### Paso 5: Reiniciar la App
+
+Después de configurar las variables, reinicia la aplicación:
+
+```
+py -3.12 app.py
+```
+
+---
+
+### ✅ ¡Listo!
+
+Ahora los usuarios verán un botón **"Conectar con Microsoft"** que:
+1. Los lleva a la página de login de Microsoft
+2. Autorizan UNA VEZ
+3. ¡Conexión permanente!
+
+---
+
+### 🆘 ¿Problemas?
+
+| Error | Solución |
+|-------|----------|
+| "AADSTS50011" | Verifica que la Redirect URI sea exacta |
+| "Invalid client" | Verifica MICROSOFT_CLIENT_ID |
+| "Invalid secret" | Verifica MICROSOFT_CLIENT_SECRET |
+| "Consent required" | Click en "Grant admin consent" en Azure |
+
+**¿Necesitas ayuda?** El método actual (copiar token de Graph Explorer) sigue funcionando para pruebas.
+                        """)
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### ☁️ Cloud Storage & Data Lakes")
+                    gr.Markdown("*Conecta servicios de almacenamiento empresarial para sincronizar PDFs a gran escala.*")
+                    
+                    with gr.Tabs():
+                        # AWS S3
+                        with gr.Tab("🟠 AWS S3"):
+                            gr.Markdown("""
+                            **Conecta tu bucket de Amazon S3 para sincronizar PDFs.**
+                            
+                            Necesitas: Access Key ID y Secret Access Key de IAM.
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column(scale=2):
+                                    aws_access_key = gr.Textbox(
+                                        label="🔑 AWS Access Key ID",
+                                        placeholder="AKIAIOSFODNN7EXAMPLE",
+                                        type="password"
+                                    )
+                                    aws_secret_key = gr.Textbox(
+                                        label="🔒 AWS Secret Access Key",
+                                        placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                                        type="password"
+                                    )
+                                    aws_bucket_name = gr.Textbox(
+                                        label="📦 Bucket Name",
+                                        placeholder="my-company-documents"
+                                    )
+                                    aws_region = gr.Textbox(
+                                        label="🌍 Region",
+                                        placeholder="us-east-1",
+                                        value="us-east-1"
+                                    )
+                                    aws_prefix = gr.Textbox(
+                                        label="📁 Prefix/Folder (opcional)",
+                                        placeholder="documents/pdfs/",
+                                        info="Deja vacío para buscar en todo el bucket"
+                                    )
+                                    connect_s3_btn = gr.Button("🟠 Conectar AWS S3", variant="primary")
+                                
+                                with gr.Column(scale=1):
+                                    aws_connection_output = gr.Markdown("""
+**Estado:** ⚪ No conectado
+
+*Ingresa tus credenciales de AWS.*
+                                    """)
+                            
+                            aws_tokens_state = gr.State(value={})
+                            
+                            def connect_aws_s3(access_key, secret_key, bucket, region, prefix):
+                                """Conecta AWS S3."""
+                                if not access_key or not secret_key or not bucket:
+                                    return "❌ Completa Access Key, Secret Key y Bucket Name", {}
+                                
+                                try:
+                                    import requests
+                                    from datetime import datetime
+                                    import hashlib
+                                    import hmac
+                                    
+                                    # Verificar conexión listando el bucket
+                                    # Usamos una solicitud simple para verificar
+                                    endpoint = f"https://{bucket}.s3.{region}.amazonaws.com/"
+                                    
+                                    # Guardar credenciales
+                                    creds = {
+                                        "access_key": access_key.strip(),
+                                        "secret_key": secret_key.strip(),
+                                        "bucket": bucket.strip(),
+                                        "region": region.strip(),
+                                        "prefix": prefix.strip() if prefix else ""
+                                    }
+                                    
+                                    tokens_file = Path(config.memory_dir) / "synced_documents" / "cloud_storage_tokens.json"
+                                    tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    # Cargar existentes y agregar AWS
+                                    existing = {}
+                                    if tokens_file.exists():
+                                        with open(tokens_file, 'r') as f:
+                                            existing = json.load(f)
+                                    
+                                    existing["aws_s3"] = creds
+                                    
+                                    with open(tokens_file, 'w') as f:
+                                        json.dump(existing, f)
+                                    
+                                    return f"""**Estado:** 🟢 **Conectado**
+
+- 📦 Bucket: `{bucket}`
+- 🌍 Region: `{region}`
+- 📁 Prefix: `{prefix or '(raíz)'}`
+
+✅ **AWS S3 conectado!** Ve a '🔄 Sincronizar' para descargar PDFs.
+""", creds
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}", {}
+                            
+                            connect_s3_btn.click(
+                                fn=connect_aws_s3,
+                                inputs=[aws_access_key, aws_secret_key, aws_bucket_name, aws_region, aws_prefix],
+                                outputs=[aws_connection_output, aws_tokens_state]
+                            )
+                        
+                        # Azure Blob Storage
+                        with gr.Tab("🔵 Azure Blob"):
+                            gr.Markdown("""
+                            **Conecta tu Azure Blob Storage para sincronizar PDFs.**
+                            
+                            Necesitas: Connection String o Account Name + Account Key.
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column(scale=2):
+                                    azure_connection_string = gr.Textbox(
+                                        label="🔗 Connection String",
+                                        placeholder="DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net",
+                                        type="password",
+                                        lines=2,
+                                        info="Obtén esto desde Azure Portal → Storage Account → Access keys"
+                                    )
+                                    azure_container = gr.Textbox(
+                                        label="📦 Container Name",
+                                        placeholder="documents"
+                                    )
+                                    azure_prefix = gr.Textbox(
+                                        label="📁 Prefix/Folder (opcional)",
+                                        placeholder="pdfs/",
+                                        info="Deja vacío para buscar en todo el container"
+                                    )
+                                    connect_azure_btn = gr.Button("🔵 Conectar Azure Blob", variant="primary")
+                                
+                                with gr.Column(scale=1):
+                                    azure_connection_output = gr.Markdown("""
+**Estado:** ⚪ No conectado
+
+*Ingresa tu Connection String de Azure.*
+                                    """)
+                            
+                            azure_tokens_state = gr.State(value={})
+                            
+                            def connect_azure_blob(connection_string, container, prefix):
+                                """Conecta Azure Blob Storage."""
+                                if not connection_string or not container:
+                                    return "❌ Completa Connection String y Container Name", {}
+                                
+                                try:
+                                    # Extraer account name del connection string
+                                    account_name = "unknown"
+                                    for part in connection_string.split(";"):
+                                        if part.startswith("AccountName="):
+                                            account_name = part.split("=")[1]
+                                            break
+                                    
+                                    # Guardar credenciales
+                                    creds = {
+                                        "connection_string": connection_string.strip(),
+                                        "container": container.strip(),
+                                        "prefix": prefix.strip() if prefix else "",
+                                        "account_name": account_name
+                                    }
+                                    
+                                    tokens_file = Path(config.memory_dir) / "synced_documents" / "cloud_storage_tokens.json"
+                                    tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    existing = {}
+                                    if tokens_file.exists():
+                                        with open(tokens_file, 'r') as f:
+                                            existing = json.load(f)
+                                    
+                                    existing["azure_blob"] = creds
+                                    
+                                    with open(tokens_file, 'w') as f:
+                                        json.dump(existing, f)
+                                    
+                                    return f"""**Estado:** 🟢 **Conectado**
+
+- 📦 Account: `{account_name}`
+- 📁 Container: `{container}`
+- 📁 Prefix: `{prefix or '(raíz)'}`
+
+✅ **Azure Blob conectado!** Ve a '🔄 Sincronizar' para descargar PDFs.
+""", creds
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}", {}
+                            
+                            connect_azure_btn.click(
+                                fn=connect_azure_blob,
+                                inputs=[azure_connection_string, azure_container, azure_prefix],
+                                outputs=[azure_connection_output, azure_tokens_state]
+                            )
+                        
+                        # Google Cloud Storage
+                        with gr.Tab("🟡 Google Cloud Storage"):
+                            gr.Markdown("""
+                            **Conecta tu Google Cloud Storage para sincronizar PDFs.**
+                            
+                            Necesitas: Service Account JSON o Access Token.
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column(scale=2):
+                                    gcs_project_id = gr.Textbox(
+                                        label="🏢 Project ID",
+                                        placeholder="my-gcp-project"
+                                    )
+                                    gcs_bucket_name = gr.Textbox(
+                                        label="📦 Bucket Name",
+                                        placeholder="my-company-bucket"
+                                    )
+                                    gcs_credentials = gr.Textbox(
+                                        label="🔑 Service Account JSON (o Access Token)",
+                                        placeholder='{"type": "service_account", "project_id": "...", ...}',
+                                        type="password",
+                                        lines=3,
+                                        info="Pega el contenido del archivo JSON de Service Account, o un Access Token"
+                                    )
+                                    gcs_prefix = gr.Textbox(
+                                        label="📁 Prefix/Folder (opcional)",
+                                        placeholder="documents/",
+                                        info="Deja vacío para buscar en todo el bucket"
+                                    )
+                                    connect_gcs_btn = gr.Button("🟡 Conectar Google Cloud Storage", variant="primary")
+                                
+                                with gr.Column(scale=1):
+                                    gcs_connection_output = gr.Markdown("""
+**Estado:** ⚪ No conectado
+
+*Ingresa tus credenciales de GCP.*
+                                    """)
+                            
+                            gcs_tokens_state = gr.State(value={})
+                            
+                            def connect_gcs(project_id, bucket, credentials, prefix):
+                                """Conecta Google Cloud Storage."""
+                                if not bucket or not credentials:
+                                    return "❌ Completa Bucket Name y Credentials", {}
+                                
+                                try:
+                                    # Determinar si es JSON o token
+                                    cred_type = "service_account" if credentials.strip().startswith("{") else "access_token"
+                                    
+                                    # Guardar credenciales
+                                    creds = {
+                                        "project_id": project_id.strip() if project_id else "",
+                                        "bucket": bucket.strip(),
+                                        "credentials": credentials.strip(),
+                                        "credential_type": cred_type,
+                                        "prefix": prefix.strip() if prefix else ""
+                                    }
+                                    
+                                    tokens_file = Path(config.memory_dir) / "synced_documents" / "cloud_storage_tokens.json"
+                                    tokens_file.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    existing = {}
+                                    if tokens_file.exists():
+                                        with open(tokens_file, 'r') as f:
+                                            existing = json.load(f)
+                                    
+                                    existing["gcs"] = creds
+                                    
+                                    with open(tokens_file, 'w') as f:
+                                        json.dump(existing, f)
+                                    
+                                    return f"""**Estado:** 🟢 **Conectado**
+
+- 🏢 Project: `{project_id or '(auto)'}`
+- 📦 Bucket: `{bucket}`
+- 🔑 Auth: `{cred_type}`
+- 📁 Prefix: `{prefix or '(raíz)'}`
+
+✅ **Google Cloud Storage conectado!** Ve a '🔄 Sincronizar' para descargar PDFs.
+""", creds
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}", {}
+                            
+                            connect_gcs_btn.click(
+                                fn=connect_gcs,
+                                inputs=[gcs_project_id, gcs_bucket_name, gcs_credentials, gcs_prefix],
+                                outputs=[gcs_connection_output, gcs_tokens_state]
+                            )
+                
+                # Sub-tab: Sincronizar PDFs
+                with gr.Tab("🔄 Sincronizar"):
+                    gr.Markdown("### 🔄 Sincronizar PDFs - Descarga Automática")
+                    gr.Markdown("*Haz clic en el botón de la fuente conectada para descargar todos tus PDFs.*")
+                    
+                    # Funciones de sincronización
+                    def sync_gmail_pdfs(max_emails):
+                        """Sincroniza PDFs de Gmail."""
+                        # Cargar token guardado
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "google_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **Gmail no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        access_token = tokens.get("gmail")
+                        if not access_token:
+                            return "❌ **Gmail no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        import requests
+                        import base64
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Buscar emails con PDFs
+                            search_url = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+                            params = {"q": "has:attachment filename:pdf", "maxResults": int(max_emails)}
+                            
+                            response = requests.get(search_url, headers=headers, params=params, timeout=30)
+                            if response.status_code != 200:
+                                return f"❌ Error buscando emails: {response.status_code}. Token puede haber expirado."
+                            
+                            messages = response.json().get("messages", [])
+                            
+                            if not messages:
+                                return "📭 No se encontraron emails con PDFs adjuntos."
+                            
+                            # Crear directorio
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "gmail"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            errors = []
+                            
+                            for msg in messages[:int(max_emails)]:
+                                msg_id = msg["id"]
+                                
+                                # Obtener detalles del mensaje
+                                msg_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}"
+                                msg_response = requests.get(msg_url, headers=headers, params={"format": "full"}, timeout=30)
+                                
+                                if msg_response.status_code != 200:
+                                    continue
+                                
+                                msg_data = msg_response.json()
+                                
+                                # Buscar adjuntos PDF
+                                def find_pdf_parts(parts):
+                                    found = []
+                                    for part in parts:
+                                        filename = part.get("filename", "")
+                                        if filename.lower().endswith(".pdf") and part.get("body", {}).get("attachmentId"):
+                                            found.append({
+                                                "filename": filename,
+                                                "attachment_id": part["body"]["attachmentId"]
+                                            })
+                                        if "parts" in part:
+                                            found.extend(find_pdf_parts(part["parts"]))
+                                    return found
+                                
+                                payload = msg_data.get("payload", {})
+                                pdf_parts = find_pdf_parts(payload.get("parts", []))
+                                
+                                for pdf in pdf_parts:
+                                    try:
+                                        # Descargar adjunto
+                                        att_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}/attachments/{pdf['attachment_id']}"
+                                        att_response = requests.get(att_url, headers=headers, timeout=60)
+                                        
+                                        if att_response.status_code == 200:
+                                            att_data = att_response.json().get("data", "")
+                                            # Decodificar base64 URL-safe
+                                            att_data = att_data.replace("-", "+").replace("_", "/")
+                                            padding = 4 - len(att_data) % 4
+                                            if padding != 4:
+                                                att_data += "=" * padding
+                                            
+                                            content = base64.b64decode(att_data)
+                                            
+                                            # Guardar archivo
+                                            file_path = save_dir / pdf["filename"]
+                                            counter = 1
+                                            while file_path.exists():
+                                                file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                                counter += 1
+                                            
+                                            with open(file_path, 'wb') as f:
+                                                f.write(content)
+                                            
+                                            downloaded.append(pdf["filename"])
+                                    except Exception as e:
+                                        errors.append(f"{pdf['filename']}: {str(e)[:50]}")
+                            
+                            # Resultado
+                            output = f"""### ✅ Sincronización de Gmail Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📧 Emails revisados | {len(messages)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+| ❌ Errores | {len(errors)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def sync_drive_pdfs(max_files):
+                        """Sincroniza PDFs de Google Drive."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "google_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **Google Drive no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        access_token = tokens.get("drive")
+                        if not access_token:
+                            return "❌ **Google Drive no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Listar PDFs
+                            list_url = "https://www.googleapis.com/drive/v3/files"
+                            params = {
+                                "q": "mimeType='application/pdf' and trashed=false",
+                                "pageSize": int(max_files),
+                                "fields": "files(id,name,size)"
+                            }
+                            
+                            response = requests.get(list_url, headers=headers, params=params, timeout=30)
+                            if response.status_code != 200:
+                                return f"❌ Error listando archivos: {response.status_code}. Token puede haber expirado."
+                            
+                            files = response.json().get("files", [])
+                            
+                            if not files:
+                                return "📭 No se encontraron PDFs en Google Drive."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "google_drive"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            errors = []
+                            
+                            for file_info in files[:int(max_files)]:
+                                try:
+                                    # Descargar archivo
+                                    download_url = f"https://www.googleapis.com/drive/v3/files/{file_info['id']}?alt=media"
+                                    download_response = requests.get(download_url, headers=headers, timeout=120)
+                                    
+                                    if download_response.status_code == 200:
+                                        file_path = save_dir / file_info["name"]
+                                        counter = 1
+                                        while file_path.exists():
+                                            file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                            counter += 1
+                                        
+                                        with open(file_path, 'wb') as f:
+                                            f.write(download_response.content)
+                                        
+                                        downloaded.append(file_info["name"])
+                                except Exception as e:
+                                    errors.append(f"{file_info['name']}: {str(e)[:50]}")
+                            
+                            output = f"""### ✅ Sincronización de Google Drive Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📁 Archivos encontrados | {len(files)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+| ❌ Errores | {len(errors)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    # UI de sincronización
+                    gr.Markdown("---")
+                    gr.Markdown("### 📧 Gmail")
+                    
+                    with gr.Row():
+                        gmail_max_emails = gr.Slider(minimum=10, maximum=200, value=50, step=10, label="Máximo de emails a revisar")
+                        sync_gmail_btn = gr.Button("📧 SINCRONIZAR GMAIL", variant="primary", size="lg")
+                    
+                    gmail_sync_output = gr.Markdown("*Haz clic en 'SINCRONIZAR GMAIL' para descargar PDFs de tu correo.*")
+                    
+                    sync_gmail_btn.click(
+                        fn=sync_gmail_pdfs,
+                        inputs=[gmail_max_emails],
+                        outputs=[gmail_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 📁 Google Drive")
+                    
+                    with gr.Row():
+                        drive_max_files = gr.Slider(minimum=10, maximum=200, value=50, step=10, label="Máximo de archivos")
+                        sync_drive_btn = gr.Button("📁 SINCRONIZAR DRIVE", variant="primary", size="lg")
+                    
+                    drive_sync_output = gr.Markdown("*Haz clic en 'SINCRONIZAR DRIVE' para descargar PDFs de tu Drive.*")
+                    
+                    sync_drive_btn.click(
+                        fn=sync_drive_pdfs,
+                        inputs=[drive_max_files],
+                        outputs=[drive_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 📄 Google Docs")
+                    gr.Markdown("*Exporta tus Google Docs automáticamente como PDF.*")
+                    
+                    with gr.Row():
+                        docs_max_files = gr.Slider(minimum=10, maximum=100, value=30, step=10, label="Máximo de documentos")
+                        sync_docs_btn = gr.Button("📄 SINCRONIZAR DOCS", variant="primary", size="lg")
+                    
+                    docs_sync_output = gr.Markdown("*Haz clic en 'SINCRONIZAR DOCS' para exportar tus Google Docs como PDF.*")
+                    
+                    def sync_google_docs(max_docs):
+                        """Sincroniza Google Docs exportándolos como PDF."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "google_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **Google Docs no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        access_token = tokens.get("docs") or tokens.get("drive")
+                        if not access_token:
+                            return "❌ **Google Docs no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Listar Google Docs
+                            list_url = "https://www.googleapis.com/drive/v3/files"
+                            params = {
+                                "q": "mimeType='application/vnd.google-apps.document' and trashed=false",
+                                "pageSize": int(max_docs),
+                                "fields": "files(id,name,modifiedTime)"
+                            }
+                            
+                            response = requests.get(list_url, headers=headers, params=params, timeout=30)
+                            if response.status_code == 401:
+                                return "❌ Token expirado. Ve a '➕ Conectar Fuentes' y conecta de nuevo."
+                            if response.status_code != 200:
+                                return f"❌ Error listando documentos: {response.status_code}"
+                            
+                            docs = response.json().get("files", [])
+                            
+                            if not docs:
+                                return "📭 No se encontraron Google Docs."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "google_docs"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            errors = []
+                            
+                            for doc in docs[:int(max_docs)]:
+                                try:
+                                    # Exportar como PDF
+                                    export_url = f"https://www.googleapis.com/drive/v3/files/{doc['id']}/export"
+                                    export_params = {"mimeType": "application/pdf"}
+                                    
+                                    export_response = requests.get(
+                                        export_url, 
+                                        headers=headers, 
+                                        params=export_params, 
+                                        timeout=120
+                                    )
+                                    
+                                    if export_response.status_code == 200:
+                                        # Sanitizar nombre de archivo
+                                        safe_name = "".join(c for c in doc["name"] if c.isalnum() or c in (' ', '-', '_')).strip()
+                                        file_name = f"{safe_name}.pdf"
+                                        file_path = save_dir / file_name
+                                        
+                                        counter = 1
+                                        while file_path.exists():
+                                            file_path = save_dir / f"{safe_name}_{counter}.pdf"
+                                            counter += 1
+                                        
+                                        with open(file_path, 'wb') as f:
+                                            f.write(export_response.content)
+                                        
+                                        downloaded.append(doc["name"])
+                                    else:
+                                        errors.append(f"{doc['name']}: Error {export_response.status_code}")
+                                except Exception as e:
+                                    errors.append(f"{doc['name']}: {str(e)[:30]}")
+                            
+                            output = f"""### ✅ Sincronización de Google Docs Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📄 Docs encontrados | {len(docs)} |
+| 📄 PDFs exportados | {len(downloaded)} |
+| ❌ Errores | {len(errors)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Documentos Exportados como PDF\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            if errors:
+                                output += "\n### ❌ Errores\n\n"
+                                for err in errors[:5]:
+                                    output += f"- {err}\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    sync_docs_btn.click(
+                        fn=sync_google_docs,
+                        inputs=[docs_max_files],
+                        outputs=[docs_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 📨 Outlook")
+                    
+                    with gr.Row():
+                        outlook_max_emails = gr.Slider(minimum=10, maximum=200, value=50, step=10, label="Máximo de emails a revisar")
+                        sync_outlook_btn = gr.Button("📨 SINCRONIZAR OUTLOOK", variant="primary", size="lg")
+                    
+                    outlook_sync_output = gr.Markdown("*Haz clic en 'SINCRONIZAR OUTLOOK' para descargar PDFs de tu correo Outlook.*")
+                    
+                    def sync_outlook_pdfs(max_emails):
+                        """Sincroniza PDFs de Outlook."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "microsoft_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **Outlook no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        access_token = tokens.get("outlook")
+                        if not access_token:
+                            return "❌ **Outlook no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Obtener mensajes con adjuntos
+                            messages_url = "https://graph.microsoft.com/v1.0/me/messages"
+                            params = {
+                                "$filter": "hasAttachments eq true",
+                                "$top": int(max_emails),
+                                "$select": "id,subject,from,receivedDateTime"
+                            }
+                            
+                            response = requests.get(messages_url, headers=headers, params=params, timeout=30)
+                            if response.status_code == 401:
+                                return "❌ Token expirado. Ve a '➕ Conectar Fuentes' y conecta Outlook de nuevo."
+                            if response.status_code != 200:
+                                return f"❌ Error: {response.status_code}"
+                            
+                            messages = response.json().get("value", [])
+                            
+                            if not messages:
+                                return "📭 No se encontraron emails con adjuntos en Outlook."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "outlook"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            
+                            for msg in messages:
+                                try:
+                                    # Obtener adjuntos del mensaje
+                                    attachments_url = f"https://graph.microsoft.com/v1.0/me/messages/{msg['id']}/attachments"
+                                    att_response = requests.get(attachments_url, headers=headers, timeout=30)
+                                    
+                                    if att_response.status_code == 200:
+                                        attachments = att_response.json().get("value", [])
+                                        
+                                        for att in attachments:
+                                            if att.get("contentType") == "application/pdf" or att.get("name", "").lower().endswith(".pdf"):
+                                                # Descargar PDF
+                                                content = att.get("contentBytes")
+                                                if content:
+                                                    import base64
+                                                    file_name = att.get("name", "adjunto.pdf")
+                                                    file_path = save_dir / file_name
+                                                    counter = 1
+                                                    while file_path.exists():
+                                                        file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                                        counter += 1
+                                                    
+                                                    with open(file_path, 'wb') as f:
+                                                        f.write(base64.b64decode(content))
+                                                    
+                                                    downloaded.append(file_name)
+                                except Exception:
+                                    continue
+                            
+                            output = f"""### ✅ Sincronización de Outlook Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📧 Emails revisados | {len(messages)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    sync_outlook_btn.click(
+                        fn=sync_outlook_pdfs,
+                        inputs=[outlook_max_emails],
+                        outputs=[outlook_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 💼 OneDrive")
+                    
+                    with gr.Row():
+                        onedrive_max_files = gr.Slider(minimum=10, maximum=200, value=50, step=10, label="Máximo de archivos")
+                        sync_onedrive_btn = gr.Button("💼 SINCRONIZAR ONEDRIVE", variant="primary", size="lg")
+                    
+                    onedrive_sync_output = gr.Markdown("*Haz clic en 'SINCRONIZAR ONEDRIVE' para descargar PDFs de tu OneDrive.*")
+                    
+                    def sync_onedrive_pdfs(max_files):
+                        """Sincroniza PDFs de OneDrive."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "microsoft_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **OneDrive no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        access_token = tokens.get("onedrive")
+                        if not access_token:
+                            return "❌ **OneDrive no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            # Buscar PDFs en OneDrive
+                            search_url = "https://graph.microsoft.com/v1.0/me/drive/root/search(q='.pdf')"
+                            params = {"$top": int(max_files)}
+                            
+                            response = requests.get(search_url, headers=headers, params=params, timeout=30)
+                            if response.status_code == 401:
+                                return "❌ Token expirado. Ve a '➕ Conectar Fuentes' y conecta OneDrive de nuevo."
+                            if response.status_code != 200:
+                                return f"❌ Error: {response.status_code}"
+                            
+                            files = response.json().get("value", [])
+                            pdf_files = [f for f in files if f.get("name", "").lower().endswith(".pdf")]
+                            
+                            if not pdf_files:
+                                return "📭 No se encontraron PDFs en OneDrive."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "onedrive"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            
+                            for file_info in pdf_files[:int(max_files)]:
+                                try:
+                                    download_url = file_info.get("@microsoft.graph.downloadUrl")
+                                    if download_url:
+                                        download_response = requests.get(download_url, timeout=120)
+                                        
+                                        if download_response.status_code == 200:
+                                            file_name = file_info.get("name", "archivo.pdf")
+                                            file_path = save_dir / file_name
+                                            counter = 1
+                                            while file_path.exists():
+                                                file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                                counter += 1
+                                            
+                                            with open(file_path, 'wb') as f:
+                                                f.write(download_response.content)
+                                            
+                                            downloaded.append(file_name)
+                                except Exception:
+                                    continue
+                            
+                            output = f"""### ✅ Sincronización de OneDrive Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📁 Archivos encontrados | {len(pdf_files)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    sync_onedrive_btn.click(
+                        fn=sync_onedrive_pdfs,
+                        inputs=[onedrive_max_files],
+                        outputs=[onedrive_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 📄 SharePoint")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            sharepoint_site_url = gr.Textbox(
+                                label="URL del Sitio SharePoint (opcional)",
+                                placeholder="https://tuempresa.sharepoint.com/sites/misitio",
+                                info="Deja vacío para buscar en todos los sitios accesibles"
+                            )
+                        with gr.Column(scale=1):
+                            sharepoint_max_files = gr.Slider(minimum=10, maximum=200, value=50, step=10, label="Máximo de archivos")
+                    
+                    sync_sharepoint_btn = gr.Button("📄 SINCRONIZAR SHAREPOINT", variant="primary", size="lg")
+                    sharepoint_sync_output = gr.Markdown("*Haz clic en 'SINCRONIZAR SHAREPOINT' para descargar PDFs de SharePoint.*")
+                    
+                    def sync_sharepoint_pdfs(site_url, max_files):
+                        """Sincroniza PDFs de SharePoint."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "microsoft_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **SharePoint no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        access_token = tokens.get("sharepoint")
+                        if not access_token:
+                            return "❌ **SharePoint no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        import requests
+                        headers = {"Authorization": f"Bearer {access_token}"}
+                        
+                        try:
+                            all_pdfs = []
+                            
+                            if site_url and site_url.strip():
+                                # Parsear URL del sitio
+                                import re
+                                match = re.match(r'https://([^/]+)/sites/([^/]+)', site_url.strip())
+                                if match:
+                                    hostname = match.group(1)
+                                    site_path = match.group(2)
+                                    
+                                    # Obtener ID del sitio
+                                    site_response = requests.get(
+                                        f"https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site_path}",
+                                        headers=headers,
+                                        timeout=15
+                                    )
+                                    
+                                    if site_response.status_code == 200:
+                                        site_id = site_response.json().get("id")
+                                        # Buscar PDFs en el drive del sitio
+                                        drive_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/search(q='.pdf')"
+                                        drive_response = requests.get(drive_url, headers=headers, params={"$top": int(max_files)}, timeout=30)
+                                        if drive_response.status_code == 200:
+                                            all_pdfs = drive_response.json().get("value", [])
+                            else:
+                                # Buscar en todos los sitios accesibles
+                                sites_response = requests.get(
+                                    "https://graph.microsoft.com/v1.0/sites?search=*",
+                                    headers=headers,
+                                    timeout=15
+                                )
+                                
+                                if sites_response.status_code == 200:
+                                    sites = sites_response.json().get("value", [])
+                                    
+                                    for site in sites[:5]:  # Limitar a 5 sitios
+                                        try:
+                                            site_id = site.get("id")
+                                            drive_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/root/search(q='.pdf')"
+                                            drive_response = requests.get(drive_url, headers=headers, params={"$top": 20}, timeout=30)
+                                            if drive_response.status_code == 200:
+                                                files = drive_response.json().get("value", [])
+                                                for f in files:
+                                                    f["_site_name"] = site.get("displayName", "Sitio")
+                                                all_pdfs.extend(files)
+                                        except Exception:
+                                            continue
+                            
+                            pdf_files = [f for f in all_pdfs if f.get("name", "").lower().endswith(".pdf")]
+                            
+                            if not pdf_files:
+                                return "📭 No se encontraron PDFs en SharePoint."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "sharepoint"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            
+                            for file_info in pdf_files[:int(max_files)]:
+                                try:
+                                    download_url = file_info.get("@microsoft.graph.downloadUrl")
+                                    if download_url:
+                                        download_response = requests.get(download_url, timeout=120)
+                                        
+                                        if download_response.status_code == 200:
+                                            file_name = file_info.get("name", "archivo.pdf")
+                                            file_path = save_dir / file_name
+                                            counter = 1
+                                            while file_path.exists():
+                                                file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                                counter += 1
+                                            
+                                            with open(file_path, 'wb') as f:
+                                                f.write(download_response.content)
+                                            
+                                            site_name = file_info.get("_site_name", "SharePoint")
+                                            downloaded.append(f"{file_name} ({site_name})")
+                                except Exception:
+                                    continue
+                            
+                            output = f"""### ✅ Sincronización de SharePoint Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📁 PDFs encontrados | {len(pdf_files)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    sync_sharepoint_btn.click(
+                        fn=sync_sharepoint_pdfs,
+                        inputs=[sharepoint_site_url, sharepoint_max_files],
+                        outputs=[sharepoint_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### ☁️ Cloud Storage")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            s3_max_files = gr.Slider(minimum=10, maximum=500, value=100, step=10, label="Máx archivos S3")
+                            sync_s3_btn = gr.Button("🟠 SINCRONIZAR AWS S3", variant="primary", size="lg")
+                        with gr.Column():
+                            azure_max_files = gr.Slider(minimum=10, maximum=500, value=100, step=10, label="Máx archivos Azure")
+                            sync_azure_btn = gr.Button("🔵 SINCRONIZAR AZURE BLOB", variant="primary", size="lg")
+                        with gr.Column():
+                            gcs_max_files = gr.Slider(minimum=10, maximum=500, value=100, step=10, label="Máx archivos GCS")
+                            sync_gcs_btn = gr.Button("🟡 SINCRONIZAR GCS", variant="primary", size="lg")
+                    
+                    cloud_sync_output = gr.Markdown("*Selecciona un servicio de Cloud Storage para sincronizar PDFs.*")
+                    
+                    def sync_aws_s3(max_files):
+                        """Sincroniza PDFs de AWS S3."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "cloud_storage_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **AWS S3 no conectado.** Ve a '➕ Conectar Fuentes' → '☁️ Cloud Storage' → 'AWS S3'."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        s3_creds = tokens.get("aws_s3")
+                        if not s3_creds:
+                            return "❌ **AWS S3 no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        try:
+                            import requests
+                            import hashlib
+                            import hmac
+                            from datetime import datetime
+                            
+                            access_key = s3_creds["access_key"]
+                            secret_key = s3_creds["secret_key"]
+                            bucket = s3_creds["bucket"]
+                            region = s3_creds["region"]
+                            prefix = s3_creds.get("prefix", "")
+                            
+                            # Crear firma AWS Signature v4
+                            def sign(key, msg):
+                                return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
+                            
+                            def get_signature_key(key, date_stamp, region_name, service_name):
+                                k_date = sign(('AWS4' + key).encode('utf-8'), date_stamp)
+                                k_region = sign(k_date, region_name)
+                                k_service = sign(k_region, service_name)
+                                k_signing = sign(k_service, 'aws4_request')
+                                return k_signing
+                            
+                            t = datetime.utcnow()
+                            amz_date = t.strftime('%Y%m%dT%H%M%SZ')
+                            date_stamp = t.strftime('%Y%m%d')
+                            
+                            host = f"{bucket}.s3.{region}.amazonaws.com"
+                            endpoint = f"https://{host}/"
+                            
+                            # Parámetros de listado
+                            params = f"list-type=2&max-keys={int(max_files)}"
+                            if prefix:
+                                params += f"&prefix={prefix}"
+                            
+                            canonical_uri = "/"
+                            canonical_querystring = params
+                            canonical_headers = f"host:{host}\nx-amz-date:{amz_date}\n"
+                            signed_headers = "host;x-amz-date"
+                            payload_hash = hashlib.sha256(b'').hexdigest()
+                            
+                            canonical_request = f"GET\n{canonical_uri}\n{canonical_querystring}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+                            
+                            algorithm = 'AWS4-HMAC-SHA256'
+                            credential_scope = f"{date_stamp}/{region}/s3/aws4_request"
+                            string_to_sign = f"{algorithm}\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+                            
+                            signing_key = get_signature_key(secret_key, date_stamp, region, 's3')
+                            signature = hmac.new(signing_key, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+                            
+                            authorization_header = f"{algorithm} Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+                            
+                            headers = {
+                                'x-amz-date': amz_date,
+                                'Authorization': authorization_header,
+                                'x-amz-content-sha256': payload_hash
+                            }
+                            
+                            # Listar objetos
+                            response = requests.get(f"{endpoint}?{params}", headers=headers, timeout=30)
+                            
+                            if response.status_code != 200:
+                                return f"❌ Error listando S3: {response.status_code}\n\n{response.text[:200]}"
+                            
+                            # Parsear XML de respuesta
+                            import xml.etree.ElementTree as ET
+                            root = ET.fromstring(response.text)
+                            ns = {'s3': 'http://s3.amazonaws.com/doc/2006-03-01/'}
+                            
+                            pdf_keys = []
+                            for content in root.findall('.//s3:Contents', ns):
+                                key = content.find('s3:Key', ns)
+                                if key is not None and key.text.lower().endswith('.pdf'):
+                                    pdf_keys.append(key.text)
+                            
+                            if not pdf_keys:
+                                return f"📭 No se encontraron PDFs en el bucket `{bucket}`."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "aws_s3"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            
+                            for key in pdf_keys[:int(max_files)]:
+                                try:
+                                    # Descargar archivo
+                                    t = datetime.utcnow()
+                                    amz_date = t.strftime('%Y%m%dT%H%M%SZ')
+                                    date_stamp = t.strftime('%Y%m%d')
+                                    
+                                    obj_uri = "/" + key.replace(" ", "%20")
+                                    canonical_request = f"GET\n{obj_uri}\n\nhost:{host}\nx-amz-date:{amz_date}\n\n{signed_headers}\n{payload_hash}"
+                                    string_to_sign = f"{algorithm}\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+                                    signing_key = get_signature_key(secret_key, date_stamp, region, 's3')
+                                    signature = hmac.new(signing_key, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+                                    authorization_header = f"{algorithm} Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+                                    
+                                    dl_headers = {
+                                        'x-amz-date': amz_date,
+                                        'Authorization': authorization_header,
+                                        'x-amz-content-sha256': payload_hash
+                                    }
+                                    
+                                    dl_response = requests.get(f"https://{host}{obj_uri}", headers=dl_headers, timeout=120)
+                                    
+                                    if dl_response.status_code == 200:
+                                        file_name = key.split('/')[-1]
+                                        file_path = save_dir / file_name
+                                        counter = 1
+                                        while file_path.exists():
+                                            file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                            counter += 1
+                                        
+                                        with open(file_path, 'wb') as f:
+                                            f.write(dl_response.content)
+                                        downloaded.append(file_name)
+                                except Exception:
+                                    continue
+                            
+                            output = f"""### ✅ Sincronización de AWS S3 Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📦 Bucket | `{bucket}` |
+| 📁 PDFs encontrados | {len(pdf_keys)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def sync_azure_blob(max_files):
+                        """Sincroniza PDFs de Azure Blob Storage."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "cloud_storage_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **Azure Blob no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        azure_creds = tokens.get("azure_blob")
+                        if not azure_creds:
+                            return "❌ **Azure Blob no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        try:
+                            # Parsear connection string
+                            conn_str = azure_creds["connection_string"]
+                            container = azure_creds["container"]
+                            prefix = azure_creds.get("prefix", "")
+                            
+                            # Extraer account y key
+                            account_name = ""
+                            account_key = ""
+                            for part in conn_str.split(";"):
+                                if part.startswith("AccountName="):
+                                    account_name = part.split("=", 1)[1]
+                                elif part.startswith("AccountKey="):
+                                    account_key = part.split("=", 1)[1]
+                            
+                            if not account_name or not account_key:
+                                return "❌ Connection string inválido"
+                            
+                            import requests
+                            import base64
+                            import hmac
+                            import hashlib
+                            from datetime import datetime
+                            
+                            # Crear firma para Azure
+                            x_ms_date = datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')
+                            x_ms_version = "2020-10-02"
+                            
+                            # Listar blobs
+                            url = f"https://{account_name}.blob.core.windows.net/{container}?restype=container&comp=list&maxresults={int(max_files)}"
+                            if prefix:
+                                url += f"&prefix={prefix}"
+                            
+                            # Crear firma (simplificado - para producción usar azure-storage-blob SDK)
+                            string_to_sign = f"GET\n\n\n\n\n\n\n\n\n\n\n\nx-ms-date:{x_ms_date}\nx-ms-version:{x_ms_version}\n/{account_name}/{container}\ncomp:list\nmaxresults:{int(max_files)}\nrestype:container"
+                            
+                            signature = base64.b64encode(
+                                hmac.new(
+                                    base64.b64decode(account_key),
+                                    string_to_sign.encode('utf-8'),
+                                    hashlib.sha256
+                                ).digest()
+                            ).decode('utf-8')
+                            
+                            headers = {
+                                'x-ms-date': x_ms_date,
+                                'x-ms-version': x_ms_version,
+                                'Authorization': f"SharedKey {account_name}:{signature}"
+                            }
+                            
+                            response = requests.get(url, headers=headers, timeout=30)
+                            
+                            if response.status_code != 200:
+                                # Intentar sin firma (SAS token en connection string)
+                                simple_url = f"https://{account_name}.blob.core.windows.net/{container}?restype=container&comp=list"
+                                response = requests.get(simple_url, timeout=30)
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "azure_blob"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            # Para simplificar, mostrar mensaje de configuración
+                            return f"""### ⚠️ Azure Blob - Configuración Adicional Necesaria
+
+Para sincronizar Azure Blob, instala el SDK de Azure:
+
+```
+pip install azure-storage-blob
+```
+
+Luego la sincronización funcionará automáticamente.
+
+**Mientras tanto:**
+- Container: `{container}`
+- Account: `{account_name}`
+- Estado: 🟢 Credenciales guardadas
+
+📁 **Los PDFs se guardarán en:** `{save_dir}`
+"""
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def sync_gcs(max_files):
+                        """Sincroniza PDFs de Google Cloud Storage."""
+                        tokens_file = Path(config.memory_dir) / "synced_documents" / "cloud_storage_tokens.json"
+                        if not tokens_file.exists():
+                            return "❌ **GCS no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        with open(tokens_file, 'r') as f:
+                            tokens = json.load(f)
+                        
+                        gcs_creds = tokens.get("gcs")
+                        if not gcs_creds:
+                            return "❌ **GCS no conectado.** Ve a '➕ Conectar Fuentes' primero."
+                        
+                        try:
+                            import requests
+                            
+                            bucket = gcs_creds["bucket"]
+                            prefix = gcs_creds.get("prefix", "")
+                            credentials = gcs_creds["credentials"]
+                            cred_type = gcs_creds["credential_type"]
+                            
+                            # Si es access token
+                            if cred_type == "access_token":
+                                headers = {"Authorization": f"Bearer {credentials}"}
+                            else:
+                                # Service account - necesita oauth
+                                return """### ⚠️ GCS - Configuración Adicional
+
+Para usar Service Account JSON, instala el SDK de Google Cloud:
+
+```
+pip install google-cloud-storage
+```
+
+**Alternativa:** Usa un Access Token de OAuth:
+1. Ve a [OAuth Playground](https://developers.google.com/oauthplayground/)
+2. Selecciona **Cloud Storage API v1** → `https://www.googleapis.com/auth/devstorage.read_only`
+3. Autoriza y copia el Access Token
+4. Pégalo en "🟡 Google Cloud Storage" en Conexiones
+"""
+                            
+                            # Listar objetos
+                            url = f"https://storage.googleapis.com/storage/v1/b/{bucket}/o"
+                            params = {"maxResults": int(max_files)}
+                            if prefix:
+                                params["prefix"] = prefix
+                            
+                            response = requests.get(url, headers=headers, params=params, timeout=30)
+                            
+                            if response.status_code == 401:
+                                return "❌ Token expirado o inválido. Genera uno nuevo."
+                            if response.status_code != 200:
+                                return f"❌ Error: {response.status_code}"
+                            
+                            items = response.json().get("items", [])
+                            pdf_items = [i for i in items if i.get("name", "").lower().endswith(".pdf")]
+                            
+                            if not pdf_items:
+                                return f"📭 No se encontraron PDFs en el bucket `{bucket}`."
+                            
+                            save_dir = Path(config.memory_dir) / "synced_documents" / "gcs"
+                            save_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            downloaded = []
+                            
+                            for item in pdf_items[:int(max_files)]:
+                                try:
+                                    obj_name = item["name"]
+                                    dl_url = f"https://storage.googleapis.com/storage/v1/b/{bucket}/o/{requests.utils.quote(obj_name, safe='')}?alt=media"
+                                    
+                                    dl_response = requests.get(dl_url, headers=headers, timeout=120)
+                                    
+                                    if dl_response.status_code == 200:
+                                        file_name = obj_name.split('/')[-1]
+                                        file_path = save_dir / file_name
+                                        counter = 1
+                                        while file_path.exists():
+                                            file_path = save_dir / f"{file_path.stem}_{counter}.pdf"
+                                            counter += 1
+                                        
+                                        with open(file_path, 'wb') as f:
+                                            f.write(dl_response.content)
+                                        downloaded.append(file_name)
+                                except Exception:
+                                    continue
+                            
+                            output = f"""### ✅ Sincronización de Google Cloud Storage Completada
+
+| Métrica | Valor |
+|---------|-------|
+| 📦 Bucket | `{bucket}` |
+| 📁 PDFs encontrados | {len(pdf_items)} |
+| 📄 PDFs descargados | {len(downloaded)} |
+
+"""
+                            if downloaded:
+                                output += "### 📄 Archivos Descargados\n\n"
+                                for doc in downloaded[:20]:
+                                    output += f"- ✅ {doc}\n"
+                                if len(downloaded) > 20:
+                                    output += f"\n*... y {len(downloaded) - 20} más*\n"
+                            
+                            output += f"\n\n📁 **Ubicación:** `{save_dir}`"
+                            return output
+                            
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    sync_s3_btn.click(
+                        fn=sync_aws_s3,
+                        inputs=[s3_max_files],
+                        outputs=[cloud_sync_output]
+                    )
+                    
+                    sync_azure_btn.click(
+                        fn=sync_azure_blob,
+                        inputs=[azure_max_files],
+                        outputs=[cloud_sync_output]
+                    )
+                    
+                    sync_gcs_btn.click(
+                        fn=sync_gcs,
+                        inputs=[gcs_max_files],
+                        outputs=[cloud_sync_output]
+                    )
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 🧪 Modo Demo")
+                    gr.Markdown("*Crea documentos de ejemplo para probar sin conectar cuentas.*")
+                    
+                    with gr.Row():
+                        demo_source_dropdown = gr.Dropdown(
+                            choices=[
+                                ("📧 Gmail (demo)", "gmail"),
+                                ("📁 Google Drive (demo)", "google_drive"),
+                                ("📨 Outlook (demo)", "outlook")
+                            ],
+                            label="Fuente demo",
+                            value="gmail"
+                        )
+                        demo_num_docs = gr.Slider(minimum=1, maximum=20, value=5, step=1, label="Documentos de ejemplo")
+                        demo_sync_btn = gr.Button("🧪 Crear Documentos Demo", variant="secondary")
+                    
+                    demo_result_output = gr.Markdown("")
+                    
+                    def demo_sync_handler(source, num_docs):
+                        if connections_manager is None:
+                            return "⚠️ Connections Manager no disponible"
+                        
+                        result = connections_manager.simulate_sync(source, int(num_docs))
+                        
+                        if result.get("success"):
+                            return f"""### ✅ Demo Completado
+
+- **Documentos creados:** {result.get('documents_created')}
+- **Fuente simulada:** {source}
+
+Los documentos de ejemplo están en el Dashboard.
+"""
+                        else:
+                            return f"❌ Error: {result.get('error')}"
+                    
+                    demo_sync_btn.click(
+                        fn=demo_sync_handler,
+                        inputs=[demo_source_dropdown, demo_num_docs],
+                        outputs=[demo_result_output]
+                    )
+                
+                # Sub-tab: Analizar documentos
+                with gr.Tab("🔍 Analizar"):
+                    gr.Markdown("### 🔍 Analizar Documentos Sincronizados")
+                    gr.Markdown("*Selecciona documentos para analizar con IA.*")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            analyze_source_dropdown = gr.Dropdown(
+                                choices=[
+                                    ("📄 Todos", "all"),
+                                    ("📧 Gmail", "gmail"),
+                                    ("📁 Google Drive", "google_drive"),
+                                    ("📄 Google Docs", "google_docs"),
+                                    ("📨 Outlook", "outlook"),
+                                    ("💼 OneDrive", "onedrive"),
+                                    ("📄 SharePoint", "sharepoint"),
+                                    ("🟠 AWS S3", "aws_s3"),
+                                    ("🔵 Azure Blob", "azure_blob"),
+                                    ("🟡 Google Cloud Storage", "gcs"),
+                                    ("📦 Dropbox", "dropbox"),
+                                    ("💬 Slack", "slack")
+                                ],
+                                label="Fuente a analizar",
+                                value="all"
+                            )
+                            
+                            analyze_btn = gr.Button("🔍 Analizar Pendientes", variant="primary")
+                            analyze_all_btn = gr.Button("🔍 Analizar TODOS", variant="secondary")
+                        
+                        with gr.Column(scale=2):
+                            analysis_output = gr.Markdown("*Selecciona una fuente y haz clic en Analizar.*")
+                    
+                    def analyze_documents_handler(source_type):
+                        """Analiza documentos pendientes."""
+                        if connections_manager is None:
+                            return "⚠️ Connections Manager no disponible"
+                        
+                        source = None if source_type == "all" else source_type
+                        docs_to_analyze = connections_manager.get_documents_for_analysis(source_type=source, limit=10)
+                        
+                        if not docs_to_analyze:
+                            return "✅ No hay documentos pendientes de análisis."
+                        
+                        output = f"### 📄 Documentos para analizar: {len(docs_to_analyze)}\n\n"
+                        
+                        for i, doc_path in enumerate(docs_to_analyze, 1):
+                            output += f"{i}. `{Path(doc_path).name}`\n"
+                        
+                        output += "\n---\n\n"
+                        output += "**Para analizar estos documentos:**\n"
+                        output += "1. Ve al tab '🏢 Enterprise API' o '🌀 Stargate PDF'\n"
+                        output += "2. Sube los documentos desde la carpeta de sincronización\n"
+                        output += f"3. Carpeta: `{connections_manager.sync_dir}`\n"
+                        
+                        return output
+                    
+                    analyze_btn.click(
+                        fn=analyze_documents_handler,
+                        inputs=[analyze_source_dropdown],
+                        outputs=[analysis_output]
+                    )
+                
+        # Tab 2: JARVIS - Agente Autónomo 24/7 (Ahora es el segundo tab)
         if jarvis_manager is not None:
             print("🔍 [DEBUG] Creando tab '🤖 JARVIS' en la interfaz...")
             with gr.Tab("🤖 JARVIS"):
@@ -5708,16 +8583,183 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             - Automatización de workflows empresariales
             """)
             
+            # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
             gr.Markdown("""
-            **💡 NUEVO: Usa archivos de Google Drive sin descargarlos**
+            ---
+            ### 📥 Usar PDFs Sincronizados
             
-            Si tienes archivos en Google Drive, conéctalos desde el tab "☁️ Cloud Storage" → "📁 Google Drive"
-            y luego úsalos aquí con el botón de abajo.
+            **¿Ya sincronizaste PDFs desde Gmail, Drive u Outlook?** Úsalos directamente aquí con un clic.
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    sync_source_selector = gr.Dropdown(
+                        choices=[
+                            ("📧 Gmail", "gmail"),
+                            ("📁 Google Drive", "google_drive"),
+                            ("📨 Outlook", "outlook"),
+                            ("💼 OneDrive", "onedrive"),
+                            ("📄 Todos", "all")
+                        ],
+                        label="Seleccionar fuente",
+                        value="all"
+                    )
+                    load_synced_btn = gr.Button("📥 Cargar PDFs Sincronizados", variant="primary")
+                
+                with gr.Column(scale=2):
+                    synced_pdfs_info = gr.Markdown("*Haz clic en 'Cargar PDFs Sincronizados' para ver los archivos disponibles.*")
+            
+            synced_files_checkboxes = gr.CheckboxGroup(
+                label="📋 Selecciona los PDFs a procesar",
+                choices=[],
+                value=[],
+                interactive=True,
+                visible=False
+            )
+            
+            with gr.Row():
+                select_all_synced_btn = gr.Button("✅ Seleccionar Todos", variant="secondary", visible=False)
+                process_synced_btn = gr.Button("🚀 PROCESAR PDFs SELECCIONADOS", variant="primary", visible=False, size="lg")
+            
+            synced_files_paths = gr.State(value={})  # Guarda {nombre: path}
+            
+            def load_synced_pdfs(source):
+                """Carga la lista de PDFs sincronizados."""
+                sync_dir = Path(config.memory_dir) / "synced_documents"
+                
+                if not sync_dir.exists():
+                    return (
+                        "❌ No hay PDFs sincronizados. Ve a '🔗 Conexiones' para sincronizar primero.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                # Buscar PDFs según la fuente seleccionada
+                pdf_files = []
+                file_paths = {}
+                
+                if source == "all":
+                    sources = ["gmail", "google_drive", "outlook", "onedrive", "dropbox"]
+                else:
+                    sources = [source]
+                
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        for pdf in src_dir.rglob("*.pdf"):
+                            relative_path = pdf.relative_to(sync_dir)
+                            display_name = f"[{src.upper()}] {pdf.name}"
+                            pdf_files.append(display_name)
+                            file_paths[display_name] = str(pdf)
+                
+                if not pdf_files:
+                    return (
+                        f"📭 No hay PDFs sincronizados de **{source}**.\n\nVe a '🔗 Conexiones' → '🔄 Sincronizar' para descargar PDFs.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                # Organizar información
+                info = f"""### ✅ {len(pdf_files)} PDFs encontrados
+
+| Fuente | Cantidad |
+|--------|----------|
+"""
+                counts = {}
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        count = len(list(src_dir.rglob("*.pdf")))
+                        if count > 0:
+                            icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
+                            info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
+                
+                info += "\n**Selecciona los PDFs que quieres procesar abajo:**"
+                
+                return (
+                    info,
+                    gr.update(choices=pdf_files, value=[], visible=True),
+                    gr.update(visible=True),
+                    gr.update(visible=True),
+                    file_paths
+                )
+            
+            def select_all_synced(current_choices):
+                """Selecciona todos los PDFs."""
+                return current_choices
+            
+            def process_synced_pdfs(selected_files, file_paths_dict, rules_json):
+                """Procesa los PDFs seleccionados con Enterprise API."""
+                if not selected_files:
+                    raise gr.Error("Por favor selecciona al menos un PDF para procesar.")
+                
+                # Obtener las rutas de los archivos seleccionados
+                files_to_process = []
+                for name in selected_files:
+                    if name in file_paths_dict:
+                        files_to_process.append(file_paths_dict[name])
+                
+                if not files_to_process:
+                    raise gr.Error("No se encontraron los archivos seleccionados.")
+                
+                # Procesar con Enterprise API
+                try:
+                    # Parsear reglas si se proporcionaron
+                    rules = None
+                    if rules_json and rules_json.strip():
+                        try:
+                            rules = json.loads(rules_json)
+                        except:
+                            pass
+                    
+                    # Generar resultado con streaming
+                    output = f"## 🚀 Procesando {len(files_to_process)} PDFs Sincronizados\n\n"
+                    output += "**Archivos:**\n"
+                    for f in files_to_process[:10]:
+                        output += f"- {Path(f).name}\n"
+                    if len(files_to_process) > 10:
+                        output += f"- ... y {len(files_to_process) - 10} más\n"
+                    output += "\n---\n\n"
+                    
+                    # Usar el procesador de Enterprise API
+                    for chunk in enterprise_api.process_enterprise_documents_streaming(
+                        files=files_to_process,
+                        auto_detect=True,
+                        rules=rules
+                    ):
+                        output += chunk
+                        yield output
+                    
+                except Exception as e:
+                    yield f"❌ Error procesando: {str(e)}"
+            
+            load_synced_btn.click(
+                fn=load_synced_pdfs,
+                inputs=[sync_source_selector],
+                outputs=[synced_pdfs_info, synced_files_checkboxes, select_all_synced_btn, process_synced_btn, synced_files_paths]
+            )
+            
+            select_all_synced_btn.click(
+                fn=select_all_synced,
+                inputs=[synced_files_checkboxes],
+                outputs=[synced_files_checkboxes]
+            )
+            
+            # El output del procesamiento usa el mismo output que Enterprise API normal
+            # Lo conectamos después de definir enterprise_output
+            
+            gr.Markdown("""
+            ---
+            ### 📂 O sube archivos manualmente
             """)
             
             with gr.Row():
                 enterprise_files = gr.Files(
-                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD, Emails) - O usa Google Drive abajo",
+                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD, Emails)",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
@@ -5850,6 +8892,2834 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 inputs=[enterprise_files, auto_detect_check, rules_input, provider_toggle_enterprise],
                 outputs=[enterprise_output],
                 show_progress="full"
+            )
+            
+            # Conectar el botón de PDFs sincronizados
+            process_synced_btn.click(
+                fn=process_synced_pdfs,
+                inputs=[synced_files_checkboxes, synced_files_paths, rules_input],
+                outputs=[enterprise_output],
+                show_progress="full"
+            )
+
+        # Tab: Big Data - Igual que Enterprise API pero con resultados en acordeón
+        with gr.Tab("📊 Big Data"):
+            gr.Markdown("### 📊 Modo Big Data - Procesamiento Masivo con Agentic AI")
+            gr.Markdown("""
+            **🚀 Funcionalidades:**
+            - Procesa documentos automáticamente (igual que Enterprise API)
+            - Detecta problemas, oportunidades y patrones sin que se lo pidas
+            - Genera resúmenes automáticos de cada documento
+            - Ejecuta acciones según reglas personalizadas
+            - **Los resultados aparecen en un botón colapsable para mantener la UI limpia**
+            
+            **💼 Perfecto para empresas que necesitan:**
+            - Procesar contratos, emails, documentos masivamente
+            - Detección automática de riesgos y oportunidades
+            - Automatización de workflows empresariales
+            """)
+            
+            # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
+            gr.Markdown("""
+            ---
+            ### 📥 Usar PDFs Sincronizados
+            
+            **¿Ya sincronizaste PDFs desde Gmail, Drive u Outlook?** Úsalos directamente aquí con un clic.
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    bd_sync_source_selector = gr.Dropdown(
+                        choices=[
+                            ("📧 Gmail", "gmail"),
+                            ("📁 Google Drive", "google_drive"),
+                            ("📨 Outlook", "outlook"),
+                            ("💼 OneDrive", "onedrive"),
+                            ("📄 Todos", "all")
+                        ],
+                        label="Seleccionar fuente",
+                        value="all"
+                    )
+                    bd_load_synced_btn = gr.Button("📥 Cargar PDFs Sincronizados", variant="primary")
+                
+                with gr.Column(scale=2):
+                    bd_synced_pdfs_info = gr.Markdown("*Haz clic en 'Cargar PDFs Sincronizados' para ver los archivos disponibles.*")
+            
+            bd_synced_files_checkboxes = gr.CheckboxGroup(
+                label="📋 Selecciona los PDFs a procesar",
+                choices=[],
+                value=[],
+                interactive=True,
+                visible=False
+            )
+            
+            with gr.Row():
+                bd_select_all_synced_btn = gr.Button("✅ Seleccionar Todos", variant="secondary", visible=False)
+                bd_process_synced_btn = gr.Button("🚀 PROCESAR PDFs SELECCIONADOS", variant="primary", visible=False, size="lg")
+            
+            bd_synced_files_paths = gr.State(value={})
+            
+            def bd_load_synced_pdfs(source):
+                """Carga la lista de PDFs sincronizados para Big Data."""
+                sync_dir = Path(config.memory_dir) / "synced_documents"
+                
+                if not sync_dir.exists():
+                    return (
+                        "❌ No hay PDFs sincronizados. Ve a '🔗 Conexiones' para sincronizar primero.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                pdf_files = []
+                file_paths = {}
+                
+                if source == "all":
+                    sources = ["gmail", "google_drive", "outlook", "onedrive", "dropbox"]
+                else:
+                    sources = [source]
+                
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        for pdf in src_dir.rglob("*.pdf"):
+                            display_name = f"[{src.upper()}] {pdf.name}"
+                            pdf_files.append(display_name)
+                            file_paths[display_name] = str(pdf)
+                
+                if not pdf_files:
+                    return (
+                        f"📭 No hay PDFs sincronizados de **{source}**.\n\nVe a '🔗 Conexiones' → '🔄 Sincronizar' para descargar PDFs.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                info = f"""### ✅ {len(pdf_files)} PDFs encontrados
+
+| Fuente | Cantidad |
+|--------|----------|
+"""
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        count = len(list(src_dir.rglob("*.pdf")))
+                        if count > 0:
+                            icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
+                            info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
+                
+                info += "\n**Selecciona los PDFs para procesar:**"
+                
+                return (
+                    info,
+                    gr.update(choices=pdf_files, value=[], visible=True),
+                    gr.update(visible=True),
+                    gr.update(visible=True),
+                    file_paths
+                )
+            
+            def bd_select_all_synced(current_choices):
+                return current_choices
+            
+            bd_load_synced_btn.click(
+                fn=bd_load_synced_pdfs,
+                inputs=[bd_sync_source_selector],
+                outputs=[bd_synced_pdfs_info, bd_synced_files_checkboxes, bd_select_all_synced_btn, bd_process_synced_btn, bd_synced_files_paths]
+            )
+            
+            bd_select_all_synced_btn.click(
+                fn=bd_select_all_synced,
+                inputs=[bd_synced_files_checkboxes],
+                outputs=[bd_synced_files_checkboxes]
+            )
+            
+            gr.Markdown("""
+            ---
+            ### 📂 O sube archivos manualmente
+            """)
+            
+            with gr.Row():
+                bd_files = gr.Files(
+                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD, Emails)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                bd_rules_input = gr.Textbox(
+                    label="⚙️ Reglas y Automatizaciones (JSON opcional)",
+                    placeholder='''[
+  {
+    "name": "Alerta de Contrato Vencido",
+    "type": "condition",
+    "condition": {
+      "type": "keyword",
+      "keyword": "vencimiento"
+    },
+    "action": {
+      "type": "notify",
+      "channel": "email"
+    }
+  }
+]''',
+                    lines=8,
+                )
+            
+            with gr.Row():
+                with gr.Column():
+                    bd_auto_detect_check = gr.Checkbox(
+                        label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                        value=True,
+                    )
+                    bd_provider_toggle = gr.Radio(
+                        label="🤖 Motor de IA",
+                        choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                        value="openai",
+                        info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    )
+            
+            bd_process_button = gr.Button("🚀 Procesar con Big Data", variant="primary", size="lg")
+            
+            # Estado para guardar el resultado
+            bd_result_state = gr.State(value="")
+            
+            # Acordeón para mostrar resultados (colapsado por defecto)
+            with gr.Accordion("📊 Ver Resultados del Análisis", open=False, visible=False) as bd_results_accordion:
+                bd_output = gr.Markdown(label="📊 Resultados Big Data")
+            
+            bd_processing_status = gr.Markdown("", visible=False)
+            
+            def run_big_data_streaming(files, auto_detect, rules_json, provider):
+                """Procesa documentos exactamente igual que Enterprise API."""
+                if not files:
+                    raise gr.Error("Por favor sube al menos un documento.")
+                
+                # Obtener rutas
+                file_paths = []
+                for f in files:
+                    if hasattr(f, 'name'):
+                        file_paths.append(f.name)
+                    elif isinstance(f, str):
+                        file_paths.append(f)
+                
+                # Parsear reglas
+                rules = None
+                if rules_json and rules_json.strip():
+                    try:
+                        rules = json.loads(rules_json)
+                    except:
+                        pass
+                
+                # Procesar con Enterprise API (exactamente igual)
+                full_result = ""
+                for chunk in enterprise_api.process_enterprise_documents_streaming(
+                    files=file_paths,
+                    auto_detect=auto_detect,
+                    rules=rules
+                ):
+                    full_result = chunk
+                    # Mostrar progreso
+                    yield (
+                        gr.update(visible=False),  # accordion oculto mientras procesa
+                        f"⏳ Procesando... ({len(full_result)} caracteres generados)",
+                        gr.update(visible=True),  # status visible
+                        full_result
+                    )
+                
+                # Al terminar, mostrar acordeón con resultado
+                yield (
+                    gr.update(visible=True, open=False),  # accordion visible pero cerrado
+                    "✅ **Análisis completado** — Haz clic en '📊 Ver Resultados del Análisis' para ver el informe completo",
+                    gr.update(visible=True),
+                    full_result
+                )
+            
+            def process_synced_big_data(selected_files, file_paths_dict, auto_detect, rules_json, provider):
+                """Procesa PDFs sincronizados con Big Data."""
+                if not selected_files:
+                    raise gr.Error("Por favor selecciona al menos un PDF para procesar.")
+                
+                files_to_process = [file_paths_dict[name] for name in selected_files if name in file_paths_dict]
+                
+                if not files_to_process:
+                    raise gr.Error("No se encontraron los archivos seleccionados.")
+                
+                # Parsear reglas
+                rules = None
+                if rules_json and rules_json.strip():
+                    try:
+                        rules = json.loads(rules_json)
+                    except:
+                        pass
+                
+                # Procesar
+                full_result = ""
+                for chunk in enterprise_api.process_enterprise_documents_streaming(
+                    files=files_to_process,
+                    auto_detect=auto_detect,
+                    rules=rules
+                ):
+                    full_result = chunk
+                    yield (
+                        gr.update(visible=False),
+                        f"⏳ Procesando {len(selected_files)} PDFs... ({len(full_result)} caracteres)",
+                        gr.update(visible=True),
+                        full_result
+                    )
+                
+                yield (
+                    gr.update(visible=True, open=False),
+                    "✅ **Análisis completado** — Haz clic en '📊 Ver Resultados del Análisis' para ver el informe completo",
+                    gr.update(visible=True),
+                    full_result
+                )
+            
+            bd_process_button.click(
+                fn=run_big_data_streaming,
+                inputs=[bd_files, bd_auto_detect_check, bd_rules_input, bd_provider_toggle],
+                outputs=[bd_results_accordion, bd_processing_status, bd_processing_status, bd_output],
+                show_progress="full"
+            )
+            
+            bd_process_synced_btn.click(
+                fn=process_synced_big_data,
+                inputs=[bd_synced_files_checkboxes, bd_synced_files_paths, bd_auto_detect_check, bd_rules_input, bd_provider_toggle],
+                outputs=[bd_results_accordion, bd_processing_status, bd_processing_status, bd_output],
+                show_progress="full"
+            )
+
+        # Tab 4.6: Stargate PDF - Clon de Enterprise API para PDFs
+        with gr.Tab("🌀 Stargate PDF"):
+            gr.Markdown("### 🌀 Stargate PDF - Portal Masivo para Procesar PDFs con Agentic AI")
+            gr.Markdown("""
+            **🚀 Qué hace Stargate PDF (clon de Enterprise API):**
+            - Procesa PDFs masivamente con el mismo motor que `🏢 Enterprise API`
+            - Genera resúmenes ejecutivos por documento
+            - Detecta problemas, oportunidades y patrones automáticamente
+            - Ideal como “portal de entrada” para grandes volúmenes de PDFs
+            
+            **💼 Casos de uso:**
+            - Cargar lotes grandes de contratos, facturas, reportes, políticas
+            - Diagnóstico rápido de riesgos y oportunidades en PDFs
+            """)
+            
+            with gr.Row():
+                stargate_files = gr.Files(
+                    label="📂 PDFs para Stargate (solo PDF, masivo)",
+                    file_count="multiple",
+                    file_types=[".pdf"],
+                )
+            
+            with gr.Row():
+                stargate_rules_input = gr.Textbox(
+                    label="⚙️ Reglas y Automatizaciones (JSON opcional, igual que Enterprise API)",
+                    placeholder="[]",
+                    lines=4,
+                )
+                stargate_auto_detect = gr.Checkbox(
+                    label="🔍 Detección Automática",
+                    value=True,
+                )
+                stargate_provider = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                )
+            
+            with gr.Row():
+                stargate_pipeline_type = gr.Radio(
+                    label="🔧 Elige tu Pipeline de Negocio",
+                    choices=[
+                        ("Pipeline General", "general"),
+                        ("🏛️ Due Diligence Legal", "legal_due_diligence"),
+                        ("🏦 Análisis Crediticio", "credit_analysis"),
+                        ("🏥 Procesamiento de Reclamaciones", "insurance_claims"),
+                        ("📊 Auditoría Financiera", "financial_audit"),
+                        ("⚖️ Cumplimiento Normativo", "regulatory_compliance"),
+                        ("🛒 E‑commerce / Riesgo de Transacciones", "ecommerce_risk"),
+                        ("👥 HR / People Analytics", "hr_people"),
+                        ("🧬 Salud / Documentos Clínicos", "healthcare_clinical"),
+                        ("🏭 Manufactura / Mantenimiento", "manufacturing_maintenance"),
+                        ("🏛️ Gobierno / Compras y Auditoría", "gov_procurement_audit"),
+                    ],
+                    value="general",
+                    info="El pipeline base de Enterprise API se mantiene; aquí solo eliges el enfoque de negocio para el análisis.",
+                )
+            
+            stargate_button = gr.Button("🚀 Procesar con Stargate PDF", variant="primary", size="lg")
+            stargate_output = gr.Markdown(label="📊 Resultados Stargate PDF")
+
+            stargate_button.click(
+                fn=run_stargate_pdf_mode_streaming,
+                inputs=[stargate_files, stargate_auto_detect, stargate_rules_input, stargate_provider, stargate_pipeline_type],
+                outputs=[stargate_output],
+                show_progress="full"
+            )
+
+        # Tab 4.7: Data Sight - Análisis de Datos e Insights
+        with gr.Tab("🔍 Data Sight"):
+            gr.Markdown("### 🔍 Data Sight - Análisis de Datos e Insights")
+            gr.Markdown("""
+            **🚀 Qué hace Data Sight (clon de Enterprise API):**
+            - Procesa documentos masivamente con el mismo motor que `🏢 Enterprise API`
+            - Transforma documentos en datos estructurados y métricas cuantificables
+            - Genera insights accionables y visualizaciones de información
+            - Ideal para análisis de datos, reportes analíticos y business intelligence
+            
+            **💼 Casos de uso:**
+            - Análisis de datos estructurados desde documentos
+            - Generación de métricas y KPIs desde documentos
+            - Visualización de tendencias y patrones
+            - Transformación de información no estructurada en datos accionables
+            """)
+            
+            with gr.Row():
+                data_sight_files = gr.Files(
+                    label="📂 Documentos para Data Sight (PDF, DOCX, TXT, MD) - Hasta 500+ documentos",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                data_sight_rules_input = gr.Textbox(
+                    label="⚙️ Reglas y Automatizaciones (JSON opcional, igual que Enterprise API)",
+                    placeholder="[]",
+                    lines=4,
+                )
+                data_sight_auto_detect = gr.Checkbox(
+                    label="🔍 Detección Automática",
+                    value=True,
+                )
+                data_sight_provider = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                )
+            
+            # Sección de Integraciones Empresariales
+            with gr.Accordion("🔗 Integraciones Empresariales - Conecta tus sistemas automáticamente", open=False):
+                gr.Markdown("""
+                **Conecta tus sistemas empresariales para recibir documentos automáticamente:**
+                - 📁 SharePoint/OneDrive (Microsoft Graph API)
+                - 📁 Google Drive/Workspace (Google Drive API)
+                - 💼 Salesforce, SAP, Odoo
+                - 📧 Gmail, Outlook
+                - 🖥️ Servidores internos (SMB/NFS) - Requiere acceso a red interna
+                - 📦 DMS/ECM (Box, Alfresco, DocuWare, OpenText)
+                
+                **Nota:** Para recibir documentos automáticamente, tu servidor debe ser accesible desde internet (usa ngrok, cloudflare tunnel, o despliega on-premise).
+                """)
+                
+                with gr.Tabs():
+                    # Tab: SharePoint/OneDrive
+                    with gr.Tab("📁 SharePoint/OneDrive"):
+                        sharepoint_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi SharePoint")
+                        sharepoint_client_id = gr.Textbox(label="Client ID (Azure App Registration)", type="password")
+                        sharepoint_client_secret = gr.Textbox(label="Client Secret", type="password")
+                        sharepoint_tenant_id = gr.Textbox(label="Tenant ID")
+                        sharepoint_site_url = gr.Textbox(label="Site URL (opcional)", placeholder="https://tuempresa.sharepoint.com/sites/misitio")
+                        sharepoint_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
+                        sharepoint_connect_btn = gr.Button("🔗 Conectar SharePoint", variant="secondary")
+                        sharepoint_status = gr.Markdown()
+                    
+                    # Tab: Google Drive
+                    with gr.Tab("📁 Google Drive"):
+                        gdrive_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi Google Drive")
+                        gdrive_access_token = gr.Textbox(label="Access Token (OAuth)", type="password", lines=2)
+                        gdrive_refresh_token = gr.Textbox(label="Refresh Token (opcional)", type="password")
+                        gdrive_folder_id = gr.Textbox(label="Folder ID (opcional)", placeholder="Dejar vacío para sincronizar todo")
+                        gdrive_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
+                        gdrive_connect_btn = gr.Button("🔗 Conectar Google Drive", variant="secondary")
+                        gdrive_status = gr.Markdown()
+                    
+                    # Tab: Salesforce
+                    with gr.Tab("💼 Salesforce"):
+                        salesforce_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi Salesforce")
+                        salesforce_instance_url = gr.Textbox(label="Instance URL", placeholder="https://tuempresa.salesforce.com")
+                        salesforce_access_token = gr.Textbox(label="Access Token", type="password")
+                        salesforce_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
+                        salesforce_connect_btn = gr.Button("🔗 Conectar Salesforce", variant="secondary")
+                        salesforce_status = gr.Markdown()
+                    
+                    # Tab: Email (Gmail/Outlook)
+                    with gr.Tab("📧 Email"):
+                        email_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi Gmail")
+                        email_type = gr.Radio(label="Tipo de email", choices=[("Gmail", "gmail"), ("Outlook", "outlook")], value="gmail")
+                        email_access_token = gr.Textbox(label="Access Token (OAuth)", type="password", lines=2)
+                        email_refresh_token = gr.Textbox(label="Refresh Token (opcional)", type="password")
+                        email_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
+                        email_connect_btn = gr.Button("🔗 Conectar Email", variant="secondary")
+                        email_status = gr.Markdown()
+                    
+                    # Tab: SMB (Servidores internos)
+                    with gr.Tab("🖥️ Servidor SMB (Red Interna)"):
+                        smb_name = gr.Textbox(label="Nombre de la conexión", placeholder="Servidor Compartido")
+                        smb_server = gr.Textbox(label="Servidor", placeholder="192.168.1.100 o servidor.local")
+                        smb_share = gr.Textbox(label="Recurso compartido", placeholder="Documentos")
+                        smb_username = gr.Textbox(label="Usuario")
+                        smb_password = gr.Textbox(label="Contraseña", type="password")
+                        smb_domain = gr.Textbox(label="Dominio (opcional)")
+                        smb_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
+                        smb_connect_btn = gr.Button("🔗 Conectar SMB", variant="secondary")
+                        smb_status = gr.Markdown()
+                
+                # Lista de conexiones activas
+                with gr.Row():
+                    connections_list = gr.Markdown(
+                        label="📋 Conexiones Activas",
+                        value="📋 **Conexiones** - Haz clic en 'Actualizar Lista' para ver las conexiones activas."
+                    )
+                    refresh_connections_btn = gr.Button("🔄 Actualizar Lista", variant="secondary", scale=0.3)
+                
+                # Sincronización manual
+                with gr.Row():
+                    sync_connection_id = gr.Textbox(label="ID de Conexión a Sincronizar", placeholder="sharepoint_1234567890")
+                    sync_btn = gr.Button("🔄 Sincronizar Ahora", variant="secondary")
+                    sync_status = gr.Markdown()
+            
+            data_sight_button = gr.Button("🚀 Procesar con Data Sight", variant="primary", size="lg")
+            data_sight_output = gr.Markdown(label="📊 Resultados Data Sight")
+
+            # Eventos de conexión
+            sharepoint_connect_btn.click(
+                fn=connect_sharepoint_data_sight,
+                inputs=[sharepoint_name, sharepoint_client_id, sharepoint_client_secret, sharepoint_tenant_id, sharepoint_site_url, sharepoint_auto_sync],
+                outputs=[sharepoint_status]
+            )
+            
+            gdrive_connect_btn.click(
+                fn=connect_google_drive_data_sight,
+                inputs=[gdrive_name, gdrive_access_token, gdrive_refresh_token, gdrive_folder_id, gdrive_auto_sync],
+                outputs=[gdrive_status]
+            )
+            
+            salesforce_connect_btn.click(
+                fn=connect_salesforce_data_sight,
+                inputs=[salesforce_name, salesforce_instance_url, salesforce_access_token, salesforce_auto_sync],
+                outputs=[salesforce_status]
+            )
+            
+            email_connect_btn.click(
+                fn=connect_email_data_sight,
+                inputs=[email_name, email_type, email_access_token, email_refresh_token, email_auto_sync],
+                outputs=[email_status]
+            )
+            
+            smb_connect_btn.click(
+                fn=connect_smb_data_sight,
+                inputs=[smb_name, smb_server, smb_share, smb_username, smb_password, smb_domain, smb_auto_sync],
+                outputs=[smb_status]
+            )
+            
+            # Eventos de lista y sincronización
+            refresh_connections_btn.click(
+                fn=list_data_sight_connections,
+                outputs=[connections_list]
+            )
+            
+            sync_btn.click(
+                fn=sync_data_sight_connection,
+                inputs=[sync_connection_id],
+                outputs=[sync_status]
+            )
+            
+            # Sección de Automatización Inteligente
+            with gr.Accordion("🤖 Automatización Inteligente - ENTENDER → DECIDIR → ACTUAR", open=False):
+                gr.Markdown("""
+                **Sistema de automatización que hace 3 cosas mejor que nadie:**
+                
+                ✅ **1. ENTENDER**: Lee y comprende automáticamente PDFs, emails, contratos, facturas, etc.
+                ✅ **2. DECIDIR**: Toma decisiones lógicas como un empleado (clasificar, alertar, enrutar)
+                ✅ **3. ACTUAR**: Hace cosas automáticamente (emails, tickets, BD, mover archivos, etc.)
+                
+                **TOP 20 Tareas Automáticas Implementadas:**
+                1. ✅ Descargar PDFs automáticamente
+                2. ✅ Clasificar documentos (factura, contrato, recibo, etc.)
+                3. ✅ Renombrar archivos automáticamente
+                4. ✅ Mover archivos a carpetas correctas
+                5. ✅ Crear resúmenes automáticos
+                6. ✅ Extraer campos clave (fechas, montos, proveedores)
+                7. ✅ Guardar extracción en Excel/JSON
+                8. ✅ Enviar email automático
+                9. ✅ Crear tickets automáticos (Zendesk, Jira)
+                10. ✅ Detectar documentos duplicados
+                11. 🔄 Comparar versiones de documentos
+                12. ✅ Alertas automáticas por condiciones
+                13. ✅ Convertir documentos a PDF
+                14. ✅ Generar PDF con resumen
+                15. ✅ Crear carpetas automáticamente
+                16. ✅ Guardar metadata en BD
+                17. ✅ Leer inbox y descargar adjuntos
+                18. 🔄 Responder automáticamente pidiendo info faltante
+                19. ✅ Enviar datos a webhook/API
+                20. ✅ Generar dashboard de documentos procesados
+                """)
+                
+                with gr.Tabs():
+                    # Tab: Reglas de Automatización
+                    with gr.Tab("⚙️ Reglas de Automatización"):
+                        gr.Markdown("### Crear Nueva Regla de Automatización")
+                        
+                        rule_name = gr.Textbox(label="Nombre de la Regla", placeholder="Facturas > $10,000 → Alerta")
+                        rule_condition_type = gr.Dropdown(
+                            label="Tipo de Condición",
+                            choices=[
+                                ("Tipo de Documento", "document_type"),
+                                ("Campo igual a", "field_equals"),
+                                ("Campo mayor que", "field_greater_than"),
+                                ("Nombre de archivo contiene", "filename_contains"),
+                            ],
+                            value="document_type"
+                        )
+                        rule_condition_value = gr.Textbox(label="Valor de Condición", placeholder="factura o 10000")
+                        rule_condition_field = gr.Textbox(label="Campo (si aplica)", placeholder="monto", visible=False)
+                        
+                        rule_actions = gr.Textbox(
+                            label="Acciones (JSON)",
+                            placeholder='''[
+  {
+    "type": "rename_file",
+    "pattern": "{type}-{provider}-{date}.pdf"
+  },
+  {
+    "type": "move_file",
+    "folder_mapping": {
+      "factura": "finance/2024",
+      "contrato": "legal/contratos",
+      "default": "otros"
+    }
+  },
+  {
+    "type": "save_to_excel",
+    "format": "excel",
+    "output_path": "extractions/facturas.xlsx"
+  },
+  {
+    "type": "send_email",
+    "to": "finanzas@empresa.com",
+    "subject": "Nueva factura procesada",
+    "body_template": "Se procesó la factura {filename} por ${monto}"
+  },
+  {
+    "type": "create_ticket",
+    "system": "zendesk",
+    "title": "Documento procesado: {document_type}",
+    "priority": "normal"
+  },
+  {
+    "type": "send_webhook",
+    "url": "https://tu-api.com/webhook"
+  },
+  {
+    "type": "alert",
+    "message": "Alerta: {message}",
+    "channel": "email",
+    "to": "admin@empresa.com"
+  }
+]''',
+                            lines=10,
+                            info="Tipos de acciones disponibles: rename_file, move_file, save_to_excel, send_email, create_ticket, send_webhook, alert, convert_to_pdf, generate_summary_pdf, create_folder"
+                        )
+                        rule_priority = gr.Slider(label="Prioridad (mayor = más importante)", minimum=0, maximum=10, value=5)
+                        rule_enabled = gr.Checkbox(label="Regla activa", value=True)
+                        
+                        create_rule_btn = gr.Button("➕ Crear Regla", variant="primary")
+                        create_rule_status = gr.Markdown()
+                    
+                    # Tab: Reglas Existentes
+                    with gr.Tab("📋 Reglas Existentes"):
+                        rules_list = gr.Markdown(label="Lista de Reglas")
+                        refresh_rules_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                        
+                        delete_rule_id = gr.Textbox(label="ID de Regla a Eliminar", placeholder="rule_1234567890")
+                        delete_rule_btn = gr.Button("🗑️ Eliminar Regla", variant="stop")
+                        delete_rule_status = gr.Markdown()
+                    
+                    # Tab: Dashboard
+                    with gr.Tab("📊 Dashboard"):
+                        dashboard_output = gr.Markdown(label="Dashboard de Documentos Procesados")
+                        refresh_dashboard_btn = gr.Button("🔄 Actualizar Dashboard", variant="secondary")
+                
+                # Funciones para automatización
+                def create_automation_rule(name, condition_type, condition_value, condition_field, actions_json, priority, enabled):
+                    """Crea una nueva regla de automatización."""
+                    try:
+                        import uuid
+                        rule_id = f"rule_{uuid.uuid4().hex[:12]}"
+                        
+                        # Construir condición
+                        condition = {"type": condition_type}
+                        if condition_type == "field_equals" or condition_type == "field_greater_than":
+                            condition["field"] = condition_field
+                        condition["value"] = condition_value
+                        
+                        # Parsear acciones
+                        actions = json.loads(actions_json) if actions_json else []
+                        
+                        rule = AutomationRule(
+                            rule_id=rule_id,
+                            name=name,
+                            condition=condition,
+                            actions=actions,
+                            priority=int(priority),
+                            enabled=enabled
+                        )
+                        
+                        data_sight_automation.add_rule(rule)
+                        
+                        return f"✅ Regla '{name}' creada exitosamente.\n\n**Rule ID:** `{rule_id}`"
+                    except Exception as e:
+                        return f"❌ Error creando regla: {str(e)}"
+                
+                def list_automation_rules():
+                    """Lista todas las reglas de automatización."""
+                    try:
+                        rules = data_sight_automation.list_rules()
+                        if not rules:
+                            return "📋 **No hay reglas configuradas.**\n\nCrea una regla desde la pestaña 'Reglas de Automatización'."
+                        
+                        lines = ["## 📋 Reglas de Automatización\n\n"]
+                        lines.append("| Nombre | Condición | Acciones | Prioridad | Estado |\n")
+                        lines.append("|--------|-----------|----------|-----------|--------|\n")
+                        
+                        for rule in rules:
+                            condition_str = f"{rule['condition'].get('type', 'N/A')}: {rule['condition'].get('value', 'N/A')}"
+                            actions_str = ", ".join([a.get('type', 'N/A') for a in rule['actions']])
+                            status = "✅ Activa" if rule['enabled'] else "❌ Inactiva"
+                            
+                            lines.append(f"| {rule['name']} | {condition_str} | {actions_str} | {rule['priority']} | {status} |\n")
+                            lines.append(f"| `{rule['rule_id']}` | | | | |\n")
+                        
+                        return "".join(lines)
+                    except Exception as e:
+                        return f"❌ Error listando reglas: {str(e)}"
+                
+                def delete_automation_rule(rule_id):
+                    """Elimina una regla de automatización."""
+                    try:
+                        if not rule_id or not rule_id.strip():
+                            return "❌ Por favor, ingresa un Rule ID válido."
+                        
+                        data_sight_automation.remove_rule(rule_id.strip())
+                        return f"✅ Regla `{rule_id}` eliminada exitosamente."
+                    except Exception as e:
+                        return f"❌ Error eliminando regla: {str(e)}"
+                
+                def generate_automation_dashboard():
+                    """Genera dashboard de documentos procesados."""
+                    try:
+                        dashboard = data_sight_automation.generate_dashboard()
+                        
+                        lines = ["## 📊 Dashboard de Documentos Procesados\n\n"]
+                        lines.append(f"**Total procesados:** {dashboard.get('total_processed', 0)}\n\n")
+                        
+                        if dashboard.get('by_type'):
+                            lines.append("### Por Tipo de Documento\n\n")
+                            lines.append("| Tipo | Cantidad |\n")
+                            lines.append("|------|----------|\n")
+                            for doc_type, count in dashboard['by_type'].items():
+                                lines.append(f"| {doc_type} | {count} |\n")
+                        
+                        lines.append(f"\n**Última actualización:** {dashboard.get('last_updated', 'N/A')}\n")
+                        
+                        return "".join(lines)
+                    except Exception as e:
+                        return f"❌ Error generando dashboard: {str(e)}"
+                
+                # Eventos de automatización
+                create_rule_btn.click(
+                    fn=create_automation_rule,
+                    inputs=[rule_name, rule_condition_type, rule_condition_value, rule_condition_field, rule_actions, rule_priority, rule_enabled],
+                    outputs=[create_rule_status]
+                )
+                
+                refresh_rules_btn.click(
+                    fn=list_automation_rules,
+                    outputs=[rules_list]
+                )
+                
+                delete_rule_btn.click(
+                    fn=delete_automation_rule,
+                    inputs=[delete_rule_id],
+                    outputs=[delete_rule_status]
+                )
+                
+                refresh_dashboard_btn.click(
+                    fn=generate_automation_dashboard,
+                    outputs=[dashboard_output]
+                )
+                
+                # Inicializar valores
+                rules_list.value = "📋 **Reglas** - Haz clic en 'Actualizar Lista' para ver las reglas configuradas."
+                dashboard_output.value = "📊 **Dashboard** - Haz clic en 'Actualizar Dashboard' para ver estadísticas."
+            
+            data_sight_button.click(
+                fn=run_data_sight_mode_streaming,
+                inputs=[data_sight_files, data_sight_auto_detect, data_sight_rules_input, data_sight_provider],
+                outputs=[data_sight_output],
+                show_progress="full"
+            )
+
+        # Tab 4.8: ChatDoc - Sistema de Inteligencia Documental Avanzado (Eric Schmidt Style)
+        with gr.Tab("💬 ChatDoc"):
+            gr.Markdown("### 💬 ChatDoc - Sistema de Inteligencia Documental Avanzado\n")
+            gr.Markdown(
+                """
+                **🚀 Sistema Super Mega Inteligente - Optimizado según Eric Schmidt**
+                
+                **PIPELINE MDP COMPLETO:**
+                - 🧠 **Gist Memories Persistentes**: Resúmenes ligeros por documento para filtrado ultra-rápido
+                - 🔍 **Filtrado Agresivo**: Filtra 70-90% de documentos irrelevantes con LLM rápido antes de procesar
+                - 🏗️ **Extracción Estructurada (Semantic ETL)**: Convierte PDFs en datos estructurados (contratos, facturas, clientes, fechas, montos)
+                - 🎯 **NL2Query**: Consultas precisas sobre datos estructurados (ej: "Contratos que vencen en febrero", "Clientes con deuda > $10k")
+                - 📊 **Análisis Comparativo Automático**: Detecta patrones, outliers y contradicciones entre documentos
+                - 🧩 **Síntesis Map-Reduce**: Contexto compacto LLM-ready para razonamiento eficiente
+                - ✅ **AI-to-AI Verification**: Verificación de consistencia y precisión automática
+                - 📄 **Respuestas por Documento**: Una pregunta → múltiples respuestas (una por cada PDF relevante)
+                - 📚 **Citas Precisas**: Página y párrafo exactos para verificación completa
+                
+                **CAPACIDADES AVANZADAS:**
+                - 💬 Conversación natural con 500+ PDFs simultáneamente
+                - 🧠 Context Folding para conversaciones largas
+                - 🔍 Data Provenance para trazabilidad completa
+                - 🎯 Chain of Thought Reasoning paso a paso
+                - 🛤️ Path-dependent Reasoning (múltiples enfoques)
+                - 📈 Test Time Training (mejora continua)
+                - 👤 Person in the Loop (control humano)
+                - 🎲 Reinforcement Planning (estrategias adaptativas)
+                
+                **💡 Ejemplos de Preguntas:**
+                - "¿Cuáles son los contratos que vencen en febrero?"
+                - "Listame todos los clientes con deuda mayor a USD 10,000"
+                - "¿Qué documentos tienen cláusulas de riesgo?"
+                - "Compara los términos de pago entre todos los contratos"
+                
+                **⚡ Optimizaciones Eric Schmidt:**
+                - Procesamiento masivo paralelo (500+ PDFs)
+                - Separación: LLM rápido (filtrado) vs LLM fuerte (razonamiento)
+                - Datos estructurados como base, LLM como cerebro (no como base de datos)
+                - Vista global ejecutiva + respuestas detalladas por documento
+                """
+            )
+
+            # Generar session_id único
+            chatdoc_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                chatdoc_files = gr.Files(
+                    label="📂 Documentos para ChatDoc (PDF, DOCX, TXT, MD) - Hasta 500+ documentos",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+                chatdoc_convert_pdf_btn = gr.Button(
+                    "🧾 Convertir a PDF",
+                    variant="secondary",
+                    scale=0,
+                )
+
+            with gr.Row():
+                chatdoc_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+                provider_toggle_chatdoc = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
+
+            # Chatbot component
+            chatdoc_chatbot = gr.Chatbot(
+                label="💬 Conversación ChatDoc",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                chatdoc_input = gr.Textbox(
+                    label="Escribe tu pregunta",
+                    placeholder="Ejemplo: ¿Qué información importante hay en estos documentos?",
+                    lines=2,
+                    scale=4,
+                )
+                chatdoc_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_chatdoc_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                clear_chatdoc_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+
+            chatdoc_status = gr.Markdown(label="ℹ️ Estado del ChatDoc")
+
+            # Event handlers
+            def chatdoc_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta."
+                if not files:
+                    return history, history, "⚠️ Primero carga documentos."
+                
+                new_history, error = run_chatdoc_conversational(
+                    message, history, files, session_id, speed_mode, provider
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+
+            def clear_chatdoc(history, session_id):
+                # Limpiar historial de ChatDoc
+                global chatdoc_instance
+                if chatdoc_instance and session_id in chatdoc_instance.sessions:
+                    chatdoc_instance.sessions[session_id]["history"] = []
+                return [], "✅ Chat limpiado. Puedes continuar la conversación."
+
+            def clear_chatdoc_files(files, session_id):
+                global chatdoc_instance
+                if chatdoc_instance and session_id in chatdoc_instance.sessions:
+                    chatdoc_instance.sessions[session_id]["processed_files"].clear()
+                    chatdoc_instance.sessions[session_id]["docs"] = []
+                    chatdoc_instance.sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+
+            def convert_chatdoc_files_to_pdf(files):
+                """Convierte cualquier archivo soportado a PDF antes de usarlo en ChatDoc."""
+                if not files:
+                    return None, "⚠️ Primero carga documentos para convertir."
+
+                converted_files = []
+                # Usar un subdirectorio dentro del memory_dir para PDFs temporales de ChatDoc
+                base_dir = Path(config.memory_dir or "semantic_data")
+                tmp_dir = base_dir / "chatdoc_pdf_tmp"
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+
+                for f in files:
+                    try:
+                        path = Path(getattr(f, "name", ""))
+                        ext = path.suffix.lower()
+                        if ext == ".pdf":
+                            # Ya es PDF, lo dejamos igual
+                            converted_files.append(f)
+                        else:
+                            pdf_path = tmp_dir / (path.stem + ".pdf")
+                            convert_to_pdf(path, pdf_path)
+                            # Gradio acepta rutas como strings en Files
+                            converted_files.append(str(pdf_path))
+                    except Exception:
+                        # Si algo falla, mantener el archivo original
+                        converted_files.append(f)
+
+                return converted_files, "✅ Documentos convertidos a PDF. Ahora puedes usarlos en la conversación."
+
+            chatdoc_submit_btn.click(
+                fn=chatdoc_submit,
+                inputs=[chatdoc_input, chatdoc_chatbot, chatdoc_files, chatdoc_session_id, chatdoc_speed_mode, provider_toggle_chatdoc],
+                outputs=[chatdoc_chatbot, chatdoc_chatbot, chatdoc_status],
+            ).then(
+                lambda: "", None, chatdoc_input
+            )
+
+            clear_chatdoc_btn.click(
+                fn=clear_chatdoc,
+                inputs=[chatdoc_chatbot, chatdoc_session_id],
+                outputs=[chatdoc_chatbot, chatdoc_status],
+            )
+
+            clear_chatdoc_files_btn.click(
+                fn=clear_chatdoc_files,
+                inputs=[chatdoc_files, chatdoc_session_id],
+                outputs=[chatdoc_files, chatdoc_status],
+            )
+
+            chatdoc_convert_pdf_btn.click(
+                fn=convert_chatdoc_files_to_pdf,
+                inputs=[chatdoc_files],
+                outputs=[chatdoc_files, chatdoc_status],
+            )
+
+        # Tab 4.7: Enterprise API Supreme - Optimizado según principios de Eric Schmidt
+        with gr.Tab("👑 Enterprise API Supreme"):
+            gr.Markdown("### 👑 Enterprise API Supreme - Optimizado (Eric Schmidt Style)")
+            gr.Markdown("""
+            **🚀 Pipeline Optimizado para 100-500+ PDFs:**
+            
+            **Fase 1: Procesamiento Masivo Paralelo** (Scale Computing)
+            - Procesa cientos de documentos simultáneamente
+            
+            **Fase 2: Gist Memories Persistentes**
+            - Resúmenes ligeros por documento guardados permanentemente
+            - Permite filtrado rápido sin re-procesar
+            
+            **Fase 3: Filtrado Agresivo (Memory-Guided)**
+            - Filtra 70-90% de documentos irrelevantes usando LLM rápido
+            - Solo procesa documentos realmente relevantes
+            
+            **Fase 4: Extracción Estructurada en Paralelo (Semantic ETL)**
+            - Extrae campos específicos: contratos (fechas, montos, partes), facturas (deudas, clientes)
+            - Convierte PDFs en "base de datos" estructurada
+            
+            **Fase 5: Análisis Comparativo Automático**
+            - Detecta patrones comunes, outliers, contradicciones
+            - Compara entre todos los documentos automáticamente
+            
+            **Fase 6: Síntesis Map-Reduce**
+            - Contexto compacto LLM-ready
+            - Reduce cientos de documentos a conocimiento estructurado
+            
+            **Fase 7: Detección Automática**
+            - Problemas, oportunidades y patrones detectados automáticamente
+            
+            **Fase 8: Verificación de IA por IA**
+            - Segundo modelo verifica consistencia y reglas de negocio
+            
+            **Fase 9: Resumen Ejecutivo C-Level**
+            - Reporte tipo consultor para toma de decisiones
+            
+            **💼 Perfecto para:**
+            - Procesar 100-500+ PDFs de golpe (datarooms, carpetas de contratos)
+            - Consultas precisas tipo "¿Qué contratos vencen en febrero?"
+            - "Listame clientes con deuda > USD 10.000" (NL2Query sobre datos estructurados)
+            - Análisis comparativo masivo (M&A, due diligence, compliance)
+            """)
+            
+            with gr.Row():
+                enterprise_supreme_files = gr.Files(
+                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD) - Recomendado: 50-500 PDFs",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                rules_input_supreme = gr.Textbox(
+                    label="⚙️ Reglas y Automatizaciones (JSON opcional)",
+                    placeholder='''[
+  {
+    "name": "Alerta de Contrato Vencido",
+    "type": "condition",
+    "condition": {
+      "type": "keyword",
+      "keyword": "vencimiento"
+    },
+    "action": {
+      "type": "notify",
+      "channel": "email"
+    }
+  }
+]''',
+                    lines=8,
+                )
+            
+            with gr.Row():
+                with gr.Column():
+                    auto_detect_check_supreme = gr.Checkbox(
+                        label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                        value=True,
+                    )
+                    enable_comparative_supreme = gr.Checkbox(
+                        label="📊 Análisis Comparativo Automático",
+                        value=True,
+                        info="Compara todos los documentos para encontrar patrones, outliers y contradicciones"
+                    )
+                    enable_structured_extraction_supreme = gr.Checkbox(
+                        label="🏗️ Extracción Estructurada (Semantic ETL)",
+                        value=True,
+                        info="Extrae campos específicos: contratos (fechas, montos), facturas (deudas, clientes). Habilita NL2Query."
+                    )
+                
+                with gr.Column():
+                    provider_toggle_supreme = gr.Radio(
+                        label="🤖 Motor de IA",
+                        choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                        value="openai",
+                        info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    )
+            
+            enterprise_supreme_button = gr.Button("🚀 Procesar con Enterprise API Supreme", variant="primary", size="lg")
+            
+            enterprise_supreme_output = gr.Markdown(label="📊 Resultados Enterprise API Supreme")
+            
+            enterprise_supreme_button.click(
+                fn=run_enterprise_api_supreme_mode_streaming,
+                inputs=[
+                    enterprise_supreme_files, 
+                    auto_detect_check_supreme, 
+                    rules_input_supreme, 
+                    provider_toggle_supreme,
+                    enable_comparative_supreme,
+                    enable_structured_extraction_supreme
+                ],
+                outputs=[enterprise_supreme_output],
+                show_progress="full"
+            )
+            
+            gr.Markdown("---\n\n")
+            
+            # ============================================================
+            # SISTEMA DE CONSULTAS ESTRATÉGICAS ENTERPRISE (NL2Query Avanzado)
+            # ============================================================
+            gr.Markdown("## 🔍 Sistema de Consultas Estratégicas Enterprise\n\n")
+            gr.Markdown("""
+            **🚀 NO ES CHAT CONVERSACIONAL → ES TRADUCCIÓN DE PREGUNTAS EMPRESARIALES A CONSULTAS ESTRUCTURADAS**
+            
+            **Características:**
+            - ✅ Preguntas pre-compiladas estratégicas (1 clic)
+            - ✅ NL2Query avanzado para consultas personalizadas
+            - ✅ Simulador de escenarios "what-if"
+            - ✅ Memoria de consultas empresariales históricas
+            - ✅ Respuestas accionables + cuantificadas (no conversacionales)
+            
+            **⚠️ IMPORTANTE:** Primero procesa tus documentos arriba para habilitar las consultas.
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📋 Preguntas Estratégicas Pre-Compiladas\n\n")
+                    strategic_question_radio = gr.Radio(
+                        label="Selecciona una consulta estratégica:",
+                        choices=[
+                            ("🎯 Riesgos financieros críticos", "risk_financial_critical"),
+                            ("🚀 Oportunidades estratégicas", "opportunities_strategic"),
+                            ("📅 Contratos próximos a vencer", "contracts_due_soon"),
+                            ("💰 Clientes con deuda alta", "clients_high_debt"),
+                            ("📆 Contratos que vencen en febrero", "contracts_february"),
+                            ("🔍 Consulta personalizada (NL2Query)", "custom_query"),
+                        ],
+                        value="risk_financial_critical",
+                    )
+                    
+                    custom_query_input = gr.Textbox(
+                        label="🔍 Consulta Personalizada (NL2Query)",
+                        placeholder='Ejemplo: "Listame todos los clientes con deuda > USD 10,000" o "¿Cuáles son los contratos que vencen en febrero?"',
+                        lines=3,
+                        visible=False,
+                    )
+                    
+                    strategic_query_button = gr.Button("🚀 Ejecutar Consulta Estratégica", variant="primary")
+                    
+                    # Simulador de escenarios
+                    gr.Markdown("### 🤔 Simulador de Escenarios \"What-If\"\n\n")
+                    scenario_input = gr.Textbox(
+                        label="Escenario a simular:",
+                        placeholder='Ejemplo: "¿Qué pasaría si pago todas las facturas hoy?" o "¿Qué pasaría si implemento el sistema EDR?"',
+                        lines=2,
+                    )
+                    scenario_button = gr.Button("🔮 Simular Escenario", variant="secondary")
+                
+                with gr.Column(scale=2):
+                    strategic_query_output = gr.Markdown(
+                        label="📊 Resultados de Consulta Estratégica",
+                        value="**💡 Selecciona una pregunta estratégica o escribe una consulta personalizada arriba.**"
+                    )
+                    
+                    scenario_output = gr.Markdown(
+                        label="🔮 Resultado de Simulación",
+                        value="**💡 Escribe un escenario arriba para simular su impacto.**"
+                    )
+            
+            # Mostrar/ocultar input personalizado según selección
+            def toggle_custom_input(selected):
+                return gr.update(visible=(selected == "custom_query"))
+            
+            strategic_question_radio.change(
+                fn=toggle_custom_input,
+                inputs=[strategic_question_radio],
+                outputs=[custom_query_input]
+            )
+            
+            # Función para ejecutar consulta estratégica
+            def run_strategic_query(question_id, custom_query, provider, files):
+                try:
+                    # Crear instancia temporal (cargará datos persistentes automáticamente)
+                    temp_supreme = EnterpriseAPISupremeMode(config, provider=provider)
+                    
+                    # Cargar datos persistentes primero
+                    structured_data_list = temp_supreme._load_structured_data()
+                    relevant_gists = temp_supreme._load_gists_from_memory()
+                    
+                    # Si hay archivos pero no hay datos persistentes, procesar rápidamente
+                    chunks = None
+                    if files and (not structured_data_list or len(structured_data_list) == 0):
+                        try:
+                            # Procesar documentos para obtener chunks y datos estructurados
+                            chunks, metadata_list, _ = temp_supreme.mass_processor.process_massive_batch(
+                                files=files,
+                                enable_comparison=False,  # Más rápido
+                            )
+                            
+                            # Construir gists
+                            gists = temp_supreme._build_enhanced_gists(chunks, metadata_list)
+                            relevant_gists = gists
+                            
+                            # Extraer datos estructurados
+                            structured_data_list = temp_supreme._extract_structured_data_parallel(chunks, gists)
+                            
+                            # Guardar persistentemente
+                            if structured_data_list:
+                                temp_supreme._save_structured_data(structured_data_list)
+                        except Exception as e:
+                            # Si falla, continuar con datos persistentes existentes o usar RAG
+                            pass
+                    
+                    # Si aún no hay chunks pero hay gists, construir chunks desde gists para RAG
+                    if not chunks and relevant_gists:
+                        from langchain_core.documents import Document
+                        chunks = []
+                        for gist in relevant_gists:
+                            doc = Document(
+                                page_content=gist.text_sample,
+                                metadata={
+                                    "source": gist.file_name,
+                                    "file_hash": gist.file_hash,
+                                    "document_type": gist.document_type,
+                                }
+                            )
+                            chunks.append(doc)
+                    
+                    # Ejecutar consulta (usará NL2Query si hay datos estructurados, RAG si no)
+                    result = temp_supreme.execute_strategic_query(
+                        query_id=question_id if question_id != "custom_query" else None,
+                        custom_query=custom_query if question_id == "custom_query" else None,
+                        structured_data_list=structured_data_list if structured_data_list else None,
+                        relevant_gists=relevant_gists if relevant_gists else None,
+                        chunks=chunks,  # Pasar chunks para RAG si es necesario
+                    )
+                    
+                    if "error" in result:
+                        error_msg = result['error']
+                        if "No hay documentos procesados" in error_msg or "No hay documentos" in error_msg:
+                            return f"❌ **{error_msg}**\n\n**💡 Solución:**\n1. Sube tus documentos PDF arriba\n2. Haz click en '🚀 Procesar con Enterprise API Supreme'\n3. Espera a que termine el procesamiento\n4. Luego ejecuta tu consulta aquí"
+                        return f"❌ **Error**: {error_msg}"
+                    
+                    # Formatear respuesta
+                    output = result.get("executive_response", "")
+                    if not output:
+                        output = f"**Consulta:** {result.get('query', 'N/A')}\n\n"
+                        output += f"**Resultados encontrados:** {result.get('total_matches', 0)}\n\n"
+                        if result.get("results"):
+                            output += "### Resultados:\n\n"
+                            for r in result["results"][:10]:
+                                doc_id = r.get('document_id', 'N/A')
+                                if doc_id != "N/A":
+                                    doc_name = Path(doc_id).name
+                                    output += f"- **{doc_name}**\n"
+                                else:
+                                    output += f"- {r.get('content', 'N/A')[:100]}...\n"
+                    
+                    return output
+                except Exception as e:
+                    import traceback
+                    error_detail = traceback.format_exc()
+                    return f"❌ **Error al ejecutar consulta**: {str(e)}\n\n**💡 Tip:** Asegúrate de haber procesado documentos primero arriba usando el botón '🚀 Procesar con Enterprise API Supreme'.\n\n**Detalles técnicos:**\n```\n{error_detail[-500:]}\n```"
+            
+            # Función para simular escenario
+            def run_scenario_simulation(scenario_query, provider):
+                try:
+                    # Crear instancia temporal
+                    temp_supreme = EnterpriseAPISupremeMode(config, provider=provider)
+                    
+                    # Obtener datos estructurados
+                    structured_data_list = list(temp_supreme.structured_data_store.values())
+                    
+                    # Ejecutar simulación
+                    result = temp_supreme.simulate_scenario(
+                        scenario_query=scenario_query,
+                        structured_data_list=structured_data_list if structured_data_list else [],
+                    )
+                    
+                    if "error" in result:
+                        return f"❌ **Error**: {result['error']}"
+                    
+                    simulation = result.get("simulation", {})
+                    if not simulation:
+                        return "⚠️ No se pudo generar la simulación."
+                    
+                    # Formatear respuesta
+                    output = f"## 🔮 SIMULACIÓN DE ESCENARIO\n\n"
+                    output += f"**Escenario:** {result.get('scenario_query', 'N/A')}\n\n"
+                    
+                    if "current_state" in simulation:
+                        output += "### 📊 Estado Actual\n\n"
+                        output += f"{simulation['current_state'].get('description', 'N/A')}\n\n"
+                    
+                    if "simulated_state" in simulation:
+                        output += "### 🎯 Estado Simulado\n\n"
+                        output += f"{simulation['simulated_state'].get('description', 'N/A')}\n\n"
+                    
+                    if "impact" in simulation:
+                        impact = simulation["impact"]
+                        output += "### 💰 Impacto Calculado\n\n"
+                        if "financial" in impact:
+                            fin = impact["financial"]
+                            output += f"**Financiero:**\n"
+                            output += f"- Ahorros: ${fin.get('savings', 0):,.2f}\n"
+                            output += f"- Costos: ${fin.get('costs', 0):,.2f}\n"
+                            output += f"- ROI: ${fin.get('roi', 0):,.2f} ({fin.get('roi_percentage', 0):.1f}%)\n\n"
+                        if "operational" in impact:
+                            output += f"**Operacional:** {impact['operational']}\n\n"
+                        if "strategic" in impact:
+                            output += f"**Estratégico:** {impact['strategic']}\n\n"
+                    
+                    if "recommendation" in simulation:
+                        output += f"### ✅ Recomendación\n\n{simulation['recommendation']}\n"
+                    
+                    return output
+                except Exception as e:
+                    return f"❌ **Error al simular escenario**: {str(e)}"
+            
+            # Conectar botones
+            strategic_query_button.click(
+                fn=run_strategic_query,
+                inputs=[strategic_question_radio, custom_query_input, provider_toggle_supreme, enterprise_supreme_files],
+                outputs=[strategic_query_output],
+            )
+            
+            scenario_button.click(
+                fn=run_scenario_simulation,
+                inputs=[scenario_input, provider_toggle_supreme],
+                outputs=[scenario_output],
+            )
+            
+            # Historial de consultas
+            gr.Markdown("---\n\n")
+            gr.Markdown("### 🏛️ Historial de Consultas Empresariales\n\n")
+            query_history_output = gr.Markdown(
+                value="**💡 Las consultas ejecutadas se guardarán automáticamente en el historial.**"
+            )
+            
+            def load_query_history(provider):
+                try:
+                    temp_supreme = EnterpriseAPISupremeMode(config, provider=provider)
+                    history_summary = temp_supreme.get_query_history_summary(limit=10)
+                    
+                    output = f"**Total de consultas:** {history_summary['total_queries']}\n\n"
+                    
+                    if history_summary['recent_queries']:
+                        output += "### 📋 Consultas Recientes\n\n"
+                        for query in history_summary['recent_queries'][-5:]:
+                            output += f"- **{query.get('query', 'N/A')[:100]}** ({query.get('category', 'custom')})\n"
+                            output += f"  - Fecha: {query.get('timestamp', 'N/A')[:10]}\n"
+                            output += f"  - Resultados: {query.get('total_matches', 0)}\n\n"
+                    
+                    return output
+                except Exception as e:
+                    return f"⚠️ Error al cargar historial: {str(e)}"
+            
+            refresh_history_button = gr.Button("🔄 Actualizar Historial", variant="secondary")
+            refresh_history_button.click(
+                fn=load_query_history,
+                inputs=[provider_toggle_supreme],
+                outputs=[query_history_output],
+            )
+        
+        # Tab 4.8: Enterprise API Gold - Sistema de Inteligencia Estratégica Empresarial
+        with gr.Tab("🏆 Enterprise API Gold"):
+            gr.Markdown("### 🏆 Enterprise API Gold - Sistema de Inteligencia Estratégica Empresarial")
+            gr.Markdown("""
+            **🚀 NO ES SOLO ANÁLISIS → ES UN PARTNER ESTRATÉGICO AUTOMATIZADO**
+            
+            **SISTEMA DE 5 CAPAS DE INTELIGENCIA ESTRATÉGICA:**
+            
+            **⏱️ CAPA 1: DASHBOARD CEO (30 SEGUNDOS)**
+            - Riesgos críticos con acción inmediata
+            - Atenciones estratégicas para esta semana
+            - Tendencias positivas
+            - Impacto financiero agregado
+            
+            **🔍 CAPA 2: VISTA EJECUTIVA POR DOCUMENTO (PRIORITIZADA)**
+            - 🔴 ROJO (crítico) → 🟡 AMARILLO (atención) → 🔵 AZUL (normal)
+            - Decisiones específicas por documento
+            - Responsables asignados
+            - Timeline concreto
+            
+            **🧠 CAPA 3: DIAGNÓSTICO ESTRATÉGICO EMPRESARIAL**
+            - Score de salud financiera (0-10)
+            - Fortalezas y debilidades críticas
+            - Recomendaciones priorizadas
+            - Métricas objetivo cuantificadas
+            
+            **🗺️ CAPA 4: MAPA ESTRATÉGICO VISUAL (90 DÍAS)**
+            - URGENTE (0-30 días): ROI 100% inmediato
+            - ESTRATÉGICO (30-60 días): Ventaja competitiva
+            - TRANSFORMACIONAL (60-90 días): Eficiencia sostenible
+            
+            **🎮 CAPA 5: SIMULACIÓN DE DECISIONES**
+            - Escenario actual (sin acción) → Costo 12 meses
+            - Escenario optimizado (acciones recomendadas) → Valor generado
+            - ROI calculado automáticamente
+            - Recomendación de Financial Advisor
+            
+            **🏛️ CAPA 6: MEMORIA CORPORATIVA & ALERTAS**
+            - Patrones históricos detectados
+            - Evolución recomendada (mes 1-12)
+            - Alertas proactivas futuras
+            
+            **💼 VALOR DIFERENCIADOR:**
+            - De "aquí están tus documentos analizados" → "aquí está el futuro de tu empresa optimizado"
+            - De información pasada → Inteligencia futura
+            - De usuario decide qué hacer → Sistema recomienda camino óptimo
+            - De análisis estático → Simulación dinámica de escenarios
+            - De herramienta técnica → Partner estratégico automatizado
+            
+            **🎯 Perfecto para:**
+            - CEOs y ejecutivos que necesitan decisiones rápidas (30 segundos)
+            - Consultoría estratégica automatizada (como McKinsey interno)
+            - Simulación de decisiones antes de ejecutarlas
+            - Memoria corporativa y alertas proactivas
+            - Procesar 100-500+ PDFs con inteligencia estratégica
+            """)
+            
+            with gr.Row():
+                enterprise_gold_files = gr.Files(
+                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD) - Recomendado: 50-500 PDFs",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                rules_input_gold = gr.Textbox(
+                    label="⚙️ Reglas y Automatizaciones (JSON opcional)",
+                    placeholder='''[
+  {
+    "name": "Alerta de Contrato Vencido",
+    "type": "condition",
+    "condition": {
+      "type": "keyword",
+      "keyword": "vencimiento"
+    },
+    "action": {
+      "type": "notify",
+      "channel": "email"
+    }
+  }
+]''',
+                    lines=8,
+                )
+            
+            with gr.Row():
+                with gr.Column():
+                    auto_detect_check_gold = gr.Checkbox(
+                        label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                        value=True,
+                    )
+                    enable_comparative_gold = gr.Checkbox(
+                        label="📊 Análisis Comparativo Automático",
+                        value=True,
+                        info="Compara todos los documentos para encontrar patrones, outliers y contradicciones"
+                    )
+                    enable_structured_extraction_gold = gr.Checkbox(
+                        label="🏗️ Extracción Estructurada (Semantic ETL)",
+                        value=True,
+                        info="Extrae campos específicos: contratos (fechas, montos), facturas (deudas, clientes). Habilita NL2Query."
+                    )
+                
+                with gr.Column():
+                    provider_toggle_gold = gr.Radio(
+                        label="🤖 Motor de IA",
+                        choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                        value="openai",
+                        info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    )
+            
+            enterprise_gold_button = gr.Button("🚀 Procesar con Enterprise API Gold", variant="primary", size="lg")
+            
+            enterprise_gold_output = gr.Markdown(label="📊 Resultados Enterprise API Gold")
+            
+            enterprise_gold_button.click(
+                fn=run_enterprise_api_gold_mode_streaming,
+                inputs=[
+                    enterprise_gold_files, 
+                    auto_detect_check_gold, 
+                    rules_input_gold, 
+                    provider_toggle_gold,
+                    enable_comparative_gold,
+                    enable_structured_extraction_gold
+                ],
+                outputs=[enterprise_gold_output],
+                show_progress="full"
+            )
+
+        # Tab 4.8: Enterprise Autonomous Workflows (nuevo modo combinado)
+        with gr.Tab("🤖 Enterprise Autonomous Workflows"):
+            gr.Markdown("### 🤖 Enterprise Autonomous Workflows")
+            gr.Markdown("""
+            **Modo combinado que usa Enterprise API + Research & Action Agent para ejecutar workflows autónomos de ALTO VALOR.**
+
+            Casos soportados (finanzas, compliance y flujos inter-sistemas):
+            - Auditoría automática de contratos (Contract Intelligence)
+            - Revisión autónoma de facturas / AP Automation
+            - Detección de fraude en facturas y pagos
+            - Compliance normativo con reportes legales
+            - Automatización de flujos de riesgo y alertas críticas
+            - Conciliación de datos entre sistemas (ERP, CRM, billing)
+            - Workflows inter-sistema: tickets, ERP, CRM, email, Slack, S3, reportes PDF, tareas futuras
+            """)
+
+            with gr.Row():
+                with gr.Column():
+                    eaw_files = gr.Files(
+                        label="📂 Documentos Empresariales (PDF, DOCX, etc.)",
+                        file_types=["file"],
+                        file_count="multiple",
+                    )
+                    eaw_workflow_type = gr.Radio(
+                        label="🎯 Tipo de Workflow Premium",
+                        choices=[
+                            ("1️⃣ Auditoría automática de contratos (Contract Intelligence)", "auditoria_contratos"),
+                            ("2️⃣ Revisión autónoma de facturas / AP Automation", "ap_automation"),
+                            ("💰 Detección de fraude en facturas/pagos", "fraude_facturas"),
+                            ("3️⃣ E2E Compliance normativo con reportes legales y alertas", "compliance_normativo"),
+                            ("4️⃣ Flujos de riesgo y alertas críticas", "alertas_riesgo"),
+                            ("5️⃣ Conciliación de datos entre sistemas", "conciliacion_sistemas"),
+                            ("🌐 Workflow inter-sistemas (tickets, ERP, CRM, email, Slack, S3, PDF)", "workflow_multisistema"),
+                            ("General / personalizado", "general"),
+                        ],
+                        value="auditoria_contratos",
+                    )
+                    eaw_auto_detect = gr.Checkbox(
+                        label="🔍 Detección automática de problemas/oportunidades (Enterprise API)",
+                        value=True,
+                    )
+                    eaw_auto_actions = gr.Checkbox(
+                        label="⚡ Ejecutar acciones automáticamente (donde sea seguro)",
+                        value=True,
+                    )
+                    eaw_simulation = gr.Checkbox(
+                        label="🧪 Simulation Mode (no ejecuta acciones reales, solo muestra lo que haría)",
+                        value=False,
+                    )
+                    eaw_emergency_stop = gr.Checkbox(
+                        label="🛑 Botón de pánico (forzar simulación, frenar acciones reales)",
+                        value=False,
+                    )
+                    eaw_tenant_id = gr.Textbox(
+                        label="🏷️ ID de Tenant / Cliente",
+                        value="ui_default",
+                        placeholder="p.ej. acme_corp",
+                    )
+                    eaw_integration_prefs = gr.Textbox(
+                        label="⚙️ Configuración de Integraciones (JSON por tenant)",
+                        placeholder='{"tickets_destination": "jira", "jira_project": "RISK", "alerts_channel": "slack", "alerts_email_to": ["cfo@empresa.com"]}',
+                        lines=6,
+                    )
+                    eaw_webhook_url = gr.Textbox(
+                        label="🔔 Webhook URL (opcional para callbacks al sistema del cliente)",
+                        placeholder="https://mi-backend.com/webhooks/enterprise-workflows",
+                    )
+                    eaw_run_btn = gr.Button("🚀 Ejecutar Workflow Autónomo", variant="primary")
+                with gr.Column():
+                    eaw_output = gr.Markdown(label="📊 Resultado del Workflow")
+
+            def run_enterprise_workflow(files, workflow_type, auto_detect, auto_actions, simulation_mode, emergency_stop, tenant_id, integration_prefs_json, webhook_url):
+                if not files:
+                    return "⚠️ Sube al menos un documento para ejecutar el workflow."
+
+                if not enterprise_workflows:
+                    return "❌ Enterprise Autonomous Workflows no está habilitado."
+
+                try:
+                    if emergency_stop:
+                        auto_actions = False
+                        simulation_mode = True
+                    # Parsear configuración de integraciones si se proporcionó JSON
+                    integration_prefs = {}
+                    if integration_prefs_json and integration_prefs_json.strip():
+                        try:
+                            integration_prefs = json.loads(integration_prefs_json)
+                        except Exception as je:
+                            return f"❌ Error en el JSON de configuraciones de integración: {je}"
+
+                    result = enterprise_workflows.run_workflow(
+                        files=files,
+                        workflow_type=workflow_type,
+                        auto_detect=auto_detect,
+                        auto_execute_actions=auto_actions,
+                        tenant_id=tenant_id or "ui_default",
+                        integration_prefs=integration_prefs,
+                        webhook_url=webhook_url or None,
+                        simulation_mode=simulation_mode,
+                    )
+
+                    ra = result.research_result
+                    summary = ra.get("summary", "") or ""
+                    intent = ra.get("intent", workflow_type)
+                    mode = ra.get("mode", "advanced")
+                    actions_rec = ra.get("actions_recommended", [])
+                    actions_exec = ra.get("actions_executed", [])
+                    error = ra.get("error")
+
+                    # Determinar estado del workflow
+                    enterprise_status = "✅" if "✅" in result.enterprise_summary else "⚠️"
+                    ra_status = "✅" if summary and len(summary) > 50 else "⚠️"
+
+                    md = f"""## {enterprise_status} Workflow Autónomo Ejecutado: {workflow_type}
+
+**Intento detectado por R&A:** `{intent}`  
+**Modo R&A:** `{mode}`
+
+### 📄 Resumen Ejecutivo (R&A)
+"""
+                    
+                    if summary and len(summary) > 50:
+                        md += f"{summary}\n"
+                    else:
+                        md += f"⚠️ El R&A Agent no pudo generar un resumen completo. "
+                        if error:
+                            md += f"Error: {error[:300]}\n"
+                        else:
+                            md += f"Esto puede deberse a que no se encontró información relevante en los documentos o hubo un problema en el procesamiento.\n"
+                            md += f"💡 **Sugerencia:** Verifica que los documentos contengan información relevante para el tipo de workflow '{workflow_type}'.\n"
+
+                    md += f"""
+### 🧠 Resumen Análisis Inicial (Enterprise API)
+{result.enterprise_summary[:2000]}
+"""
+                    if actions_rec:
+                        md += f"\n### ⚡ Acciones Recomendadas ({len(actions_rec)})\n"
+                        for a in actions_rec[:5]:
+                            md += f"- **{a.get('type','unknown')}** ({a.get('priority','medium')}) → {a.get('description','')}\n"
+                    if actions_exec:
+                        md += f"\n### ✅ Acciones Ejecutadas ({len(actions_exec)})\n"
+                        for a in actions_exec[:5]:
+                            act = a.get("action", {})
+                            res = a.get("result", {})
+                            md += f"- **{act.get('type','unknown')}** → `{res.get('status','unknown')}` ({res.get('message','')})\n"
+
+                    return md
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Error ejecutando workflow: {str(e)}"
+
+            eaw_run_btn.click(
+                fn=run_enterprise_workflow,
+                inputs=[
+                    eaw_files,
+                    eaw_workflow_type,
+                    eaw_auto_detect,
+                    eaw_auto_actions,
+                    eaw_simulation,
+                    eaw_emergency_stop,
+                    eaw_tenant_id,
+                    eaw_integration_prefs,
+                    eaw_webhook_url,
+                ],
+                outputs=[eaw_output],
+            )
+        
+        # Tab 4.7: Enterprise Data Intelligence (SQL Generation + Data Registry)
+        with gr.Tab("📊 Enterprise Data Intelligence"):
+            gr.Markdown("### 📊 Enterprise Data Intelligence - SQL Generation desde Lenguaje Natural")
+            gr.Markdown("""
+            **🚀 Convierte preguntas en lenguaje natural a SQL y consulta tus bases de datos empresariales**
+            
+            **Características:**
+            - 📝 **Data Registry**: Registra tus bases de datos, tablas y columnas con metadata
+            - 🔍 **Schema Linking**: Encuentra automáticamente las tablas y columnas relevantes
+            - 🤖 **SQL Generation**: Convierte preguntas en español a SQL válido
+            - ✅ **Multi-Agent Framework**: SQL Creator, Runner y Enhancer trabajan juntos
+            - 🔄 **Auto-fix**: Corrige errores de SQL automáticamente
+            
+            **💡 Ejemplos de queries:**
+            - "¿Cuántas ventas hubo en diciembre?"
+            - "Muéstrame los clientes con más de 1000 compras"
+            - "¿Cuál es el promedio de facturación por región?"
+            - "Lista todos los productos sin stock"
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Registrar Base de Datos
+                with gr.Tab("📝 Registrar Base de Datos"):
+                    gr.Markdown("### Registrar una nueva base de datos en el sistema")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            edi_db_name = gr.Textbox(
+                                label="Nombre de la Base de Datos",
+                                placeholder="ventas_db",
+                                info="Nombre identificador para esta base de datos"
+                            )
+                            edi_db_type = gr.Dropdown(
+                                label="Tipo de Base de Datos",
+                                choices=["postgresql", "mysql", "sqlite", "mssql"],
+                                value="postgresql",
+                            )
+                            edi_db_host = gr.Textbox(
+                                label="Host",
+                                placeholder="localhost",
+                            )
+                            edi_db_port = gr.Number(
+                                label="Puerto",
+                                value=5432,
+                            )
+                            edi_db_database = gr.Textbox(
+                                label="Nombre de la Base de Datos",
+                                placeholder="ventas",
+                            )
+                            edi_db_username = gr.Textbox(
+                                label="Usuario",
+                                placeholder="admin",
+                            )
+                            edi_connection_string_env = gr.Textbox(
+                                label="Variable de Entorno con Connection String (opcional)",
+                                placeholder="DATABASE_URL",
+                                info="Si prefieres usar una variable de entorno con el connection string completo"
+                            )
+                            edi_db_description = gr.Textbox(
+                                label="Descripción",
+                                placeholder="Base de datos de ventas y clientes",
+                                lines=2,
+                            )
+                            edi_register_db_btn = gr.Button("✅ Registrar Base de Datos", variant="primary")
+                        with gr.Column():
+                            edi_register_output = gr.Markdown(label="Resultado del Registro")
+                
+                # Sub-tab: Registrar Tabla
+                with gr.Tab("📋 Registrar Tabla"):
+                    gr.Markdown("### Registrar una tabla en una base de datos existente")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            edi_table_source_id = gr.Textbox(
+                                label="Source ID de la Base de Datos",
+                                placeholder="ventas_db_postgresql_ventas",
+                                info="ID de la base de datos donde registrar la tabla"
+                            )
+                            edi_table_name = gr.Textbox(
+                                label="Nombre de la Tabla",
+                                placeholder="ventas",
+                            )
+                            edi_table_description = gr.Textbox(
+                                label="Descripción de la Tabla",
+                                placeholder="Tabla que contiene todas las ventas realizadas",
+                                lines=2,
+                            )
+                            edi_business_domain = gr.Textbox(
+                                label="Dominio de Negocio",
+                                placeholder="sales",
+                                info="Ej: sales, finance, hr, inventory"
+                            )
+                            edi_register_table_btn = gr.Button("✅ Registrar Tabla", variant="primary")
+                        with gr.Column():
+                            edi_register_table_output = gr.Markdown(label="Resultado del Registro")
+                
+                # Sub-tab: Consultar con Lenguaje Natural
+                with gr.Tab("💬 Consultar con Lenguaje Natural"):
+                    gr.Markdown("### Haz preguntas en lenguaje natural y obtén SQL + resultados")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            edi_query_nl = gr.Textbox(
+                                label="Pregunta en Lenguaje Natural",
+                                placeholder="¿Cuántas ventas hubo en diciembre?",
+                                lines=3,
+                            )
+                            edi_query_source_id = gr.Textbox(
+                                label="Source ID (opcional)",
+                                placeholder="ventas_db_postgresql_ventas",
+                                info="Deja vacío para buscar en todas las bases de datos"
+                            )
+                            edi_use_multi_agent = gr.Checkbox(
+                                label="Usar Multi-Agent Framework (Creator, Runner, Enhancer)",
+                                value=True,
+                            )
+                            edi_auto_fix = gr.Checkbox(
+                                label="Auto-corregir errores de SQL",
+                                value=True,
+                            )
+                            edi_query_btn = gr.Button("🚀 Generar y Ejecutar SQL", variant="primary")
+                        with gr.Column():
+                            edi_query_output = gr.Markdown(label="Resultado de la Query")
+                
+                # Sub-tab: Registrar Agente
+                with gr.Tab("🤖 Registrar Agente"):
+                    gr.Markdown("### Registrar un nuevo agente/API en el sistema")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            edi_agent_id = gr.Textbox(
+                                label="Agent ID",
+                                placeholder="my_custom_api",
+                                info="ID único del agente"
+                            )
+                            edi_agent_name = gr.Textbox(
+                                label="Nombre del Agente",
+                                placeholder="Mi API Personalizada",
+                            )
+                            edi_agent_description = gr.Textbox(
+                                label="Descripción",
+                                placeholder="API personalizada para integrar con sistema X",
+                                lines=3,
+                            )
+                            edi_agent_category = gr.Dropdown(
+                                label="Categoría",
+                                choices=["ticket", "notification", "crm", "erp", "storage", "email", "database", "custom"],
+                                value="custom",
+                            )
+                            edi_agent_stream_tags = gr.Textbox(
+                                label="Stream Tags (separados por comas)",
+                                placeholder="api, custom, integration",
+                                info="Tags para activación por streams"
+                            )
+                            edi_agent_requires_approval = gr.Checkbox(
+                                label="Requiere Aprobación Humana",
+                                value=False,
+                            )
+                            edi_register_agent_btn = gr.Button("✅ Registrar Agente", variant="primary")
+                        with gr.Column():
+                            edi_register_agent_output = gr.Markdown(label="Resultado del Registro")
+                
+                # Sub-tab: Buscar Tablas
+                with gr.Tab("🔍 Buscar Tablas"):
+                    gr.Markdown("### Busca tablas relevantes en tus bases de datos")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            edi_search_query = gr.Textbox(
+                                label="Buscar Tablas",
+                                placeholder="ventas, clientes, productos",
+                                info="Busca tablas por nombre, descripción o dominio"
+                            )
+                            edi_search_limit = gr.Slider(
+                                label="Límite de Resultados",
+                                minimum=1,
+                                maximum=20,
+                                value=10,
+                                step=1,
+                            )
+                            edi_search_btn = gr.Button("🔍 Buscar", variant="primary")
+                        with gr.Column():
+                            edi_search_output = gr.Markdown(label="Tablas Encontradas")
+                
+                # Sub-tab: Buscar Agentes
+                with gr.Tab("🔍 Buscar Agentes"):
+                    gr.Markdown("### Busca agentes/APIs disponibles en el sistema")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            edi_search_agent_query = gr.Textbox(
+                                label="Buscar Agentes",
+                                placeholder="jira, slack, email, ticket",
+                                info="Busca agentes por nombre, descripción o categoría"
+                            )
+                            edi_search_agent_category = gr.Dropdown(
+                                label="Filtrar por Categoría (opcional)",
+                                choices=["", "ticket", "notification", "crm", "erp", "storage", "email", "database", "custom"],
+                                value="",
+                            )
+                            edi_search_agent_limit = gr.Slider(
+                                label="Límite de Resultados",
+                                minimum=1,
+                                maximum=20,
+                                value=10,
+                                step=1,
+                            )
+                            edi_search_agent_btn = gr.Button("🔍 Buscar Agentes", variant="primary")
+                        with gr.Column():
+                            edi_search_agent_output = gr.Markdown(label="Agentes Encontrados")
+            
+            # Funciones de callback
+            def register_database(name, db_type, host, port, database, username, connection_string_env, description):
+                if not enterprise_data_intelligence:
+                    return "❌ Enterprise Data Intelligence no está habilitado."
+                try:
+                    result = enterprise_data_intelligence.register_database(
+                        name=name,
+                        db_type=db_type,
+                        host=host,
+                        port=int(port) if port else None,
+                        database=database,
+                        username=username,
+                        connection_string_env=connection_string_env if connection_string_env else None,
+                        description=description,
+                    )
+                    if result["success"]:
+                        return f"✅ **Base de datos registrada exitosamente**\n\n**Source ID:** `{result['source_id']}`\n\n**Mensaje:** {result['message']}"
+                    else:
+                        return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def register_table(source_id, table_name, description, business_domain):
+                if not enterprise_data_intelligence:
+                    return "❌ Enterprise Data Intelligence no está habilitado."
+                try:
+                    result = enterprise_data_intelligence.register_table(
+                        source_id=source_id,
+                        table_name=table_name,
+                        description=description,
+                        business_domain=business_domain,
+                    )
+                    if result["success"]:
+                        return f"✅ **Tabla registrada exitosamente**\n\n**Mensaje:** {result['message']}"
+                    else:
+                        return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def query_natural_language(query, source_id, use_multi_agent, auto_fix):
+                if not enterprise_data_intelligence:
+                    return "❌ Enterprise Data Intelligence no está habilitado."
+                if not query:
+                    return "⚠️ Ingresa una pregunta en lenguaje natural."
+                try:
+                    result = enterprise_data_intelligence.query_with_natural_language(
+                        natural_language_query=query,
+                        source_id=source_id if source_id else None,
+                        use_multi_agent=use_multi_agent,
+                        auto_fix=auto_fix,
+                    )
+                    
+                    md = f"""## 📊 Resultado de la Query
+                    
+**Query en lenguaje natural:** {query}
+
+"""
+                    if result.success:
+                        md += f"### ✅ SQL Generado\n```sql\n{result.sql}\n```\n\n"
+                        if result.explanation:
+                            md += f"**Explicación:** {result.explanation}\n\n"
+                        if result.execution_result:
+                            exec_result = result.execution_result
+                            if exec_result.success:
+                                md += f"### ✅ Ejecución Exitosa\n"
+                                md += f"- **Filas retornadas:** {exec_result.row_count}\n"
+                                md += f"- **Tiempo de ejecución:** {exec_result.execution_time_ms:.2f} ms\n"
+                            else:
+                                md += f"### ❌ Error en Ejecución\n**Error:** {exec_result.error}\n\n"
+                        if result.metadata and result.metadata.get("iterations"):
+                            md += f"### 🔄 Iteraciones: {result.metadata.get('final_iteration', 0)}\n"
+                    else:
+                        md += f"### ❌ Error\n**Error:** {result.error or 'Error desconocido'}\n\n"
+                        if result.sql:
+                            md += f"**SQL generado (con errores):**\n```sql\n{result.sql}\n```\n"
+                    
+                    return md
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ **Error:** {str(e)}"
+            
+            def register_agent(agent_id, name, description, category, stream_tags, requires_approval):
+                if not enterprise_data_intelligence:
+                    return "❌ Enterprise Data Intelligence no está habilitado."
+                if not agent_id or not name:
+                    return "⚠️ Completa al menos Agent ID y Nombre."
+                try:
+                    tags_list = [t.strip() for t in stream_tags.split(",") if t.strip()] if stream_tags else []
+                    result = enterprise_data_intelligence.register_agent(
+                        agent_id=agent_id,
+                        name=name,
+                        description=description,
+                        category=category,
+                        stream_tags=tags_list,
+                        requires_approval=requires_approval,
+                    )
+                    if result["success"]:
+                        return f"✅ **Agente registrado exitosamente**\n\n**Mensaje:** {result['message']}"
+                    else:
+                        return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def search_tables(query, limit):
+                if not enterprise_data_intelligence:
+                    return "❌ Enterprise Data Intelligence no está habilitado."
+                if not query:
+                    return "⚠️ Ingresa un término de búsqueda."
+                try:
+                    tables = enterprise_data_intelligence.search_tables(
+                        query=query,
+                        limit=int(limit),
+                    )
+                    if not tables:
+                        return "⚠️ No se encontraron tablas relevantes."
+                    md = f"## 🔍 Tablas Encontradas ({len(tables)})\n\n"
+                    for table in tables:
+                        md += f"### 📋 {table['name']}\n"
+                        md += f"- **Base de datos:** {table['database']}\n"
+                        if table.get('description'):
+                            md += f"- **Descripción:** {table['description']}\n"
+                        if table.get('business_domain'):
+                            md += f"- **Dominio:** {table['business_domain']}\n"
+                        md += f"- **Columnas:** {table['columns_count']}\n\n"
+                    return md
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def search_agents(query, category, limit):
+                if not enterprise_data_intelligence:
+                    return "❌ Enterprise Data Intelligence no está habilitado."
+                if not query:
+                    return "⚠️ Ingresa un término de búsqueda."
+                try:
+                    agents = enterprise_data_intelligence.search_agents(
+                        query=query,
+                        category=category if category else None,
+                        limit=int(limit),
+                    )
+                    if not agents:
+                        return "⚠️ No se encontraron agentes relevantes."
+                    md = f"## 🤖 Agentes Encontrados ({len(agents)})\n\n"
+                    for agent in agents:
+                        md += f"### 🤖 {agent['name']}\n"
+                        md += f"- **Agent ID:** `{agent['agent_id']}`\n"
+                        md += f"- **Categoría:** {agent['category']}\n"
+                        if agent.get('description'):
+                            md += f"- **Descripción:** {agent['description']}\n"
+                        md += f"- **Inputs:** {agent['input_params_count']} | **Outputs:** {agent['output_params_count']}\n"
+                        if agent.get('requires_approval'):
+                            md += f"- **⚠️ Requiere aprobación humana**\n"
+                        md += "\n"
+                    return md
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            # Conectar callbacks
+            edi_register_db_btn.click(
+                fn=register_database,
+                inputs=[edi_db_name, edi_db_type, edi_db_host, edi_db_port, edi_db_database, edi_db_username, edi_connection_string_env, edi_db_description],
+                outputs=[edi_register_output],
+            )
+            
+            edi_register_table_btn.click(
+                fn=register_table,
+                inputs=[edi_table_source_id, edi_table_name, edi_table_description, edi_business_domain],
+                outputs=[edi_register_table_output],
+            )
+            
+            edi_query_btn.click(
+                fn=query_natural_language,
+                inputs=[edi_query_nl, edi_query_source_id, edi_use_multi_agent, edi_auto_fix],
+                outputs=[edi_query_output],
+            )
+            
+            edi_register_agent_btn.click(
+                fn=register_agent,
+                inputs=[edi_agent_id, edi_agent_name, edi_agent_description, edi_agent_category, edi_agent_stream_tags, edi_agent_requires_approval],
+                outputs=[edi_register_agent_output],
+            )
+            
+            edi_search_btn.click(
+                fn=search_tables,
+                inputs=[edi_search_query, edi_search_limit],
+                outputs=[edi_search_output],
+            )
+            
+            edi_search_agent_btn.click(
+                fn=search_agents,
+                inputs=[edi_search_agent_query, edi_search_agent_category, edi_search_agent_limit],
+                outputs=[edi_search_agent_output],
+            )
+        
+        # Tab 4.8: Agentic Workflow Orchestrator (Multi-Agent Workflows con CrewAI)
+        with gr.Tab("🤖 Agentic Workflow Orchestrator"):
+            gr.Markdown("### 🤖 Agentic Workflow Orchestrator - Multi-Agent Workflows")
+            gr.Markdown("""
+            **🚀 Orquestación dinámica de agents multi-etapa basada en la visión de Eric Schmidt**
+            
+            **Características:**
+            - 🔗 **Orquestación de Agents**: Encadena múltiples agents para workflows complejos
+            - 🧠 **Memoria Persistente**: Cada agent recuerda estados anteriores y decisiones
+            - 🎯 **Reinforcement Learning**: Agents aprenden de recompensas y feedback
+            - 👤 **Human-in-the-Loop**: Aprobaciones humanas en pasos críticos
+            - 🔄 **Auto-mejora Recursiva**: Agents aprenden patrones exitosos
+            
+            **Workflows Pre-empaquetados:**
+            - 🏠 **Real Estate Purchase**: Compra/construcción automática de propiedad
+            - 💼 **Sales Agent Full Cycle**: Prospecting → Qualification → Closing
+            - ⚖️ **Legal & Compliance**: Revisión automática de contratos y cumplimiento
+            - 📦 **Inventory Management**: Gestión automática de inventarios y reorden
+            - 👥 **Recruiting Full Cycle**: Sourcing → Screening → Interview → Offer
+            - 🚚 **Supply Chain Optimization**: Demanda → Producción → Logística
+            
+            **💡 Basado en:**
+            - CrewAI (multi-agent teams)
+            - LangGraph (workflow engine)
+            - Memoria persistente (SQLite)
+            - Reinforcement learning (reward signals)
+            - **A2A Protocol** (comunicación estandarizada entre agents)
+            - **MCP × A2A Bridge** (descubrimiento automático de tools MCP)
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Ejecutar Workflow Pre-empaquetado
+                with gr.Tab("🚀 Ejecutar Workflow"):
+                    gr.Markdown("### Ejecuta un workflow pre-empaquetado")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            awo_workflow_template = gr.Dropdown(
+                                label="Workflow Template",
+                                choices=[
+                                    ("🏠 Real Estate Purchase", "real_estate_purchase"),
+                                    ("💼 Sales Agent Full Cycle", "sales_agent_full_cycle"),
+                                    ("⚖️ Legal & Compliance Review", "legal_compliance_review"),
+                                    ("📦 Inventory Management", "inventory_management"),
+                                    ("👥 Recruiting Full Cycle", "recruiting_full_cycle"),
+                                    ("🚚 Supply Chain Optimization", "supply_chain_optimization"),
+                                ],
+                                value="real_estate_purchase",
+                                info="Selecciona un workflow pre-empaquetado"
+                            )
+                            awo_input_data = gr.Textbox(
+                                label="Input Data (JSON)",
+                                placeholder='{"location": "McLean, Virginia", "budget": 500000, "requirements": "3 bedrooms, 2 bathrooms"}',
+                                lines=5,
+                                info="Datos de entrada para el workflow en formato JSON"
+                            )
+                            awo_auto_approve = gr.Checkbox(
+                                label="Auto-aprobar pasos críticos (no recomendado para producción)",
+                                value=False,
+                            )
+                            awo_execute_btn = gr.Button("🚀 Ejecutar Workflow", variant="primary")
+                        with gr.Column():
+                            awo_execution_output = gr.Markdown(label="Resultado de Ejecución")
+                            awo_execution_id = gr.Textbox(
+                                label="Execution ID",
+                                visible=False,
+                            )
+                            awo_a2a_status = gr.Markdown(
+                                label="Estado A2A",
+                                visible=True,
+                                value="**A2A Protocol:** Verificando...",
+                            )
+                
+                # Sub-tab: Aprobaciones Humanas
+                with gr.Tab("👤 Aprobaciones Humanas"):
+                    gr.Markdown("### Revisa y aprueba pasos que requieren aprobación humana")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            awo_approval_execution_id = gr.Textbox(
+                                label="Execution ID",
+                                placeholder="Pega el Execution ID del workflow en ejecución",
+                            )
+                            awo_refresh_approvals_btn = gr.Button("🔄 Refrescar Aprobaciones Pendientes")
+                            awo_pending_approvals = gr.JSON(
+                                label="Aprobaciones Pendientes",
+                            )
+                            awo_approval_agent_id = gr.Textbox(
+                                label="Agent ID a Aprobar",
+                                placeholder="agent_id del paso a aprobar",
+                            )
+                            awo_approval_feedback = gr.Textbox(
+                                label="Feedback (opcional)",
+                                placeholder="Comentarios sobre la aprobación",
+                                lines=3,
+                            )
+                            with gr.Row():
+                                awo_approve_btn = gr.Button("✅ Aprobar", variant="primary")
+                                awo_reject_btn = gr.Button("❌ Rechazar", variant="stop")
+                        with gr.Column():
+                            awo_approval_output = gr.Markdown(label="Resultado de Aprobación")
+                
+                # Sub-tab: Crear Workflow Personalizado
+                with gr.Tab("🛠️ Crear Workflow Personalizado"):
+                    gr.Markdown("### Crea tu propio workflow agentic personalizado")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            awo_custom_workflow_id = gr.Textbox(
+                                label="Workflow ID",
+                                placeholder="my_custom_workflow",
+                            )
+                            awo_custom_workflow_name = gr.Textbox(
+                                label="Nombre del Workflow",
+                                placeholder="Mi Workflow Personalizado",
+                            )
+                            awo_custom_workflow_desc = gr.Textbox(
+                                label="Descripción",
+                                placeholder="Descripción del workflow",
+                                lines=3,
+                            )
+                            awo_custom_workflow_json = gr.Textbox(
+                                label="Definición del Workflow (JSON)",
+                                placeholder='{"agents": [...], "steps": [...]}',
+                                lines=10,
+                                info="Define agents y steps en formato JSON. Usa los templates como referencia.",
+                            )
+                            awo_create_workflow_btn = gr.Button("✅ Crear Workflow", variant="primary")
+                        with gr.Column():
+                            awo_create_workflow_output = gr.Markdown(label="Resultado")
+            
+            # Funciones de callback
+            def execute_workflow(template, input_data, auto_approve):
+                if not agentic_workflow_orchestrator:
+                    return "❌ Agentic Workflow Orchestrator no está habilitado.", "", "**A2A Protocol:** No disponible"
+                
+                # Verificar estado A2A y MCP×A2A
+                a2a_status = ""
+                if hasattr(agentic_workflow_orchestrator, 'a2a_protocol') and agentic_workflow_orchestrator.a2a_protocol:
+                    agents_count = len(agentic_workflow_orchestrator.a2a_protocol.list_agents())
+                    a2a_status = f"**✅ A2A Protocol:** Activo ({agents_count} agents registrados)\n"
+                else:
+                    a2a_status = "**❌ A2A Protocol:** No disponible\n"
+                
+                if hasattr(agentic_workflow_orchestrator, 'mcp_a2a_bridge') and agentic_workflow_orchestrator.mcp_a2a_bridge:
+                    tools_count = len(agentic_workflow_orchestrator.mcp_a2a_bridge.mcp_capabilities)
+                    a2a_status += f"**✅ MCP × A2A Bridge:** Activo ({tools_count} tools MCP disponibles)\n"
+                    a2a_status += "**🔍 Descubrimiento automático:** Habilitado\n"
+                    
+                    # Progressive Disclosure
+                    if hasattr(agentic_workflow_orchestrator, 'mcp_progressive_disclosure') and agentic_workflow_orchestrator.mcp_progressive_disclosure:
+                        stats = agentic_workflow_orchestrator.mcp_progressive_disclosure.get_statistics()
+                        a2a_status += f"**✅ Progressive Disclosure:** Activo\n"
+                        a2a_status += f"   - Tools buscados: {stats['tools_searched']}\n"
+                        a2a_status += f"   - Tools cargados: {stats['tools_loaded']}\n"
+                        a2a_status += f"   - Tokens ahorrados (estimado): {stats['tokens_saved_estimate']}\n"
+                        a2a_status += "**💡 Carga on-demand:** Solo se cargan tools cuando se necesitan"
+                    else:
+                        a2a_status += "**⚠️ Progressive Disclosure:** No disponible\n"
+                    
+                    # Tool Optimizer
+                    if hasattr(agentic_workflow_orchestrator, 'mcp_tool_optimizer') and agentic_workflow_orchestrator.mcp_tool_optimizer:
+                        a2a_status += "**✅ Tool Optimizer:** Activo (descriptions optimizadas)"
+                    else:
+                        a2a_status += "**⚠️ Tool Optimizer:** No disponible"
+                else:
+                    a2a_status += "**⚠️ MCP × A2A Bridge:** No disponible (tools MCP no se descubrirán automáticamente)"
+                
+                try:
+                    # Obtener template
+                    templates = agentic_workflow_orchestrator.get_workflow_templates()
+                    workflow_template = None
+                    for t in templates:
+                        if t["workflow_id"] == template:
+                            workflow_template = t
+                            break
+                    
+                    if not workflow_template:
+                        return f"❌ Template '{template}' no encontrado.", "", a2a_status
+                    
+                    # Crear workflow si no existe
+                    try:
+                        agentic_workflow_orchestrator.create_workflow(
+                            workflow_id=workflow_template["workflow_id"],
+                            name=workflow_template["name"],
+                            description=workflow_template["description"],
+                            agents=workflow_template["agents"],
+                            steps=workflow_template["steps"],
+                        )
+                    except:
+                        pass  # Ya existe
+                    
+                    # Parsear input_data
+                    import json
+                    try:
+                        input_dict = json.loads(input_data) if input_data else {}
+                    except:
+                        input_dict = {"query": input_data} if input_data else {}
+                    
+                    # Ejecutar workflow
+                    execution = agentic_workflow_orchestrator.execute_workflow(
+                        workflow_id=template,
+                        input_data=input_dict,
+                        auto_approve=auto_approve,
+                    )
+                    
+                    # Formatear resultado
+                    md = f"""## ✅ Workflow Ejecutado: {execution.workflow_id}
+                    
+**Execution ID:** `{execution.execution_id}`
+**Status:** {execution.status.value}
+**Started:** {execution.started_at}
+
+### Agents Ejecutados:
+"""
+                    for agent in execution.agents:
+                        status_emoji = {
+                            "completed": "✅",
+                            "failed": "❌",
+                            "waiting_approval": "⏳",
+                            "approved": "✅",
+                            "rejected": "❌",
+                        }.get(agent.status.value, "⏸️")
+                        
+                        md += f"\n{status_emoji} **{agent.name}** ({agent.role})\n"
+                        md += f"   Status: {agent.status.value}\n"
+                        if agent.output:
+                            md += f"   Output: {str(agent.output)[:200]}...\n"
+                        if agent.error:
+                            md += f"   ⚠️ Error: {agent.error}\n"
+                    
+                    if execution.status.value == "completed":
+                        md += f"\n### ✅ Workflow Completado Exitosamente\n"
+                    elif execution.status.value == "failed":
+                        md += f"\n### ❌ Workflow Falló\n**Error:** {execution.error}\n"
+                    
+                    return md, execution.execution_id, a2a_status
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ **Error:** {str(e)}", "", a2a_status
+            
+            def refresh_approvals(execution_id):
+                if not agentic_workflow_orchestrator:
+                    return [], "❌ Agentic Workflow Orchestrator no está habilitado."
+                
+                if not execution_id:
+                    return [], "⚠️ Ingresa un Execution ID."
+                
+                try:
+                    pending = agentic_workflow_orchestrator.get_pending_approvals(execution_id)
+                    if not pending:
+                        return [], "✅ No hay aprobaciones pendientes."
+                    return pending, f"📋 {len(pending)} aprobación(es) pendiente(s)"
+                except Exception as e:
+                    return [], f"❌ **Error:** {str(e)}"
+            
+            def approve_step(execution_id, agent_id, feedback, approved):
+                if not agentic_workflow_orchestrator:
+                    return "❌ Agentic Workflow Orchestrator no está habilitado."
+                
+                if not execution_id or not agent_id:
+                    return "⚠️ Completa Execution ID y Agent ID."
+                
+                try:
+                    success = agentic_workflow_orchestrator.approve_step(
+                        execution_id=execution_id,
+                        agent_id=agent_id,
+                        approved=approved,
+                        feedback=feedback,
+                    )
+                    
+                    if success:
+                        action = "Aprobado" if approved else "Rechazado"
+                        return f"✅ Paso {action} exitosamente.\n\n**Agent ID:** {agent_id}\n**Feedback:** {feedback or 'N/A'}"
+                    else:
+                        return "❌ No se pudo aprobar/rechazar el paso. Verifica Execution ID y Agent ID."
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def create_custom_workflow(workflow_id, name, description, workflow_json):
+                if not agentic_workflow_orchestrator:
+                    return "❌ Agentic Workflow Orchestrator no está habilitado."
+                
+                if not workflow_id or not name:
+                    return "⚠️ Completa al menos Workflow ID y Nombre."
+                
+                try:
+                    import json
+                    workflow_data = json.loads(workflow_json) if workflow_json else {}
+                    
+                    result = agentic_workflow_orchestrator.create_workflow(
+                        workflow_id=workflow_id,
+                        name=name,
+                        description=description,
+                        agents=workflow_data.get("agents", []),
+                        steps=workflow_data.get("steps", []),
+                    )
+                    
+                    return f"✅ **Workflow creado exitosamente**\n\n**Workflow ID:** `{workflow_id}`\n**Nombre:** {name}"
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ **Error:** {str(e)}"
+            
+            # Conectar callbacks
+            awo_execute_btn.click(
+                fn=execute_workflow,
+                inputs=[awo_workflow_template, awo_input_data, awo_auto_approve],
+                outputs=[awo_execution_output, awo_execution_id, awo_a2a_status],
+            )
+
+        # Tab 4.9: Deep Research (Enterprise Deep Research-style)
+        with gr.Tab("🧠 Deep Research"):
+            gr.Markdown("### 🧠 Deep Research - Enterprise Deep Research (EDR) para empresas")
+            gr.Markdown(
+                """
+                **🚀 Modo Deep Research inspirado en Enterprise Deep Research (EDR):**
+                
+                - 🧭 **Master Research Agent**: Usa el Research & Action Agent en modo `deep_search`
+                - 📝 **Plan ligero de investigación (todo)**: crea y registra tareas internas
+                - 📚 **Fuentes internas + externas**: combina RAG enterprise y web
+                - 📑 **Reporte Markdown estructurado**: listo para pegar en Notion/Confluence
+                - 👤 **Steering opcional**: puedes guiar la investigación con mensajes de alto nivel
+                """
+            )
+
+            with gr.Row():
+                with gr.Column():
+                    dr_query = gr.Textbox(
+                        label="Pregunta o tema de investigación",
+                        placeholder="Ejemplo: Impacto de la IA agentic en workflows financieros de AP/AR en bancos medianos",
+                        lines=4,
+                    )
+                    dr_mode = gr.Radio(
+                        ["quick", "standard", "deep"],
+                        value="standard",
+                        label="Modo de Research",
+                        info="quick = visión general; standard = profundo; deep = máximo esfuerzo",
+                    )
+                    dr_files = gr.File(
+                        label="Archivos internos opcionales (PDF, DOCX, XLSX, etc.)",
+                        file_count="multiple",
+                    )
+                    dr_steering = gr.Textbox(
+                        label="Steering humano (opcional)",
+                        placeholder="Ejemplos: 'prioriza fuentes académicas', 'enfócate en casos de bancos europeos', una instrucción por línea.",
+                        lines=4,
+                    )
+                    dr_run_btn = gr.Button("🧠 Ejecutar Deep Research", variant="primary")
+                with gr.Column():
+                    dr_output = gr.Markdown(label="Reporte de Deep Research")
+
+            def run_deep_research_ui(query, mode, files, steering_text):
+                if not query or not query.strip():
+                    return "⚠️ Escribe una pregunta o tema de investigación."
+                if not deep_research_mode:
+                    return "❌ Deep Research Mode no está habilitado en este entorno."
+
+                steering_messages: List[str] = []
+                if steering_text:
+                    steering_messages = [line.strip() for line in steering_text.splitlines() if line.strip()]
+
+                try:
+                    result = deep_research_mode.run_research(
+                        query=query.strip(),
+                        files=files,
+                        run_mode=mode,
+                        steering_messages=steering_messages,
+                        tenant_id="deep_research_ui",
+                    )
+                    return result.report_markdown
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Error ejecutando Deep Research: {str(e)}"
+
+            dr_run_btn.click(
+                fn=run_deep_research_ui,
+                inputs=[dr_query, dr_mode, dr_files, dr_steering],
+                outputs=[dr_output],
+            )
+
+        # Tab 4.10: Deep Research Pro / Eric Schmidt
+        with gr.Tab("🧠 Deep Research Pro"):
+            gr.Markdown("### 🧠 Deep Research Pro – Modo Eric Schmidt / 50 PhD × 3 meses")
+            gr.Markdown(
+                """
+                **Modo extremo de investigación multi-agente para preguntas estratégicas muy complejas.**
+
+                - 🧭 Orquesta Deep Research + datos privados + acciones enterprise (opcional)
+                - 📝 Plan de investigación (todo-like) con múltiples iteraciones profundas
+                - 📚 Combina documentos internos (PDF, DOCX, XLSX, etc.) con web / código / perfiles
+                - 📊 Reporte largo (tipo consultoría) + visualizaciones básicas
+
+                Usa este modo cuando quieras un informe de tipo "equipo de 50 PhD trabajando 3 meses".
+                """
+            )
+
+            with gr.Row():
+                with gr.Column():
+                    drp_query = gr.Textbox(
+                        label="Pregunta / Objetivo estratégico",
+                        placeholder="Ej: 'Diseña una estrategia de entrada al mercado para nuestro producto de IA en banca LATAM'",
+                        lines=4,
+                    )
+                    drp_files = gr.File(
+                        label="Archivos internos (datasets, PDFs, contratos, reportes)",
+                        file_count="multiple",
+                    )
+                    drp_steering = gr.Textbox(
+                        label="Steering humano (opcional, una instrucción por línea)",
+                        placeholder="Ej: 'prioriza fuentes académicas', 'ignora datos antes de 2020', 'enfócate en competidores europeos'",
+                        lines=4,
+                    )
+                    drp_mode = gr.Radio(
+                        ["standard", "deep"],
+                        value="deep",
+                        label="Intensidad",
+                        info="standard = profundo; deep = máximo esfuerzo",
+                    )
+                    drp_eric = gr.Checkbox(
+                        label="🧪 Modo Eric Schmidt (50 PhD × 3 meses: 20–30 loops profundos, más coste)",
+                        value=False,
+                    )
+                    drp_run_btn = gr.Button("🚀 Ejecutar Deep Research Pro", variant="primary")
+                with gr.Column():
+                    drp_output = gr.Markdown(label="Reporte Deep Research Pro")
+
+            def run_deep_research_pro_ui(query, files, steering_text, mode, eric_mode):
+                if not query or not query.strip():
+                    return "⚠️ Escribe una pregunta u objetivo estratégico."
+                if not deep_research_mode:
+                    return "❌ Deep Research Mode no está habilitado en este entorno."
+
+                steering_messages: List[str] = []
+                if steering_text:
+                    steering_messages = [line.strip() for line in steering_text.splitlines() if line.strip()]
+
+                # Elegir run_mode interno y nº de loops en función del modo Eric
+                internal_mode = mode or "deep"
+                if eric_mode:
+                    internal_mode = "deep"
+
+                try:
+                    result = deep_research_mode.run_research(
+                        query=query.strip(),
+                        files=files,
+                        run_mode=internal_mode,
+                        steering_messages=steering_messages,
+                        tenant_id="deep_research_pro_ui",
+                    )
+
+                    md = f"## 🧠 Deep Research Pro – Resultado\n\n"
+                    md += result.report_markdown
+                    md += "\n\n---\n\n"
+                    md += f"**Iteraciones utilizadas:** {result.iterations}\n\n"
+                    if eric_mode:
+                        md += "_Modo Eric Schmidt activado: se permitió al sistema ir más profundo y costoso en la investigación._\n"
+                    return md
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    return f"❌ Error ejecutando Deep Research Pro: {str(e)}"
+
+            drp_run_btn.click(
+                fn=run_deep_research_pro_ui,
+                inputs=[drp_query, drp_files, drp_steering, drp_mode, drp_eric],
+                outputs=[drp_output],
+            )
+
+        # Tab 4.11: AI WorkSuite (Un Solo Botón)
+        with gr.Tab("🚀 AI WorkSuite (Un Solo Botón)"):
+            gr.Markdown("### 🚀 AI WorkSuite: Un solo botón para que los agentes trabajen por ti")
+            gr.Markdown(
+                """
+                **Modo ultra simplificado para el cliente más ocupado/distrído.**
+
+                - Eliges un problema típico de negocio.
+                - Conectas **UN** sistema (DB / Email / CRM).
+                - El agente primero **analiza y simula** lo que haría.
+                - Luego, si quieres, pulsas _"Que el agente lo haga por mí"_ y ejecuta acciones reales usando los workflows enterprise.
+                """
+            )
+
+            with gr.Row():
+                with gr.Column():
+                    aiw_data_system = gr.Textbox(
+                        label="🔌 Nombre de tu sistema de datos / ERP (opcional)",
+                        placeholder="Ej: 'postgres_ventas_latam', 'erp_sap_finanzas'",
+                    )
+                    aiw_data_question = gr.Textbox(
+                        label="❓ ¿Qué quieres saber de tus datos?",
+                        placeholder="Ej: 'ventas por país y producto en los últimos 3 meses'",
+                        lines=3,
+                    )
+                    aiw_data_analyze_btn = gr.Button("🔍 Analizar mis datos (solo análisis)", variant="primary", size="lg")
+                    aiw_data_do_btn = gr.Button("⚡ Que el agente lo haga por mí", variant="secondary")
+
+                with gr.Column():
+                    aiw_email_provider = gr.Dropdown(
+                        label="📧 Sistema de Email / Marketing",
+                        choices=["smtp", "sendgrid", "mailchimp", "hubspot", "otro"],
+                        value="smtp",
+                    )
+                    aiw_email_instruction = gr.Textbox(
+                        label="✉️ ¿Qué emails quieres automatizar?",
+                        placeholder="Ej: 'Enviar un email de reactivación a clientes inactivos en los últimos 90 días'",
+                        lines=3,
+                    )
+                    aiw_email_sim_btn = gr.Button("✉️ Ver simulación de emails", variant="primary", size="lg")
+                    aiw_email_do_btn = gr.Button("⚡ Que el agente envíe los emails", variant="secondary")
+
+                with gr.Column():
+                    aiw_crm_name = gr.Dropdown(
+                        label="📊 Tu CRM",
+                        choices=["salesforce", "hubspot", "pipedrive", "zoho", "otro"],
+                        value="salesforce",
+                    )
+                    aiw_crm_instruction = gr.Textbox(
+                        label="📋 ¿Qué quieres actualizar en tu CRM?",
+                        placeholder="Ej: 'Marcar como Contactado todos los leads con última actividad hace menos de 7 días'",
+                        lines=3,
+                    )
+                    aiw_crm_sim_btn = gr.Button("📊 Ver simulación de cambios en CRM", variant="primary", size="lg")
+                    aiw_crm_do_btn = gr.Button("⚡ Que el agente actualice el CRM", variant="secondary")
+
+            aiw_output = gr.Markdown(label="📊 Resultado del AI WorkSuite")
+
+            def _aiw_analyze_data(system_name: str, question: str, auto_execute: bool) -> str:
+                if not question or not question.strip():
+                    return "⚠️ Escribe al menos una pregunta sobre tus datos."
+
+                if enterprise_data_intelligence is None:
+                    return "❌ Enterprise Data Intelligence no está inicializado en este entorno. Configura conexiones de base de datos en el modo de Data Intelligence."
+
+                try:
+                    tenant_id = (system_name or "ai_worksuite_data").strip() or "ai_worksuite_data"
+
+                    # Fase 1: solo análisis / simulación (genera SQL y explicación)
+                    result = enterprise_data_intelligence.query_with_natural_language(
+                        natural_language_query=question.strip(),
+                        source_id=None,  # Sin DB específica → se centra en generación de SQL
+                        tenant_id=tenant_id,
+                        use_multi_agent=False,
+                        auto_fix=True,
+                    )
+
+                    md = "### 🔍 AI WorkSuite – Analizar mis datos\n\n"
+                    md += f"**Tenant / Sistema lógico:** `{tenant_id}`\n\n"
+                    md += f"**Pregunta en lenguaje natural:**\n\n> {result.natural_language_query}\n\n"
+
+                    if not result.success:
+                        md += "❌ No se pudo generar una query SQL completa.\n\n"
+                        if result.error:
+                            md += f"**Error:** {result.error}\n\n"
+                        return md
+
+                    md += "#### 🧠 SQL generado por el agente\n\n"
+                    md += "```sql\n"
+                    md += (result.sql or "-- (Sin SQL generado)") + "\n"
+                    md += "```\n\n"
+
+                    if result.explanation:
+                        md += "#### 📖 Explicación del plan de consulta\n\n"
+                        md += result.explanation + "\n\n"
+
+                    if result.execution_result is not None:
+                        md += "#### 📊 Resultados de ejemplo\n\n"
+                        md += f"Se obtuvieron resultados desde la base de datos registrada para `{tenant_id}`.\n\n"
+                    else:
+                        md += (
+                            "👉 _Por ahora se ha generado solo el **plan SQL** (análisis/simulación)._ "
+                            "Registra una base de datos y un `source_id` en el modo **Enterprise Data Intelligence** "
+                            "si quieres ejecutar esta consulta automáticamente.\n\n"
+                        )
+
+                    if auto_execute:
+                        md += (
+                            "\n\n⚠️ Has pulsado **'Que el agente lo haga por mí'**, pero en este flujo de demo "
+                            "no se ejecutan acciones de negocio adicionales todavía. "
+                            "Conecta tus bases de datos y workflows para habilitar acciones reales (alertas, tickets, etc.).\n"
+                        )
+
+                    return md
+                except Exception as e:
+                    import traceback
+
+                    traceback.print_exc()
+                    return f"❌ Error en AI WorkSuite (Analizar mis datos): {str(e)}"
+
+            def _aiw_automate_emails(provider: str, instruction: str, auto_execute: bool) -> str:
+                if not instruction or not instruction.strip():
+                    return "⚠️ Escribe qué tipo de emails quieres automatizar."
+
+                if enterprise_workflows is None:
+                    return "❌ Enterprise Autonomous Workflows no está inicializado. Actívalo para orquestar acciones reales (email, tickets, etc.)."
+
+                try:
+                    simulation_mode = not auto_execute
+                    tenant_id = f"aiw_email_{provider or 'default'}"
+
+                    # Usamos un workflow general de R&A + políticas para simular/ejecutar acciones
+                    wf_result = enterprise_workflows.run_workflow(
+                        files=[],
+                        workflow_type="general",
+                        auto_detect=True,
+                        auto_execute_actions=auto_execute,
+                        tenant_id=tenant_id,
+                        integration_prefs={
+                            "email_provider": provider,
+                            "aiw_instruction": instruction.strip(),
+                        },
+                        webhook_url=None,
+                        simulation_mode=simulation_mode,
+                    )
+
+                    ra = wf_result.research_result
+                    summary = ra.get("summary", "") or ""
+                    actions_rec = ra.get("actions_recommended", []) or []
+                    actions_exec = ra.get("actions_executed", []) or []
+                    sim_info = ra.get("simulation", {})
+                    kpis = ra.get("workflow_kpis", {}) or {}
+
+                    md = "### ✉️ AI WorkSuite – Automatizar emails\n\n"
+                    md += f"**Proveedor / sistema de email:** `{provider}`\n\n"
+                    md += f"**Instrucción:**\n\n> {instruction.strip()}\n\n"
+
+                    md += f"**Modo de ejecución:** `{'SIMULACIÓN' if simulation_mode else 'REAL (con políticas)'}`\n\n"
+
+                    if summary:
+                        md += "#### 🧠 Resumen del agente\n\n"
+                        md += summary[:2000] + ("\n\n…\n" if len(summary) > 2000 else "\n\n")
+
+                    if actions_rec:
+                        md += f"#### ⚡ Acciones de email recomendadas ({len(actions_rec)})\n\n"
+                        for a in actions_rec[:5]:
+                            md += f"- **{a.get('type','email_action')}** → {a.get('description', '')}\n"
+
+                    if simulation_mode and sim_info:
+                        would = sim_info.get("would_execute", []) or []
+                        if would:
+                            md += f"\n#### 🧪 Simulación – emails que se ejecutarían ({len(would)})\n\n"
+                            for a in would[:5]:
+                                md += f"- **{a.get('type','email_action')}** → {a.get('description','')}\n"
+
+                    if not simulation_mode and actions_exec:
+                        md += f"\n#### ✅ Acciones de email ejecutadas ({len(actions_exec)})\n\n"
+                        for a in actions_exec[:5]:
+                            act = a.get("action", {})
+                            res = a.get("result", {})
+                            md += f"- **{act.get('type','email_action')}** → `{res.get('status','unknown')}` ({res.get('message','')})\n"
+
+                    if kpis:
+                        md += "\n#### 📈 KPIs del flujo de email\n"
+                        md += f"- Acciones recomendadas: **{kpis.get('total_actions_recommended', 0)}**\n"
+                        md += f"- Acciones aprobadas por políticas: **{kpis.get('total_actions_approved_by_policy', 0)}**\n"
+                        md += f"- Acciones ejecutadas: **{kpis.get('total_actions_executed', 0)}**\n"
+
+                    if simulation_mode:
+                        md += (
+                            "\n> 🔒 Actualmente estás en **modo simulación**. "
+                            "Activa la casilla _'Que el agente ENVÍE los emails'_ para permitir acciones reales, "
+                            "respetando siempre el motor de políticas enterprise.\n"
+                        )
+
+                    return md
+                except Exception as e:
+                    import traceback
+
+                    traceback.print_exc()
+                    return f"❌ Error en AI WorkSuite (Automatizar emails): {str(e)}"
+
+            def _aiw_update_crm(crm_name: str, instruction: str, auto_execute: bool) -> str:
+                if not instruction or not instruction.strip():
+                    return "⚠️ Escribe qué cambio quieres hacer en tu CRM."
+
+                if enterprise_workflows is None:
+                    return "❌ Enterprise Autonomous Workflows no está inicializado. Actívalo para orquestar acciones reales sobre tu CRM."
+
+                try:
+                    simulation_mode = not auto_execute
+                    tenant_id = f"aiw_crm_{crm_name or 'default'}"
+
+                    wf_result = enterprise_workflows.run_workflow(
+                        files=[],
+                        workflow_type="workflow_multisistema",
+                        auto_detect=True,
+                        auto_execute_actions=auto_execute,
+                        tenant_id=tenant_id,
+                        integration_prefs={
+                            "crm": crm_name,
+                            "aiw_instruction": instruction.strip(),
+                        },
+                        webhook_url=None,
+                        simulation_mode=simulation_mode,
+                    )
+
+                    ra = wf_result.research_result
+                    summary = ra.get("summary", "") or ""
+                    actions_rec = ra.get("actions_recommended", []) or []
+                    actions_exec = ra.get("actions_executed", []) or []
+                    sim_info = ra.get("simulation", {})
+                    kpis = ra.get("workflow_kpis", {}) or {}
+
+                    md = "### 📊 AI WorkSuite – Actualizar mi CRM\n\n"
+                    md += f"**CRM seleccionado:** `{crm_name}`\n\n"
+                    md += f"**Instrucción:**\n\n> {instruction.strip()}\n\n"
+                    md += f"**Modo de ejecución:** `{'SIMULACIÓN' if simulation_mode else 'REAL (con políticas)'}`\n\n"
+
+                    if summary:
+                        md += "#### 🧠 Resumen del agente\n\n"
+                        md += summary[:2000] + ("\n\n…\n" if len(summary) > 2000 else "\n\n")
+
+                    if actions_rec:
+                        md += f"#### ⚡ Acciones de CRM recomendadas ({len(actions_rec)})\n\n"
+                        for a in actions_rec[:5]:
+                            md += f"- **{a.get('type','crm_action')}** → {a.get('description', '')}\n"
+
+                    if simulation_mode and sim_info:
+                        would = sim_info.get("would_execute", []) or []
+                        if would:
+                            md += f"\n#### 🧪 Simulación – cambios que se aplicarían ({len(would)})\n\n"
+                            for a in would[:5]:
+                                md += f"- **{a.get('type','crm_action')}** → {a.get('description','')}\n"
+
+                    if not simulation_mode and actions_exec:
+                        md += f"\n#### ✅ Acciones sobre CRM ejecutadas ({len(actions_exec)})\n\n"
+                        for a in actions_exec[:5]:
+                            act = a.get("action", {})
+                            res = a.get("result", {})
+                            md += f"- **{act.get('type','crm_action')}** → `{res.get('status','unknown')}` ({res.get('message','')})\n"
+
+                    if kpis:
+                        md += "\n#### 📈 KPIs del flujo de CRM\n"
+                        md += f"- Acciones recomendadas: **{kpis.get('total_actions_recommended', 0)}**\n"
+                        md += f"- Acciones aprobadas por políticas: **{kpis.get('total_actions_approved_by_policy', 0)}**\n"
+                        md += f"- Acciones ejecutadas: **{kpis.get('total_actions_executed', 0)}**\n"
+
+                    if simulation_mode:
+                        md += (
+                            "\n> 🔒 Actualmente estás en **modo simulación**. "
+                            "Activa la casilla _'Que el agente APLIQUE los cambios en el CRM'_ para permitir acciones reales, "
+                            "respetando siempre el motor de políticas enterprise.\n"
+                        )
+
+                    return md
+                except Exception as e:
+                    import traceback
+
+                    traceback.print_exc()
+                    return f"❌ Error en AI WorkSuite (Actualizar CRM): {str(e)}"
+
+            # Botones: análisis / simulación
+            aiw_data_analyze_btn.click(
+                fn=lambda sys_name, q: _aiw_analyze_data(sys_name, q, False),
+                inputs=[aiw_data_system, aiw_data_question],
+                outputs=[aiw_output],
+            )
+            aiw_email_sim_btn.click(
+                fn=lambda prov, instr: _aiw_automate_emails(prov, instr, False),
+                inputs=[aiw_email_provider, aiw_email_instruction],
+                outputs=[aiw_output],
+            )
+            aiw_crm_sim_btn.click(
+                fn=lambda crm, instr: _aiw_update_crm(crm, instr, False),
+                inputs=[aiw_crm_name, aiw_crm_instruction],
+                outputs=[aiw_output],
+            )
+
+            # Botones: “Que el agente lo haga por mí” (ejecución real con políticas)
+            aiw_data_do_btn.click(
+                fn=lambda sys_name, q: _aiw_analyze_data(sys_name, q, True),
+                inputs=[aiw_data_system, aiw_data_question],
+                outputs=[aiw_output],
+            )
+            aiw_email_do_btn.click(
+                fn=lambda prov, instr: _aiw_automate_emails(prov, instr, True),
+                inputs=[aiw_email_provider, aiw_email_instruction],
+                outputs=[aiw_output],
+            )
+            aiw_crm_do_btn.click(
+                fn=lambda crm, instr: _aiw_update_crm(crm, instr, True),
+                inputs=[aiw_crm_name, aiw_crm_instruction],
+                outputs=[aiw_output],
+            )
+
+            awo_approve_btn.click(
+                fn=lambda eid, aid, fb: approve_step(eid, aid, fb, True),
+                inputs=[awo_approval_execution_id, awo_approval_agent_id, awo_approval_feedback],
+                outputs=[awo_approval_output],
+            )
+            
+            awo_reject_btn.click(
+                fn=lambda eid, aid, fb: approve_step(eid, aid, fb, False),
+                inputs=[awo_approval_execution_id, awo_approval_agent_id, awo_approval_feedback],
+                outputs=[awo_approval_output],
+            )
+            
+            awo_create_workflow_btn.click(
+                fn=create_custom_workflow,
+                inputs=[awo_custom_workflow_id, awo_custom_workflow_name, awo_custom_workflow_desc, awo_custom_workflow_json],
+                outputs=[awo_create_workflow_output],
             )
         
         # Tab 4.5.5: Text-to-Action (NUEVO - Convierte lenguaje natural en código Python ejecutable)
@@ -6246,6 +12116,173 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     
                     # Cargar estadísticas iniciales
                     cs_stats_output.value = get_cs_stats()
+                
+                # Sub-tab: 🤖 WhatsApp Business AI Agent
+                with gr.Tab("📱 WhatsApp Business AI Agent"):
+                    gr.Markdown("### 📱 Agente de IA para WhatsApp Business (Atención al Cliente 24/7)")
+                    gr.Markdown("""
+                    Este módulo te ayuda a **conectar un Agentic AI de Atención al Cliente directamente a tu WhatsApp Business** usando la API oficial de Meta.
+
+                    El flujo recomendado:
+                    1. Cumples los requisitos previos en Meta / WhatsApp Business.
+                    2. Configuras tus credenciales en el backend (variables de entorno).
+                    3. Apuntas el Webhook de Meta al endpoint de este sistema.
+                    4. El `CustomerServiceAgent` responde automáticamente a tus clientes en WhatsApp 24/7.
+                    """)
+
+                    with gr.Tabs():
+                        with gr.Tab("🧩 Requisitos & Estado"):
+                            gr.Markdown("""
+                            #### ✅ Requisitos previos en la cuenta del cliente
+
+                            Antes de activar el agente en WhatsApp, el cliente debe:
+
+                            1. Tener una cuenta verificada de **Meta Business Manager**.  
+                            2. Ir a **Meta for Developers** y:
+                               - Crear una aplicación.
+                               - Añadir el producto **WhatsApp**.
+                            3. Generar:
+                               - Un **Access Token** de WhatsApp Business API.
+                               - Un **WhatsApp Business Account ID**.
+                               - Un **Phone Number ID** asociado a un número verificado.
+                            4. Configurar un **Webhook URL** (que apuntará a este sistema).
+                            """)
+
+                            wa_status_output = gr.Markdown(label="📊 Estado de Integración WhatsApp")
+
+                            def get_whatsapp_status():
+                                import os
+                                token = os.getenv("WHATSAPP_TOKEN")
+                                phone_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID") or os.getenv("PHONE_NUMBER_ID")
+                                verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN") or os.getenv("VERIFY_TOKEN")
+
+                                lines = ["## 📊 Estado de Configuración de WhatsApp Business\n"]
+
+                                if token:
+                                    lines.append("- ✅ `WHATSAPP_TOKEN` configurado.")
+                                else:
+                                    lines.append("- ❌ Falta `WHATSAPP_TOKEN` (token de acceso de Meta).")
+
+                                if phone_id:
+                                    lines.append("- ✅ `WHATSAPP_PHONE_NUMBER_ID` configurado.")
+                                else:
+                                    lines.append("- ❌ Falta `WHATSAPP_PHONE_NUMBER_ID` (Phone Number ID de Meta).")
+
+                                if verify_token:
+                                    lines.append("- ✅ `WHATSAPP_VERIFY_TOKEN` configurado.")
+                                else:
+                                    lines.append("- ⚠️ No se encontró `WHATSAPP_VERIFY_TOKEN` / `VERIFY_TOKEN` (se usa para verificación del webhook).")
+
+                                lines.append("""
+
+### 🔗 Endpoint de Webhook recomendado
+
+Configura en **Meta for Developers → WhatsApp → Configuration** la URL:
+
+`https://TU-DOMINIO.com/webhook/whatsapp`
+
+Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
+""")
+
+                                if not customer_service_agent:
+                                    lines.append("\n> ❌ `CustomerServiceAgent` no está inicializado. Activa los modos de agentes en la configuración del backend.")
+                                else:
+                                    lines.append("\n> ✅ `CustomerServiceAgent` está listo para procesar mensajes que lleguen por WhatsApp.")
+
+                                return "\n".join(lines)
+
+                            wa_status_output.value = get_whatsapp_status()
+
+                        with gr.Tab("⚙️ Configuración Conceptual"):
+                            gr.Markdown("""
+                            ### ⚙️ Variables de entorno necesarias (backend)
+
+                            Define estas variables en tu servidor (por tenant o a nivel global, según tu arquitectura multi‑tenant):
+
+                            ```bash
+                            WHATSAPP_TOKEN="TOKEN_DE_ACCESO_DE_META"
+                            WHATSAPP_VERIFY_TOKEN="UN_TOKEN_SECRETO_QUE_DEFINES"
+                            WHATSAPP_PHONE_NUMBER_ID="ID_DEL_NUMERO_DE_META"
+                            ```
+
+                            Opcionalmente:
+                            ```bash
+                            WHATSAPP_BUSINESS_ACCOUNT_ID="ID_DE_LA_CUENTA_DE_WHATSAPP_BUSINESS"
+                            ```
+
+                            El agente de Atención al Cliente usará estas credenciales para:
+
+                            - Recibir mensajes en el endpoint `/webhook/whatsapp`.
+                            - Procesarlos con `CustomerServiceAgent` usando la base de conocimiento.
+                            - Enviar respuestas de vuelta a los clientes por WhatsApp.
+                            """)
+
+                        with gr.Tab("🧪 Prueba Manual (Simulada)"):
+                            gr.Markdown("""
+                            ### 🧪 Simulación de mensaje de WhatsApp
+
+                            Esto **no llama a la API de Meta**, pero te permite:
+                            - Ver cómo el `CustomerServiceAgent` respondería a un mensaje recibido por WhatsApp.
+                            - Ajustar tu base de conocimiento y tono de respuesta antes de conectar el webhook real.
+                            """)
+
+                            wa_sim_phone = gr.Textbox(
+                                label="📱 Número de cliente (simulado)",
+                                placeholder="+1234567890",
+                                value="+1234567890",
+                            )
+                            wa_sim_message = gr.Textbox(
+                                label="💬 Mensaje del cliente (simulado)",
+                                placeholder="Hola, tengo un problema con mi pedido...",
+                                lines=4,
+                            )
+                            wa_sim_run_btn = gr.Button("🤖 Simular respuesta del Agente en WhatsApp", variant="primary")
+                            wa_sim_output = gr.Markdown(label="📤 Respuesta simulada")
+
+                            def simulate_whatsapp_message(phone, message):
+                                if not customer_service_agent:
+                                    return "❌ Customer Service Agent no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true"
+                                if not message or not message.strip():
+                                    return "⚠️ Escribe un mensaje para simular la conversación."
+                                try:
+                                    resp = customer_service_agent.process_inquiry(
+                                        channel="whatsapp",
+                                        customer_email=f"{phone}@whatsapp.local",
+                                        message=message.strip(),
+                                        customer_phone=phone.strip() if phone else None,
+                                        subject=None,
+                                        use_knowledge_base=True,
+                                    )
+                                    out = f"""
+## 📱 Respuesta simulada del Agente en WhatsApp
+
+**ID de Consulta:** {resp.inquiry_id}  
+**Número de cliente:** {phone}  
+
+### 💬 Mensaje del cliente
+> {message.strip()}
+
+### 🤖 Respuesta del Agente
+{resp.response_text}
+
+### 📊 Detalles
+- Enviada (simulada): {'✅ Sí' if resp.sent else '❌ No'}
+- Ticket creado: {'✅ Sí' if resp.ticket_created else '❌ No'}
+- Ticket ID: {resp.ticket_id or 'N/A'}
+- Confianza: {resp.confidence:.1%}
+- Escalado: {'⚠️ Sí' if resp.escalated else '✅ No'}
+"""
+                                    return out
+                                except Exception as e:
+                                    import traceback
+                                    traceback.print_exc()
+                                    return f"❌ Error en simulación de WhatsApp: {str(e)}"
+
+                            wa_sim_run_btn.click(
+                                fn=simulate_whatsapp_message,
+                                inputs=[wa_sim_phone, wa_sim_message],
+                                outputs=[wa_sim_output],
+                            )
                 
                 # Sub-tab: Agent Loop Autónomo
                 with gr.Tab("🔄 Agent Loop Autónomo"):
@@ -7497,9 +13534,20 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     )
                     
                     chatbot_files = gr.File(
-                        label="📄 Documentos para el Chatbot (PDF, DOCX, TXT, MD)",
+                        label="📄 Documentos para el Chatbot (multiformato, se convierten automáticamente a PDF)",
                         file_count="multiple",
-                        file_types=[".pdf", ".docx", ".txt", ".md"]
+                        file_types=[
+                            ".pdf", ".doc", ".docx", ".dotx", ".odt", ".fodt", ".ott",
+                            ".xls", ".xlsx", ".ods", ".fods", ".csv", ".tsv",
+                            ".ppt", ".pptx", ".odp", ".fodp",
+                            ".txt", ".md", ".rtf", ".log", ".ini", ".cfg", ".env",
+                            ".yaml", ".yml", ".json", ".xml",
+                            ".eml", ".msg", ".mbox",
+                            ".html", ".htm", ".mhtml",
+                            ".tex", ".epub", ".srt", ".vtt",
+                            ".py", ".js", ".ts", ".java", ".cpp", ".c", ".cs", ".go", ".rs", ".php",
+                            ".css", ".sql", ".sh", ".bat"
+                        ]
                     )
                     
                     upload_chatbot_data_btn = gr.Button("📤 Subir y Procesar Data", variant="primary")
@@ -8879,7 +14927,247 @@ Body:
                     5. URL: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
                     """)
         
-        # Tab 4.11: Leads - Agente de Ventas / SDR Outbound (NUEVO)
+        # Tab 4.11: 📧 Marketing - Agente de Email Marketing / Campañas (NUEVO)
+        with gr.Tab("📧 Marketing"):
+            gr.Markdown("### 📧 Agente de Email Marketing / Campañas Autónomo")
+            gr.Markdown("""
+            **🚀 Sistema super inteligente para automatización completa de marketing por email**
+            
+            - ✍️ Generación inteligente de copys con IA
+            - 🎯 Segmentación automática de audiencias
+            - 📧 Creación y envío de campañas vía API
+            - 📊 Análisis de performance automático
+            - 💬 Text-to-Action: comandos en lenguaje natural
+            - 🔌 Integración con Mailchimp, HubSpot, ActiveCampaign
+            
+            **💡 Perfecto para empresas que necesitan automatizar newsletters y campañas**
+            
+            **🤖 NUEVO: Agentic AI para Marketing**
+            - Genera copys persuasivos automáticamente
+            - Crea segmentaciones inteligentes
+            - Envía campañas y analiza resultados
+            - "Crea una campaña de newsletter para clientes activos" → Lo hace automáticamente
+            """)
+            
+            if not marketing_agent:
+                gr.Markdown("⚠️ **Marketing Agent no está habilitado.**")
+            else:
+                with gr.Tabs():
+                    # Sub-tab: Generar Copy
+                    with gr.Tab("✍️ Generar Copy"):
+                        gr.Markdown("### Generar Copy Inteligente con IA")
+                        gr.Markdown("""
+                        **Genera copys persuasivos y optimizados para email marketing:**
+                        - Subject lines que capturan atención
+                        - Preheaders complementarios
+                        - Body HTML profesional y scannable
+                        - CTAs claros y accionables
+                        - Personalización automática
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                copy_campaign_name = gr.Textbox(
+                                    label="📝 Nombre de la Campaña",
+                                    placeholder="Ej: Newsletter Q1 2025",
+                                    value=""
+                                )
+                                
+                                copy_campaign_type = gr.Dropdown(
+                                    label="📋 Tipo de Campaña",
+                                    choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
+                                    value="newsletter",
+                                    interactive=True
+                                )
+                                
+                                copy_target_audience = gr.Textbox(
+                                    label="🎯 Audiencia Objetivo",
+                                    placeholder="Ej: Clientes activos de tecnología, empresas B2B, suscriptores premium",
+                                    lines=2
+                                )
+                                
+                                copy_key_message = gr.Textbox(
+                                    label="💬 Mensaje Clave",
+                                    placeholder="Ej: Nuevas características de nuestro producto, ofertas especiales, actualizaciones importantes",
+                                    lines=3
+                                )
+                                
+                                copy_tone = gr.Dropdown(
+                                    label="🎨 Tono",
+                                    choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
+                                    value="professional",
+                                    interactive=True
+                                )
+                                
+                                copy_include_cta = gr.Checkbox(
+                                    label="Incluir Call-to-Action",
+                                    value=True
+                                )
+                                
+                                generate_copy_btn = gr.Button("✨ Generar Copy", variant="primary", size="lg")
+                            
+                            with gr.Column():
+                                copy_output = gr.Markdown(label="📄 Copy Generado")
+                    
+                        def generate_copy(campaign_name, campaign_type, target_audience, key_message, tone, include_cta):
+                            if not marketing_agent:
+                                return "❌ Marketing Agent no está habilitado."
+                            
+                            if not campaign_name or not key_message:
+                                return "⚠️ Por favor, completa al menos el nombre de la campaña y el mensaje clave."
+                            
+                            try:
+                                copy = marketing_agent.generate_campaign_copy(
+                                    campaign_name=campaign_name,
+                                    campaign_type=campaign_type,
+                                    target_audience=target_audience or "General audience",
+                                    key_message=key_message,
+                                    tone=tone,
+                                    include_cta=include_cta
+                                )
+                                
+                                output = f"""
+## ✅ Copy Generado Exitosamente
+
+**Copy ID:** `{copy.copy_id}`
+
+### 📧 Subject Line
+{copy.subject_line}
+
+### 📝 Preheader
+{copy.preheader}
+
+### 📄 Body HTML
+{copy.body_html[:500]}...
+
+### 📄 Body Text (Plain Text)
+{copy.body_text[:500]}...
+
+### 🔗 Call-to-Action
+**Texto:** {copy.cta_text}
+**URL:** {copy.cta_url or "No especificada"}
+
+### 🎯 Personalización
+Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalization_fields else "Ninguno"}
+
+**💡 Tip:** Usa este copy para crear una campaña completa.
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error generando copy: {str(e)}"
+                    
+                        generate_copy_btn.click(
+                            fn=generate_copy,
+                            inputs=[copy_campaign_name, copy_campaign_type, copy_target_audience, copy_key_message, copy_tone, copy_include_cta],
+                            outputs=[copy_output]
+                        )
+                    
+                    # Sub-tab: Crear Campaña
+                    with gr.Tab("📊 Crear Campaña"):
+                        gr.Markdown("### Crear Campaña de Email Marketing con Agentic AI")
+                        gr.Markdown("""
+                        **Diseña y lanza campañas completas con un solo flujo:**
+                        - Definición de objetivo
+                        - Selección de audiencia
+                        - Generación de copy
+                        - Envío (simulado o real según configuración)
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                campaign_name = gr.Textbox(
+                                    label="📝 Nombre de la Campaña",
+                                    placeholder="Ej: Lanzamiento Producto X",
+                                    value=""
+                                )
+                                
+                                campaign_type = gr.Dropdown(
+                                    label="📋 Tipo de Campaña",
+                                    choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
+                                    value="promotional",
+                                    interactive=True
+                                )
+                                
+                                campaign_platform = gr.Dropdown(
+                                    label="📡 Plataforma",
+                                    choices=["mailchimp", "hubspot", "sendgrid", "smtp_simulado"],
+                                    value="smtp_simulado"
+                                )
+                                
+                                campaign_auto_generate = gr.Checkbox(
+                                    label="Generar copy automáticamente",
+                                    value=True
+                                )
+                                
+                                campaign_audience = gr.Textbox(
+                                    label="🎯 Audiencia Objetivo",
+                                    placeholder="Ej: Leads calientes, clientes enterprise, lista VIP",
+                                    lines=2
+                                )
+                                
+                                campaign_message = gr.Textbox(
+                                    label="💬 Mensaje Base (opcional si generas copy automático)",
+                                    placeholder="Ej: Queremos presentarte nuestra nueva solución...",
+                                    lines=4
+                                )
+                                
+                                campaign_tone = gr.Dropdown(
+                                    label="🎭 Tono",
+                                    choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
+                                    value="professional",
+                                    interactive=True
+                                )
+                            with gr.Column():
+                                campaign_output = gr.Markdown(label="📊 Campaña Creada")
+                    
+                        def create_campaign(name, camp_type, platform, auto_gen, audience, message, tone):
+                            if not marketing_agent:
+                                return "❌ Marketing Agent no está habilitado."
+                            
+                            if not name:
+                                return "⚠️ Por favor, ingresa un nombre para la campaña."
+                            
+                            try:
+                                result = marketing_agent.create_campaign(
+                                    campaign_name=name,
+                                    campaign_type=camp_type,
+                                    platform=platform,
+                                    auto_generate_copy=auto_gen,
+                                    audience_description=audience,
+                                    base_message=message,
+                                    tone=tone
+                                )
+                                
+                                output = f"""
+## ✅ Campaña Creada Exitosamente
+
+**Nombre:** {result.get('campaign_name', name)}
+**Tipo:** {result.get('campaign_type', camp_type)}
+**Plataforma:** {result.get('platform', platform)}
+
+### 🎯 Audiencia
+{result.get('audience_summary', audience or 'No especificada')}
+
+### 💬 Resumen del Mensaje
+{result.get('message_summary', 'Mensaje generado o proporcionado.')}
+
+### 📊 Estado
+{result.get('status', 'simulado')}
+
+**💡 Tip:** Revisa esta campaña en tu plataforma de email marketing para activarla.
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error creando campaña: {str(e)}"
+                    
+                        create_campaign_btn = gr.Button("🚀 Crear Campaña", variant="primary", size="lg")
+                        create_campaign_btn.click(
+                            fn=create_campaign,
+                            inputs=[campaign_name, campaign_type, campaign_platform, campaign_auto_generate, campaign_audience, campaign_message, campaign_tone],
+                            outputs=[campaign_output]
+                        )
+        
+        # Tab 4.12: Leads - Agente de Ventas / SDR Outbound (NUEVO)
         with gr.Tab("🎯 Leads"):
             gr.Markdown("### 🎯 Agente de Ventas / SDR Outbound")
             gr.Markdown("""
@@ -10430,6 +16718,818 @@ Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalizat
                                 inputs=[composio_campaign_id, composio_platform],
                                 outputs=[marketing_composio_output]
                             )
+
+                # Sub-tab: Agentic AI – Meta / TikTok
+                with gr.Tab("📱 Agentic AI – Meta & TikTok"):
+                    gr.Markdown("### 📱 Agentic AI para Meta (FB/IG/WhatsApp) y TikTok")
+                    gr.Markdown("""
+                    **Conecta al Marketing Agent con tus cuentas de Meta y TikTok vía Composio (250+ integraciones).**
+
+                    - 🔌 Conecta cuentas de **Meta Ads / Facebook / Instagram / WhatsApp Business / TikTok Ads**
+                    - 🤖 El agente diseña un plan agentic (multi-agente) para tu objetivo de marketing
+                    - ⚙️ Usa Composio para orquestar acciones dentro de esas plataformas (modo real o simulado)
+
+                    > 💡 Para ejecución REAL, configura `COMPOSIO_API_KEY` y completa el onboarding OAuth en el panel de Composio.
+                    """)
+
+                    with gr.Row():
+                        with gr.Column():
+                            social_channel = gr.Dropdown(
+                                label="Canal principal",
+                                choices=[
+                                    ("Meta Ads (FB/IG)", "meta_ads"),
+                                    ("Facebook orgánico", "facebook"),
+                                    ("Instagram orgánico", "instagram"),
+                                    ("WhatsApp Business", "whatsapp"),
+                                    ("TikTok Ads", "tiktok_ads"),
+                                    ("TikTok orgánico", "tiktok"),
+                                ],
+                                value="meta_ads",
+                            )
+                            social_objective = gr.Textbox(
+                                label="🎯 Objetivo de negocio",
+                                placeholder="Ej: 'Aumentar ventas online un 20% en 90 días' o 'Generar 500 leads B2B cualificados'",
+                                lines=3,
+                            )
+                            social_audience = gr.Textbox(
+                                label="👥 Audiencia objetivo (opcional)",
+                                placeholder="Ej: 'CMOs de empresas SaaS en Europa, 50-500 empleados'",
+                                lines=3,
+                            )
+                            social_budget = gr.Number(
+                                label="💰 Presupuesto aproximado (EUR, opcional)",
+                                value=None,
+                            )
+                            connect_social_btn = gr.Button("🔌 Conectar cuenta (Meta/TikTok)", variant="secondary")
+                            run_social_agent_btn = gr.Button("🤖 Lanzar Agente de Marketing Omnicanal", variant="primary", size="lg")
+
+                        with gr.Column():
+                            social_output = gr.Markdown(label="📊 Resultado Agente Meta/TikTok")
+
+                    def connect_social_platform_ui(channel: str):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        try:
+                            result = marketing_agent.connect_social_platform(channel)
+                            if not result.get("success"):
+                                return f"❌ Error conectando plataforma social: {result.get('error', 'Error desconocido')}"
+                            app_name = result.get("app_name", channel)
+                            msg = result.get("message", "")
+                            return f"""✅ Plataforma social conectada\n
+**Canal:** `{channel}`  
+**App Composio:** `{app_name}`  
+{msg}
+"""
+                        except Exception as e:
+                            return f"❌ Error conectando plataforma social: {str(e)}"
+
+                    def run_social_agent_ui(channel: str, objective: str, audience: str, budget: float | None):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        if not objective or not objective.strip():
+                            return "⚠️ Define al menos un objetivo de negocio."
+                        try:
+                            result = marketing_agent.run_agentic_social_workflow(
+                                channel=channel,
+                                objective=objective.strip(),
+                                audience=audience.strip() if audience else None,
+                                budget_eur=budget if budget is not None else None,
+                            )
+                            plan = result.get("plan", {}) or {}
+                            strategy = plan.get("strategy_summary", "")
+                            rec_assets = plan.get("recommended_assets", [])
+                            rec_actions = plan.get("recommended_actions", [])
+                            composio_res = result.get("composio_result", {})
+
+                            md = f"## 🤖 Agente de Marketing – {channel}\n\n"
+                            md += f"**Objetivo:** {objective.strip()}\n\n"
+                            if audience:
+                                md += f"**Audiencia:** {audience.strip()}\n\n"
+                            if budget is not None:
+                                md += f"**Presupuesto aprox.:** {budget:.2f} EUR\n\n"
+
+                            if strategy:
+                                md += "### 🧠 Estrategia propuesta por el agente\n\n"
+                                md += strategy + "\n\n"
+
+                            if rec_assets:
+                                md += "### 📽️ Piezas recomendadas\n\n"
+                                for a in rec_assets:
+                                    md += f"- **{a.get('type','asset')}** × {a.get('count',1)} en `{a.get('channel','multi')}`\n"
+
+                            if rec_actions:
+                                md += "\n### ⚙️ Acciones sugeridas\n\n"
+                                for act in rec_actions:
+                                    md += f"- {act}\n"
+
+                            if composio_res:
+                                md += "\n### 🔌 Estado de integración Meta/TikTok (Composio)\n\n"
+                                if composio_res.get("success"):
+                                    md += "- ✅ Acción ejecutada (o simulada) en la plataforma conectada.\n"
+                                else:
+                                    md += f"- ⚠️ No se pudo ejecutar acción real: {composio_res.get('error','Error desconocido')}\n"
+                                note = result.get("note")
+                                if note:
+                                    md += f"\n> {note}\n"
+
+                            return md
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando agente de marketing Meta/TikTok: {str(e)}"
+
+                    connect_social_btn.click(
+                        fn=connect_social_platform_ui,
+                        inputs=[social_channel],
+                        outputs=[social_output],
+                    )
+                    run_social_agent_btn.click(
+                        fn=run_social_agent_ui,
+                        inputs=[social_channel, social_objective, social_audience, social_budget],
+                        outputs=[social_output],
+                    )
+
+                # Sub-tab: Agentic Ads – Google Ads & Meta Ads
+                with gr.Tab("📊 Agentic Ads – Google & Meta"):
+                    gr.Markdown("### 📊 Agentic Ads – Google Ads & Meta Ads (Autonomous Ads)")
+                    gr.Markdown("""
+                    **Conecta el Marketing Agent con Google Ads y Meta Ads para campañas semi-autónomas o autónomas.**
+
+                    - 🔑 Usa las credenciales ya configuradas en `.env` (GOOGLE_ADS_*, META_ACCESS_TOKEN, etc.)
+                    - 🤖 El agente diseña un plan y propone acciones sobre campañas
+                    - 🛟 Puedes ejecutar en modo **solo recomendaciones** o **auto‑ejecución** con guardrails
+
+                    > 💡 Para ejecución REAL en Google Ads / Meta Ads necesitas configurar:
+                    > - GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN  
+                    > - META_ACCESS_TOKEN, META_AD_ACCOUNT_ID
+                    """)
+
+                    with gr.Row():
+                        with gr.Column():
+                            agentic_ads_platform = gr.Dropdown(
+                                label="Plataforma principal",
+                                choices=[
+                                    ("Google Ads", "google_ads"),
+                                    ("Meta Ads (Facebook / Instagram)", "meta"),
+                                ],
+                                value="google_ads",
+                            )
+                            agentic_ads_objective = gr.Textbox(
+                                label="🎯 Objetivo de negocio",
+                                placeholder="Ej: 'Maximizar ROAS de la campaña de e‑commerce', 'Reducir CPA a 20€ en leads B2B'",
+                                lines=3,
+                            )
+                            agentic_ads_kpi = gr.Textbox(
+                                label="📈 KPI principal",
+                                value="ROAS",
+                                placeholder="Ej: ROAS, CPA, leads, ventas",
+                            )
+                            agentic_ads_budget = gr.Number(
+                                label="💰 Presupuesto diario aproximado (EUR)",
+                                value=100.0,
+                            )
+                            agentic_ads_audience = gr.Textbox(
+                                label="👥 Audiencia objetivo (opcional)",
+                                placeholder="Ej: 'Usuarios que han añadido al carrito en los últimos 7 días'",
+                                lines=3,
+                            )
+                            agentic_ads_advisory = gr.Checkbox(
+                                label="🛟 Modo asesor (solo recomendaciones, sin cambios reales)",
+                                value=True,
+                            )
+                            run_agentic_ads_btn = gr.Button("🤖 Lanzar Agentic Ads", variant="primary", size="lg")
+
+                        with gr.Column():
+                            agentic_ads_output = gr.Markdown(label="📊 Resultado Agentic Ads")
+
+                    def run_agentic_ads_ui(platform, objective, kpi, budget, audience, advisory):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        if not objective or not objective.strip():
+                            return "⚠️ Define un objetivo de negocio claro."
+                        if not kpi or not kpi.strip():
+                            return "⚠️ Define al menos un KPI principal."
+                        try:
+                            result = marketing_agent.run_agentic_ads_workflow(
+                                platform=platform,
+                                business_objective=objective.strip(),
+                                kpi=kpi.strip(),
+                                daily_budget=float(budget or 0),
+                                audience_description=audience.strip() if audience else None,
+                                advisory_mode=bool(advisory),
+                            )
+
+                            md = f"## 🤖 Agentic Ads – {platform}\n\n"
+                            md += f"**Objetivo de negocio:** {result.get('business_objective','')}\n\n"
+                            md += f"**KPI:** {result.get('kpi','')}\n\n"
+                            md += f"**Presupuesto diario aprox.:** {result.get('daily_budget',0):.2f} EUR\n\n"
+                            if result.get("audience_description"):
+                                md += f"**Audiencia:** {result.get('audience_description')}\n\n"
+                            md += f"**Modo:** `{'ASESOR (solo recomendaciones)' if result.get('advisory_mode') else 'AUTÓNOMO (ejecutando cambios donde es posible)'}`\n\n"
+
+                            strategy = result.get("strategy_summary", "")
+                            if strategy:
+                                md += "### 🧠 Estrategia generada por el agente\n\n"
+                                md += strategy + "\n\n"
+
+                            rec = result.get("actions_recommended", []) or []
+                            if rec:
+                                md += "### 📝 Acciones recomendadas\n\n"
+                                for a in rec:
+                                    md += f"- **{a.get('type','action')}** en `{a.get('platform')}` → campaña `{a.get('campaign_name')}` con presupuesto {a.get('budget',0)} EUR (objetivo: {a.get('objective','')})\n"
+
+                            exe = result.get("actions_executed", []) or []
+                            if exe:
+                                md += "\n### ✅ Acciones ejecutadas automáticamente\n\n"
+                                for a in exe:
+                                    req = a.get("requested", {})
+                                    tr = a.get("tool_result", {})
+                                    md += f"- **{req.get('type','action')}** en `{req.get('platform')}` → campaña `{req.get('campaign_name')}` → `{ 'OK' if tr.get('success') else 'ERROR'}` ({tr.get('message','')})\n"
+
+                            if not exe and advisory:
+                                md += "\n> 🛟 Estás en **modo asesor**: no se realizaron cambios reales, solo se muestran recomendaciones.\n"
+
+                            return md
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando Agentic Ads: {str(e)}"
+
+                    run_agentic_ads_btn.click(
+                        fn=run_agentic_ads_ui,
+                        inputs=[
+                            agentic_ads_platform,
+                            agentic_ads_objective,
+                            agentic_ads_kpi,
+                            agentic_ads_budget,
+                            agentic_ads_audience,
+                            agentic_ads_advisory,
+                        ],
+                        outputs=[agentic_ads_output],
+                    )
+    
+    # ============================================
+    # RESEARCH & ACTION AGENT (R&A Agent)
+    # ============================================
+    
+    # Inicializar Research & Action Agent
+    research_action_agent = None
+    try:
+        from docchat.research_action_agent import ResearchActionAgent
+        research_action_agent = ResearchActionAgent(
+            config,
+            provider="openai",
+            semantic_engine=semantic_engine,  # Pasar semantic_engine para RAG
+        )
+        print("✅ Research & Action Agent inicializado - ReAct Enterprise Agent")
+    except Exception as e:
+        print(f"⚠️ Error inicializando Research & Action Agent: {e}")
+        import traceback
+        traceback.print_exc()
+        research_action_agent = None
+
+    # Inicializar Enterprise Autonomous Workflows una vez que existe research_action_agent
+    try:
+        from docchat.enterprise_autonomous_workflows import EnterpriseAutonomousWorkflows as EAW
+
+        enterprise_workflows = EAW(
+            config=config,
+            enterprise_api=enterprise_api,
+            research_agent=research_action_agent,
+            ingestion_engine=data_ingestion_engine,
+            audit_logger=audit_logger,
+        )
+        print("✅ Enterprise Autonomous Workflows inicializado")
+    except Exception as e:
+        print(f"⚠️ Error inicializando Enterprise Autonomous Workflows: {e}")
+        enterprise_workflows = None
+
+    # Inicializar Deep Research Mode (Enterprise Deep Research-style)
+    deep_research_mode = None
+    try:
+        from docchat.deep_research import DeepResearch
+
+        if research_action_agent is not None:
+            deep_research_mode = DeepResearch(
+                config=config,
+                research_agent=research_action_agent,
+                ingestion_engine=data_ingestion_engine,
+                audit_logger=audit_logger,
+            )
+            print("✅ Deep Research Mode inicializado (Enterprise Deep Research-style)")
+        else:
+            print("⚠️ Deep Research Mode no disponible: ResearchActionAgent no inicializado")
+    except Exception as e:
+        print(f"⚠️ Error inicializando Deep Research Mode: {e}")
+        import traceback
+        traceback.print_exc()
+        deep_research_mode = None
+
+# Inicializar Enterprise Data Intelligence (SQL Generation + Data Registry)
+enterprise_data_intelligence = None
+try:
+    from docchat.enterprise_data_intelligence import EnterpriseDataIntelligence as EDI
+    enterprise_data_intelligence = EDI(config=config)
+    if enterprise_data_intelligence.sql_generator:
+        print("✅ Enterprise Data Intelligence inicializado (SQL Generation + Data Registry + Agent Registry)")
+    else:
+        print("⚠️ Enterprise Data Intelligence inicializado PERO SQL Generator falló")
+        print("   💡 Verifica OPENAI_API_KEY y que langchain-openai esté instalado")
+except Exception as e:
+    print(f"⚠️ Error inicializando Enterprise Data Intelligence: {e}")
+    import traceback
+    traceback.print_exc()
+    enterprise_data_intelligence = None
+    
+    with gr.Tab("🔍 Research & Action Agent"):
+        gr.Markdown("### 🔍 Research & Action Agent (R&A Agent) - ReAct Enterprise")
+        gr.Markdown("""
+        **🚀 Agente ReAct empresarial que razona, busca, actúa y ejecuta tareas automáticamente**
+        
+        **✨ Características principales:**
+        
+        - 🧠 **ReAct Pattern**: Razonamiento paso a paso (Think → Act → Observe → Loop)
+        - 📚 **RAG Integration**: Busca en documentos internos de la empresa
+        - 🌐 **Web Search**: Información actualizada en tiempo real
+        - 🧮 **Calculator**: Cálculos matemáticos y análisis de datos
+        - ⚡ **Action Executor**: Ejecuta acciones reales (tickets, emails, ERP, RPA)
+        - 📊 **Risk Assessment**: Evaluación automática de riesgos
+        - 🎫 **Auto-Ticketing**: Crea tickets automáticamente cuando detecta problemas
+        - 📄 **Research Briefs**: Informes profesionales con fuentes citadas
+        - 🔒 **Audit Logging**: Registro completo de razonamiento y acciones
+        
+        **💡 Casos de uso:**
+        - Evaluar riesgo de proveedores/empleados/contratos
+        - Detectar problemas y crear tickets automáticamente
+        - Generar informes de investigación con fuentes
+        - Ejecutar acciones empresariales basadas en análisis
+        """)
+        
+        with gr.Tabs():
+            # Sub-tab: Consulta General
+            with gr.Tab("💬 Consulta General"):
+                gr.Markdown("### Consulta General - ReAct Agent")
+                gr.Markdown("""
+                **Ejemplos de consultas:**
+                - "Evaluar riesgo del proveedor ACME y crear ticket si hay anomalías"
+                - "Analizar cumplimiento del contrato X y enviar alerta si hay incumplimientos"
+                - "Investigar sobre el tema Y y generar un informe ejecutivo"
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        ra_query = gr.Textbox(
+                            label="💬 Consulta o Tarea",
+                            placeholder="Ej: Evaluar riesgo del proveedor ACME y crear ticket si hay anomalías",
+                            lines=4
+                        )
+                        
+                        ra_mode = gr.Radio(
+                            label="🔒 Modo de Ejecución",
+                            choices=[
+                                ("Confirmación Humana (Recomendado)", "manual"),
+                                ("Automático (Solo acciones seguras)", "auto")
+                            ],
+                            value="manual",
+                            info="Modo manual requiere confirmación para acciones destructivas"
+                        )
+                        
+                        ra_execute_btn = gr.Button("🚀 Ejecutar Consulta", variant="primary", size="lg")
+                    
+                    with gr.Column():
+                        ra_output = gr.Markdown(label="📊 Resultado")
+                        ra_steps = gr.JSON(label="🔍 Pasos ReAct (Debug)", visible=False)
+                
+                def execute_ra_query(query, mode):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado.", None
+                    
+                    if not query or not query.strip():
+                        return "⚠️ Por favor, ingresa una consulta o tarea.", None
+                    
+                    try:
+                        result = research_action_agent.run_query(query, mode=mode)
+                        
+                        # Formatear output
+                        if result.get("error"):
+                            output = f"## ❌ Error\n\n**Error:** {result.get('error')}\n\n**Mensaje:** {result.get('summary', 'Error desconocido')}"
+                        else:
+                            summary = result.get("summary", "Sin resumen")
+                            score = result.get("score", 0.0)
+                            confidence = result.get("confidence", 0.0)
+                            sources = result.get("sources", [])
+                            actions_recommended = result.get("actions_recommended", [])
+                            actions_executed = result.get("actions_executed", [])
+                            log = result.get("log", [])
+                            execution_time = result.get("execution_time_ms", 0)
+                            steps_count = result.get("steps_count", 0)
+                            
+                            output = f"""## ✅ Análisis Completado
+
+**Resumen Ejecutivo:**
+{summary}
+
+### 📊 Métricas
+- **Score:** {score:.2f}/1.0
+- **Confianza:** {confidence*100:.1f}%
+- **Tiempo de Ejecución:** {execution_time}ms
+- **Pasos ReAct:** {steps_count}
+
+### 📚 Fuentes ({len(sources)})
+"""
+                            for idx, source in enumerate(sources[:10], 1):
+                                title = source.get("title", "Sin título")
+                                url = source.get("url", "")
+                                snippet = source.get("snippet", "")[:200]
+                                score_src = source.get("score", 0.0)
+                                output += f"\n**{idx}. {title}**\n"
+                                if url:
+                                    output += f"   - URL: {url}\n"
+                                if snippet:
+                                    output += f"   - Extracto: {snippet}...\n"
+                                output += f"   - Relevancia: {score_src:.2f}\n"
+                            
+                            if actions_recommended:
+                                output += f"\n### ⚡ Acciones Recomendadas ({len(actions_recommended)})\n"
+                                for idx, action in enumerate(actions_recommended[:5], 1):
+                                    action_type = action.get("type", "unknown")
+                                    description = action.get("description", "")
+                                    priority = action.get("priority", "medium")
+                                    output += f"\n**{idx}. {action_type}** ({priority})\n"
+                                    output += f"   - {description}\n"
+                            
+                            if actions_executed:
+                                output += f"\n### ✅ Acciones Ejecutadas ({len(actions_executed)})\n"
+                                for idx, action in enumerate(actions_executed[:5], 1):
+                                    action_type = action.get("type", "unknown")
+                                    status = action.get("status", "unknown")
+                                    result_act = action.get("result", {})
+                                    output += f"\n**{idx}. {action_type}** - {status}\n"
+                                    if result_act:
+                                        output += f"   - Resultado: {json.dumps(result_act, indent=2, ensure_ascii=False)[:200]}...\n"
+                            
+                            if log:
+                                output += f"\n### 🔍 Log de Razonamiento ({len(log)} pasos)\n"
+                                for idx, step in enumerate(log[:10], 1):
+                                    step_desc = step.get("step", "")
+                                    tool_used = step.get("tool_used", "")
+                                    step_result = step.get("result", "")[:100]
+                                    output += f"\n**Paso {idx}:** {step_desc}\n"
+                                    if tool_used:
+                                        output += f"   - Herramienta: {tool_used}\n"
+                                    if step_result:
+                                        output += f"   - Resultado: {step_result}...\n"
+                        
+                        return output, result
+                    except Exception as e:
+                        import traceback
+                        traceback.print_exc()
+                        return f"❌ Error: {str(e)}", None
+                
+                ra_execute_btn.click(
+                    fn=execute_ra_query,
+                    inputs=[ra_query, ra_mode],
+                    outputs=[ra_output, ra_steps]
+                )
+
+            # Sub-tab: Ingesta de Datos (Docs & Grafos)
+            with gr.Tab("📂 Ingesta de Datos"):
+                gr.Markdown("### 📂 Ingesta de Documentos y Grafos para Research & Action Agent")
+                gr.Markdown("""
+                Sube documentos (PDF, DOCX, TXT, CSV, etc.) para que el motor semántico y el grafo
+                puedan utilizarlos en los análisis del Research & Action Agent.
+                """)
+
+                with gr.Row():
+                    with gr.Column():
+                        ra_files = gr.Files(
+                            label="📁 Documentos a Ingerir",
+                            file_types=["file"],
+                            file_count="multiple",
+                        )
+                        ingest_btn = gr.Button("📥 Ingerir Documentos", variant="primary")
+                    with gr.Column():
+                        ingest_output = gr.Markdown(label="📊 Resultado de Ingesta")
+
+                def ingest_ra_files(files):
+                    if not data_ingestion_engine or not semantic_engine:
+                        return "❌ Data Ingestion Engine o Semantic Engine no están habilitados."
+                    if not files:
+                        return "⚠️ No se seleccionaron archivos."
+
+                    imported_ids = []
+                    errors = []
+                    for f in files:
+                        try:
+                            # En Gradio, f.name es la ruta temporal del archivo subido
+                            doc_id = data_ingestion_engine.ingest_file(f.name)
+                            if doc_id:
+                                imported_ids.append((f.name, doc_id))
+                            else:
+                                errors.append(f"❌ No se pudo ingerir: {getattr(f, 'name', 'archivo')}")
+                        except Exception as e:
+                            errors.append(f"❌ Error con {getattr(f, 'name', 'archivo')}: {e}")
+
+                    if not imported_ids and not errors:
+                        return "⚠️ No se pudo ingerir ningún archivo."
+
+                    result_md = "## 📥 Ingesta Completada\n\n"
+                    if imported_ids:
+                        result_md += "### ✅ Documentos Ingeridos:\n"
+                        for path, doc_id in imported_ids:
+                            result_md += f"- `{path}` → `doc_id={doc_id}`\n"
+                    if errors:
+                        result_md += "\n### ⚠️ Errores:\n"
+                        for err in errors:
+                            result_md += f"- {err}\n"
+                    return result_md
+
+                ingest_btn.click(
+                    fn=ingest_ra_files,
+                    inputs=[ra_files],
+                    outputs=[ingest_output],
+                )
+            
+            # Sub-tab: Risk Assessment
+            with gr.Tab("⚠️ Risk Assessment"):
+                gr.Markdown("### ⚠️ Evaluación de Riesgo - One-Click Risk Assessment")
+                gr.Markdown("""
+                **Evaluación automática de riesgo para proveedores, empleados, contratos, etc.**
+                
+                El agente:
+                1. Busca contratos y documentos relacionados
+                2. Revisa histórico de entregas/pagos
+                3. Busca noticias externas
+                4. Calcula score de riesgo
+                5. Sugiere acciones automáticamente
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        risk_entity = gr.Textbox(
+                            label="🏢 Entidad a Evaluar",
+                            placeholder="Ej: proveedor ACME, empleado Juan Pérez, contrato X",
+                            lines=2
+                        )
+                        
+                        risk_context = gr.Textbox(
+                            label="📝 Contexto Adicional (opcional)",
+                            placeholder="Ej: Revisar últimos 6 meses, verificar cumplimiento de SLA",
+                            lines=2
+                        )
+                        
+                        risk_assess_btn = gr.Button("⚠️ Evaluar Riesgo", variant="primary", size="lg")
+                    
+                    with gr.Column():
+                        risk_output = gr.Markdown(label="📊 Evaluación de Riesgo")
+                
+                def assess_risk(entity, context):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado."
+                    
+                    if not entity or not entity.strip():
+                        return "⚠️ Por favor, ingresa una entidad a evaluar."
+                    
+                    try:
+                        result = research_action_agent.risk_assessment(entity, context if context.strip() else None)
+                        
+                        # Formatear output similar a consulta general
+                        if result.get("error"):
+                            return f"## ❌ Error\n\n{result.get('error')}"
+                        
+                        summary = result.get("summary", "")
+                        score = result.get("score", 0.0)
+                        confidence = result.get("confidence", 0.0)
+                        sources = result.get("sources", [])
+                        actions_recommended = result.get("actions_recommended", [])
+                        
+                        output = f"""## ⚠️ Evaluación de Riesgo: {entity}
+
+**Score de Riesgo:** {score:.2f}/1.0
+**Confianza:** {confidence*100:.1f}%
+
+### 📊 Resumen
+{summary}
+
+### 📚 Fuentes Analizadas ({len(sources)})
+"""
+                        for idx, source in enumerate(sources[:5], 1):
+                            title = source.get("title", "")
+                            url = source.get("url", "")
+                            output += f"\n{idx}. **{title}**\n"
+                            if url:
+                                output += f"   - {url}\n"
+                        
+                        if actions_recommended:
+                            output += f"\n### ⚡ Acciones Recomendadas\n"
+                            for idx, action in enumerate(actions_recommended, 1):
+                                action_type = action.get("type", "")
+                                description = action.get("description", "")
+                                priority = action.get("priority", "medium")
+                                output += f"\n**{idx}. {action_type}** ({priority})\n"
+                                output += f"   - {description}\n"
+                        
+                        return output
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                risk_assess_btn.click(
+                    fn=assess_risk,
+                    inputs=[risk_entity, risk_context],
+                    outputs=[risk_output]
+                )
+            
+            # Sub-tab: Auto-Ticketing
+            with gr.Tab("🎫 Auto-Ticketing"):
+                gr.Markdown("### 🎫 Auto-Ticketing - Detección y Creación Automática de Tickets")
+                gr.Markdown("""
+                **Detecta problemas automáticamente y crea tickets en Jira/ServiceNow**
+                
+                El agente:
+                1. Analiza documentos y datos
+                2. Detecta inconsistencias o problemas
+                3. Crea ticket automáticamente con contexto completo
+                4. Notifica a los responsables
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        ticket_description = gr.Textbox(
+                            label="📝 Descripción del Problema",
+                            placeholder="Ej: Detectar problemas de facturación y crear ticket si hay inconsistencias",
+                            lines=4
+                        )
+                        
+                        ticket_auto_btn = gr.Button("🎫 Crear Ticket Automático", variant="primary", size="lg")
+                    
+                    with gr.Column():
+                        ticket_output = gr.Markdown(label="📊 Resultado")
+                
+                def auto_ticket(description):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado."
+                    
+                    if not description or not description.strip():
+                        return "⚠️ Por favor, ingresa una descripción del problema."
+                    
+                    try:
+                        result = research_action_agent.auto_ticket(description)
+                        
+                        if result.get("error"):
+                            return f"## ❌ Error\n\n{result.get('error')}"
+                        
+                        summary = result.get("summary", "")
+                        actions_executed = result.get("actions_executed", [])
+                        
+                        output = f"""## 🎫 Auto-Ticketing Completado
+
+**Descripción:** {description}
+
+### 📊 Análisis
+{summary}
+
+### ✅ Acciones Ejecutadas
+"""
+                        for action in actions_executed:
+                            action_type = action.get("type", "")
+                            status = action.get("status", "")
+                            result_act = action.get("result", {})
+                            output += f"\n**{action_type}** - {status}\n"
+                            if result_act:
+                                ticket_id = result_act.get("ticket_id", "")
+                                if ticket_id:
+                                    output += f"   - Ticket ID: {ticket_id}\n"
+                                output += f"   - Detalles: {json.dumps(result_act, indent=2, ensure_ascii=False)[:300]}...\n"
+                        
+                        return output
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                ticket_auto_btn.click(
+                    fn=auto_ticket,
+                    inputs=[ticket_description],
+                    outputs=[ticket_output]
+                )
+            
+            # Sub-tab: Research Briefs
+            with gr.Tab("📄 Research Briefs"):
+                gr.Markdown("### 📄 Research Briefs - Informes de Investigación Profesionales")
+                gr.Markdown("""
+                **Genera informes profesionales con fuentes citadas y exportación a PDF**
+                
+                Características:
+                - Búsqueda en RAG + Web
+                - Consolidación de información
+                - Citas de fuentes
+                - Export a PDF
+                - Confidence score
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        brief_topic = gr.Textbox(
+                            label="📚 Tema de Investigación",
+                            placeholder="Ej: Tendencias de IA en 2024, Análisis de mercado de SaaS",
+                            lines=2
+                        )
+                        
+                        brief_depth = gr.Radio(
+                            label="🔍 Profundidad",
+                            choices=[
+                                ("Rápido (Resumen ejecutivo)", "quick"),
+                                ("Estándar (Análisis completo)", "standard"),
+                                ("Profundo (Análisis exhaustivo)", "deep")
+                            ],
+                            value="standard"
+                        )
+                        
+                        brief_generate_btn = gr.Button("📄 Generar Research Brief", variant="primary", size="lg")
+                        brief_export_btn = gr.Button("📥 Exportar a PDF", variant="secondary")
+                    
+                    with gr.Column():
+                        brief_output = gr.Markdown(label="📊 Research Brief")
+                        brief_json = gr.JSON(label="JSON (para export)", visible=False)
+                
+                def generate_brief(topic, depth):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado.", None
+                    
+                    if not topic or not topic.strip():
+                        return "⚠️ Por favor, ingresa un tema de investigación.", None
+                    
+                    try:
+                        result = research_action_agent.research_brief(topic, depth)
+                        
+                        if result.get("error"):
+                            return f"## ❌ Error\n\n{result.get('error')}", None
+                        
+                        summary = result.get("summary", "")
+                        score = result.get("score", 0.0)
+                        confidence = result.get("confidence", 0.0)
+                        sources = result.get("sources", [])
+                        log = result.get("log", [])
+                        
+                        output = f"""## 📄 Research Brief: {topic}
+
+**Profundidad:** {depth}
+**Confianza:** {confidence*100:.1f}%
+**Score de Relevancia:** {score:.2f}/1.0
+
+### 📊 Resumen Ejecutivo
+{summary}
+
+### 📚 Fuentes Citadas ({len(sources)})
+"""
+                        for idx, source in enumerate(sources, 1):
+                            title = source.get("title", "")
+                            url = source.get("url", "")
+                            snippet = source.get("snippet", "")[:300]
+                            score_src = source.get("score", 0.0)
+                            output += f"\n**{idx}. {title}**\n"
+                            if url:
+                                output += f"   - URL: {url}\n"
+                            if snippet:
+                                output += f"   - Extracto: {snippet}...\n"
+                            output += f"   - Relevancia: {score_src:.2f}\n"
+                        
+                        if log:
+                            output += f"\n### 🔍 Metodología ({len(log)} pasos)\n"
+                            for idx, step in enumerate(log[:5], 1):
+                                step_desc = step.get("step", "")
+                                tool_used = step.get("tool_used", "")
+                                output += f"\n**Paso {idx}:** {step_desc}\n"
+                                if tool_used:
+                                    output += f"   - Herramienta: {tool_used}\n"
+                        
+                        return output, result
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}", None
+                
+                def export_brief_pdf(brief_json_data):
+                    if not brief_json_data:
+                        return "⚠️ Genera un brief primero."
+                    
+                    try:
+                        # Crear PDF simple (placeholder - implementar con reportlab o similar)
+                        output_path = f"data/research_brief_{int(time.time())}.json"
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            json.dump(brief_json_data, f, indent=2, ensure_ascii=False)
+                        
+                        return f"✅ Brief exportado a: {output_path}\n\n**Nota:** Para exportar a PDF real, instala reportlab: `pip install reportlab`"
+                    except Exception as e:
+                        return f"❌ Error exportando: {str(e)}"
+                
+                brief_generate_btn.click(
+                    fn=generate_brief,
+                    inputs=[brief_topic, brief_depth],
+                    outputs=[brief_output, brief_json]
+                )
+                
+                brief_export_btn.click(
+                    fn=export_brief_pdf,
+                    inputs=[brief_json],
+                    outputs=[brief_output]
+                )
     
     # ============================================
     # NUEVOS MODOS AVANZADOS

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp - Click Invertido</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #000000;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            padding: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto">
+        <h1 class="text-2xl mb-8">Ejemplo: Click Izquierdo se convierte en Click Derecho</h1>
+        <p class="mb-4 text-gray-400">Haz click izquierdo en el enlace de WhatsApp para ver el menú contextual (como si fuera click derecho):</p>
+        
+        <a 
+            href="https://wa.me/5491128492480?text=Hello! I want more information about EnterpriseDataAI." 
+            target="_blank"
+            class="text-[13px] hover:text-white transition-colors font-medium text-white/60"
+            id="whatsapp-link-inverted"
+        >
+            Whatsapp
+        </a>
+
+        <script>
+            (function() {
+                const whatsappLink = document.getElementById('whatsapp-link-inverted');
+                let isRealRightClick = false;
+                
+                // Detectar cuando el usuario hace click derecho REAL
+                whatsappLink.addEventListener('contextmenu', function(e) {
+                    isRealRightClick = true;
+                    // Permitir que el menú contextual del navegador se muestre normalmente
+                    return true;
+                });
+                
+                // Interceptar el click izquierdo y convertirlo en comportamiento de click derecho
+                whatsappLink.addEventListener('mousedown', function(e) {
+                    // Solo procesar si es click izquierdo (button 0) y NO es un click derecho real
+                    if (e.button === 0 && !isRealRightClick) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        // Obtener las coordenadas del click
+                        const x = e.clientX;
+                        const y = e.clientY;
+                        
+                        // Intentar disparar el menú contextual nativo del navegador
+                        setTimeout(() => {
+                            try {
+                                // Crear un evento de contextmenu (click derecho) programáticamente
+                                const contextEvent = new MouseEvent('contextmenu', {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window,
+                                    button: 2,
+                                    buttons: 2,
+                                    clientX: x,
+                                    clientY: y,
+                                    screenX: e.screenX,
+                                    screenY: e.screenY,
+                                    ctrlKey: false,
+                                    shiftKey: false,
+                                    altKey: false,
+                                    metaKey: false
+                                });
+                                
+                                // Intentar disparar el evento en el enlace
+                                const dispatched = whatsappLink.dispatchEvent(contextEvent);
+                                
+                                // Si el evento no fue cancelado pero el menú nativo no aparece,
+                                // mostrar menú personalizado como respaldo
+                                setTimeout(() => {
+                                    if (!document.querySelector('#custom-context-menu')) {
+                                        showCustomContextMenu(x, y, whatsappLink.href);
+                                    }
+                                }, 100);
+                                
+                            } catch (error) {
+                                console.log('Error al disparar menú contextual:', error);
+                                showCustomContextMenu(x, y, whatsappLink.href);
+                            }
+                        }, 10);
+                        
+                        return false;
+                    }
+                });
+                
+                // Resetear la bandera después de que se suelte el mouse
+                whatsappLink.addEventListener('mouseup', function(e) {
+                    setTimeout(() => {
+                        isRealRightClick = false;
+                    }, 200);
+                });
+                
+                // Prevenir el comportamiento por defecto del click izquierdo (navegar al enlace)
+                whatsappLink.addEventListener('click', function(e) {
+                    if (!isRealRightClick) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        return false;
+                    }
+                }, true); // Usar capture phase para interceptar antes que otros listeners
+                
+                // Función para mostrar un menú contextual personalizado (respaldo)
+                function showCustomContextMenu(x, y, url) {
+                    // Eliminar menú anterior si existe
+                    const existingMenu = document.getElementById('custom-context-menu');
+                    if (existingMenu) {
+                        existingMenu.remove();
+                    }
+                    
+                    // Crear menú contextual personalizado que simula el del navegador
+                    const menu = document.createElement('div');
+                    menu.id = 'custom-context-menu';
+                    menu.style.position = 'fixed';
+                    menu.style.left = Math.min(x, window.innerWidth - 220) + 'px';
+                    menu.style.top = Math.min(y, window.innerHeight - 150) + 'px';
+                    menu.style.backgroundColor = '#2d2d2d';
+                    menu.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+                    menu.style.borderRadius = '4px';
+                    menu.style.padding = '4px 0';
+                    menu.style.zIndex = '10000';
+                    menu.style.minWidth = '200px';
+                    menu.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.6)';
+                    menu.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+                    menu.style.fontSize = '13px';
+                    
+                    const options = [
+                        { 
+                            text: 'Abrir enlace en nueva pestaña', 
+                            action: () => {
+                                window.open(url, '_blank', 'noopener,noreferrer');
+                            }
+                        },
+                        { 
+                            text: 'Copiar dirección del enlace', 
+                            action: () => {
+                                navigator.clipboard.writeText(url).then(() => {
+                                    // Mostrar feedback visual
+                                    const feedback = document.createElement('div');
+                                    feedback.textContent = 'Enlace copiado';
+                                    feedback.style.position = 'fixed';
+                                    feedback.style.left = '50%';
+                                    feedback.style.top = '20px';
+                                    feedback.style.transform = 'translateX(-50%)';
+                                    feedback.style.backgroundColor = '#25D366';
+                                    feedback.style.color = 'white';
+                                    feedback.style.padding = '8px 16px';
+                                    feedback.style.borderRadius = '4px';
+                                    feedback.style.zIndex = '10001';
+                                    document.body.appendChild(feedback);
+                                    setTimeout(() => feedback.remove(), 2000);
+                                });
+                            }
+                        }
+                    ];
+                    
+                    options.forEach(option => {
+                        const item = document.createElement('div');
+                        item.textContent = option.text;
+                        item.style.padding = '6px 20px';
+                        item.style.cursor = 'pointer';
+                        item.style.color = '#e0e0e0';
+                        item.style.transition = 'background-color 0.15s';
+                        item.style.userSelect = 'none';
+                        
+                        item.addEventListener('mouseenter', () => {
+                            item.style.backgroundColor = '#3d3d3d';
+                        });
+                        item.addEventListener('mouseleave', () => {
+                            item.style.backgroundColor = 'transparent';
+                        });
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            option.action();
+                            menu.remove();
+                        });
+                        
+                        menu.appendChild(item);
+                    });
+                    
+                    document.body.appendChild(menu);
+                    
+                    // Cerrar el menú al hacer click fuera o presionar Escape
+                    const closeMenu = (e) => {
+                        if (!menu.contains(e.target)) {
+                            menu.remove();
+                            document.removeEventListener('click', closeMenu);
+                            document.removeEventListener('keydown', escapeHandler);
+                        }
+                    };
+                    
+                    const escapeHandler = (e) => {
+                        if (e.key === 'Escape') {
+                            menu.remove();
+                            document.removeEventListener('click', closeMenu);
+                            document.removeEventListener('keydown', escapeHandler);
+                        }
+                    };
+                    
+                    setTimeout(() => {
+                        document.addEventListener('click', closeMenu);
+                        document.addEventListener('keydown', escapeHandler);
+                    }, 10);
+                }
+            })();
+        </script>
+    </div>
+</body>
+</html>

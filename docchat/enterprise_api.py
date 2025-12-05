@@ -48,15 +48,15 @@ class EnterpriseAPIMode:
         self.memory_store = MemoryStore(config.memory_dir, config.memory_retention_days) if config.enable_memory else None
         self.context_manager = ContextManager(self.memory_store, config) if self.memory_store else None
         
-        # LLM para detección automática - Optimizado para velocidad
+        # LLM para detección automática - SIN LÍMITE DE TOKENS (la API decide)
         from docchat.utils.llm_factory import create_llm
         self.llm = create_llm(
             provider=provider,
             model=config.agentic_model,
             temperature=0.2,
             api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
-            max_tokens=8000,
-            request_timeout=120
+            # max_tokens REMOVIDO - dejar que la API decida la longitud de respuesta
+            request_timeout=300  # Timeout más largo para respuestas largas
         )
         
         # LLM rápido para tareas simples (detección, insights)
@@ -67,8 +67,8 @@ class EnterpriseAPIMode:
             model=fast_model,
             temperature=0.2,
             api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
-            max_tokens=4000,
-            request_timeout=60
+            # max_tokens REMOVIDO - dejar que la API decida la longitud de respuesta
+            request_timeout=180  # Timeout más largo para respuestas largas
         )
         
         # Herramientas Agentic AI avanzadas
@@ -174,20 +174,20 @@ class EnterpriseAPIMode:
                 
                 if detection_results.get('problems'):
                     yield "### ⚠️ Problemas Detectados\n\n"
-                    for problem in detection_results['problems'][:5]:
-                        yield f"- **{problem.get('type', 'Unknown')}** ({problem.get('severity', 'N/A')}): {problem.get('description', 'N/A')[:150]}...\n"
+                    for problem in detection_results['problems']:
+                        yield f"- **{problem.get('type', 'Unknown')}** ({problem.get('severity', 'N/A')}): {problem.get('description', 'N/A')}\n"
                     yield "\n"
                 
                 if detection_results.get('opportunities'):
                     yield "### 💡 Oportunidades Detectadas\n\n"
-                    for opp in detection_results['opportunities'][:5]:
-                        yield f"- **{opp.get('type', 'Unknown')}** ({opp.get('impact', 'N/A')}): {opp.get('description', 'N/A')[:150]}...\n"
+                    for opp in detection_results['opportunities']:
+                        yield f"- **{opp.get('type', 'Unknown')}** ({opp.get('impact', 'N/A')}): {opp.get('description', 'N/A')}\n"
                     yield "\n"
                 
                 if detection_results.get('patterns'):
                     yield "### 🔍 Patrones Encontrados\n\n"
-                    for pattern in detection_results['patterns'][:5]:
-                        yield f"- **{pattern.get('type', 'Unknown')}**: {pattern.get('description', 'N/A')[:150]}...\n"
+                    for pattern in detection_results['patterns']:
+                        yield f"- **{pattern.get('type', 'Unknown')}**: {pattern.get('description', 'N/A')}\n"
                     yield "\n"
             
             # 4. Insights generales
@@ -248,7 +248,35 @@ class EnterpriseAPIMode:
             results["documents_processed"] = len(files)
             results["chunks_generated"] = len(docs)
             
+            # Si no se generaron chunks, intentar procesar directamente con MultiFormatProcessor como último recurso
+            if not docs or len(docs) == 0:
+                print("⚠️ El procesador estándar no generó chunks.")
+                print("   💡 Posibles causas: PDF encriptado, formato no soportado, o error en procesamiento.")
+                print("   🔄 Intentando procesamiento directo con MultiFormatProcessor (Docling)...")
+                try:
+                    from docchat.multi_format_processor import MultiFormatProcessor
+                    direct_processor = MultiFormatProcessor(self.config)
+                    # Procesar archivos directamente
+                    direct_docs = direct_processor.process(files)
+                    if direct_docs and len(direct_docs) > 0:
+                        docs = direct_docs
+                        results["chunks_generated"] = len(docs)
+                        print(f"   ✅ Procesamiento directo exitoso: {len(docs)} chunks generados")
+                        results["status"] = "success"  # Actualizar estado a success si el fallback funcionó
+                    else:
+                        print("   ⚠️ Procesamiento directo tampoco generó chunks")
+                except Exception as e:
+                    print(f"   ⚠️ Error en procesamiento directo: {str(e)[:200]}")
+                    import traceback
+                    traceback.print_exc()
+            
             # 2. Generar resúmenes automáticos
+            if not docs or len(docs) == 0:
+                results["status"] = "error"
+                results["error"] = "No se pudieron procesar los documentos. El PDF puede estar encriptado o corrupto."
+                print("ERROR en procesamiento enterprise: No hay documentos procesados para indexar.")
+                return results
+            
             print("Generando resumenes automaticos...")
             # Usar un namespace único para esta sesión para evitar mezclar con documentos previos
             import uuid

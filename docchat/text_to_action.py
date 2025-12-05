@@ -584,7 +584,7 @@ IMPORTANTE:
                 "metadata": tool_result.metadata
             }
         except Exception as e:
-            return {
+                return {
                 "success": False,
                 "error": str(e)
             }

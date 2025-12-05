@@ -349,13 +349,15 @@ class SemanticDataEngine:
         """Save vector store to disk."""
         if self.vector_store:
             try:
-                if self.use_faiss and FAISS_AVAILABLE:
+                # Priorizar tipo real de store por encima del flag use_faiss
+                if Chroma and isinstance(self.vector_store, Chroma):
+                    # Chroma 0.4.x+ persiste automáticamente, no necesita persist() manual
+                    # self.vector_store.persist()  # Deprecated en Chroma 0.4.x+
+                    pass
+                elif self.use_faiss and FAISS_AVAILABLE:
                     # FAISS save
                     vector_store_path = self.embeddings_dir / "vector_store"
                     self.vector_store.save_local(str(vector_store_path))
-                elif Chroma and isinstance(self.vector_store, Chroma):
-                    # Chroma persists automatically, but we can call persist
-                    self.vector_store.persist()
             except Exception as e:
                 print(f"[Semantic Engine] Error saving vector store: {e}")
     

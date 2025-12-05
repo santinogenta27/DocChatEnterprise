@@ -136,17 +136,17 @@ class DocumentProcessor:
         return self._extract_documents_from_result(result, file_name, file_hash)
     
     def _process_pdf_with_fallback(self, data: bytes, file_name: str, file_hash: str) -> List[Document]:
-        """Procesar PDF usando solo PyPDF2. Si falla, se salta el documento y continúa."""
+        """Procesar PDF usando PyPDF2 primero, luego Docling como fallback si falla."""
         import tempfile
+        import time
         
         file_size_mb = len(data) / (1024*1024)
         print(f"   📄 Procesando PDF: {file_name} ({file_size_mb:.2f} MB)")
         
         # ESTRATEGIA OPTIMIZADA: PyPDF2 primero (10-100x más rápido)
-        # Solo usar Docling si PyPDF2 falla o no extrae suficiente texto
+        # Usar Docling como fallback si PyPDF2 falla (encriptación, etc.)
         try:
             print(f"   ⚡ Intentando extracción rápida con PyPDF2...")
-            import time
             start_time = time.time()
             chunks = self._extract_text_native_pdf(data, file_name, file_hash)
             elapsed = time.time() - start_time
@@ -159,16 +159,46 @@ class DocumentProcessor:
                     return chunks
                 else:
                     print(f"   ⚠️ PyPDF2 extrajo poco texto ({total_text} chars)")
-                    print(f"   ⏭️ Saltando este documento y continuando con el siguiente...")
-                    return []  # Retornar lista vacía para continuar con siguiente documento
+                    print(f"   🔄 Intentando con Docling como fallback...")
             else:
                 print(f"   ⚠️ PyPDF2 no extrajo texto")
-                print(f"   ⏭️ Saltando este documento y continuando con el siguiente...")
-                return []  # Retornar lista vacía para continuar con siguiente documento
+                print(f"   🔄 Intentando con Docling como fallback...")
         except Exception as pypdf_error:
-            print(f"   ⚠️ PyPDF2 falló: {str(pypdf_error)[:80]}")
-            print(f"   ⏭️ Saltando este documento y continuando con el siguiente...")
-            return []  # Retornar lista vacía para continuar con siguiente documento
+            error_msg = str(pypdf_error).lower()
+            if "pycryptodome" in error_msg or "aes" in error_msg or "encrypted" in error_msg:
+                print(f"   ⚠️ PDF encriptado detectado. PyPDF2 requiere PyCryptodome.")
+                print(f"   💡 Instala con: pip install pycryptodome")
+                print(f"   🔄 Intentando con Docling como fallback...")
+            else:
+                print(f"   ⚠️ PyPDF2 falló: {str(pypdf_error)[:80]}")
+                print(f"   🔄 Intentando con Docling como fallback...")
+        
+        # FALLBACK: Usar Docling si PyPDF2 falla
+        try:
+            print(f"   🔄 Convirtiendo con Docling...")
+            start_time = time.time()
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(data)
+                tmp.flush()
+                tmp_path = tmp.name
+            
+            try:
+                result = self.converter.convert(tmp_path)
+                elapsed = time.time() - start_time
+                print(f"   ✅ Docling completado en {elapsed:.1f}s")
+                chunks = self._extract_documents_from_result(result, file_name, file_hash)
+                if chunks:
+                    print(f"   ✅ Extracción exitosa: {len(chunks)} chunks generados")
+                    return chunks
+                else:
+                    print(f"   ⚠️ Docling no generó chunks")
+                    return []
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+        except Exception as docling_error:
+            print(f"   ❌ Docling también falló: {str(docling_error)[:80]}")
+            print(f"   ⚠️ No se pudo procesar este PDF")
+            return []
     
     def _extract_text_native_pdf(self, data: bytes, file_name: str, file_hash: str) -> List[Document]:
         """Extraer texto nativo de PDF usando PyPDF2 (método rápido)."""
@@ -202,10 +232,15 @@ class DocumentProcessor:
             return self._split_markdown_to_documents(markdown, file_name, file_hash)
         except ImportError:
             print("   ⚠️ PyPDF2 no está instalado")
-            return []
+            raise  # Re-lanzar para que el método padre use Docling
         except Exception as e:
-            print(f"   ❌ Error en PyPDF2: {str(e)[:80]}")
-            return []
+            error_msg = str(e).lower()
+            if "pycryptodome" in error_msg or "aes" in error_msg or "encrypted" in error_msg:
+                print(f"   ❌ PDF encriptado: PyPDF2 requiere PyCryptodome para desencriptar")
+                raise  # Re-lanzar para que el método padre use Docling como fallback
+            else:
+                print(f"   ❌ Error en PyPDF2: {str(e)[:80]}")
+                raise  # Re-lanzar para que el método padre use Docling como fallback
     
     def _extract_documents_from_result(self, result, file_name: str, file_hash: str) -> List[Document]:
         """Extraer documentos del resultado de Docling."""

@@ -21,7 +21,7 @@ try:
     COMPOSIO_AVAILABLE = True
 except ImportError:
     COMPOSIO_AVAILABLE = False
-    print("⚠️ Composio no está instalado. Instala con: py -3.12 -m pip install composio-core")
+    # Nota: Composio no está instalado. Instala con: py -3.12 -m pip install composio-core
 
 from ..config import AppConfig
 

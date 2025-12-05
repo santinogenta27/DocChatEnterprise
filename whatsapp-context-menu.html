@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Context Menu</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 50px;
+      background-color: #1a1a1a;
+      color: white;
+    }
+    .whatsapp-link {
+      text-decoration: none;
+      color: #25D366;
+      font-size: 16px;
+      padding: 10px 20px;
+      border: 1px solid #25D366;
+      border-radius: 5px;
+      display: inline-block;
+      cursor: pointer;
+    }
+    .whatsapp-link:hover {
+      background-color: #25D366;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ejemplo de WhatsApp con Menú Contextual</h1>
+  <p>Haz clic izquierdo en el enlace para ver el menú contextual:</p>
+  
+  <a 
+    href="https://wa.me/5491128492480?text=Hello! I want more information about EnterpriseDataAI." 
+    class="whatsapp-link"
+    id="whatsappLink"
+    onclick="return false;"
+    oncontextmenu="return true;"
+  >
+    WhatsApp
+  </a>
+
+  <script>
+    const whatsappLink = document.getElementById('whatsappLink');
+    const url = whatsappLink.href;
+
+    // Interceptar clic izquierdo
+    whatsappLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Crear un evento de clic derecho (contextmenu)
+      const contextMenuEvent = new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: 2, // Botón derecho
+        buttons: 2,
+        clientX: e.clientX,
+        clientY: e.clientY
+      });
+      
+      // Disparar el evento de menú contextual
+      this.dispatchEvent(contextMenuEvent);
+    });
+
+    // Permitir que el menú contextual funcione normalmente
+    whatsappLink.addEventListener('contextmenu', function(e) {
+      // El menú contextual del navegador se mostrará automáticamente
+      return true;
+    });
+  </script>
+</body>
+</html>

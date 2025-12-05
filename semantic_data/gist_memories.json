@@ -1,0 +1,42 @@
+{
+  "2788d1d1-9816-43e0-8cf4-71cb1b73594d": {
+    "summary": "## MODEL-DOCUMENT PROTOCOL FOR AI SEARCH  \nHongjin Qian, Zheng Liu ∗ BAAI  \n{ chienqhj, zhengliu1026 } @gmail.com\n\n## ABSTRACT  \nAI search depends on linking large language models (LLMs) with vast external knowledge sources. Yet web pages, PDF files, and other raw documents are not inherently LLM-ready: they are long, noisy, and unstructured. Conventional retrieval methods treat these documents as verbatim text and return raw passages, leaving the burden of fragment assembly and contextual reaso...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\2da8a787b2c624b984fe86484dcd893786a485f8\\DOCUMENT GOD PAPER.pdf"
+  },
+  "70fcdc78-4c5d-445c-ac56-171031bf96e0": {
+    "summary": "",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\2998fc4c27c052df62912932c4d5b317c9790a9f\\1.16-number-finance-problems-cp.pdf"
+  },
+  "8d5dae3d-438d-43e3-ba0e-d3c0717106ce": {
+    "summary": "# Página 1  \nSave My Exams! – The Home of Revision\nFor more awesome GCSE and A level resources, visit us at www.savemyexams.co.uk\nE1.16 Finance Problems\nQuestion Paper\nLevel  IGCSE\nSubject  Maths (0580)\nExam Board  Cambridge International Examinations (CIE)\nLevel  Core\nTopic  E1. Number\nSub-Topic E1.16 Finance Problems\nBooklet  Question Paper\nTime Allowed: 60  minutes\nScore:  /50\nPercentage: /100\nGrade Boundaries:\nA* A B C D E U\n>85% 75%  60% 45% 35% 25% <25%\n\n# Página 2  \nSave My Exams! – The H...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\2998fc4c27c052df62912932c4d5b317c9790a9f\\1.16-number-finance-problems-cp.pdf"
+  },
+  "67eeda25-08bb-431d-9fe9-c7160b15e6eb": {
+    "summary": "# Página 1  \nTechnical Report\nMODEL-DOCUMENTPROTOCOL FORAI SEARCH\nHongjin Qian, Zheng Liu∗\nBAAI\n{chienqhj, zhengliu1026}@gmail.com\nABSTRACT\nAI search depends on linking large language models (LLMs) with vast external\nknowledge sources. Yet web pages, PDF files, and other raw documents are not\ninherently LLM-ready: they are long, noisy, and unstructured. Conventional re-\ntrieval methods treat these documents as verbatim text and return raw passages,\nleaving the burden of fragment assembly and con...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\2da8a787b2c624b984fe86484dcd893786a485f8\\DOCUMENT GOD PAPER.pdf"
+  },
+  "7ddb2f46-a1fb-4bd2-8376-d37cbdfca1f7": {
+    "summary": "# Página 1  \nAI Knowledge Assist: An Automated Approach for the Creation of\nKnowledge Bases for Conversational AI Agents\nMd Tahmid Rahman Laskar, Julien Bouvier Tremblay\nXue-Yong Fu,Cheng Chen,Shashi Bhushan TN\nDialpad Inc.\n{tahmid.rahman,julien.bouviertremblay,xue-yong,cchen,sbhushan}@dialpad.com\nAbstract\nThe utilization of conversational AI systems\nby leveraging Retrieval Augmented Generation\n(RAG) techniques to solve customer problems\nhas been on the rise with the rapid progress\nof Large Lang...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\c9921609db6962d1ba32f65f295bbaef86e5e696\\2510.08149 1.pdf"
+  },
+  "ccb7a984-b8cb-40a6-a6e6-4ec0b81cb4f2": {
+    "summary": "# Página 1  \nMuRAR: A Simple and Effective Multimodal Retrieval and Answer\nRefinement Framework for Multimodal Question Answering\nZhengyuan Zhu1, Daniel Lee2, Hong Zhang2,\nSai Sree Harsha2,Loic Feujio2,Akash Maharaj2,Yunyao Li2\n1University of Texas at Arlington,2Adobe\nzhengyuan.zhu@mavs.uta.edu, dlee1@adobe.com, yunyaol@adobe.com\nAbstract\nRecent advancements in retrieval-augmented\ngeneration have demonstrated impressive per-\nformance on the question-answering task. How-\never, most previous work ...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\ae621d5067ba04e4fed55af3896c2e3b1532c70a\\2408.08521.pdf"
+  },
+  "cbb820cf-d53b-46e6-8797-a8f7d74d6e98": {
+    "summary": "# Página 1  \narXiv:2506.09566v1  [cs.CL]  11 Jun 2025From Symbolic to Neural and Back: Exploring\nKnowledge Graph–Large Language Model\nSynergies\nBlaž Škrlj1[0000−0002−9916−8756], Boshko Koloski1,2[0000−0002−7330−0579],\nSenja Pollak1[0000−0002−4380−0863], and Nada Lavrač1[0000−0002−9995−7093]\n(1) Jožef Stefan Institute\n(2) Jožef Stefan International Postgraduate School\nJamova cesta 39, 1000 Ljubljana, Slovenia\n{name.surname}@ijs.si\nAbstract. Integrating structured knowledge from Knowledge Graphs\n(...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\dbd386c6901ab5b96356bd6557fd9617657f6b77\\2506.09566v1.pdf"
+  },
+  "074bb226-7751-463a-b0cb-2610b6f9b73d": {
+    "summary": "# Página 1  \nIntroduction to Numbers, Accounting,\nand Financial Analysis\nLearning Objectives\n1. To understand the three most common measurements of a company’s success.\n2. To recognize how important understanding accounting and ﬁnance is to the career of\nany hospitality manager.\n3. To learn about and describe the three fundamental ﬁnancial statements.\n4. To become familiar with fundamental revenue accounting concepts.\n5. To understand fundamental proﬁt accounting concepts.\n6. To learn the revenu...",
+    "topics": [],
+    "source_path": "C:\\Users\\Random\\AppData\\Local\\Temp\\gradio\\7900ec8db4e1f807b2538e8418849f9bd4d720eb\\1 - Introduction to Numbers-Accounting and Financial Analysis.pdf"
+  }
+}

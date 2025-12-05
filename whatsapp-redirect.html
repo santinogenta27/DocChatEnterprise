@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Open WhatsApp</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 20px;
+    background-color: #f9f9f9;
+  }
+  a.button {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #25D366;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: bold;
+    margin-top: 15px;
+  }
+</style>
+</head>
+<body>
+  <p>Click the button below to open WhatsApp:</p>
+  <a class="button" href="https://wa.me/5491128492480?text=Hello! I want more information about EnterpriseDataAI." target="_blank" id="whatsapp-link">
+    Open WhatsApp
+  </a>
+
+  <script>
+    // Interceptar el clic izquierdo y convertirlo en comportamiento de clic derecho
+    document.getElementById('whatsapp-link').addEventListener('click', function(e) {
+      // Prevenir el comportamiento predeterminado del clic izquierdo
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Obtener la URL del enlace
+      const url = this.href;
+      
+      // Abrir en nueva pestaña (comportamiento típico de clic derecho)
+      window.open(url, '_blank', 'noopener,noreferrer');
+      
+      return false;
+    });
+    
+    // También prevenir el clic derecho normal para evitar confusión
+    document.getElementById('whatsapp-link').addEventListener('contextmenu', function(e) {
+      // Si hacen clic derecho, permitir el comportamiento normal
+      // (o puedes comentar esto si quieres que el clic derecho también se comporte diferente)
+    });
+  </script>
+</body>
+</html>

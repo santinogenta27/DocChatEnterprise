@@ -23,6 +23,12 @@ from .config import AppConfig
 from .document_processor import DocumentProcessor
 from .retriever_builder import RetrieverBuilder
 from .cache.embedding_cache import CachedOpenAIEmbeddings
+from .pdf_converter import convert_to_pdf, TEXT_EXTENSIONS
+from .chatbot_advanced_rag import (
+    AdvancedRAGPipeline,
+    AdvancedRAGConfig,
+    HybridRetriever
+)
 
 
 @dataclass
@@ -63,7 +69,7 @@ class ChatbotMode:
     - API para consultas desde chatbots externos
     """
     
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, use_advanced_rag: bool = True):
         self.config = config
         self.document_processor = DocumentProcessor(config)
         self.retriever_builder = RetrieverBuilder(config)
@@ -76,6 +82,26 @@ class ChatbotMode:
         self.connections_file = self.data_dir / "chatbot_connections.json"
         self.vector_stores: Dict[str, Any] = {}  # Vector stores por chatbot_id
         self.retrievers: Dict[str, BaseRetriever] = {}  # Retrievers por chatbot_id
+        self.hybrid_retrievers: Dict[str, HybridRetriever] = {}  # Advanced hybrid retrievers
+        self.processed_documents: Dict[str, List[Document]] = {}  # Documentos procesados por chatbot_id (para L4 RAG)
+        
+        # Advanced RAG Pipeline
+        self.use_advanced_rag = use_advanced_rag
+        if use_advanced_rag:
+            rag_config = AdvancedRAGConfig(
+                chunk_size=700,  # Optimizado según paper
+                chunk_overlap=200,
+                dense_weight=0.6,
+                sparse_weight=0.4,
+                use_cross_encoder=True,
+                use_ner_enrichment=True,
+                use_query_expansion=True,
+                use_query_rewriting=True
+            )
+            self.advanced_rag = AdvancedRAGPipeline(config, rag_config)
+            print("✅ Advanced RAG Pipeline habilitado (Hybrid Retrieval + Cross-Encoder Reranking + NER)")
+        else:
+            self.advanced_rag = None
         
         # LLM para generación de respuestas
         if not config.openai_api_key:
@@ -188,22 +214,50 @@ class ChatbotMode:
         print(f"📄 PROCESANDO DATA PARA CHATBOT: {connection.chatbot_name}")
         print(f"{'='*60}\n")
         
-        # Procesar documentos con chunking optimizado
-        documents = self.document_processor.process(files)
+        # Si es posible, convertir formatos de texto / multiformato a PDF intermedio
+        processed_files: List[Any] = []
+        tmp_dirs: List[Path] = []
+        for f in files:
+            try:
+                # f puede ser ruta (str) o file-like con atributo name
+                path = Path(f) if isinstance(f, (str, Path)) else Path(getattr(f, "name", ""))
+                ext = path.suffix.lower()
+                if ext in TEXT_EXTENSIONS:
+                    tmp_dir = Path(self.data_dir) / f"_tmp_pdf_{chatbot_id}"
+                    if tmp_dir not in tmp_dirs:
+                        tmp_dir.mkdir(parents=True, exist_ok=True)
+                        tmp_dirs.append(tmp_dir)
+                    pdf_path = tmp_dir / (path.stem + ".pdf")
+                    convert_to_pdf(path, pdf_path)
+                    processed_files.append(str(pdf_path))
+                else:
+                    processed_files.append(f)
+            except Exception:
+                # Si algo falla, usar el archivo original
+                processed_files.append(f)
+
+        # Procesar documentos (PDFs + originales)
+        raw_documents = self.document_processor.process(processed_files)
         
-        if not documents:
+        if not raw_documents:
             raise ValueError("No se pudieron procesar los documentos")
         
-        # Enriquecer documentos con metadatos (opcional, mejora precisión)
-        # Para documentos técnicos, activar enriquecimiento avanzado
-        try:
-            from .metadata_enricher import MetadataEnricher
-            enricher = MetadataEnricher(use_llm=False)  # use_llm=True solo para docs muy técnicos
-            documents = enricher.enrich_documents_batch(documents, use_advanced=False)
-            print(f"✅ Metadatos enriquecidos: keywords, entidades, frases representativas")
-        except Exception as e:
-            print(f"⚠️ Enriquecimiento de metadatos no disponible: {e}")
-            # Continuar sin enriquecimiento si falla
+        # Usar Advanced RAG Pipeline si está habilitado
+        if self.use_advanced_rag and self.advanced_rag:
+            print("🔄 Procesando con Advanced RAG Pipeline...")
+            # Procesar con chunking semántico y enriquecimiento NER
+            documents = self.advanced_rag.process_documents(raw_documents)
+            print(f"✅ Chunking semántico completado: {len(documents)} chunks (700 tokens con overlap)")
+        else:
+            # Fallback a procesamiento estándar
+            documents = raw_documents
+            try:
+                from .metadata_enricher import MetadataEnricher
+                enricher = MetadataEnricher(use_llm=False)
+                documents = enricher.enrich_documents_batch(documents, use_advanced=False)
+                print(f"✅ Metadatos enriquecidos: keywords, entidades, frases representativas")
+            except Exception as e:
+                print(f"⚠️ Enriquecimiento de metadatos no disponible: {e}")
         
         # Crear base vectorizada específica para este chatbot
         vector_store_dir = self.data_dir / chatbot_id / "vectorstore"
@@ -223,13 +277,37 @@ class ChatbotMode:
             persist_directory=str(vector_store_dir)
         )
         
-        # Crear retriever híbrido usando RetrieverBuilder
-        # Esto crea un HybridRetriever optimizado (BM25 + Vector Search)
-        hybrid_retriever = self.retriever_builder.build_hybrid_retriever(documents)
+        # Crear retriever (Advanced o estándar)
+        if self.use_advanced_rag and self.advanced_rag:
+            # Advanced Hybrid Retriever con pesos optimizados
+            hybrid_retriever = self.advanced_rag.create_hybrid_retriever(
+                documents=documents,
+                embeddings=embeddings,
+                vector_store_path=str(vector_store_dir)
+            )
+            self.hybrid_retrievers[chatbot_id] = hybrid_retriever
+            print("✅ Advanced Hybrid Retriever creado (Dense 0.6 + BM25 0.4)")
+        else:
+            # Retriever estándar
+            hybrid_retriever = self.retriever_builder.build_hybrid_retriever(documents)
+            self.retrievers[chatbot_id] = hybrid_retriever
         
-        # Guardar vector store y retriever
+        # Guardar vector store
         self.vector_stores[chatbot_id] = vector_store
-        self.retrievers[chatbot_id] = hybrid_retriever
+        
+        # Guardar documentos procesados (necesario para L4 RAG)
+        self.processed_documents[chatbot_id] = documents
+        
+        # L4 RAG: Construir índices de Mixture of Spaces si está habilitado
+        if self.use_advanced_rag and self.advanced_rag and \
+           self.advanced_rag.rag_config.use_mixture_of_spaces and \
+           self.advanced_rag.mixture_of_spaces:
+            try:
+                print("🔨 Construyendo índices de Mixture of Spaces (L4 RAG)...")
+                self.advanced_rag.mixture_of_spaces.build_indexes(documents)
+                print("✅ Mixture of Spaces construido (Semantic + Structural + Metadata)")
+            except Exception as e:
+                print(f"⚠️ Error construyendo Mixture of Spaces: {e}")
         
         # Actualizar conexión
         connection.documents_count = len(files)
@@ -355,8 +433,31 @@ Respuesta:"""
         print(f"🔍 Consultando chatbot '{connection.chatbot_name}'...")
         print(f"   Pregunta: {user_question[:100]}...")
         
-        # 1. Retrieval: Obtener chunks relevantes
-        retrieved_docs = retriever.invoke(user_question)
+        # 1. Retrieval: Obtener chunks relevantes (Advanced o estándar)
+        if self.use_advanced_rag and chatbot_id in self.hybrid_retrievers:
+            # Advanced RAG con L4: Mixture of Spaces + Adaptive Chain of Actions
+            documents_for_l4 = self.processed_documents.get(chatbot_id, [])
+            retrieved_docs = self.advanced_rag.retrieve(
+                retriever=self.hybrid_retrievers[chatbot_id],
+                query=user_question,
+                use_reformulation=True,
+                documents=documents_for_l4 if documents_for_l4 else None
+            )
+            used_reranking = True
+            # Detectar si se usó L4 RAG
+            if self.advanced_rag.adaptive_chain and documents_for_l4:
+                print(f"   ✅ L4 RAG: Mixture of Spaces + Adaptive Chain of Actions")
+            else:
+                print(f"   ✅ Advanced RAG: Query reformulation + Hybrid Retrieval + Cross-Encoder Reranking")
+        else:
+            # Retrieval estándar
+            retrieved_docs = retriever.invoke(user_question)
+            used_reranking = False
+            
+            # Reranking manual si está habilitado
+            if use_reranking and len(retrieved_docs) > max_chunks:
+                retrieved_docs = self._rerank_documents(user_question, retrieved_docs, top_k=max_chunks)
+                used_reranking = True
         
         if not retrieved_docs:
             return RAGResponse(
@@ -364,15 +465,11 @@ Respuesta:"""
                 sources=[],
                 confidence=0.0,
                 chunks_used=0,
-                reranked=False,
+                reranked=used_reranking,
                 metadata={"error": "No documents retrieved"}
             )
         
-        # 2. Reranking (opcional pero recomendado)
-        if use_reranking and len(retrieved_docs) > max_chunks:
-            retrieved_docs = self._rerank_documents(user_question, retrieved_docs, top_k=max_chunks)
-        
-        # 3. Construir contexto con chunks relevantes
+        # 2. Construir contexto con chunks relevantes
         context_chunks = retrieved_docs[:max_chunks]
         context = self._build_context(context_chunks)
         
@@ -394,16 +491,20 @@ Respuesta:"""
         
         print(f"✅ Respuesta generada usando {len(context_chunks)} chunks\n")
         
+        # Determinar si se usó reranking
+        final_reranked = used_reranking if 'used_reranking' in locals() else use_reranking
+        
         response = RAGResponse(
             answer=answer,
             sources=sources,
             confidence=confidence,
             chunks_used=len(context_chunks),
-            reranked=use_reranking,
+            reranked=final_reranked,
             metadata={
                 "chatbot_name": connection.chatbot_name,
                 "company_name": connection.company_name,
-                "cached": False
+                "cached": False,
+                "advanced_rag": self.use_advanced_rag
             }
         )
         

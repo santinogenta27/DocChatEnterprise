@@ -1,0 +1,1483 @@
+<html lang="en" class="scroll-smooth"><head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI WorkSuite - Enterprise Data that actually works</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+
+    <style>
+
+        body {
+
+            font-family: 'Inter', sans-serif;
+
+            background-color: #000000;
+
+            color: #ffffff;
+
+            overflow-x: hidden;
+
+            /* Grid Background Pattern from Code 2 */
+
+            background-image: 
+
+                linear-gradient(to right, #1a1a1a 1px, transparent 1px),
+
+                linear-gradient(to bottom, #1a1a1a 1px, transparent 1px);
+
+            background-size: 40px 40px;
+
+            background-position: center top;
+
+        }
+
+        /* Fade the grid at the bottom */
+
+        .bg-mask-fade {
+
+            mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+
+            -webkit-mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+
+        }
+
+        /* 
+
+          Sequence animation intro. 
+
+        */
+
+        @keyframes animationIn {
+
+            0% {
+
+                opacity: 0;
+
+                transform: translateY(30px);
+
+                filter: blur(8px);
+
+            }
+
+            100% {
+
+                opacity: 1;
+
+                transform: translateY(0);
+
+                filter: blur(0px);
+
+            }
+
+        }
+
+        /* Animations from Code 2 */
+
+        @keyframes fadeInUp {
+
+            from { opacity: 0; transform: translateY(20px); }
+
+            to { opacity: 1; transform: translateY(0); }
+
+        }
+
+        
+
+        @keyframes pulse-slow {
+
+            0%, 100% { opacity: 0.3; }
+
+            50% { opacity: 0.6; }
+
+        }
+
+        @keyframes scanline {
+
+            0% { transform: translateY(-100%); }
+
+            100% { transform: translateY(100%); }
+
+        }
+
+        /*
+
+          Border Gradient Implementation
+
+        */
+
+        .border-gradient {
+
+            position: relative;
+
+        }
+
+        .border-gradient::before {
+
+            content: "";
+
+            position: absolute;
+
+            inset: 0;
+
+            border-radius: inherit; 
+
+            padding: 1px;
+
+            -webkit-mask: linear-gradient(#fff 0 0) content-box,
+
+                linear-gradient(#fff 0 0);
+
+            -webkit-mask-composite: xor;
+
+            mask-composite: exclude;
+
+            background: linear-gradient(225deg,
+
+                rgba(255, 255, 255, 0.05) 0%,
+
+                rgba(255, 255, 255, 0.4) 50%,
+
+                rgba(255, 255, 255, 0.05) 100%);
+
+            pointer-events: none;
+
+        }
+
+        /* Custom Scrollbar */
+
+        ::-webkit-scrollbar {
+
+            width: 8px;
+
+        }
+
+        ::-webkit-scrollbar-track {
+
+            background: #000;
+
+        }
+
+        ::-webkit-scrollbar-thumb {
+
+            background: #333;
+
+            border-radius: 4px;
+
+        }
+
+        /* Utilities */
+
+        .glass {
+
+            background: rgba(255, 255, 255, 0.03);
+
+            backdrop-filter: blur(10px);
+
+            border: 1px solid rgba(255, 255, 255, 0.08);
+
+        }
+
+        /* Enhanced Glass Styles from Code 2 */
+
+        .glass-panel {
+
+            background: rgba(10, 10, 10, 0.6);
+
+            backdrop-filter: blur(12px);
+
+            border: 1px solid rgba(255, 255, 255, 0.08);
+
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+
+        }
+
+        .glass-card {
+
+            background: linear-gradient(180deg, rgba(20,20,20,0.6) 0%, rgba(10,10,10,0.4) 100%);
+
+            border: 1px solid rgba(255, 255, 255, 0.06);
+
+            backdrop-filter: blur(8px);
+
+            transition: all 0.3s ease;
+
+        }
+
+        .glass-card:hover {
+
+            border-color: rgba(255, 255, 255, 0.15);
+
+            background: linear-gradient(180deg, rgba(25,25,25,0.8) 0%, rgba(15,15,15,0.6) 100%);
+
+            transform: translateY(-2px);
+
+        }
+
+        
+
+        .glow-text {
+
+            text-shadow: 0 0 20px rgba(255,255,255,0.3);
+
+        }
+
+        .text-gradient-blue {
+
+            background: linear-gradient(90deg, #60A5FA, #3B82F6);
+
+            -webkit-background-clip: text;
+
+            -webkit-text-fill-color: transparent;
+
+        }
+
+        
+
+        .text-gradient-orange {
+
+            background: linear-gradient(90deg, #FB923C, #EA580C);
+
+            -webkit-background-clip: text;
+
+            -webkit-text-fill-color: transparent;
+
+        }
+
+        /* Text Glow from Code 2 */
+
+        .text-glow {
+
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+
+        }
+
+        .hero-glow {
+
+            background: radial-gradient(circle at center, rgba(249, 115, 22, 0.15) 0%, transparent 60%);
+
+        }
+
+        /* Shimmer Button from Code 2 */
+
+        .btn-shimmer {
+
+            background: linear-gradient(45deg, #000 40%, #222 50%, #000 60%);
+
+            background-size: 200% 200%;
+
+            animation: shimmer 3s infinite linear;
+
+        }
+
+        @keyframes shimmer {
+
+            0% { background-position: 100% 50%; }
+
+            100% { background-position: 0% 50%; }
+
+        }
+
+        /* Reveal Animation from Code 2 */
+
+        .reveal {
+
+            opacity: 0;
+
+            transform: translateY(30px);
+
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+
+        }
+
+        .reveal.animate-active {
+
+            opacity: 1;
+
+            transform: translateY(0);
+
+        }
+
+    </style>
+
+    <script>
+
+        /* 
+
+          Sequence animation on scroll logic
+
+        */
+
+        (function () {
+
+            const style = document.createElement("style");
+
+            style.textContent = `
+
+            .animate-on-scroll { animation-play-state: paused !important; }
+
+            .animate-on-scroll.animate { animation-play-state: running !important; }
+
+            `;
+
+            document.head.appendChild(style);
+
+            const once = true;
+
+            if (!window.__inViewIO) {
+
+            window.__inViewIO = new IntersectionObserver((entries) => {
+
+                entries.forEach((entry) => {
+
+                if (entry.isIntersecting) {
+
+                    entry.target.classList.add("animate");
+
+                    if (once) window.__inViewIO.unobserve(entry.target);
+
+                }
+
+                });
+
+            }, { threshold: 0.1, rootMargin: "0px 0px -5% 0px" });
+
+            }
+
+            window.initInViewAnimations = function (selector = ".animate-on-scroll") {
+
+            document.querySelectorAll(selector).forEach((el) => {
+
+                window.__inViewIO.observe(el);
+
+            });
+
+            };
+
+            document.addEventListener("DOMContentLoaded", () => initInViewAnimations());
+
+        })();
+
+        // Intersection Observer for reveal animations from Code 2
+
+        document.addEventListener("DOMContentLoaded", () => {
+
+            const observer = new IntersectionObserver((entries) => {
+
+                entries.forEach(entry => {
+
+                    if (entry.isIntersecting) {
+
+                        entry.target.classList.add('animate-active');
+
+                        entry.target.style.opacity = '1';
+
+                        entry.target.style.transform = 'translateY(0)';
+
+                    }
+
+                });
+
+            }, { threshold: 0.1 });
+
+            document.querySelectorAll('.reveal').forEach(el => {
+
+                el.style.opacity = '0';
+
+                el.style.transform = 'translateY(30px)';
+
+                el.style.transition = 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)';
+
+                observer.observe(el);
+
+            });
+
+        });
+
+    </script>
+
+</head>
+
+<body class="antialiased selection:bg-orange-500/30">
+
+    <!-- Top Announcement -->
+
+    <div class="relative w-full bg-stone-900/50 border-b border-white/5 text-center py-2 px-4 backdrop-blur-md z-50">
+
+        <a href="#" class="group text-xs font-medium text-stone-300 hover:text-white transition-colors flex items-center justify-center gap-2">
+
+            <span class="bg-gradient-to-r from-orange-500 to-red-500 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white">NEW</span>
+
+            Text-to-Action is now live. Write what you want, the agent executes.
+
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right w-3 h-3 group-hover:translate-x-0.5 transition-transform"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+
+        </a>
+
+    </div>
+
+    <!-- Navigation (Capsule Style) -->
+
+    <div class="sticky top-4 z-40 w-full flex justify-center px-4 mb-4">
+
+        <nav class="flex items-center justify-between w-full max-w-5xl bg-black/80 backdrop-blur-xl border border-white/10 rounded-full pl-6 pr-2 py-2 shadow-2xl ring-1 ring-white/5">
+
+             
+
+             <!-- Logo -->
+
+             <a href="#" class="flex items-center gap-2 group shrink-0">
+
+                <div class="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-orange-500/20 transition-transform group-hover:scale-105">
+
+                    <iconify-icon icon="solar:layers-minimalistic-bold-duotone" width="18"></iconify-icon>
+
+                </div>
+
+                <span class="font-semibold text-sm tracking-tight text-white group-hover:opacity-80 transition-opacity">AI WorkSuite</span>
+
+            </a>
+
+            <!-- Centered Links -->
+
+            <div class="hidden md:flex items-center gap-8">
+
+                 <a href="#" class="text-xs font-medium text-stone-400 hover:text-white transition-colors">Product</a>
+
+                 <a href="#" class="text-xs font-medium text-stone-400 hover:text-white transition-colors">Solutions</a>
+
+                 <a href="#" class="text-xs font-medium text-stone-400 hover:text-white transition-colors">Customers</a>
+
+                 <a href="#" class="text-xs font-medium text-stone-400 hover:text-white transition-colors">Resources</a>
+
+                 <a href="#" class="text-xs font-medium text-stone-400 hover:text-white transition-colors">About</a>
+
+            </div>
+
+            <!-- Right Actions -->
+
+            <div class="flex items-center gap-4">
+
+                 <a href="#" class="hidden sm:block text-xs font-medium text-stone-300 hover:text-white transition-colors">Sign In</a>
+
+                 <a href="#" class="group flex items-center gap-2 bg-stone-900 border border-stone-700 hover:border-stone-500 hover:bg-stone-800 text-white text-xs font-semibold px-4 py-2 rounded-full transition-all shadow-md">
+
+                    Get a Demo
+
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right w-3 h-3 group-hover:translate-x-0.5 transition-transform"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+
+                 </a>
+
+            </div>
+
+        </nav>
+
+    </div>
+
+    <!-- Hero Section -->
+
+    <main class="overflow-hidden bg-black pt-16 pb-32 relative">
+
+        <!-- Ambient Background Glow -->
+
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-orange-900/20 rounded-full blur-[120px] -z-10 opacity-50"></div>
+
+        <div class="flex flex-col text-center bg-black max-w-7xl mx-auto px-6 items-center">
+
+            
+
+            <!-- Social Proof / Sub-header -->
+
+            <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both] flex justify-center mb-6">
+
+                 <span class="text-sm font-medium text-orange-500 tracking-wide uppercase">Automate your company</span>
+
+            </div>
+
+            <!-- Headline -->
+
+            <h1 class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both] text-5xl md:text-7xl font-semibold tracking-tighter text-white max-w-5xl mb-6 leading-[1.1]">
+
+                Enterprise Data that actually <span class="text-gradient-orange">works.</span> <br>Secure. Local. Powerful.
+
+            </h1>
+
+            
+
+            <p class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.3s_both] text-lg md:text-xl text-stone-400 max-w-2xl mb-4 font-light leading-relaxed">
+
+                The first all-in-one platform that turns your company's documents, messages, workflows, and knowledge into actionable intelligence and autonomous execution.
+
+            </p>
+
+            
+
+            <p class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.35s_both] text-sm font-medium text-stone-500 mb-10">
+
+                Runs 100% local. No cloud. No data leaks. No limits.
+
+            </p>
+
+            <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.4s_both] flex items-center gap-4 mb-20">
+
+                <a href="#" class="bg-white text-black px-6 py-3 rounded-full font-semibold text-sm hover:bg-stone-200 transition-colors">Get a Demo</a>
+
+                <button class="flex items-center gap-2 text-stone-300 hover:text-white font-medium text-sm transition-colors group">
+
+                    <div class="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-colors">
+
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play w-3 h-3 fill-current ml-0.5"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"></path></svg>
+
+                    </div>
+
+                    Watch Video
+
+                </button>
+
+            </div>
+
+            <!-- Hero Visual / Dashboard Terminal -->
+
+            <div class="animate-on-scroll [animation:animationIn_1s_ease-out_0.5s_both] w-full max-w-5xl relative group">
+
+                <!-- Outer Glow -->
+
+                <div class="absolute -inset-1 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl opacity-20 group-hover:opacity-30 blur transition duration-1000"></div>
+
+                
+
+                <!-- Main Interface Container -->
+
+                <div class="relative bg-black rounded-xl border border-white/10 overflow-hidden shadow-2xl">
+
+                    <!-- Fake UI Header -->
+
+                    <div class="h-10 bg-stone-900/50 border-b border-white/5 flex items-center px-4 gap-2">
+
+                        <div class="flex gap-1.5">
+
+                            <div class="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
+
+                            <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+
+                            <div class="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
+
+                        </div>
+
+                        <div class="ml-4 w-64 h-5 bg-white/5 rounded-md"></div>
+
+                        <div class="ml-auto flex gap-4 text-[10px] font-mono text-stone-500">
+
+                            <span>cpu: <span class="text-green-500">local</span></span>
+
+                            <span>status: <span class="text-green-500">connected</span></span>
+
+                        </div>
+
+                    </div>
+
+                    
+
+                    <!-- Terminal Content -->
+
+                    <div class="grid md:grid-cols-12 bg-[#0A0A0A]">
+
+                        <!-- Sidebar -->
+
+                        <div class="hidden md:block col-span-3 border-r border-white/5 p-4">
+
+                            <div class="space-y-4 font-mono text-[11px] text-stone-400">
+
+                                <div class="text-stone-600 uppercase tracking-widest text-[9px] mb-2">Sources</div>
+
+                                <div class="flex items-center gap-2 text-white"><iconify-icon icon="logos:notion-icon"></iconify-icon> company_docs</div>
+
+                                <div class="flex items-center gap-2"><iconify-icon icon="logos:slack-icon"></iconify-icon> #product_team</div>
+
+                                <div class="flex items-center gap-2"><iconify-icon icon="logos:google-drive"></iconify-icon> customer_feedback</div>
+
+                                <div class="flex items-center gap-2"><iconify-icon icon="logos:postgresql"></iconify-icon> analytics_db</div>
+
+                                <div class="h-px bg-white/5 my-4"></div>
+
+                                <div class="text-stone-600 uppercase tracking-widest text-[9px] mb-2">Active Agents</div>
+
+                                <div class="flex items-center gap-2 text-green-400">
+
+                                    <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Insight_Bot
+
+                                </div>
+
+                                <div class="flex items-center gap-2 text-green-400">
+
+                                    <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Action_Bot
+
+                                </div>
+
+                                <div class="flex items-center gap-2 text-stone-500">
+
+                                    <div class="w-1.5 h-1.5 rounded-full bg-stone-700"></div> Email_Bot
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <!-- Main Terminal Area -->
+
+                        <div class="col-span-12 md:col-span-9 p-6 font-mono text-sm relative overflow-hidden min-h-[600px]">
+
+                            <!-- Scanline effect -->
+
+                            <div class="absolute inset-0 bg-gradient-to-b from-transparent via-orange-500/5 to-transparent h-[100px] w-full pointer-events-none animate-[scanline_4s_linear_infinite]"></div>
+
+                            <div class="space-y-6 relative z-10">
+
+                                <!-- User Command -->
+
+                                <div class="flex gap-2 text-stone-500 text-base">
+
+                                    <span class="text-orange-500">➜</span>
+
+                                    <span>user:</span>
+
+                                    <span class="text-white">Maximize revenue from upcoming product launch.</span>
+
+                                </div>
+
+                                <!-- Processing Steps -->
+
+                                <div class="pl-6 space-y-3 border-l border-white/5 ml-1.5 py-3">
+
+                                    <div class="flex items-center gap-2 text-sm text-blue-400">
+
+                                        <iconify-icon icon="solar:database-bold-duotone" width="16"></iconify-icon> Ingested 28 PDFs &amp; 142 Slack threads (150ms)
+
+                                    </div>
+
+                                    <div class="flex items-center gap-2 text-sm text-blue-400">
+
+                                        <iconify-icon icon="solar:document-text-bold-duotone" width="16"></iconify-icon> Analyzed 512 customer feedback entries (95ms)
+
+                                    </div>
+
+                                    <div class="flex items-center gap-2 text-sm text-blue-400">
+
+                                        <iconify-icon icon="solar:chat-line-bold-duotone" width="16"></iconify-icon> Correlated market trends &amp; competitor launches (80ms)
+
+                                    </div>
+
+                                </div>
+
+                                <!-- AI WorkSuite Response 1: Insights -->
+
+                                <div class="flex gap-2 text-stone-500 text-base">
+
+                                    <span class="text-green-500">➜</span>
+
+                                    <span>ai_worksuite:</span>
+
+                                </div>
+
+                                <div class="text-stone-300 leading-relaxed bg-white/5 p-6 rounded-lg border border-white/5">
+
+                                    <div class="space-y-3">
+
+                                        <p class="text-sm text-stone-400"><span class="text-orange-400">•</span> Highest demand: Dark Mode, Offline Access</p>
+
+                                        <p class="text-sm text-stone-400"><span class="text-orange-400">•</span> Pain points: Login friction, Confusing pricing</p>
+
+                                        <p class="text-sm text-stone-400"><span class="text-orange-400">•</span> Revenue ops: Upsell premium, Bundle training</p>
+
+                                    </div>
+
+                                </div>
+
+                                <!-- AI WorkSuite Response 2: Recommended Actions -->
+
+                                <div class="flex gap-2 text-stone-500 text-base">
+
+                                    <span class="text-green-500">➜</span>
+
+                                    <span>ai_worksuite:</span>
+
+                                </div>
+
+                                <div class="text-stone-300 leading-relaxed bg-white/5 p-6 rounded-lg border border-white/5">
+
+                                    <div class="space-y-3 mb-5">
+
+                                        <p class="text-sm text-stone-400"><span class="text-emerald-400">1.</span> Enable Dark Mode + Offline Access in MVP</p>
+
+                                        <p class="text-sm text-stone-400"><span class="text-emerald-400">2.</span> Simplify onboarding &amp; payment flow</p>
+
+                                        <p class="text-sm text-stone-400"><span class="text-emerald-400">3.</span> Launch targeted upsell campaign</p>
+
+                                    </div>
+
+                                    <p class="text-stone-500 text-sm">Generating PDF report...
+
+                                        <span class="animate-pulse">_</span>
+
+                                    </p>
+
+                                </div>
+
+                                <!-- Download Button -->
+
+                                <div class="flex gap-2">
+
+                                    <div class="px-4 py-2 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 text-sm flex items-center gap-2 cursor-pointer hover:bg-orange-500/20 transition">
+
+                                        <iconify-icon icon="solar:file-download-bold-duotone" width="16"></iconify-icon> Download
+
+                                        Product_Launch_Report.pdf
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Engineering Example Section -->
+
+    <section class="bg-black/50 border-white/5 border-t py-20">
+
+        <div class="max-w-7xl mx-auto px-6">
+
+            
+
+            <!-- Content -->
+
+            <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both] grid md:grid-cols-2 gap-12 items-center">
+
+                <div class="order-2 md:order-1 relative">
+
+                    <div class="glass border-gradient flex flex-col rounded-2xl p-8 justify-center shadow-2xl">
+
+                        <div class="font-mono text-xs text-orange-400 mb-4 flex justify-between">
+
+                             <span>&gt; ai_worksuite.py</span>
+
+                             <span class="text-stone-500">Python 3.9</span>
+
+                        </div>
+
+                        <div class="space-y-2 font-mono text-xs text-stone-400 mb-6">
+
+                            <p class="text-white"><span class="text-pink-400">def</span> process_company(batch):</p>
+
+                            <p class="pl-4">data = brain.ingest(batch)</p>
+
+                            <p class="pl-4">insights = analyst.generate_recommendations(data)</p>
+
+                            <p class="pl-4">actions = worker.execute(insights)</p>
+
+                            <p class="pl-4"><span class="text-pink-400">return</span> actions</p>
+
+                        </div>
+
+                        <div class="mt-2 bg-stone-900/80 p-4 rounded-lg border border-white/5 font-mono">
+
+                            <div class="flex gap-2 items-center text-xs text-green-400 mb-1">
+
+                                <span class="">&gt; Documents processed: 1,248</span>
+
+                            </div>
+
+                            <div class="flex gap-2 items-center text-xs text-green-400 mb-1">
+
+                                <span class="">&gt; Emails automated: 93</span>
+
+                            </div>
+
+                            <div class="flex gap-2 items-center text-xs text-green-400">
+
+                                <span class="">&gt; Workflows executed: 27</span>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="order-1 md:order-2">
+
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 text-orange-400 text-xs font-medium mb-4">
+
+                        <iconify-icon icon="solar:code-square-bold-duotone"></iconify-icon>
+
+                        Engineering Example
+
+                    </div>
+
+                    <h3 class="text-3xl font-semibold tracking-tight text-white mb-4">Your work — understood, analyzed, executed.</h3>
+
+                    <p class="text-stone-400 leading-relaxed mb-6">
+
+                        AI WorkSuite combines your documents, emails, systems, and processes into one intelligent automation layer.
+
+                    </p>
+
+                    <ul class="space-y-2 mb-6">
+
+                         <li class="flex items-center gap-2 text-sm text-stone-300">
+
+                            <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+
+                            Read and understand thousands of documents
+
+                         </li>
+
+                         <li class="flex items-center gap-2 text-sm text-stone-300">
+
+                            <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+
+                            Make decisions and suggest next actions
+
+                         </li>
+
+                         <li class="flex items-center gap-2 text-sm text-stone-300">
+
+                            <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+
+                            Execute tasks automatically
+
+                         </li>
+
+                    </ul>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Why AI WorkSuite (Banner) -->
+
+    <section class="py-12 px-6">
+
+        <div class="max-w-7xl mx-auto">
+
+            <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both] relative overflow-hidden rounded-3xl border border-orange-500/20 bg-stone-900/40">
+
+                <div class="absolute inset-0 bg-gradient-to-r from-orange-900/20 via-transparent to-transparent opacity-50"></div>
+
+                <div class="absolute -right-20 -top-20 w-64 h-64 bg-orange-500/20 blur-[80px] rounded-full"></div>
+
+                
+
+                <div class="relative p-8 md:p-12 flex flex-col md:flex-row md:items-center justify-between gap-8">
+
+                    <div class="">
+
+                        <div class="text-orange-400 text-xs font-semibold tracking-wide uppercase mb-2">Why AI WorkSuite</div>
+
+                        <h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-white mb-4">Your company's brain, analyst, and worker.</h2>
+
+                        <p class="text-stone-400 max-w-xl text-sm md:text-base leading-relaxed">
+
+                            We combine Intelligent Document Processing, Agentic AI, RAG, and enterprise automation to create a system that can answer complex questions, make decisions, and execute tasks — all running locally, securely, at enterprise-grade speed.
+
+                        </p>
+
+                    </div>
+
+                    <div>
+
+                        <a href="#" class="inline-block bg-white text-black px-6 py-3 rounded-full font-semibold text-sm hover:bg-stone-200 transition-colors">
+
+                            Get a Demo
+
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Three Products / Capabilities Grid -->
+
+    <section class="py-24 bg-black">
+
+        <div class="max-w-7xl mx-auto px-6">
+
+            <div class="text-center mb-16">
+
+                <h2 class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both] text-3xl md:text-5xl font-semibold tracking-tight mb-4">Three Products, One Intelligent System</h2>
+
+                <p class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both] text-stone-400 text-lg">Reimagine how work gets done.</p>
+
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- Card 1: Brain -->
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.3s_both] group relative bg-stone-900/30 rounded-2xl border border-white/5 p-8 hover:bg-stone-900/50 transition-colors border-gradient">
+
+                    <div class="w-12 h-12 bg-orange-500/10 rounded-xl flex items-center justify-center mb-6 text-orange-400 group-hover:scale-110 transition-transform duration-300">
+
+                        <iconify-icon icon="solar:server-square-bold-duotone" width="24"></iconify-icon>
+
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-white mb-3">AI Document Brain</h3>
+
+                    <p class="text-sm text-stone-400 mb-6 leading-relaxed">Upload 1,000+ documents at once. Extract key insights, summaries, patterns, and answers instantly.</p>
+
+                    <ul class="space-y-2">
+
+                        <li class="flex items-center gap-2 text-xs text-stone-500">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check w-3 h-3 text-orange-500"><path d="M20 6 9 17l-5-5"></path></svg> Enterprise semantic search
+
+                        </li>
+
+                        <li class="flex items-center gap-2 text-xs text-stone-500">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check w-3 h-3 text-orange-500"><path d="M20 6 9 17l-5-5"></path></svg> Onboard &amp; train faster
+
+                        </li>
+
+                    </ul>
+
+                </div>
+
+                <!-- Card 2: Analyst -->
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.4s_both] group relative bg-stone-900/30 rounded-2xl border border-white/5 p-8 hover:bg-stone-900/50 transition-colors border-gradient">
+
+                    <div class="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center mb-6 text-red-400 group-hover:scale-110 transition-transform duration-300">
+
+                        <iconify-icon icon="solar:graph-up-bold-duotone" width="24"></iconify-icon>
+
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-white mb-3">AI Business Analyst</h3>
+
+                    <p class="text-sm text-stone-400 mb-6 leading-relaxed">Understands your business. Identifies risks, opportunities, and bottlenecks. Gives prioritized, actionable recommendations.</p>
+
+                    <ul class="space-y-2">
+
+                        <li class="flex items-center gap-2 text-xs text-stone-500">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check w-3 h-3 text-red-500"><path d="M20 6 9 17l-5-5"></path></svg> Perfect summaries
+
+                        </li>
+
+                        <li class="flex items-center gap-2 text-xs text-stone-500">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check w-3 h-3 text-red-500"><path d="M20 6 9 17l-5-5"></path></svg> Strategic recommendations
+
+                        </li>
+
+                    </ul>
+
+                </div>
+
+                <!-- Card 3: Worker -->
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.5s_both] group relative bg-stone-900/30 rounded-2xl border border-white/5 p-8 hover:bg-stone-900/50 transition-colors border-gradient">
+
+                    <div class="w-12 h-12 bg-pink-500/10 rounded-xl flex items-center justify-center mb-6 text-pink-400 group-hover:scale-110 transition-transform duration-300">
+
+                        <iconify-icon icon="solar:bolt-circle-bold-duotone" width="24"></iconify-icon>
+
+                    </div>
+
+                    <h3 class="text-xl font-semibold text-white mb-3">AI Automation Worker</h3>
+
+                    <p class="text-sm text-stone-400 mb-6 leading-relaxed">Autonomously executes work: Emails, reports, API calls, and workflows. Text-to-Action: write what you want — the agent executes.</p>
+
+                    <ul class="space-y-2">
+
+                        <li class="flex items-center gap-2 text-xs text-stone-500">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check w-3 h-3 text-pink-500"><path d="M20 6 9 17l-5-5"></path></svg> Trigger systems &amp; APIs
+
+                        </li>
+
+                        <li class="flex items-center gap-2 text-xs text-stone-500">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check w-3 h-3 text-pink-500"><path d="M20 6 9 17l-5-5"></path></svg> Manage repetitive tasks
+
+                        </li>
+
+                    </ul>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Connectors -->
+
+    <section class="border-y bg-black border-white/5 pt-12 pb-12">
+
+        <div class="max-w-7xl mx-auto px-6 text-center">
+
+            <p class="text-sm text-stone-500 mb-8 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both]">Connect with your entire ecosystem: APIs, Databases, Email, CRMs, Cloud Storage, Web History.</p>
+
+            <div class="flex flex-wrap justify-center gap-8 opacity-100 transition-all duration-500 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both]">
+
+                <iconify-icon icon="logos:slack-icon" width="24" class=""></iconify-icon>
+
+                <iconify-icon icon="logos:google-drive" width="24"></iconify-icon>
+
+                <iconify-icon icon="logos:jira" width="24"></iconify-icon>
+
+                <iconify-icon icon="logos:confluence" width="24"></iconify-icon>
+
+                <iconify-icon icon="logos:salesforce" width="30" class=""></iconify-icon>
+
+                <iconify-icon icon="logos:notion-icon" width="24"></iconify-icon>
+
+                <iconify-icon icon="logos:microsoft-teams" width="24" class=""></iconify-icon>
+
+                <iconify-icon icon="logos:github-icon" width="24"></iconify-icon>
+
+            </div>
+
+            <div class="mt-8">
+
+                <a href="#" class="text-xs font-semibold text-orange-400 hover:text-orange-300 transition-colors flex items-center justify-center gap-1">
+
+                    Runs local, but connects everywhere <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right w-3 h-3"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Metrics (Impact) -->
+
+    <section class="py-24">
+
+        <div class="max-w-7xl mx-auto px-6">
+
+            <h3 class="text-center text-3xl font-semibold mb-16 tracking-tight">Proven enterprise results.</h3>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both]">
+
+                    <div class="text-4xl md:text-5xl font-semibold text-white tracking-tighter mb-2">110h</div>
+
+                    <p class="text-xs text-stone-500 leading-relaxed">Saved per employee/year</p>
+
+                </div>
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both]">
+
+                    <div class="text-4xl md:text-5xl font-semibold text-white tracking-tighter mb-2">93%</div>
+
+                    <p class="text-xs text-stone-500 leading-relaxed">Adoption within 12 months</p>
+
+                </div>
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.3s_both]">
+
+                    <div class="text-4xl md:text-5xl font-semibold text-white tracking-tighter mb-2">20%</div>
+
+                    <p class="text-xs text-stone-500 leading-relaxed">Fewer support tickets</p>
+
+                </div>
+
+                <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.4s_both]">
+
+                    <div class="text-4xl md:text-5xl font-semibold text-white tracking-tighter mb-2">&lt;6mo</div>
+
+                    <p class="text-xs text-stone-500 leading-relaxed">ROI recovery time</p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Testimonials (Bento Grid) -->
+
+    <section class="bg-black pt-10 pb-20">
+
+        <div class="max-w-7xl mx-auto px-6">
+
+            <h2 class="text-3xl font-semibold tracking-tight mb-12 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both]">Customer Testimonials</h2>
+
+            
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-min gap-x-6 gap-y-6">
+
+                
+
+                <!-- Main Featured Testimonial -->
+
+                <div class="md:col-span-2 row-span-2 bg-stone-900/30 rounded-3xl p-8 md:p-12 border border-white/5 relative overflow-hidden animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both]">
+
+                     <!-- Subtle Gradient -->
+
+                     <div class="absolute top-0 right-0 w-64 h-64 bg-orange-900/20 blur-[80px] rounded-full pointer-events-none"></div>
+
+                     
+
+                     <div class="relative z-10 h-full flex flex-col justify-between">
+
+                         <div class="mb-8">
+
+                             <iconify-icon icon="solar:quote-up-square-bold-duotone" class="text-stone-600 text-4xl mb-6"></iconify-icon>
+
+                             <p class="text-xl md:text-2xl font-medium text-white leading-relaxed">
+
+                                 "AI WorkSuite transformed how we understand documents. We found insights we didn't even know existed."
+
+                             </p>
+
+                         </div>
+
+                         <div class="flex items-center gap-4">
+
+                             <div class="w-10 h-10 rounded-full bg-stone-700 flex items-center justify-center text-xs font-bold">DO</div>
+
+                             <div class="">
+
+                                 <div class="text-sm font-semibold text-white">Director of Operations</div>
+
+                                 <div class="text-xs text-stone-500">Global Logistics Co.</div>
+
+                             </div>
+
+                         </div>
+
+                     </div>
+
+                </div>
+
+                <!-- Smaller Testimonial 1 -->
+
+                <div class="bg-stone-900/30 rounded-3xl p-8 border border-white/5 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.3s_both]">
+
+                    <p class="text-sm text-stone-300 mb-6 leading-relaxed">
+
+                        "The agent now responds to customer emails automatically with perfect accuracy."
+
+                    </p>
+
+                    <div class="flex items-center gap-3">
+
+                        <div class="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center text-[10px] font-bold">HS</div>
+
+                        <div>
+
+                            <div class="text-xs font-semibold text-white">Head of Support</div>
+
+                            <div class="text-[10px] text-stone-500">FinTech Startup</div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- Smaller Testimonial 2 -->
+
+                <div class="bg-stone-900/30 rounded-3xl p-8 border border-white/5 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.4s_both]">
+
+                    <p class="text-sm text-stone-300 mb-6 leading-relaxed">
+
+                        "Our marketing team uses Text-to-Action to generate ads and campaigns every week."
+
+                    </p>
+
+                    <div class="flex items-center gap-3">
+
+                        <div class="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center text-[10px] font-bold">VP</div>
+
+                        <div class="">
+
+                            <div class="text-xs font-semibold text-white">VP of Growth</div>
+
+                            <div class="text-[10px] text-stone-500">SaaS Enterprise</div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                 <!-- Smaller Testimonial 3 -->
+
+                 <div class="md:col-span-3 lg:col-span-1 bg-stone-900/30 rounded-3xl p-8 border border-white/5 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.5s_both]">
+
+                    <p class="text-sm text-stone-300 mb-6 leading-relaxed">
+
+                        "The Business Analyst helped us identify risks and fix processes much faster."
+
+                    </p>
+
+                    <div class="flex items-center gap-3">
+
+                        <div class="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center text-[10px] font-bold">CT</div>
+
+                        <div>
+
+                            <div class="text-xs font-semibold text-white">CTO</div>
+
+                            <div class="text-[10px] text-stone-500">Healthcare Provider</div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Analyst Recognition -->
+
+    <section class="py-16 border-t border-white/5">
+
+        <div class="max-w-7xl mx-auto px-6">
+
+            <h3 class="text-center text-xs font-semibold text-stone-500 uppercase tracking-widest mb-12">Analyst Recognition</h3>
+
+            <div class="grid md:grid-cols-3 gap-8">
+
+                <div class="text-center animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both]">
+
+                    <div class="h-8 mb-4 flex items-center justify-center">
+
+                        <iconify-icon icon="simple-icons:gartner" width="100" class="text-white"></iconify-icon>
+
+                    </div>
+
+                    <p class="text-xs text-stone-400 max-w-xs mx-auto">Leader in Intelligent Document Processing &amp; Agentic AI</p>
+
+                </div>
+
+                <div class="text-center animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both]">
+
+                    <div class="h-8 mb-4 flex items-center justify-center">
+
+                        <iconify-icon icon="simple-icons:fastcompany" width="100" class="text-white"></iconify-icon>
+
+                    </div>
+
+                    <p class="text-xs text-stone-400 max-w-xs mx-auto">Top 5 Global Innovators in Applied AI</p>
+
+                </div>
+
+                <div class="text-center animate-on-scroll [animation:animationIn_0.8s_ease-out_0.3s_both]">
+
+                    <div class="h-8 mb-4 flex items-center justify-center">
+
+                        <span class="text-lg font-bold font-serif italic">Emerging Tech</span>
+
+                    </div>
+
+                    <p class="text-xs text-stone-400 max-w-xs mx-auto">Recognized for Autonomous Work Automation</p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Bottom CTA -->
+
+    <section class="py-32 text-center relative overflow-hidden">
+
+        <div class="bg-black absolute top-0 right-0 bottom-0 left-0"></div>
+
+        <div class="bg-black max-w-2xl z-10 mx-auto px-6 relative">
+
+            <h2 class="md:text-7xl animate-on-scroll [animation:animationIn_0.8s_ease-out_0.1s_both] text-5xl font-semibold text-white tracking-tighter mb-8">Work AI that actually works.</h2>
+
+            <p class="text-stone-400 mb-8 animate-on-scroll [animation:animationIn_0.8s_ease-out_0.15s_both]">Transform your documents, workflows, and employees into a productive, automated organization.</p>
+
+            <div class="animate-on-scroll [animation:animationIn_0.8s_ease-out_0.2s_both]">
+
+                <a href="#" class="inline-flex items-center justify-center bg-white text-black text-sm font-semibold px-8 py-4 rounded-full hover:bg-stone-200 transition-all hover:scale-105">
+
+                    Get a Demo
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- Footer -->
+
+    <footer class="bg-black border-t border-white/10 pt-16 pb-12">
+
+        <div class="max-w-7xl mr-auto ml-auto pr-6 pl-6">
+
+            <div class="flex flex-col md:flex-row justify-between gap-12 mb-16">
+
+                <div class="md:w-1/4">
+
+                    <div class="flex items-center gap-2 mb-6">
+
+                        <div class="w-6 h-6 bg-white rounded-md flex items-center justify-center text-black">
+
+                             <iconify-icon icon="solar:layers-minimalistic-bold-duotone" width="16"></iconify-icon>
+
+                        </div>
+
+                        <span class="font-semibold text-sm tracking-tight text-white">AI WorkSuite</span>
+
+                    </div>
+
+                    <p class="text-xs text-stone-500 leading-relaxed max-w-[200px]">
+
+                        260 Sheridan Ave Suite 300<br>
+
+                        Palo Alto, CA 94306<br>
+
+                        United States
+
+                    </p>
+
+                </div>
+
+                
+
+                <div class="md:w-3/4 grid grid-cols-2 md:grid-cols-4 gap-8">
+
+                    <div class="">
+
+                        <h4 class="text-xs font-semibold text-white mb-4">PRODUCT</h4>
+
+                        <ul class="space-y-3 text-xs text-stone-500">
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">AI Document Brain</a></li>
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">AI Business Analyst</a></li>
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">AI Automation Worker</a></li>
+
+                        </ul>
+
+                    </div>
+
+                    <div class="">
+
+                        <h4 class="text-xs font-semibold text-white mb-4">SOLUTIONS</h4>
+
+                        <ul class="space-y-3 text-xs text-stone-500">
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">Engineering</a></li>
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">Operations</a></li>
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">Legal</a></li>
+
+                        </ul>
+
+                    </div>
+
+                    <div class="">
+
+                        <h4 class="text-xs font-semibold text-white mb-4">RESOURCES</h4>
+
+                        <ul class="space-y-3 text-xs text-stone-500">
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">Resource Center</a></li>
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">Product Videos</a></li>
+
+                        </ul>
+
+                    </div>
+
+                    <div class="">
+
+                        <h4 class="text-xs font-semibold text-white mb-4">COMPANY</h4>
+
+                        <ul class="space-y-3 text-xs text-stone-500">
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">About</a></li>
+
+                            <li class=""><a href="#" class="hover:text-white transition-colors">Careers</a></li>
+
+                        </ul>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            
+
+            <div class="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-stone-600">
+
+                <p>© 2025 AI WorkSuite Technologies, Inc.</p>
+
+                <div class="flex gap-6">
+
+                    <a href="#" class="hover:text-white transition-colors">Website Terms</a>
+
+                    <a href="#" class="hover:text-white transition-colors">Privacy</a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </footer>
+
+    <script>
+
+        lucide.createIcons();
+
+    </script>
+
+</body></html>

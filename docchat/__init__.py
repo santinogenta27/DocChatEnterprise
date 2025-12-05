@@ -84,6 +84,80 @@ from .agent_orchestration_studio import (  # noqa: F401
     AgentConnection,
     AgentMessage
 )
+# Agentic Workflow Orchestrator - Multi-agent workflows con CrewAI
+from .agentic_workflow_orchestrator import (  # noqa: F401
+    AgenticWorkflowOrchestrator,
+    WorkflowAgent,
+    WorkflowStep,
+    WorkflowExecution,
+    WorkflowStatus,
+    AgentStatus,
+)
+from .agentic_memory import (  # noqa: F401
+    AgenticMemory,
+    RewardSignal,
+    AgentDecision,
+)
+from .agentic_crewai_tools import (  # noqa: F401
+    get_crewai_tools,
+    get_tool_by_name,
+    JiraCreateTicketTool,
+    SlackSendMessageTool,
+    TeamsSendMessageTool,
+    EmailSendTool,
+    SQLQueryTool,
+    FileWriteTool,
+    PDFExportTool,
+)
+from .agentic_rl_advanced import (  # noqa: F401
+    AdvancedRLManager,
+    QLearningAgent,
+    PolicyGradientAgent,
+    RLState,
+    RLAction,
+    RLExperience,
+)
+from .agentic_a2a_protocol import (  # noqa: F401
+    A2AProtocol,
+    AgentCard,
+    A2AMessage,
+    A2ATask,
+    A2AArtifact,
+    TaskStatus,
+    MessageType,
+)
+from .agentic_mcp_a2a_bridge import (  # noqa: F401
+    MCPA2ABridge,
+    MCPToolCapability,
+)
+from .mcp_progressive_disclosure import (  # noqa: F401
+    MCPProgressiveDisclosure,
+    ToolDetailLevel,
+    ResponseFormat,
+    ToolSearchResult,
+)
+from .mcp_tool_optimizer import (  # noqa: F401
+    MCPToolOptimizer,
+    OptimizedToolDescription,
+)
+# Enterprise Data Intelligence - SQL Generation + Data Registry + Agent Registry
+from .enterprise_data_intelligence import EnterpriseDataIntelligence, QueryResult  # noqa: F401
+from .data_registry import (  # noqa: F401
+    DataRegistry,
+    DatabaseConnection,
+    TableMetadata,
+    ColumnMetadata,
+    DataSource,
+)
+from .agent_registry import AgentRegistry, AgentMetadata, AgentParameter  # noqa: F401
+from .sql_generation import SQLGenerator, SQLGenerationResult  # noqa: F401
+from .sql_agents import (  # noqa: F401
+    MultiAgentSQLFramework,
+    SQLRunner,
+    SQLEnhancer,
+    SQLExecutionResult,
+)
+from .deep_research import DeepResearch, DeepResearchResult  # noqa: F401
 
 __version__ = "2.1.0"
 __all__ = [
@@ -273,4 +347,70 @@ __all__ = [
     "AudienceSegment",
     "MarketingCampaign",
     "CampaignPerformance",
+    # Enterprise Data Intelligence
+    "EnterpriseDataIntelligence",
+    "QueryResult",
+    "DataRegistry",
+    "DatabaseConnection",
+    "TableMetadata",
+    "ColumnMetadata",
+    "DataSource",
+    "AgentRegistry",
+    "AgentMetadata",
+    "AgentParameter",
+    "SQLGenerator",
+    "SQLGenerationResult",
+    "MultiAgentSQLFramework",
+    "SQLRunner",
+    "SQLEnhancer",
+    "SQLExecutionResult",
+    # Deep Research Mode
+    "DeepResearch",
+    "DeepResearchResult",
+    # Agentic Workflow Orchestrator
+    "AgenticWorkflowOrchestrator",
+    "WorkflowAgent",
+    "WorkflowStep",
+    "WorkflowExecution",
+    "WorkflowStatus",
+    "AgentStatus",
+    "AgenticMemory",
+    "RewardSignal",
+    "AgentDecision",
+    # Agentic CrewAI Tools
+    "get_crewai_tools",
+    "get_tool_by_name",
+    "JiraCreateTicketTool",
+    "SlackSendMessageTool",
+    "TeamsSendMessageTool",
+    "EmailSendTool",
+    "SQLQueryTool",
+    "FileWriteTool",
+    "PDFExportTool",
+    # Agentic RL Advanced
+    "AdvancedRLManager",
+    "QLearningAgent",
+    "PolicyGradientAgent",
+    "RLState",
+    "RLAction",
+    "RLExperience",
+    # A2A Protocol
+    "A2AProtocol",
+    "AgentCard",
+    "A2AMessage",
+    "A2ATask",
+    "A2AArtifact",
+    "TaskStatus",
+    "MessageType",
+    # MCP × A2A Bridge
+    "MCPA2ABridge",
+    "MCPToolCapability",
+    # MCP Progressive Disclosure
+    "MCPProgressiveDisclosure",
+    "ToolDetailLevel",
+    "ResponseFormat",
+    "ToolSearchResult",
+    # MCP Tool Optimizer
+    "MCPToolOptimizer",
+    "OptimizedToolDescription",
 ]

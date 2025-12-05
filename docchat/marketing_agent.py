@@ -19,6 +19,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from .config import AppConfig
 from .tools.email_marketing_tool import EmailMarketingTool
+from .tools.advertising_tool import AdvertisingTool
 from .text_to_action import TextToAction
 from .integrations.langgraph_integration import LangGraphIntegration
 from .integrations.crewai_integration import CrewAIIntegration
@@ -128,6 +129,7 @@ class MarketingAgent:
         # Herramientas
         self.email_tool = EmailMarketingTool(config)
         self.text_to_action = TextToAction(config)
+        self.advertising_tool = AdvertisingTool(config)
         
         # Integraciones avanzadas
         try:
@@ -1289,4 +1291,351 @@ Return JSON:
         except Exception as e:
             print(f"Error obteniendo apps de marketing: {e}")
             return []
+
+    # ============================================
+    # AGENTIC AI – Meta (FB/IG/WhatsApp) y TikTok
+    # ============================================
+    
+    def connect_social_platform(self, platform: str) -> Dict[str, Any]:
+        """
+        Conecta una plataforma social (Meta / TikTok) vía Composio.
+        
+        Plataformas soportadas (mapeadas):
+        - meta_marketing (Meta Marketing API: Facebook/Instagram Ads)
+        - facebook
+        - instagram
+        - whatsapp_business
+        - tiktok_ads
+        - tiktok
+        """
+        if not self.composio:
+            return {"success": False, "error": "Composio no está disponible para integrar Meta/TikTok"}
+        
+        try:
+            platform_map = {
+                "meta_ads": "meta_marketing",
+                "meta": "meta_marketing",
+                "facebook": "facebook",
+                "instagram": "instagram",
+                "whatsapp": "whatsapp_business",
+                "whatsapp_business": "whatsapp_business",
+                "tiktok": "tiktok",
+                "tiktok_ads": "tiktok_ads",
+            }
+            app_name = platform_map.get(platform.lower(), platform.lower())
+            result = self.composio.connect_app(app_name)
+            if result.get("success"):
+                return {
+                    "success": True,
+                    "platform": platform,
+                    "app_name": app_name,
+                    "message": result.get("message") or "Plataforma conectada (o simulada) vía Composio",
+                }
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def run_agentic_social_workflow(
+        self,
+        channel: str,
+        objective: str,
+        audience: Optional[str] = None,
+        budget_eur: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Lanza un flujo agentic de marketing para Meta/TikTok:
+        - Usa LLM para definir estrategia y tipos de piezas.
+        - Usa Composio para orquestar acciones básicas (simuladas o reales según COMPOSIO_API_KEY).
+        
+        Args:
+            channel: "meta_ads", "facebook", "instagram", "whatsapp", "tiktok_ads", "tiktok"
+            objective: Objetivo de negocio (ej: "aumentar ventas 20% en 90 días")
+            audience: Descripción de la audiencia objetivo
+            budget_eur: Presupuesto aproximado (solo informativo para el plan)
+        """
+        plan: Dict[str, Any] = {}
+        actions: List[Dict[str, Any]] = []
+        
+        try:
+            # 1) Generar plan de alto nivel con LLM
+            audience_desc = audience or "audiencia general de marketing digital"
+            budget_text = f"{budget_eur:.2f} EUR" if budget_eur is not None else "no especificado"
+            
+            prompt = f"""
+You are an expert Agentic AI orchestrator for digital marketing on Meta (Facebook/Instagram/WhatsApp) and TikTok.
+
+Design an agentic marketing plan for this channel: {channel}
+Business objective: {objective}
+Target audience: {audience_desc}
+Budget: {budget_text}
+
+Return a JSON with:
+{{
+  "strategy_summary": "...",
+  "recommended_assets": [
+    {{"type": "short_video", "channel": "tiktok", "count": 3}},
+    {{"type": "image_ad", "channel": "meta", "count": 5}}
+  ],
+  "recommended_actions": [
+    "Launch awareness campaign on TikTok with 3 creatives",
+    "Test 2 creatives on Meta Ads optimized for purchases",
+    "Retarget engaged users with WhatsApp broadcast (if allowed)"
+  ]
+}}
+"""
+            response = self.llm.invoke(prompt)
+            import re
+            json_match = re.search(r"\{.*\}", response.content, re.DOTALL)
+            if json_match:
+                plan = json.loads(json_match.group())
+            else:
+                plan = {
+                    "strategy_summary": f"Plan básico para {channel} centrado en el objetivo: {objective}",
+                    "recommended_assets": [],
+                    "recommended_actions": [],
+                }
+        except Exception as e:
+            plan = {
+                "strategy_summary": f"⚠️ No se pudo generar un plan detallado: {e}",
+                "recommended_assets": [],
+                "recommended_actions": [],
+            }
+        
+        # 2) Opcionalmente llamar a Composio para una acción mínima (si está disponible)
+        composio_result: Optional[Dict[str, Any]] = None
+        if self.composio:
+            try:
+                # Mapear canal a app Composio y a una acción genérica
+                channel_map = {
+                    "meta_ads": ("meta_marketing", "create_campaign"),
+                    "meta": ("meta_marketing", "create_campaign"),
+                    "facebook": ("facebook", "create_post"),
+                    "instagram": ("instagram", "create_post"),
+                    "whatsapp": ("whatsapp_business", "send_message"),
+                    "whatsapp_business": ("whatsapp_business", "send_message"),
+                    "tiktok_ads": ("tiktok_ads", "create_campaign"),
+                    "tiktok": ("tiktok", "create_post"),
+                }
+                app_name, default_action = channel_map.get(
+                    channel.lower(), ("meta_marketing", "create_campaign")
+                )
+                
+                # Asegurar conexión
+                _ = self.composio.connect_app(app_name)
+                
+                parameters = {
+                    "objective": objective,
+                    "audience_description": audience_desc,
+                    "budget_eur": budget_eur,
+                    "notes": "Generated by MarketingAgent.run_agentic_social_workflow (demo).",
+                }
+                
+                composio_result = self.composio.execute_action(
+                    app_name=app_name,
+                    action_name=default_action,
+                    parameters=parameters,
+                )
+                actions.append(
+                    {
+                        "app_name": app_name,
+                        "action": default_action,
+                        "parameters": parameters,
+                        "result": composio_result,
+                    }
+                )
+            except Exception as e:
+                composio_result = {"success": False, "error": str(e)}
+        else:
+            composio_result = {
+                "success": False,
+                "error": "Composio no disponible: se requiere para integración directa con Meta/TikTok.",
+            }
+        
+        return {
+            "success": True,
+            "channel": channel,
+            "objective": objective,
+            "audience": audience,
+            "budget_eur": budget_eur,
+            "plan": plan,
+            "actions": actions,
+            "composio_result": composio_result,
+            "note": (
+                "Si ves 'simulated: true' en los resultados de Composio, configura COMPOSIO_API_KEY "
+                "y completa el onboarding OAuth en el panel de Composio para tener ejecución REAL "
+                "dentro de Meta/TikTok."
+            ),
+        }
+
+    # ============================================
+    # AGENTIC AI – Google Ads & Meta Ads (Autonomous Ads)
+    # ============================================
+
+    def run_agentic_ads_workflow(
+        self,
+        platform: str,
+        business_objective: str,
+        kpi: str,
+        daily_budget: float,
+        audience_description: Optional[str] = None,
+        advisory_mode: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Ejecuta un flujo agentic para Google Ads / Meta Ads usando AdvertisingTool como capa de acción.
+
+        Args:
+            platform: "google_ads" o "meta"
+            business_objective: Objetivo de negocio (ej: "maximizar ROAS", "bajar CPA a 20€")
+            kpi: KPI principal (ej: "ROAS", "CPA", "leads", "ventas")
+            daily_budget: Presupuesto diario aproximado
+            audience_description: Descripción libre de la audiencia
+            advisory_mode: Si True, el agente solo recomienda cambios; si False, intenta aplicarlos.
+        """
+        # 1) Generar plan de alto nivel con LLM (orquestador)
+        try:
+            prompt = f"""
+Eres un orquestador de Agentic AI especializado en campañas de pago en Google Ads y Meta Ads.
+
+Plataforma principal: {platform}
+Objetivo de negocio: {business_objective}
+KPI principal: {kpi}
+Presupuesto diario aprox.: {daily_budget} EUR
+Audiencia: {audience_description or "no especificada"}
+Modo: {"ASESOR (solo recomendaciones, sin acciones directas)" if advisory_mode else "AUTÓNOMO (puede proponer y ejecutar cambios)"}
+
+1. Resume la estrategia en 3-5 frases.
+2. Define 3-7 acciones concretas a nivel de campañas/anuncios:
+   - tipo: "create_campaign" | "optimize_campaign" | "analyze_performance"
+   - nombre_campaña (si aplica)
+   - plataforma: "google_ads" o "meta"
+   - presupuesto_sugerido (número)
+   - objetivo (texto corto)
+3. Indica qué acciones deberían ser AUTO ejecutadas y cuáles solo sugeridas.
+
+Devuelve SOLO JSON:
+{{
+  "strategy_summary": "...",
+  "actions": [
+    {{
+      "type": "create_campaign",
+      "campaign_name": "Performance Max - Brand X",
+      "platform": "{platform}",
+      "budget": {daily_budget},
+      "objective": "conversions",
+      "auto_execute": {str(not advisory_mode).lower()}
+    }}
+  ]
+}}
+"""
+            response = self.llm.invoke(prompt)
+            import re
+
+            json_match = re.search(r"\{.*\}", response.content, re.DOTALL)
+            if json_match:
+                plan = json.loads(json_match.group())
+            else:
+                plan = {
+                    "strategy_summary": f"Estrategia básica para {platform} con objetivo: {business_objective}",
+                    "actions": [],
+                }
+        except Exception as e:
+            plan = {
+                "strategy_summary": f"⚠️ No se pudo generar plan con IA: {e}",
+                "actions": [],
+            }
+
+        executed_actions: List[Dict[str, Any]] = []
+        recommended_actions: List[Dict[str, Any]] = []
+
+        # 2) Ejecutar acciones vía AdvertisingTool según guardrails (advisory_mode)
+        for act in plan.get("actions", []):
+            act_type = act.get("type", "analyze_performance")
+            act_platform = act.get("platform", platform)
+            act_campaign = act.get("campaign_name") or "AI_Autonomous_Campaign"
+            act_budget = float(act.get("budget", daily_budget))
+            act_objective = act.get("objective", "conversions")
+            auto_exec = bool(act.get("auto_execute", False)) and not advisory_mode
+
+            # Siempre añadimos a recomendaciones
+            recommended_actions.append(
+                {
+                    "type": act_type,
+                    "platform": act_platform,
+                    "campaign_name": act_campaign,
+                    "budget": act_budget,
+                    "objective": act_objective,
+                    "auto_execute_requested": auto_exec,
+                }
+            )
+
+            if not auto_exec:
+                # Solo recomendar, no ejecutar
+                continue
+
+            # Mapear al tool AdvertisingTool
+            try:
+                if act_type == "create_campaign":
+                    tool_res = self.advertising_tool.execute(
+                        action="create_campaign",
+                        campaign_name=act_campaign,
+                        platform=act_platform,
+                        budget=act_budget,
+                        objective=act_objective,
+                        audience={"description": audience_description or ""},
+                        creative_content=f"Autonomous campaign for: {business_objective} ({kpi})",
+                    )
+                elif act_type == "optimize_campaign":
+                    tool_res = self.advertising_tool.execute(
+                        action="optimize_campaign",
+                        campaign_name=act_campaign,
+                        optimization_goal=f"{business_objective} / {kpi}",
+                    )
+                else:  # analyze_performance u otros
+                    tool_res = self.advertising_tool.execute(
+                        action="analyze_performance",
+                        campaign_name=act_campaign,
+                    )
+
+                executed_actions.append(
+                    {
+                        "requested": {
+                            "type": act_type,
+                            "platform": act_platform,
+                            "campaign_name": act_campaign,
+                        },
+                        "tool_result": {
+                            "success": tool_res.success,
+                            "message": tool_res.message,
+                            "metadata": tool_res.metadata,
+                        },
+                    }
+                )
+            except Exception as e:
+                executed_actions.append(
+                    {
+                        "requested": {
+                            "type": act_type,
+                            "platform": act_platform,
+                            "campaign_name": act_campaign,
+                        },
+                        "tool_result": {
+                            "success": False,
+                            "message": f"Error ejecutando acción: {e}",
+                            "metadata": {},
+                        },
+                    }
+                )
+
+        return {
+            "success": True,
+            "platform": platform,
+            "business_objective": business_objective,
+            "kpi": kpi,
+            "daily_budget": daily_budget,
+            "audience_description": audience_description,
+            "advisory_mode": advisory_mode,
+            "strategy_summary": plan.get("strategy_summary", ""),
+            "actions_recommended": recommended_actions,
+            "actions_executed": executed_actions,
+        }
 

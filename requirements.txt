@@ -10,6 +10,7 @@ langchain-text-splitters>=0.2.2
 langgraph>=0.1.6
 crewai  # Instalar con: py -3.12 -m pip install crewai
 composio-core  # Opcional - instalar con: py -3.12 -m pip install composio-core
+neo4j  # Opcional - driver para GraphRAGEngine (Neo4j/Memgraph)
 gradio==4.40.0
 pydantic>=2.8.0
 tiktoken>=0.7.0
@@ -30,6 +31,7 @@ pillow>=10.0.0
 pdf2image>=1.16.0
 pytesseract>=0.3.10
 PyPDF2>=3.0.0
+pycryptodome>=3.19.0  # Requerido por PyPDF2 para PDFs encriptados con AES
 openpyxl>=3.1.0
 xlsxwriter>=3.1.0
 google-api-python-client>=2.100.0
@@ -47,3 +49,7 @@ psutil>=5.9.0
 keybert>=0.8.0
 yake>=0.4.8
 spacy>=3.7.0
+sentence-transformers>=2.2.0  # Para Cross-Encoder reranking en Advanced RAG
+pytest>=8.0.0  # Tests
+matplotlib>=3.8.0  # Visualizations for Deep Research
+reportlab>=4.0.0  # PDF generation / conversion

@@ -10,7 +10,7 @@ def create_llm(
     provider: str = "openai",
     model: str = "gpt-4o",
     temperature: float = 0.15,
-    max_tokens: int = 8000,
+    max_tokens: Optional[int] = None,  # None = sin límite, la API decide
     api_key: Optional[str] = None,
     request_timeout: int = 180,
     max_retries: int = 3
@@ -22,7 +22,7 @@ def create_llm(
         provider: "openai" o "claude"
         model: Nombre del modelo
         temperature: Temperatura del modelo
-        max_tokens: Tokens máximos
+        max_tokens: Tokens máximos (None = sin límite, la API decide la longitud)
         api_key: API key (opcional, se toma de config si no se proporciona)
         request_timeout: Timeout en segundos
         max_retries: Número máximo de reintentos
@@ -43,22 +43,35 @@ def create_llm(
         }
         claude_model = model_mapping.get(model, "claude-sonnet-4-5-20250929")  # Default: Sonnet 4.5
         
-        return ChatAnthropic(
-            model=claude_model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=api_key,
-            timeout=request_timeout,
-            max_retries=max_retries
-        )
+        # Construir kwargs dinámicamente para no pasar max_tokens si es None
+        kwargs = {
+            "model": claude_model,
+            "temperature": temperature,
+            "api_key": api_key,
+            "timeout": request_timeout,
+            "max_retries": max_retries
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        else:
+            # Para Anthropic, si no queremos límite, ponemos un valor muy alto
+            # porque Anthropic REQUIERE max_tokens
+            kwargs["max_tokens"] = 16384  # Máximo permitido por Claude
+        
+        return ChatAnthropic(**kwargs)
     else:
         # Default: OpenAI
-        return ChatOpenAI(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=api_key,
-            request_timeout=request_timeout,
-            max_retries=max_retries
-        )
+        # OpenAI no requiere max_tokens, si es None simplemente no lo pasamos
+        kwargs = {
+            "model": model,
+            "temperature": temperature,
+            "api_key": api_key,
+            "request_timeout": request_timeout,
+            "max_retries": max_retries
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        # Si max_tokens es None, no lo pasamos y OpenAI usará su límite por defecto del modelo
+        
+        return ChatOpenAI(**kwargs)
 
