@@ -998,3 +998,4 @@ class RealConnectionsManager:
         
         return {"success": True, "message": f"{provider} desconectado"}
 
+

@@ -572,3 +572,4 @@ class ConnectionsManager:
             "message": f"Sincronización simulada: {len(created)} documentos creados"
         }
 
+

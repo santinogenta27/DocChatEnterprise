@@ -145,6 +145,15 @@ from docchat.persistent_storage import PersistentStorage
 from docchat.connections_manager import ConnectionsManager
 from docchat.oauth_connections import RealConnectionsManager, GoogleOAuth, MicrosoftOAuth, DropboxOAuth
 
+# Importar modo BANKS (con manejo de errores)
+try:
+    from docchat.banks import BanksMode
+    BANKS_MODE_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Advertencia: Modo BANKS no disponible: {e}")
+    BANKS_MODE_AVAILABLE = False
+    BanksMode = None
+
 # Check for vector store availability
 try:
     try:
@@ -3909,113 +3918,222 @@ def connect_azure_storage(
         raise gr.Error(error_msg)
 
 
-# CSS personalizado para el menú de configuración de API keys
+# CSS personalizado profesional - Tema Enterprise Azul Índigo
 CUSTOM_CSS = """
-/* Contenedor del header con el menú de API keys */
-.api-config-container {
-    position: fixed;
-    top: 10px;
-    right: 20px;
-    z-index: 9999;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border-radius: 12px;
-    padding: 8px 16px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+/* ==================== TEMA PROFESIONAL - AZUL DEEPSEEK ==================== */
+
+/* Variables de color principales - Azul DeepSeek */
+:root {
+    --primary-600: #4D6BFE;
+    --primary-500: #5B7CFF;
+    --primary-400: #7B96FF;
+    --primary-300: #A8BBFF;
+    --accent-500: #4D6BFE;
+    --accent-400: #5B7CFF;
+    --success-500: #10B981;
+    --success-400: #34D399;
+    --warning-500: #F59E0B;
+    --error-500: #EF4444;
+    --neutral-900: #111827;
+    --neutral-800: #1F2937;
+    --neutral-700: #374151;
+    --neutral-600: #4B5563;
+    --neutral-100: #F3F4F6;
+    --neutral-50: #F9FAFB;
 }
 
-.api-config-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.3s ease;
+/* Fondo blanco puro estilo ChatGPT */
+.gradio-container {
+    background: #ffffff !important;
 }
 
-.api-config-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+body {
+    background: #ffffff !important;
 }
 
-/* Modal de configuración */
-.api-modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    z-index: 10000;
-    justify-content: center;
-    align-items: center;
+.main {
+    background: #ffffff !important;
 }
 
-.api-modal.active {
-    display: flex;
+/* Headers y títulos */
+h1, h2, h3 {
+    color: var(--neutral-900) !important;
+    font-weight: 700 !important;
 }
 
-.api-modal-content {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border-radius: 16px;
-    padding: 30px;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+/* Botones primarios - Azul DeepSeek */
+.primary {
+    background: linear-gradient(135deg, #4D6BFE 0%, #5B7CFF 100%) !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(77, 107, 254, 0.35) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-.api-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+.primary:hover {
+    background: linear-gradient(135deg, #3D5BEE 0%, #4D6BFE 100%) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(77, 107, 254, 0.5) !important;
 }
 
-.api-modal-title {
-    color: #fff;
-    font-size: 20px;
-    font-weight: 700;
-    margin: 0;
+/* Botones secundarios */
+.secondary {
+    background: var(--neutral-100) !important;
+    border: 1px solid var(--neutral-700) !important;
+    color: var(--neutral-800) !important;
+    transition: all 0.2s ease !important;
 }
 
-.api-close-btn {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 24px;
-    cursor: pointer;
-    transition: color 0.3s;
+.secondary:hover {
+    background: var(--neutral-800) !important;
+    color: white !important;
+    border-color: var(--neutral-800) !important;
 }
 
-.api-close-btn:hover {
-    color: #fff;
+/* Tabs - Estilo profesional */
+.tabs {
+    border-bottom: 2px solid var(--neutral-100) !important;
 }
 
-/* Estilos para el acordeón de Gradio en el header */
-#api-config-accordion {
-    position: absolute;
-    top: 60px;
-    right: 20px;
-    width: 400px;
-    z-index: 9999;
+.tab-nav button {
+    color: var(--neutral-700) !important;
+    font-weight: 500 !important;
+    padding: 12px 20px !important;
+    border-radius: 8px 8px 0 0 !important;
+    transition: all 0.2s ease !important;
 }
 
-#api-config-accordion .label-wrap {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+.tab-nav button:hover {
+    background: #E8EDFF !important;
+    color: #4D6BFE !important;
+}
+
+.tab-nav button.selected {
+    background: linear-gradient(135deg, #4D6BFE 0%, #5B7CFF 100%) !important;
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+/* Inputs y textareas */
+textarea, input[type="text"], input[type="password"] {
+    border: 2px solid var(--neutral-100) !important;
     border-radius: 10px !important;
+    transition: all 0.2s ease !important;
 }
 
-/* Indicador de estado de API */
+textarea:focus, input[type="text"]:focus, input[type="password"]:focus {
+    border-color: #4D6BFE !important;
+    box-shadow: 0 0 0 3px rgba(77, 107, 254, 0.15) !important;
+}
+
+/* Cards y contenedores */
+.block {
+    border-radius: 12px !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Acordeones */
+.accordion {
+    border: 1px solid var(--neutral-100) !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+.accordion .label-wrap {
+    background: linear-gradient(135deg, var(--neutral-800) 0%, var(--neutral-900) 100%) !important;
+    color: white !important;
+    font-weight: 600 !important;
+    padding: 14px 18px !important;
+}
+
+.accordion .label-wrap:hover {
+    background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-500) 100%) !important;
+}
+
+/* Checkboxes y radios */
+input[type="checkbox"]:checked, input[type="radio"]:checked {
+    background-color: #4D6BFE !important;
+    border-color: #4D6BFE !important;
+}
+
+/* Progress bars */
+.progress-bar {
+    background: linear-gradient(90deg, #4D6BFE 0%, #5B7CFF 100%) !important;
+    border-radius: 999px !important;
+}
+
+/* Dropdown menus */
+.dropdown {
+    border-radius: 10px !important;
+    border: 2px solid var(--neutral-100) !important;
+}
+
+/* File upload area */
+.file-upload {
+    border: 2px dashed #7B96FF !important;
+    border-radius: 12px !important;
+    background: rgba(77, 107, 254, 0.03) !important;
+    transition: all 0.3s ease !important;
+}
+
+.file-upload:hover {
+    border-color: #4D6BFE !important;
+    background: rgba(77, 107, 254, 0.08) !important;
+}
+
+/* Markdown output styling */
+.markdown-text {
+    line-height: 1.7 !important;
+}
+
+.markdown-text h2 {
+    color: #4D6BFE !important;
+    border-bottom: 2px solid #A8BBFF !important;
+    padding-bottom: 8px !important;
+    margin-top: 24px !important;
+}
+
+.markdown-text h3 {
+    color: #1F2937 !important;
+}
+
+.markdown-text code {
+    background: #F3F4F6 !important;
+    color: #4D6BFE !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+}
+
+.markdown-text pre {
+    background: var(--neutral-900) !important;
+    border-radius: 10px !important;
+    padding: 16px !important;
+}
+
+/* Tables in markdown */
+.markdown-text table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin: 16px 0 !important;
+}
+
+.markdown-text th {
+    background: linear-gradient(135deg, #4D6BFE 0%, #5B7CFF 100%) !important;
+    color: white !important;
+    padding: 12px 16px !important;
+    text-align: left !important;
+}
+
+.markdown-text td {
+    padding: 10px 16px !important;
+    border-bottom: 1px solid #F3F4F6 !important;
+}
+
+.markdown-text tr:hover td {
+    background: rgba(77, 107, 254, 0.05) !important;
+}
+
+/* Indicador de estado de API - Cyan en lugar de verde */
 .api-status-indicator {
     width: 10px;
     height: 10px;
@@ -4025,18 +4143,98 @@ CUSTOM_CSS = """
 }
 
 .api-status-connected {
-    background: #10b981;
-    box-shadow: 0 0 10px #10b981;
+    background: var(--success-500);
+    box-shadow: 0 0 10px var(--success-500);
 }
 
 .api-status-disconnected {
-    background: #ef4444;
-    box-shadow: 0 0 10px #ef4444;
+    background: var(--error-500);
+    box-shadow: 0 0 10px var(--error-500);
+}
+
+/* Scrollbar personalizada - Gris original */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Ocultar "Built with Gradio" footer */
+footer {
+    display: none !important;
+}
+
+.gradio-container footer {
+    display: none !important;
+}
+
+div[class*="footer"], 
+a[href*="gradio.app"] {
+    display: none !important;
+}
+
+/* Animaciones suaves */
+* {
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Labels */
+label {
+    color: var(--neutral-800) !important;
+    font-weight: 500 !important;
+}
+
+/* Info text */
+.info {
+    color: var(--neutral-700) !important;
+    font-size: 0.875rem !important;
+}
+
+/* Success messages */
+.success {
+    color: var(--success-500) !important;
+}
+
+/* Error messages */
+.error {
+    color: var(--error-500) !important;
+}
+
+/* Loading spinner */
+.loading {
+    border-color: var(--primary-500) !important;
+}
+
+/* Footer / branding */
+footer {
+    background: var(--neutral-900) !important;
+    color: var(--neutral-100) !important;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .tab-nav button {
+        padding: 8px 12px !important;
+        font-size: 0.875rem !important;
+    }
 }
 """
 
-# Interfaz Gradio
-with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="teal"), css=CUSTOM_CSS) as demo:
+# Interfaz Gradio - Tema Profesional Azul DeepSeek
+with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
     
     # ==================== MENÚ DE CONFIGURACIÓN DE API KEYS ====================
     # Estado para almacenar las API keys del usuario
@@ -4224,19 +4422,6 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="tea
             gr.Markdown(
                 """
                 📄 **¿Archivo no es PDF?** 👉 [Convertir gratis en iLovePDF](https://www.ilovepdf.com/es)
-                """
-            )
-    
-    gr.Markdown(
-        """
-        **Funcionalidades:**
-        - 📚 Procesamiento híbrido (Docling + chunking jerárquico)
-        - 🔍 Recuperación híbrida (BM25 + embeddings)
-        - 🤖 Agentes autónomos con herramientas
-        - 🧠 Memoria persistente empresarial
-        - 📊 Procesamiento masivo (1000+ documentos)
-        - 🏢 Enterprise API Mode (Procesamiento automático con Agentic AI)
-        - 🔒 Auditoría y seguridad
         """
     )
     
@@ -9716,6 +9901,581 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             )
 
         # Tab 4.7: Data Sight - Análisis de Datos e Insights
+        # Tab 4.8: BANKS Mode - Compliance KYC/AML (NUEVO)
+        with gr.Tab("🏦 BANKS - Compliance KYC/AML"):
+            if not BANKS_MODE_AVAILABLE:
+                gr.Markdown("### ⚠️ Modo BANKS no disponible")
+                gr.Markdown("""
+                **Error al cargar el modo BANKS.**
+                
+                Por favor, verifica que todas las dependencias estén instaladas:
+                - `pip install langgraph langchain-anthropic langchain-openai rapidfuzz`
+                - `pip install unstructured weasyprint jinja2`
+                """)
+            else:
+                gr.Markdown("### 🏦 Modo BANKS - Compliance Agent para KYC/AML")
+                gr.Markdown("""
+                **🚀 Sistema multi-agente especializado en compliance regulatorio para bancos**
+                
+                **Características principales:**
+                - 📄 **Procesamiento masivo**: Soporta carpetas con 1000+ documentos (PDFs, scans, fotos, Word, Excel)
+                - 🔍 **Screening automático**: Validación contra listas de sanciones (OFAC, EU, UN, World-Check)
+                - ⚠️ **Risk Scoring**: Score 1-100 con explicación completa y evidencia clicable
+                - 📋 **Generación de SARs**: Reportes en formato FinCEN XML listos para subir al regulador
+                - 👤 **Human-in-the-Loop**: Steering en tiempo real con comandos en lenguaje natural
+                - 📊 **Audit Trail**: Registro completo de todas las decisiones (todo.md estilo EDR)
+                - 🔗 **Integraciones**: Salesforce, Jira, Slack, Core Banking
+                
+                **💡 Perfecto para bancos medianos que necesitan automatizar KYC/AML con explainability total**
+                """)
+                
+                # Inicializar modo BANKS
+                try:
+                    banks_mode = BanksMode(config)
+                    
+                    with gr.Tabs():
+                        # Sub-tab: Procesamiento de Compliance
+                        with gr.Tab("🔍 Procesar Compliance Check"):
+                            gr.Markdown("### Procesa documentos de cliente para check de compliance KYC/AML")
+                            gr.Markdown("""
+                            **Flujo automático:**
+                            1. Ingesta y procesamiento de documentos
+                            2. Extracción de entidades (nombre, DNI, UBO, PEP, transacciones)
+                            3. Screening contra listas de sanciones y PEP
+                            4. Cálculo de risk score con explicación
+                            5. Generación de SARs y reportes
+                            """)
+                            
+                            banks_input_path = gr.Textbox(
+                                label="📂 Ruta de Documentos",
+                                placeholder="Ruta a carpeta, ZIP, o archivo individual",
+                                info="Puede ser una carpeta con múltiples documentos, un ZIP, o un archivo individual"
+                            )
+                            
+                            banks_files = gr.File(
+                                label="📄 O Sube Documentos Directamente",
+                                file_count="multiple",
+                                file_types=[".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".zip"]
+                            )
+                            
+                            banks_jurisdiction = gr.Dropdown(
+                                label="🌍 Jurisdicción",
+                                choices=[
+                                    ("Estados Unidos (FinCEN)", "US"),
+                                    ("Unión Europea", "EU"),
+                                    ("México (UIF)", "MX"),
+                                    ("Colombia (UIAF)", "CO"),
+                                    ("Chile", "CL"),
+                                    ("Perú", "PE"),
+                                    ("España", "ES"),
+                                    ("Portugal", "PT"),
+                                    ("Polonia", "PL")
+                                ],
+                                value="US",
+                                info="Selecciona la jurisdicción para generar reportes en el formato correcto"
+                            )
+                            
+                            banks_steering = gr.Textbox(
+                                label="👤 Comandos de Steering (Opcional)",
+                                placeholder='Ej: "Ignora PEP level 1 para clientes España" o "Solo flaggea si beneficiario final en Panamá"',
+                                lines=3,
+                                info="Comandos en lenguaje natural para ajustar el procesamiento en tiempo real"
+                            )
+                            
+                            # Configuración de Acciones
+                            with gr.Accordion("🔗 Integraciones y Acciones Automáticas", open=False):
+                                gr.Markdown("""
+                                **Configura acciones automáticas basadas en los resultados:**
+                                - Actualizar Salesforce Financial Services Cloud
+                                - Crear tickets en Jira/ClickUp
+                                - Enviar notificaciones a Slack/Teams
+                                - Bloquear onboarding en core banking (si score muy alto)
+                                """)
+                                
+                                action_config_json = gr.Textbox(
+                                    label="⚙️ Configuración de Acciones (JSON)",
+                                    placeholder='''{
+  "update_salesforce": true,
+  "salesforce_opportunity_id": "006XX000004ABCD",
+  "create_jira_ticket": true,
+  "jira_threshold": 70,
+  "jira_project_key": "AML",
+  "send_notifications": true,
+  "notify_slack": true,
+  "notify_teams": true,
+  "block_core_banking": true,
+  "block_threshold": 90,
+  "core_banking_webhook": "https://api.bank.com/webhook/freeze"
+}''',
+                                    lines=8,
+                                    value='{"update_salesforce": false, "create_jira_ticket": false, "send_notifications": true, "block_core_banking": false}'
+                                )
+                            
+                            process_banks_btn = gr.Button("🚀 Ejecutar Compliance Check", variant="primary")
+                            banks_output = gr.Markdown(label="📊 Resultados del Compliance Check")
+                            
+                            def process_banks_compliance(input_path: str, files, jurisdiction: str, steering: str, action_config_json: str) -> str:
+                                try:
+                                    # Si hay archivos subidos, usar esos
+                                    if files:
+                                        import tempfile
+                                        import shutil
+                                        temp_dir = Path(tempfile.mkdtemp())
+                                        
+                                        if isinstance(files, list):
+                                            for f in files:
+                                                shutil.copy(f, temp_dir / Path(f).name)
+                                        else:
+                                            shutil.copy(files, temp_dir / Path(files).name)
+                                        
+                                        input_path = str(temp_dir)
+                                    
+                                    if not input_path:
+                                        return "❌ Error: Debes proporcionar una ruta o subir archivos"
+                                    
+                                    # Parsear comandos de steering
+                                    steering_commands = []
+                                    if steering and steering.strip():
+                                        steering_commands = [cmd.strip() for cmd in steering.split('\n') if cmd.strip()]
+                                    
+                                    # Parsear configuración de acciones
+                                    action_config = {}
+                                    if action_config_json and action_config_json.strip():
+                                        try:
+                                            action_config = json.loads(action_config_json)
+                                        except Exception as e:
+                                            return f"❌ Error parseando action_config JSON: {e}"
+                                    
+                                    # Ejecutar compliance check
+                                    result = banks_mode.process_compliance_check(
+                                        input_path=input_path,
+                                        jurisdiction=jurisdiction,
+                                        steering_commands=steering_commands,
+                                        action_config=action_config
+                                    )
+                                    
+                                    if result["success"]:
+                                        workflow_result = result["result"]
+                                        summary = banks_mode.get_reports_summary(workflow_result)
+                                        
+                                        output = f"""
+## ✅ Compliance Check Completado
+
+### 📊 Resumen
+- **Entidades procesadas:** {result['entities_count']}
+- **Risk scores calculados:** {result['risk_scores_count']}
+- **Reportes generados:** {result['reports_generated']}
+
+### ⚠️ Entidades de Alto Riesgo
+"""
+                                        if summary["high_risk_entities"]:
+                                            for entity in summary["high_risk_entities"]:
+                                                output += f"- **{entity['name']}**: Score {entity['risk_score']}/100\n"
+                                        else:
+                                            output += "- No se detectaron entidades de alto riesgo\n"
+                                        
+                                        output += f"\n### 📋 Reportes Generados\n"
+                                        for report in workflow_result.get("generated_reports", []):
+                                            output += f"- **{report.get('type')}**: `{report.get('path')}`\n"
+                                            if report.get("risk_score"):
+                                                output += f"  - Risk Score: {report.get('risk_score')}/100\n"
+                                        
+                                        # Acciones ejecutadas
+                                        actions = workflow_result.get("actions_executed", [])
+                                        if actions:
+                                            output += f"\n### 🔗 Acciones Ejecutadas\n"
+                                            for action in actions:
+                                                action_type = action.get("action", "unknown")
+                                                status = action.get("status", "unknown")
+                                                status_emoji = "✅" if status == "success" else "❌"
+                                                output += f"- {status_emoji} **{action_type}**: {status}\n"
+                                                if action.get("ticket_id"):
+                                                    output += f"  - Ticket: {action.get('ticket_id')}\n"
+                                                if action.get("opportunity_id"):
+                                                    output += f"  - Salesforce Opportunity: {action.get('opportunity_id')}\n"
+                                        
+                                        if workflow_result.get("errors"):
+                                            output += f"\n### ⚠️ Errores\n"
+                                            for error in workflow_result["errors"]:
+                                                output += f"- {error}\n"
+                                        
+                                        return output
+                                    else:
+                                        return f"❌ Error: {result.get('error', 'Error desconocido')}"
+                                
+                                except Exception as e:
+                                    return f"❌ Error procesando compliance check: {str(e)}"
+                            
+                            process_banks_btn.click(
+                                fn=process_banks_compliance,
+                                inputs=[banks_input_path, banks_files, banks_jurisdiction, banks_steering, action_config_json],
+                                outputs=[banks_output]
+                            )
+                        
+                        # Sub-tab: Ver Reportes
+                        with gr.Tab("📋 Ver Reportes Generados"):
+                            gr.Markdown("### Reportes y SARs generados")
+                            gr.Markdown("""
+                            Los reportes se guardan en: `.docchat_cache/banks/reports/`
+                            """)
+                            
+                            list_reports_btn = gr.Button("📋 Listar Reportes", variant="secondary")
+                            reports_list_output = gr.Markdown(label="📊 Lista de Reportes")
+                            
+                            def list_banks_reports():
+                                try:
+                                    reports_dir = Path(config.cache_dir) / "banks" / "reports"
+                                    if not reports_dir.exists():
+                                        return "📁 No hay reportes generados aún"
+                                    
+                                    reports = list(reports_dir.glob("*"))
+                                    if not reports:
+                                        return "📁 No hay reportes generados aún"
+                                    
+                                    output = "### 📋 Reportes Generados\n\n"
+                                    for report in sorted(reports, key=lambda x: x.stat().st_mtime, reverse=True):
+                                        size_kb = report.stat().st_size / 1024
+                                        mod_time = datetime.fromtimestamp(report.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                                        output += f"- **{report.name}** ({size_kb:.1f} KB) - {mod_time}\n"
+                                        output += f"  - Ruta: `{report}`\n\n"
+                                    
+                                    return output
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}"
+                            
+                            list_reports_btn.click(
+                                fn=list_banks_reports,
+                                inputs=[],
+                                outputs=[reports_list_output]
+                            )
+                        
+                        # Sub-tab: Batch Processing
+                        with gr.Tab("📦 Procesamiento por Lotes"):
+                            gr.Markdown("### Procesa múltiples clientes en batch")
+                            gr.Markdown("""
+                            **Ideal para:**
+                            - Refresh anual de 500+ clientes
+                            - Onboarding masivo
+                            - Re-screening después de actualizaciones de listas
+                            """)
+                            
+                            batch_clients_json = gr.Textbox(
+                                label="📋 Lista de Clientes (JSON)",
+                                placeholder='''[
+  {
+    "client_id": "CLIENT_001",
+    "input_path": "C:/path/to/client1/docs"
+  },
+  {
+    "client_id": "CLIENT_002",
+    "input_path": "C:/path/to/client2/docs"
+  }
+]''',
+                                lines=10,
+                                info="Lista de clientes con sus rutas de documentos"
+                            )
+                            
+                            batch_jurisdiction = gr.Dropdown(
+                                label="🌍 Jurisdicción",
+                                choices=[
+                                    ("Estados Unidos (FinCEN)", "US"),
+                                    ("Unión Europea", "EU"),
+                                    ("México (UIF)", "MX"),
+                                    ("Colombia (UIAF)", "CO"),
+                                    ("Chile", "CL"),
+                                    ("Perú", "PE"),
+                                    ("España", "ES"),
+                                    ("Portugal", "PT"),
+                                    ("Polonia", "PL")
+                                ],
+                                value="US"
+                            )
+                            
+                            batch_action_config_json = gr.Textbox(
+                                label="⚙️ Configuración de Acciones (JSON)",
+                                placeholder='{"update_salesforce": false, "create_jira_ticket": true, "jira_threshold": 70}',
+                                lines=5
+                            )
+                            
+                            process_batch_btn = gr.Button("🚀 Procesar Lote", variant="primary")
+                            batch_output = gr.Markdown(label="📊 Resultados del Batch")
+                            
+                            def process_batch_compliance(clients_json: str, jurisdiction: str, action_config_json: str) -> str:
+                                try:
+                                    # Parsear JSON
+                                    clients = json.loads(clients_json) if clients_json else []
+                                    action_config = json.loads(action_config_json) if action_config_json else {}
+                                    
+                                    if not clients:
+                                        return "❌ Error: Debes proporcionar al menos un cliente"
+                                    
+                                    # Procesar batch
+                                    result = banks_mode.process_batch_compliance(
+                                        clients=clients,
+                                        jurisdiction=jurisdiction,
+                                        action_config=action_config
+                                    )
+                                    
+                                    output = f"""
+## ✅ Batch Processing Completado
+
+### 📊 Resumen
+- **Total clientes:** {result['total_clients']}
+- **Procesados exitosamente:** {result['processed']}
+- **Entidades de alto riesgo detectadas:** {result['total_high_risk']}
+- **SARs generados:** {result['total_sars']}
+
+### 📋 Detalles por Cliente
+"""
+                                    for i, client_result in enumerate(result['results'], 1):
+                                        if client_result.get("success"):
+                                            output += f"\n**Cliente {i} ({client_result.get('result', {}).get('client_id', 'N/A')}):**\n"
+                                            output += f"- Entidades: {client_result.get('entities_count', 0)}\n"
+                                            output += f"- Reportes: {client_result.get('reports_generated', 0)}\n"
+                                        else:
+                                            output += f"\n**Cliente {i}:** ❌ Error - {client_result.get('error', 'Desconocido')}\n"
+                                    
+                                    return output
+                                except Exception as e:
+                                    return f"❌ Error procesando batch: {str(e)}"
+                            
+                            process_batch_btn.click(
+                                fn=process_batch_compliance,
+                                inputs=[batch_clients_json, batch_jurisdiction, batch_action_config_json],
+                                outputs=[batch_output]
+                            )
+                        
+                        # Sub-tab: Verificación Biométrica
+                        with gr.Tab("🔐 Verificación Biométrica"):
+                            gr.Markdown("### Verifica match entre selfie y documento de identidad")
+                            gr.Markdown("""
+                            **Usa Face++ o AWS Rekognition para verificar que la selfie coincide con la foto del DNI/pasaporte.**
+                            """)
+                            
+                            biometric_id_photo = gr.File(
+                                label="📷 Foto del DNI/Pasaporte",
+                                file_types=[".png", ".jpg", ".jpeg", ".pdf"]
+                            )
+                            
+                            biometric_selfie = gr.File(
+                                label="🤳 Selfie del Cliente",
+                                file_types=[".png", ".jpg", ".jpeg"]
+                            )
+                            
+                            biometric_provider = gr.Radio(
+                                label="🔧 Provider",
+                                choices=[("AWS Rekognition", "aws"), ("Face++", "facepp")],
+                                value="aws"
+                            )
+                            
+                            biometric_threshold = gr.Slider(
+                                label="Umbral de Confianza",
+                                minimum=0.5,
+                                maximum=1.0,
+                                value=0.8,
+                                step=0.05
+                            )
+                            
+                            verify_biometric_btn = gr.Button("🔐 Verificar Match", variant="primary")
+                            biometric_output = gr.Markdown(label="📊 Resultado de Verificación")
+                            
+                            def verify_biometric(id_photo, selfie, provider: str, threshold: float) -> str:
+                                try:
+                                    if not id_photo or not selfie:
+                                        return "❌ Error: Debes subir ambas fotos (DNI y selfie)"
+                                    
+                                    from docchat.banks.integrations.biometric_verification import BiometricVerification
+                                    
+                                    # Guardar archivos temporalmente
+                                    import tempfile
+                                    import shutil
+                                    temp_dir = Path(tempfile.mkdtemp())
+                                    
+                                    id_path = temp_dir / "id_photo.jpg"
+                                    selfie_path = temp_dir / "selfie.jpg"
+                                    
+                                    shutil.copy(id_photo, id_path)
+                                    shutil.copy(selfie, selfie_path)
+                                    
+                                    # Verificar
+                                    verifier = BiometricVerification(provider=provider)
+                                    result = verifier.verify_face_match(
+                                        id_photo_path=str(id_path),
+                                        selfie_path=str(selfie_path),
+                                        threshold=threshold
+                                    )
+                                    
+                                    if result.get("success"):
+                                        match = result.get("match", False)
+                                        confidence = result.get("confidence", 0.0)
+                                        
+                                        if match:
+                                            return f"""
+## ✅ Verificación Biométrica: MATCH CONFIRMADO
+
+**Confianza:** {confidence:.1%}
+**Umbral:** {threshold:.1%}
+**Status:** ✅ La selfie coincide con la foto del documento
+
+**Acción recomendada:** Proceder con onboarding
+"""
+                                        else:
+                                            return f"""
+## ⚠️ Verificación Biométrica: NO HAY MATCH
+
+**Confianza:** {confidence:.1%}
+**Umbral:** {threshold:.1%}
+**Status:** ❌ La selfie NO coincide con la foto del documento
+
+**Acción recomendada:** Solicitar nueva selfie o verificación manual
+"""
+                                    else:
+                                        return f"❌ Error en verificación: {result.get('error', 'Desconocido')}"
+                                
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}"
+                            
+                            verify_biometric_btn.click(
+                                fn=verify_biometric,
+                                inputs=[biometric_id_photo, biometric_selfie, biometric_provider, biometric_threshold],
+                                outputs=[biometric_output]
+                            )
+                        
+                        # Sub-tab: Guía y Documentación
+                        with gr.Tab("📖 Guía y Documentación"):
+                            gr.Markdown("""
+                            ### 📖 Guía Completa del Modo BANKS
+                            
+                            ## 🎯 Cómo Usar
+                            
+                            1. **Sube documentos** de cliente (DNI, pasaportes, extractos, contratos, etc.)
+                            2. **Selecciona jurisdicción** (US, EU, MX, CO, etc.)
+                            3. **Opcionalmente añade comandos de steering** para ajustar el procesamiento
+                            4. **Configura acciones automáticas** (Salesforce, Jira, Slack, etc.)
+                            5. **Ejecuta** y recibe resultados con risk scores y SARs generados
+                            
+                            ## 🔍 7 Agentes del Sistema
+                            
+                            **Agent 1: Ingestor**
+                            - Procesa carpetas, ZIPs, archivos individuales
+                            - Aplica OCR si es necesario (precisión >95%)
+                            - Soporta 1000+ documentos en batch
+                            - Tolera documentos rotos, tablas, sellos, firmas manuscritas
+                            
+                            **Agent 2: Extractor**
+                            - Extrae entidades estructuradas con precisión >97%
+                            - Nombre, DNI/ID, dirección, UBO, PEP, transacciones
+                            - Usa LLM (Claude 3.5 Sonnet) con schemas Pydantic estrictos
+                            
+                            **Agent 3: Screener**
+                            - Screening contra OFAC, EU Consolidated, UN Sanctions (gratuitos)
+                            - World-Check One API (LSEG) - mismo screening que JPMorgan/HSBC
+                            - Fuzzy matching con RapidFuzz (transliteración árabe/chino)
+                            - Verificación PEP (Politically Exposed Person)
+                            - Búsqueda de adverse media (Google News API, LexisNexis)
+                            
+                            **Agent 4: Risk Engine**
+                            - Calcula score de riesgo 1-100 con breakdown detallado
+                            - País riesgo (40%), PEP (25%), adverse media (20%), transacciones (10%), UBO (5%)
+                            - Cada punto del score es clicable → muestra evidencia exacta (página, línea)
+                            - Explicación completa con LLM reasoning
+                            
+                            **Agent 5: Steering Manager**
+                            - Procesa comandos en lenguaje natural en tiempo real
+                            - Re-planifica workflow al vuelo
+                            - Mantiene audit trail en todo.md (estilo EDR)
+                            - Ejemplos: "Ignora PEP level 1 para España", "Solo flaggea si UBO en Panamá"
+                            
+                            **Agent 6: Report Generator**
+                            - Genera SARs en formato FinCEN XML (US)
+                            - Formatos locales: SAGRILAFT (Colombia), UIF (México), etc.
+                            - PDF audit-ready con evidencia, scores, y trail
+                            - Listo para subir al regulador con un clic
+                            
+                            **Agent 7: Action Executor** ⭐ NUEVO
+                            - Actualiza Salesforce Financial Services Cloud automáticamente
+                            - Crea tickets en Jira/ClickUp para analistas
+                            - Envía notificaciones a Slack/Teams/Email
+                            - Bloquea onboarding en core banking si score >90
+                            
+                            ## 📋 Formatos de Reportes
+                            
+                            - **SAR (Suspicious Activity Report)**: XML FinCEN para US, JSON para otros países
+                            - **PDF Consolidado**: Reporte completo con todos los resultados
+                            - **Batch Reports**: ZIP con SARs individuales + summary dashboard
+                            
+                            ## 👤 Comandos de Steering
+                            
+                            Ejemplos:
+                            - "Ignora PEP level 1 para clientes España"
+                            - "Solo flaggea si beneficiario final en Panamá + Islas Caimán"
+                            - "Revisa solo documentos subidos hoy"
+                            - "Prioriza EU AI Act risks"
+                            - "Excluye clientes retail"
+                            - "Céntrate solo en transacciones >€10k 2025"
+                            
+                            ## 🔗 Integraciones Completas
+                            
+                            ✅ **Salesforce Financial Services Cloud**
+                            - Actualiza Opportunity stage → "KYC Review"
+                            - Añade risk score en custom field
+                            - Crea notas automáticas
+                            
+                            ✅ **Jira/ClickUp**
+                            - Crea tickets automáticos para investigaciones AML
+                            - Asigna a compliance team
+                            - Incluye risk score y evidencia
+                            
+                            ✅ **Slack/Teams**
+                            - Notificaciones en tiempo real
+                            - Resumen con PDF adjunto
+                            - Alertas de alto riesgo
+                            
+                            ✅ **Core Banking**
+                            - Bloquea onboarding si score >90
+                            - Webhook a Mambu/Temenos/Finacle
+                            
+                            ✅ **World-Check One API**
+                            - Partnership con LSEG (London Stock Exchange Group)
+                            - Mismo screening que usan JPMorgan y HSBC
+                            
+                            ## 🔐 Verificación Biométrica
+                            
+                            - Match entre selfie y foto del DNI/pasaporte
+                            - Usa AWS Rekognition o Face++
+                            - Flag si mismatch >20%
+                            
+                            ## 📦 Procesamiento por Lotes
+                            
+                            - Procesa 500+ clientes en batch
+                            - Ideal para refresh anual
+                            - Genera ZIP con todos los SARs + dashboard
+                            
+                            ## 📊 Audit Trail Completo
+                            
+                            Todos los procesos se registran en:
+                            - `.docchat_audit/banks/` - Logs de auditoría por agente
+                            - `.docchat_audit/banks/todo.md` - Historial de steering (estilo EDR)
+                            - Exportable a PDF con timestamps y firmas digitales
+                            
+                            ## 🔒 Seguridad y Compliance
+                            
+                            - Todo encriptado en reposo y tránsito (AES-256, TLS 1.3)
+                            - Datos nunca salen de tu VPC (ofrece on-premise)
+                            - EU AI Act High-Risk compliance ready
+                            - Explainability total desde día 1
+                            
+                            ## 💰 Pricing Model
+                            
+                            - **Tier 1** (bancos pequeños): $4,999/mes (hasta 500 onboardings/mes)
+                            - **Tier 2** (medio): $14,999/mes (hasta 2,000)
+                            - **Tier 3** (grande): $29,999–$65k/mes (ilimitado)
+                            - **Setup fee**: $50k–$150k (integración custom)
+                            """)
+                except Exception as e:
+                    gr.Markdown(f"### ❌ Error al inicializar modo BANKS")
+                    gr.Markdown(f"**Error:** {str(e)}\n\nPor favor, verifica la configuración y las dependencias.")
+
         with gr.Tab("🔍 Data Sight"):
             gr.Markdown("### 🔍 Data Sight - Análisis de Datos e Insights")
             gr.Markdown("""
@@ -10834,34 +11594,34 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     ### 🔌 Conecta tus Plataformas para Automatización
                     
                     **Conecta una vez, automatiza para siempre.** El agente usará estas conexiones para ejecutar acciones en tu nombre.
-                    """)
+            """)
 
-                    with gr.Row():
-                        # Microsoft 365
-                        with gr.Column():
-                            gr.Markdown("### 🟦 Microsoft 365")
-                            gr.Markdown("*Outlook, Teams, SharePoint, OneDrive, Calendar*")
-                            eaw_ms_token = gr.Textbox(
-                                label="Access Token de Microsoft Graph",
-                                type="password",
-                                placeholder="Obtén el token desde Graph Explorer",
-                                info="graph.microsoft.com → Sign in → Copy Access Token"
-                            )
-                            eaw_ms_connect_btn = gr.Button("🔗 Conectar Microsoft 365", variant="primary")
-                            eaw_ms_status = gr.Markdown("**Estado:** ⚪ No conectado")
-                        
-                        # Google Workspace
-                        with gr.Column():
-                            gr.Markdown("### 🟢 Google Workspace")
-                            gr.Markdown("*Gmail, Drive, Calendar, Docs, Sheets*")
-                            eaw_google_token = gr.Textbox(
-                                label="Access Token de Google",
-                                type="password",
-                                placeholder="Obtén el token desde OAuth Playground",
-                                info="developers.google.com/oauthplayground"
-                            )
-                            eaw_google_connect_btn = gr.Button("🔗 Conectar Google Workspace", variant="primary")
-                            eaw_google_status = gr.Markdown("**Estado:** ⚪ No conectado")
+            with gr.Row():
+                # Microsoft 365
+                with gr.Column():
+                    gr.Markdown("### 🟦 Microsoft 365")
+                    gr.Markdown("*Outlook, Teams, SharePoint, OneDrive, Calendar*")
+                    eaw_ms_token = gr.Textbox(
+                        label="Access Token de Microsoft Graph",
+                        type="password",
+                        placeholder="Obtén el token desde Graph Explorer",
+                        info="graph.microsoft.com → Sign in → Copy Access Token"
+                    )
+                    eaw_ms_connect_btn = gr.Button("🔗 Conectar Microsoft 365", variant="primary")
+                    eaw_ms_status = gr.Markdown("**Estado:** ⚪ No conectado")
+                
+                # Google Workspace
+                with gr.Column():
+                    gr.Markdown("### 🟢 Google Workspace")
+                    gr.Markdown("*Gmail, Drive, Calendar, Docs, Sheets*")
+                    eaw_google_token = gr.Textbox(
+                        label="Access Token de Google",
+                        type="password",
+                        placeholder="Obtén el token desde OAuth Playground",
+                        info="developers.google.com/oauthplayground"
+                    )
+                    eaw_google_connect_btn = gr.Button("🔗 Conectar Google Workspace", variant="primary")
+                    eaw_google_status = gr.Markdown("**Estado:** ⚪ No conectado")
                     
                     with gr.Row():
                         # Slack
@@ -14696,6 +15456,465 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 outputs=[chat2_stats_output],
             )
         
+        # Tab 4.5.6: Company Knowledge (NUEVO - Con conexión de apps y tareas autónomas)
+        with gr.Tab("📚 Company Knowledge"):
+            gr.Markdown("### 📚 Company Knowledge - Sistema de Conocimiento Empresarial con Apps Conectadas")
+            gr.Markdown("""
+            **🌟 Sistema avanzado de conocimiento corporativo - Similar a ChatGPT Company Knowledge**
+            
+            **✨ Capacidades Avanzadas:**
+            - 📦 **Context Folding**: Gestiona eficientemente contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Rastrea el origen de cada información para compliance
+            - 🧠 **Chain of Thought**: Razona paso a paso en conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba diferentes enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continuamente con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning y Planning**: Prueba estrategias, retrocede si falla, aprende qué funciona
+            - 🔌 **MCP Potenciado**: Conecta con sistemas externos, bases de datos, APIs
+            - 📱 **Apps Conectadas**: Slack, Google Drive, SharePoint, GitHub, Gmail, Outlook, HubSpot, Salesforce, Linear, Asana, GitLab, ClickUp, Intercom, Jira, Confluence y más
+            
+            **💼 Perfecto para:**
+            - Gestión de conocimiento corporativo
+            - Bases de conocimiento empresariales
+            - Documentación técnica y procedimientos
+            - Onboarding de empleados
+            - Consultas sobre políticas y procesos
+            - Análisis de datos de múltiples fuentes conectadas
+            
+            **💡 Ejemplo de uso:**
+            1. Conecta tus apps (Slack, Google Drive, SharePoint)
+            2. Sube 500 PDFs de documentación corporativa
+            3. Pregunta: "¿Cuál es nuestra política de trabajo remoto según Slack y Google Drive?"
+            4. El sistema busca en todos los documentos Y apps conectadas
+            5. Combina información histórica con datos actuales de tus apps
+            6. Aprende qué estrategias funcionan mejor para futuras consultas
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Conectar Apps
+                with gr.Tab("🔌 Conectar Apps"):
+                    gr.Markdown("### Conecta tus aplicaciones empresariales")
+                    gr.Markdown("""
+                    **Conecta tus apps para que Company Knowledge pueda buscar en ellas:**
+                    - Slack, Google Drive, SharePoint, GitHub, Gmail, Outlook
+                    - HubSpot, Salesforce, Linear, Asana, GitLab, ClickUp
+                    - Intercom, Jira, Confluence, Dropbox, Box, Teams
+                    """)
+                    
+                    app_type_select = gr.Dropdown(
+                        label="📱 Tipo de App",
+                        choices=[
+                            ("💬 Slack", "slack"),
+                            ("📁 Google Drive", "google_drive"),
+                            ("📂 SharePoint", "sharepoint"),
+                            ("💻 GitHub", "github"),
+                            ("📧 Gmail", "gmail"),
+                            ("📧 Outlook", "outlook"),
+                            ("📦 Dropbox", "dropbox"),
+                            ("📦 Box", "box"),
+                            ("💬 Teams", "teams"),
+                            ("📊 HubSpot", "hubspot"),
+                            ("☁️ Salesforce", "salesforce"),
+                            ("📋 Linear", "linear"),
+                            ("✅ Asana", "asana"),
+                            ("🔧 GitLab", "gitlab"),
+                            ("📝 ClickUp", "clickup"),
+                            ("💬 Intercom", "intercom"),
+                            ("🎯 Jira", "jira"),
+                            ("📚 Confluence", "confluence")
+                        ],
+                        value="slack"
+                    )
+                    
+                    app_name_input = gr.Textbox(
+                        label="Nombre de la Conexión",
+                        placeholder="Ej: Slack Oficina Principal"
+                    )
+                    
+                    connect_app_btn = gr.Button("🔌 Conectar App", variant="primary")
+                    app_connection_output = gr.Markdown(label="📊 Estado de Conexión")
+                    
+                    def connect_app(app_type, app_name):
+                        if not app_name.strip():
+                            return "⚠️ Por favor, ingresa un nombre para la conexión."
+                        
+                        try:
+                            company_knowledge = get_company_knowledge(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            if not company_knowledge.app_integrations:
+                                return "❌ Sistema de integraciones no disponible."
+                            
+                            from docchat.company_knowledge_integrations import IntegrationType
+                            integration_type = IntegrationType(app_type)
+                            
+                            connection = company_knowledge.app_integrations.connect_app(
+                                app_type=integration_type,
+                                app_name=app_name.strip(),
+                                credentials={},  # En producción, aquí irían las credenciales OAuth
+                                permissions={}
+                            )
+                            
+                            return f"""
+## ✅ App Conectada Exitosamente
+
+**ID de Conexión:** `{connection.connection_id}`
+**App:** {app_name} ({app_type})
+**Estado:** {connection.status}
+**Conectado:** {connection.connected_at}
+
+**💡 Ahora Company Knowledge puede buscar en esta app cuando hagas preguntas.**
+"""
+                        except Exception as e:
+                            return f"❌ Error conectando app: {str(e)}"
+                    
+                    connect_app_btn.click(
+                        fn=connect_app,
+                        inputs=[app_type_select, app_name_input],
+                        outputs=[app_connection_output]
+                    )
+                    
+                    # Listar apps conectadas
+                    list_apps_btn = gr.Button("📋 Listar Apps Conectadas", variant="secondary")
+                    apps_list_output = gr.Markdown(label="📊 Apps Conectadas")
+                    
+                    def list_connected_apps():
+                        try:
+                            company_knowledge = get_company_knowledge(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            if not company_knowledge.app_integrations:
+                                return "❌ Sistema de integraciones no disponible."
+                            
+                            apps = company_knowledge.app_integrations.get_connected_apps()
+                            
+                            if not apps:
+                                return "## 📋 No hay apps conectadas\n\nConecta apps en el tab 'Conectar Apps'."
+                            
+                            output = f"## 📋 Apps Conectadas: {len(apps)}\n\n"
+                            for app in apps:
+                                output += f"### 📱 {app.app_name}\n\n"
+                                output += f"- **Tipo:** {app.app_type.value}\n"
+                                output += f"- **Estado:** {app.status}\n"
+                                output += f"- **Conectado:** {app.connected_at}\n"
+                                output += f"- **Última sincronización:** {app.last_sync or 'N/A'}\n"
+                                output += f"- **ID:** `{app.connection_id}`\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    list_apps_btn.click(
+                        fn=list_connected_apps,
+                        inputs=[],
+                        outputs=[apps_list_output]
+                    )
+                
+                # Sub-tab: Chat con Apps
+                with gr.Tab("💬 Chat con Apps"):
+                    gr.Markdown("### Haz preguntas que buscan en tus apps conectadas")
+                    gr.Markdown("""
+                    **Pregunta sobre información que está en tus apps conectadas:**
+                    - "Resume los comentarios de clientes de Slack y HubSpot"
+                    - "¿Qué hay en el documento X de Google Drive?"
+                    - "Analiza los issues abiertos en GitHub"
+                    """)
+                    
+                    # Generar session_id único
+                    company_knowledge_session_id = gr.State(value=str(uuid.uuid4()))
+                    
+                    with gr.Row():
+                        company_knowledge_files = gr.Files(
+                            label="📂 Documentos (Opcional - PDF, DOCX, TXT, MD)",
+                            file_count="multiple",
+                            file_types=[".pdf", ".docx", ".txt", ".md"],
+                        )
+                    
+                    with gr.Row():
+                        company_knowledge_speed_mode = gr.Radio(
+                            label="⚡ Modo de Velocidad",
+                            choices=[
+                                ("🚀 Rápido", "fast"),
+                                ("⚖️ Balanceado (recomendado)", "balanced"),
+                                ("🎯 Máxima Calidad", "quality")
+                            ],
+                            value="balanced",
+                        )
+                        company_knowledge_provider_toggle = gr.Radio(
+                            label="🤖 Motor de IA",
+                            choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                            value="openai",
+                            info="Cambia el motor de IA utilizado"
+                        )
+                    
+                    # Chatbot component
+                    company_knowledge_bot = gr.Chatbot(
+                        label="💬 Conversación de Conocimiento",
+                        height=500,
+                        show_copy_button=True,
+                    )
+                    
+                    with gr.Row():
+                        company_knowledge_input = gr.Textbox(
+                            label="Escribe tu pregunta",
+                            placeholder="Ejemplo: ¿Cuál es nuestra política de trabajo remoto según Slack y Google Drive?",
+                            lines=2,
+                            scale=4,
+                        )
+                        company_knowledge_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                    
+                    with gr.Row():
+                        clear_company_knowledge_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                        clear_company_knowledge_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+                        company_knowledge_stats_btn = gr.Button("📊 Ver Estadísticas", variant="secondary")
+                    
+                    company_knowledge_status = gr.Markdown(label="ℹ️ Estado del Chat")
+                    company_knowledge_stats_output = gr.Markdown(label="📊 Estadísticas Avanzadas", visible=False)
+                    
+                    # Event handlers
+                    def company_knowledge_submit(message, history, files, session_id, speed_mode, provider):
+                        if not message.strip():
+                            return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                        
+                        new_history, error = run_company_knowledge(
+                            message=message,
+                            history=history,
+                            files=files or [],
+                            session_id=session_id,
+                            speed_mode=speed_mode,
+                            provider=provider,
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        status = f"✅ {len(new_history)} mensajes en la conversación"
+                        if error:
+                            status = error
+                        return new_history, new_history, status, gr.Markdown(visible=False)
+                    
+                    def clear_company_knowledge(history, session_id):
+                        company_knowledge = get_company_knowledge(
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        if hasattr(company_knowledge, 'sessions') and session_id in company_knowledge.sessions:
+                            company_knowledge.sessions[session_id]["history"] = []
+                            company_knowledge.sessions[session_id]["docs"] = []
+                            company_knowledge.sessions[session_id]["retriever"] = None
+                            company_knowledge.sessions[session_id]["processed_files"].clear()
+                        return [], "✅ Chat limpiado. Puedes cargar nuevos documentos.", gr.Markdown(visible=False)
+                    
+                    def clear_company_knowledge_files(files, session_id):
+                        company_knowledge = get_company_knowledge(
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        if hasattr(company_knowledge, 'sessions') and session_id in company_knowledge.sessions:
+                            company_knowledge.sessions[session_id]["processed_files"].clear()
+                            company_knowledge.sessions[session_id]["docs"] = []
+                            company_knowledge.sessions[session_id]["retriever"] = None
+                        return None, "✅ Documentos limpiados. Puedes cargar nuevos.", gr.Markdown(visible=False)
+                    
+                    def show_company_knowledge_stats(session_id):
+                        company_knowledge = get_company_knowledge(
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        stats = company_knowledge.get_statistics(session_id=session_id)
+                        
+                        output = "## 📊 Estadísticas Avanzadas - Company Knowledge\n\n"
+                        output += f"### 📦 Context Folding\n"
+                        output += f"- Ramas activas: {stats['context_folding']['active_branches']}\n"
+                        output += f"- Ramas plegadas: {stats['context_folding']['folded_branches']}\n"
+                        output += f"- Tokens ahorrados: {stats['context_folding']['total_tokens_saved']:,}\n"
+                        output += f"- Ratio de compresión: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                        
+                        output += f"### 🔍 Data Provenance\n"
+                        output += f"- Registros totales: {stats['data_provenance']['total_records']}\n"
+                        output += f"- Fuentes únicas: {stats['data_provenance']['unique_sources']}\n"
+                        output += f"- Promedio fuentes/registro: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                        
+                        output += f"### 📱 Apps Conectadas\n"
+                        app_stats = stats.get('app_integrations', {})
+                        output += f"- Total conexiones: {app_stats.get('total_connections', 0)}\n"
+                        output += f"- Apps conectadas: {app_stats.get('connected_apps', 0)}\n"
+                        output += f"- Apps por tipo: {app_stats.get('apps_by_type', {})}\n\n"
+                        
+                        output += f"### 🧠 Chain of Thought\n"
+                        output += f"- Cadenas activas: {stats['chain_of_thought']['active_chains']}\n"
+                        output += f"- Cadenas completadas: {stats['chain_of_thought']['completed_chains']}\n"
+                        output += f"- Pasos totales: {stats['chain_of_thought']['total_steps']}\n\n"
+                        
+                        output += f"### 🛤️ Path-dependent Reasoning\n"
+                        output += f"- Caminos probados: {stats['path_reasoning']['total_paths_tested']}\n"
+                        output += f"- Tasa de éxito: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                        output += f"- Enfoques aprendidos: {stats['path_reasoning']['learned_approaches']}\n\n"
+                        
+                        output += f"### 📈 Test Time Training\n"
+                        output += f"- Episodios totales: {stats['test_time_training']['total_episodes']}\n"
+                        output += f"- Tasa de éxito: {stats['test_time_training']['success_rate']:.1f}%\n"
+                        output += f"- Patrones aprendidos: {stats['test_time_training']['learned_patterns']}\n\n"
+                        
+                        output += f"### 👤 Person in the Loop\n"
+                        output += f"- Aprobaciones pendientes: {stats['person_in_loop']['pending_approvals']}\n"
+                        output += f"- Tasa de aprobación: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                        output += f"- Reglas activas: {stats['person_in_loop']['active_rules']}\n\n"
+                        
+                        output += f"### 🧠 Reinforcement Learning y Planning\n"
+                        output += f"- Árboles totales: {stats['reinforcement_planning']['total_trees']}\n"
+                        output += f"- Tasa de éxito: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                        output += f"- Exploraciones totales: {stats['reinforcement_planning']['total_explorations']}\n"
+                        output += f"- Memoria de aprendizaje: {stats['reinforcement_planning']['learning_memory_size']} patrones\n\n"
+                        
+                        output += f"### 🔌 MCP Potenciado (Model Context Protocol)\n"
+                        output += f"- Conexiones totales: {stats['mcp_integration']['connections']}\n"
+                        output += f"- Conexiones activas: {stats['mcp_integration']['enabled_connections']}\n"
+                        
+                        if 'session' in stats:
+                            output += f"\n### 📋 Sesión\n"
+                            output += f"- Documentos: {stats['session']['docs_count']}\n"
+                            output += f"- Mensajes: {stats['session']['history_count']}\n"
+                            output += f"- Archivos procesados: {stats['session']['processed_files']}\n"
+                        
+                        return gr.Markdown(output, visible=True)
+                    
+                    company_knowledge_submit_btn.click(
+                        fn=company_knowledge_submit,
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle],
+                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output],
+                    ).then(
+                        fn=lambda: gr.Markdown(visible=False),
+                        outputs=[company_knowledge_stats_output]
+                    )
+                    
+                    company_knowledge_input.submit(
+                        fn=company_knowledge_submit,
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle],
+                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output],
+                    ).then(
+                        fn=lambda: gr.Markdown(visible=False),
+                        outputs=[company_knowledge_stats_output]
+                    )
+                    
+                    clear_company_knowledge_btn.click(
+                        fn=clear_company_knowledge,
+                        inputs=[company_knowledge_bot, company_knowledge_session_id],
+                        outputs=[company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output]
+                    )
+                    
+                    clear_company_knowledge_files_btn.click(
+                        fn=clear_company_knowledge_files,
+                        inputs=[company_knowledge_files, company_knowledge_session_id],
+                        outputs=[company_knowledge_files, company_knowledge_status]
+                    )
+                    
+                    company_knowledge_stats_btn.click(
+                        fn=show_company_knowledge_stats,
+                        inputs=[company_knowledge_session_id],
+                        outputs=[company_knowledge_stats_output]
+                    )
+                
+                # Sub-tab: Tareas Autónomas
+                with gr.Tab("🤖 Tareas Autónomas"):
+                    gr.Markdown("### Ejecuta tareas autónomas usando tus apps conectadas")
+                    gr.Markdown("""
+                    **Tipos de tareas disponibles:**
+                    - **Resumir**: Resumir información de múltiples fuentes
+                    - **Analizar**: Analizar datos y generar insights
+                    - **Crear Informe**: Crear un informe basado en datos
+                    - **Planificar**: Crear un plan basado en información disponible
+                    - **Comparar**: Comparar información de diferentes fuentes
+                    """)
+                    
+                    task_type_select = gr.Dropdown(
+                        label="⚙️ Tipo de Tarea",
+                        choices=[
+                            ("📝 Resumir información", "summarize"),
+                            ("📊 Analizar datos", "analyze"),
+                            ("📄 Crear informe", "create_report"),
+                            ("📋 Planificar", "plan"),
+                            ("⚖️ Comparar información", "compare")
+                        ],
+                        value="summarize"
+                    )
+                    
+                    task_description_input = gr.Textbox(
+                        label="Descripción de la Tarea",
+                        placeholder="Ej: Resume los comentarios de clientes de Slack y HubSpot del último trimestre",
+                        lines=5
+                    )
+                    
+                    execute_task_btn = gr.Button("🚀 Ejecutar Tarea Autónoma", variant="primary", size="lg")
+                    task_output = gr.Markdown(label="📊 Resultado de la Tarea")
+                    
+                    def execute_autonomous_task(task_type, task_description):
+                        if not task_description.strip():
+                            return "⚠️ Por favor, describe la tarea que quieres ejecutar."
+                        
+                        try:
+                            company_knowledge = get_company_knowledge(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            result = loop.run_until_complete(
+                                company_knowledge.execute_autonomous_task(
+                                    task_description=task_description,
+                                    task_type=task_type,
+                                    context=None
+                                )
+                            )
+                            loop.close()
+                            
+                            if result.get("success"):
+                                output = f"""
+## ✅ Tarea Completada: {task_type}
+
+### 📋 Resultado:
+
+{result.get('summary', result.get('analysis', result.get('report', result.get('plan', result.get('comparison', 'N/A')))))}
+
+### 📚 Fuentes Consultadas:
+{', '.join(result.get('sources', []))}
+
+### 📊 Información:
+- **Tipo:** {result.get('task_type')}
+- **Fuentes:** {result.get('sources_count', len(result.get('sources', [])))}
+"""
+                                return output
+                            else:
+                                return f"❌ Error: {result.get('error', 'Error desconocido')}"
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando tarea: {str(e)}"
+                    
+                    execute_task_btn.click(
+                        fn=execute_autonomous_task,
+                        inputs=[task_type_select, task_description_input],
+                        outputs=[task_output]
+                    )
+        
         # Tab 4.6: Chat Multi-Formato (NUEVO - Soporta todos los formatos)
         with gr.Tab("📚 Chat Multi-Formato"):
             gr.Markdown("### Chat Conversacional con Todos los Formatos")
@@ -16226,7 +17445,7 @@ Body:
                     5. URL: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
                     """)
         
-        # Tab 4.11: 📧 Marketing - Agente de Email Marketing / Campañas (NUEVO)
+        # Tab: 📧 Marketing - Agente de Email Marketing / Campañas
         with gr.Tab("📧 Marketing"):
             gr.Markdown("### 📧 Agente de Email Marketing / Campañas Autónomo")
             gr.Markdown("""
@@ -16266,49 +17485,49 @@ Body:
                         
                         with gr.Row():
                             with gr.Column():
-                                copy_campaign_name = gr.Textbox(
+                                mkt_copy_campaign_name = gr.Textbox(
                                     label="📝 Nombre de la Campaña",
                                     placeholder="Ej: Newsletter Q1 2025",
                                     value=""
                                 )
                                 
-                                copy_campaign_type = gr.Dropdown(
+                                mkt_copy_campaign_type = gr.Dropdown(
                                     label="📋 Tipo de Campaña",
                                     choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
                                     value="newsletter",
                                     interactive=True
                                 )
                                 
-                                copy_target_audience = gr.Textbox(
+                                mkt_copy_target_audience = gr.Textbox(
                                     label="🎯 Audiencia Objetivo",
                                     placeholder="Ej: Clientes activos de tecnología, empresas B2B, suscriptores premium",
                                     lines=2
                                 )
                                 
-                                copy_key_message = gr.Textbox(
+                                mkt_copy_key_message = gr.Textbox(
                                     label="💬 Mensaje Clave",
                                     placeholder="Ej: Nuevas características de nuestro producto, ofertas especiales, actualizaciones importantes",
                                     lines=3
                                 )
                                 
-                                copy_tone = gr.Dropdown(
+                                mkt_copy_tone = gr.Dropdown(
                                     label="🎨 Tono",
                                     choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
                                     value="professional",
                                     interactive=True
                                 )
                                 
-                                copy_include_cta = gr.Checkbox(
+                                mkt_copy_include_cta = gr.Checkbox(
                                     label="Incluir Call-to-Action",
                                     value=True
                                 )
                                 
-                                generate_copy_btn = gr.Button("✨ Generar Copy", variant="primary", size="lg")
+                                mkt_generate_copy_btn = gr.Button("✨ Generar Copy", variant="primary", size="lg")
                             
                             with gr.Column():
-                                copy_output = gr.Markdown(label="📄 Copy Generado")
+                                mkt_copy_output = gr.Markdown(label="📄 Copy Generado")
                     
-                        def generate_copy(campaign_name, campaign_type, target_audience, key_message, tone, include_cta):
+                        def mkt_generate_copy(campaign_name, campaign_type, target_audience, key_message, tone, include_cta):
                             if not marketing_agent:
                                 return "❌ Marketing Agent no está habilitado."
                             
@@ -16355,10 +17574,10 @@ Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalizat
                             except Exception as e:
                                 return f"❌ Error generando copy: {str(e)}"
                     
-                        generate_copy_btn.click(
-                            fn=generate_copy,
-                            inputs=[copy_campaign_name, copy_campaign_type, copy_target_audience, copy_key_message, copy_tone, copy_include_cta],
-                            outputs=[copy_output]
+                        mkt_generate_copy_btn.click(
+                            fn=mkt_generate_copy,
+                            inputs=[mkt_copy_campaign_name, mkt_copy_campaign_type, mkt_copy_target_audience, mkt_copy_key_message, mkt_copy_tone, mkt_copy_include_cta],
+                            outputs=[mkt_copy_output]
                         )
                     
                     # Sub-tab: Crear Campaña
@@ -16374,52 +17593,52 @@ Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalizat
                         
                         with gr.Row():
                             with gr.Column():
-                                campaign_name = gr.Textbox(
+                                mkt_campaign_name = gr.Textbox(
                                     label="📝 Nombre de la Campaña",
                                     placeholder="Ej: Lanzamiento Producto X",
                                     value=""
                                 )
                                 
-                                campaign_type = gr.Dropdown(
+                                mkt_campaign_type = gr.Dropdown(
                                     label="📋 Tipo de Campaña",
                                     choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
                                     value="promotional",
                                     interactive=True
                                 )
                                 
-                                campaign_platform = gr.Dropdown(
+                                mkt_campaign_platform = gr.Dropdown(
                                     label="📡 Plataforma",
                                     choices=["mailchimp", "hubspot", "sendgrid", "smtp_simulado"],
                                     value="smtp_simulado"
                                 )
                                 
-                                campaign_auto_generate = gr.Checkbox(
+                                mkt_campaign_auto_generate = gr.Checkbox(
                                     label="Generar copy automáticamente",
                                     value=True
                                 )
                                 
-                                campaign_audience = gr.Textbox(
+                                mkt_campaign_audience = gr.Textbox(
                                     label="🎯 Audiencia Objetivo",
                                     placeholder="Ej: Leads calientes, clientes enterprise, lista VIP",
                                     lines=2
                                 )
                                 
-                                campaign_message = gr.Textbox(
+                                mkt_campaign_message = gr.Textbox(
                                     label="💬 Mensaje Base (opcional si generas copy automático)",
                                     placeholder="Ej: Queremos presentarte nuestra nueva solución...",
                                     lines=4
                                 )
                                 
-                                campaign_tone = gr.Dropdown(
+                                mkt_campaign_tone = gr.Dropdown(
                                     label="🎭 Tono",
                                     choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
                                     value="professional",
                                     interactive=True
                                 )
                             with gr.Column():
-                                campaign_output = gr.Markdown(label="📊 Campaña Creada")
+                                mkt_campaign_output = gr.Markdown(label="📊 Campaña Creada")
                     
-                        def create_campaign(name, camp_type, platform, auto_gen, audience, message, tone):
+                        def mkt_create_campaign(name, camp_type, platform, auto_gen, audience, message, tone):
                             if not marketing_agent:
                                 return "❌ Marketing Agent no está habilitado."
                             
@@ -16459,14 +17678,14 @@ Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalizat
                             except Exception as e:
                                 return f"❌ Error creando campaña: {str(e)}"
                     
-                        create_campaign_btn = gr.Button("🚀 Crear Campaña", variant="primary", size="lg")
-                        create_campaign_btn.click(
-                            fn=create_campaign,
-                            inputs=[campaign_name, campaign_type, campaign_platform, campaign_auto_generate, campaign_audience, campaign_message, campaign_tone],
-                            outputs=[campaign_output]
+                        mkt_create_campaign_btn = gr.Button("🚀 Crear Campaña", variant="primary", size="lg")
+                        mkt_create_campaign_btn.click(
+                            fn=mkt_create_campaign,
+                            inputs=[mkt_campaign_name, mkt_campaign_type, mkt_campaign_platform, mkt_campaign_auto_generate, mkt_campaign_audience, mkt_campaign_message, mkt_campaign_tone],
+                            outputs=[mkt_campaign_output]
                         )
         
-        # Tab 4.12: Leads - Agente de Ventas / SDR Outbound (NUEVO)
+        # Tab: Leads - Agente de Ventas / SDR Outbound
         with gr.Tab("🎯 Leads"):
             gr.Markdown("### 🎯 Agente de Ventas / SDR Outbound")
             gr.Markdown("""
@@ -17345,28 +18564,9 @@ Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalizat
         """
     )
     
-    # Tab 4.12: Marketing - Agente de Email Marketing / Campañas (NUEVO)
-    with gr.Tab("📧 Marketing"):
-        gr.Markdown("### 📧 Agente de Email Marketing / Campañas Autónomo")
-        gr.Markdown("""
-        **🚀 Sistema super inteligente para automatización completa de marketing por email**
-        
-        - ✍️ Generación inteligente de copys con IA
-        - 🎯 Segmentación automática de audiencias
-        - 📧 Creación y envío de campañas vía API
-        - 📊 Análisis de performance automático
-        - 💬 Text-to-Action: comandos en lenguaje natural
-        - 🔌 Integración con Mailchimp, HubSpot, ActiveCampaign
-        
-        **💡 Perfecto para empresas que necesitan automatizar newsletters y campañas**
-        
-        **🤖 NUEVO: Agentic AI para Marketing**
-        - Genera copys persuasivos automáticamente
-        - Crea segmentaciones inteligentes
-        - Envía campañas y analiza resultados
-        - "Crea una campaña de newsletter para clientes activos" → Lo hace automáticamente
-        """)
-        
+    # [Marketing Mode ya existe antes de Leads - duplicado eliminado]
+    
+    if False:  # Marketing duplicado eliminado - el código original sigue para mantener estructura
         if not marketing_agent:
             gr.Markdown("⚠️ **Marketing Agent no está habilitado.**")
         else:
