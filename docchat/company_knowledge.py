@@ -2331,7 +2331,6 @@ RESPUESTA:"""
             "total_conflicts": len(conflicts)
         }
     
->>>>>>> 7cc331624b8b5de58ee8f2365424f0acfbda7432
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
