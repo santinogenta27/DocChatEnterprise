@@ -13,9 +13,9 @@ try:
     from unstructured.partition.auto import partition
     from unstructured.chunking.title import chunk_by_title
     UNSTRUCTURED_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     UNSTRUCTURED_AVAILABLE = False
-    logging.warning("unstructured no disponible, usando fallback")
+    logging.warning(f"unstructured no disponible: {e}. Algunas funcionalidades pueden estar limitadas.")
 
 try:
     import pytesseract
@@ -26,8 +26,9 @@ except ImportError:
     logging.warning("OCR no disponible")
 
 from .base_agent import BaseBanksAgent
+from docchat.config import AppConfig
 try:
-    from ....document_processor import DocumentProcessor
+    from docchat.document_processor import DocumentProcessor
 except ImportError:
     DocumentProcessor = None
 

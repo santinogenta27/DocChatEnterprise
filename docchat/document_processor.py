@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
 
-from docling.document_converter import DocumentConverter
+try:
+    from docling.document_converter import DocumentConverter
+    DOCLING_AVAILABLE = True
+except ImportError:
+    DOCLING_AVAILABLE = False
+    DocumentConverter = None
+
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 
@@ -27,7 +33,11 @@ class DocumentProcessor:
     def __init__(self, config: AppConfig):
         self.config = config
         # Usar DocumentConverter sin forzar OCR - extraerá texto nativo primero
-        self.converter = DocumentConverter()
+        if DOCLING_AVAILABLE:
+            self.converter = DocumentConverter()
+        else:
+            self.converter = None
+            print("⚠️ Docling no disponible. Algunas funcionalidades de procesamiento de documentos pueden estar limitadas.")
         self.splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=config.headers_to_split_on,
             strip_headers=False,

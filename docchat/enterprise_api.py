@@ -14,7 +14,12 @@ from langchain_openai import ChatOpenAI
 
 from .config import AppConfig
 from .document_processor import DocumentProcessor
-from docling.document_converter import DocumentConverter
+try:
+    from docling.document_converter import DocumentConverter
+    DOCLING_AVAILABLE = True
+except ImportError:
+    DOCLING_AVAILABLE = False
+    DocumentConverter = None
 from .retriever_builder import RetrieverBuilder
 from .workflow import AgentWorkflow
 from .memory import MemoryStore, ContextManager

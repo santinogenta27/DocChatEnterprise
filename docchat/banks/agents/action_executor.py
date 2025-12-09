@@ -24,7 +24,7 @@ except ImportError:
     logging.warning("atlassian-python-api no disponible")
 
 from .base_agent import BaseBanksAgent
-from ....config import AppConfig
+from docchat.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,9 @@ class ActionExecutorAgent(BaseBanksAgent):
         # Configuración de integraciones
         self.salesforce_config = self._load_salesforce_config()
         self.jira_config = self._load_jira_config()
-        self.slack_webhook = config.__dict__.get("slack_webhook_url", "")
-        self.teams_webhook = config.__dict__.get("teams_webhook_url", "")
+        # Usar getattr en lugar de __dict__ para evitar problemas
+        self.slack_webhook = getattr(config, "slack_webhook_url", "")
+        self.teams_webhook = getattr(config, "teams_webhook_url", "")
         
         # Clientes de APIs (inicializados bajo demanda)
         self.salesforce_client = None

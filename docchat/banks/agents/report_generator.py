@@ -14,16 +14,16 @@ import json
 try:
     from weasyprint import HTML
     WEASYPRINT_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError) as e:
     WEASYPRINT_AVAILABLE = False
     HTML = None
-    logging.warning("weasyprint no disponible, usando fallback")
+    logging.warning(f"weasyprint no disponible: {e}. Usando fallback.")
 
 from jinja2 import Template
 
 from .base_agent import BaseBanksAgent
 from ..schemas import SARData, RiskScore
-from ....config import AppConfig
+from docchat.config import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +340,11 @@ class ReportGeneratorAgent(BaseBanksAgent):
         # Generar PDF
         if WEASYPRINT_AVAILABLE and HTML:
             pdf_path = self.output_dir / f"compliance_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            HTML(string=html_content).write_pdf(pdf_path)
+            if WEASYPRINT_AVAILABLE and HTML:
+                HTML(string=html_content).write_pdf(pdf_path)
+            else:
+                # Fallback: usar reportlab u otro método
+                raise ImportError("weasyprint no disponible para generar PDF")
             return pdf_path
         else:
             # Fallback: guardar HTML

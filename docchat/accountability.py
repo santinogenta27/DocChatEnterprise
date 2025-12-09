@@ -15,9 +15,11 @@ from __future__ import annotations
 import json
 import time
 import asyncio
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple, Iterator
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass, asdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
@@ -38,9 +40,9 @@ from .mcp_manager import MCPManager
 from .company_knowledge_integrations import CompanyKnowledgeIntegrations, IntegrationType
 
 
-class CompanyKnowledge:
+class Accountability:
     """
-    Company Knowledge - Sistema de conocimiento empresarial avanzado.
+    Accountability - Sistema de conocimiento empresarial avanzado.
     
     Características:
     - Gestiona eficientemente 500+ PDFs con Context Folding
@@ -65,7 +67,7 @@ class CompanyKnowledge:
         
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Company Knowledge")
+            raise ValueError("OPENAI_API_KEY requerida para Accountability")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -74,6 +76,21 @@ class CompanyKnowledge:
             # max_tokens REMOVIDO - dejar que la API decida la longitud (como Enterprise API)
             request_timeout=300  # Timeout más largo para respuestas extensas (como Enterprise API)
         )
+        
+        # LLM rápido para tareas de procesamiento automático (clasificación, extracción)
+        try:
+            from docchat.utils.llm_factory import create_llm
+            self.fast_llm = create_llm(
+                provider="openai",
+                model="gpt-4o-mini",
+                temperature=0.2,
+                api_key=config.openai_api_key,
+                max_tokens=4000,
+                request_timeout=60
+            )
+        except Exception as e:
+            print(f"⚠️ [Accountability] No se pudo inicializar fast_llm: {e}")
+            self.fast_llm = self.llm  # Fallback al LLM principal
         
         # Embeddings para relevancia semántica
         try:
@@ -132,12 +149,12 @@ class CompanyKnowledge:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
-        # Sistema de integración de apps (Company Knowledge)
+        # Sistema de integración de apps (Accountability)
         try:
             from .company_knowledge_integrations import CompanyKnowledgeIntegrations
             self.app_integrations = CompanyKnowledgeIntegrations(config=config)
         except ImportError:
-            print("⚠️ [Company Knowledge] No se pudo importar CompanyKnowledgeIntegrations")
+            print("⚠️ [Accountability] No se pudo importar CompanyKnowledgeIntegrations")
             self.app_integrations = None
         
         # Sesiones activas
@@ -1035,9 +1052,7 @@ Si crees que debería haber resultados, verifica:
         task_description: str,
         task_type: str,
         session_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        urls_in_bullets: bool = False
+        context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Ejecuta una tarea autónoma usando apps conectadas.
@@ -1048,7 +1063,6 @@ Si crees que debería haber resultados, verifica:
         - "create_report": Crear un informe basado en datos
         - "plan": Crear un plan basado en información disponible
         - "compare": Comparar información de diferentes fuentes
-        - "prebrief": Pre-brief de campaña/meeting combinando apps
         """
         if not self.app_integrations:
             return {
@@ -1056,463 +1070,12 @@ Si crees que debería haber resultados, verifica:
                 "error": "Sistema de integraciones no disponible"
             }
         
-        # Flujo especial para pre-brief: detectar apps relevantes y combinar resultados
-        if task_type == "prebrief":
-            try:
-                app_types = self._detect_apps_for_prebrief(task_description)
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    app_types=app_types,
-                    filters=filters
-                )
-                if not search_results:
-                    return {
-                        "success": False,
-                        "error": "No se encontró información en las apps conectadas."
-                    }
-                
-                # Preparar contexto breve para el LLM (limitado a 10 fuentes)
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = r.snippet or r.content
-                    snippet = (snippet or "")[:500]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                
-                prompt = f"""
-Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
-- Executive Summary (3-5 bullets concisos)
-- Métricas / Hechos clave (bullets)
-- Riesgos / Issues abiertos (si los hay)
-- Próximas acciones recomendadas (3-5 bullets)
-- Fuentes (lista con texto y URL cuando esté disponible)
-
-Usa SOLO la información proporcionada. No inventes datos.
-Fuentes (incluye siempre la URL si existe):
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                
-                return {
-                    "success": True,
-                    "task_type": "prebrief",
-                    "summary": llm_summary,
-                    "sources": [
-                        {
-                            "app": r.app_name,
-                            "source": r.source_name,
-                            "url": r.url
-                        } for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"Error generando pre-brief: {e}"
-                }
-
-        # Flujo para tareas de análisis de datos / outliers / KPIs / limpieza de Excel
-        if task_type in ["data_analysis", "data_insights", "kpi_dashboard", "excel_cleanup"] or any(
-            k in task_description.lower() for k in ["ventas", "outlier", "kpi", "excel", "dashboard", "insight"]
-        ):
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {
-                        "success": False,
-                        "error": "No se encontró información en las apps conectadas."
-                    }
-
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = r.snippet or r.content
-                    snippet = (snippet or "")[:600]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-
-                prompt = f"""
-Eres un analista senior de datos. Con la información conectada, entrega:
-- Resumen ejecutivo (3-5 bullets con URLs si existen).
-- Insights clave multi-año (tendencias de ventas/volumen, top/bottom periodos).
-- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
-- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
-- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
-- Próximas acciones priorizadas (impacto/urgencia).
-
-Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
-Fuentes:
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-
-                llm_summary = self.llm.predict(prompt)
-
-                return {
-                    "success": True,
-                    "task_type": "data_analysis",
-                    "summary": llm_summary,
-                    "sources": [
-                        {
-                            "app": r.app_name,
-                            "source": r.source_name,
-                            "url": r.url
-                        } for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"Error generando análisis de datos: {e}"
-                }
-        
         return await self.app_integrations.execute_autonomous_task(
             task_description=task_description,
             task_type=task_type,
             context=context
         )
-
-    async def execute_autonomous_task_v2(
-        self,
-        task_description: str,
-        task_type: str,
-        session_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        urls_in_bullets: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
-        """
-        if not self.app_integrations:
-            return {"success": False, "error": "Sistema de integraciones no disponible"}
-        
-        if task_type == "prebrief":
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = (r.snippet or r.content or "")[:500]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                prompt = f"""
-Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
-- Executive Summary (3-5 bullets concisos)
-- Métricas / Hechos clave (bullets)
-- Riesgos / Issues abiertos (si los hay)
-- Próximas acciones recomendadas (3-5 bullets)
-- Fuentes (lista con texto y URL cuando esté disponible)
-
-Usa SOLO la información proporcionada. No inventes datos.
-Fuentes (incluye siempre la URL si existe):
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                return {
-                    "success": True,
-                    "task_type": "prebrief",
-                    "summary": llm_summary,
-                    "sources": [
-                        {"app": r.app_name, "source": r.source_name, "url": r.url}
-                        for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Error generando pre-brief: {e}"}
-
-        if task_type == "data_analysis":
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = (r.snippet or r.content or "")[:600]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                prompt = f"""
-Eres un analista senior de datos. Con la información conectada, entrega:
-- Resumen ejecutivo (3-5 bullets con URLs si existen).
-- Insights clave multi-año (tendencias, top/bottom periodos).
-- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
-- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
-- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
-- Próximas acciones priorizadas (impacto/urgencia).
-
-Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
-Fuentes:
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                return {
-                    "success": True,
-                    "task_type": "data_analysis",
-                    "summary": llm_summary,
-                    "sources": [
-                        {"app": r.app_name, "source": r.source_name, "url": r.url}
-                        for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
-
-        return await self.execute_autonomous_task(
-            task_description=task_description,
-            task_type=task_type,
-            session_id=session_id,
-            context=context
-        )
     
-<<<<<<< HEAD
-    def _detect_apps_for_prebrief(self, task_description: str) -> List[IntegrationType]:
-        """Detecta apps relevantes para pre-brief según palabras clave en el prompt."""
-        desc = task_description.lower()
-        apps = []
-        if any(k in desc for k in ["slack", "mensaje", "canal"]):
-            apps.append(IntegrationType.SLACK)
-        if any(k in desc for k in ["drive", "documento", "google doc", "gdoc"]):
-            apps.append(IntegrationType.GOOGLE_DRIVE)
-        if any(k in desc for k in ["hubspot", "crm", "deal", "contacto", "lead"]):
-            apps.append(IntegrationType.HUBSPOT)
-        if any(k in desc for k in ["jira", "ticket", "issue", "bug"]):
-            apps.append(IntegrationType.JIRA)
-        if any(k in desc for k in ["confluence", "wiki", "doc interna"]):
-            apps.append(IntegrationType.CONFLUENCE)
-        # fallback si no se detecta nada
-        if not apps:
-            apps = [IntegrationType.SLACK, IntegrationType.GOOGLE_DRIVE, IntegrationType.HUBSPOT]
-        return apps
-    
-    async def execute_autonomous_task_v2(
-        self,
-        task_description: str,
-        task_type: str,
-        session_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        urls_in_bullets: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
-        """
-        if not self.app_integrations:
-            return {"success": False, "error": "Sistema de integraciones no disponible"}
-        
-        if task_type == "prebrief":
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = (r.snippet or r.content or "")[:500]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                prompt = f"""
-Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
-- Executive Summary (3-5 bullets concisos)
-- Métricas / Hechos clave (bullets)
-- Riesgos / Issues abiertos (si los hay)
-- Próximas acciones recomendadas (3-5 bullets)
-- Fuentes (lista con texto y URL cuando esté disponible)
-
-Usa SOLO la información proporcionada. No inventes datos.
-Fuentes (incluye siempre la URL si existe):
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                return {
-                    "success": True,
-                    "task_type": "prebrief",
-                    "summary": llm_summary,
-                    "sources": [
-                        {"app": r.app_name, "source": r.source_name, "url": r.url}
-                        for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Error generando pre-brief: {e}"}
-
-        if task_type == "data_analysis":
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = (r.snippet or r.content or "")[:600]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                prompt = f"""
-Eres un analista senior de datos. Con la información conectada, entrega:
-- Resumen ejecutivo (3-5 bullets con URLs si existen).
-- Insights clave multi-año (tendencias, top/bottom periodos).
-- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
-- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
-- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
-- Próximas acciones priorizadas (impacto/urgencia).
-
-Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
-Fuentes:
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                return {
-                    "success": True,
-                    "task_type": "data_analysis",
-                    "summary": llm_summary,
-                    "sources": [
-                        {"app": r.app_name, "source": r.source_name, "url": r.url}
-                        for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
-        
-        return await self.app_integrations.execute_autonomous_task(
-            task_description=task_description,
-            task_type=task_type,
-            context=context
-        )
-
-    async def execute_autonomous_task_v2(
-        self,
-        task_description: str,
-        task_type: str,
-        session_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        urls_in_bullets: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
-        """
-        if not self.app_integrations:
-            return {"success": False, "error": "Sistema de integraciones no disponible"}
-        
-        if task_type == "prebrief":
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = (r.snippet or r.content or "")[:500]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                prompt = f"""
-Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
-- Executive Summary (3-5 bullets concisos)
-- Métricas / Hechos clave (bullets)
-- Riesgos / Issues abiertos (si los hay)
-- Próximas acciones recomendadas (3-5 bullets)
-- Fuentes (lista con texto y URL cuando esté disponible)
-
-Usa SOLO la información proporcionada. No inventes datos.
-Fuentes (incluye siempre la URL si existe):
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                return {
-                    "success": True,
-                    "task_type": "prebrief",
-                    "summary": llm_summary,
-                    "sources": [
-                        {"app": r.app_name, "source": r.source_name, "url": r.url}
-                        for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Error generando pre-brief: {e}"}
-
-        if task_type == "data_analysis":
-            try:
-                search_results = await self.app_integrations.search_across_apps(
-                    query=task_description,
-                    filters=filters
-                )
-                if not search_results:
-                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
-                ctx_lines = []
-                for r in search_results[:10]:
-                    snippet = (r.snippet or r.content or "")[:600]
-                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
-                context_block = "\n".join(ctx_lines)
-                prompt = f"""
-Eres un analista senior de datos. Con la información conectada, entrega:
-- Resumen ejecutivo (3-5 bullets con URLs si existen).
-- Insights clave multi-año (tendencias, top/bottom periodos).
-- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
-- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
-- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
-- Próximas acciones priorizadas (impacto/urgencia).
-
-Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
-Fuentes:
-{context_block}
-"""
-                if urls_in_bullets:
-                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
-                llm_summary = self.llm.predict(prompt)
-                return {
-                    "success": True,
-                    "task_type": "data_analysis",
-                    "summary": llm_summary,
-                    "sources": [
-                        {"app": r.app_name, "source": r.source_name, "url": r.url}
-                        for r in search_results[:10]
-                    ],
-                    "sources_count": len(search_results)
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
-
-        return await self.execute_autonomous_task(
-            task_description=task_description,
-            task_type=task_type,
-            session_id=session_id,
-            context=context
-        )
-
     async def execute_autonomous_task_v2(
         self,
         task_description: str,
@@ -2331,7 +1894,6 @@ RESPUESTA:"""
             "total_conflicts": len(conflicts)
         }
     
->>>>>>> 7cc331624b8b5de58ee8f2365424f0acfbda7432
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
@@ -2367,33 +1929,1095 @@ RESPUESTA:"""
             }
         
         return stats
+    
+    # ===================================================================
+    # MÉTODOS ESPECIALIZADOS PARA PROCESAMIENTO AUTOMÁTICO CONTABLE
+    # ===================================================================
+    
+    def _generate_accounting_gists(self, docs: List[Document]) -> List[AccountingDocumentGist]:
+        """Genera gists (resúmenes ligeros) para clasificación rápida de documentos contables."""
+        from collections import defaultdict
+        import hashlib
+        
+        # Agrupar chunks por archivo
+        docs_by_file: Dict[str, List[Document]] = defaultdict(list)
+        for doc in docs:
+            src = doc.metadata.get("source") or doc.metadata.get("file_name") or "documento"
+            docs_by_file[src].append(doc)
+        
+        gists = []
+        for file_name, file_docs in docs_by_file.items():
+            # Obtener muestra de texto
+            text_sample = "\n".join([d.page_content[:500] for d in file_docs[:5]])
+            
+            # Calcular hash
+            file_hash = hashlib.md5(text_sample.encode()).hexdigest()
+            
+            # Clasificar tipo de documento usando LLM rápido
+            doc_type, entities, topics = self._classify_accounting_document(text_sample, file_name)
+            
+            # Calcular tamaño
+            total_size = sum(len(d.page_content) for d in file_docs)
+            size_mb = total_size / (1024 * 1024)
+            
+            gist = AccountingDocumentGist(
+                file_name=file_name,
+                file_hash=file_hash,
+                text_sample=text_sample[:1000],
+                chunk_count=len(file_docs),
+                size_mb=size_mb,
+                document_type=doc_type,
+                key_entities=entities,
+                key_topics=topics
+            )
+            gists.append(gist)
+        
+        return gists
+    
+    def _classify_accounting_document(self, text_sample: str, file_name: str) -> Tuple[str, List[str], List[str]]:
+        """Classifies an accounting document and extracts key entities/topics."""
+        prompt = f"""You are an expert in accounting and financial documents. Analyze this fragment and classify with MAXIMUM PRECISION.
+
+1. DOCUMENT TYPE (choose EXACTLY one):
+   - "invoice": Invoices, bills, sales receipts
+   - "contract": Contracts, agreements, conventions
+   - "financial_statement": Financial statements, accounting reports
+   - "balance_sheet": Balance sheets, financial position statements
+   - "receipt": Payment receipts, vouchers
+   - "bank_statement": Bank account statements, extracts
+   - "report": Financial reports, accounting reports
+   - "other": Other accounting documents
+
+2. MAIN ENTITIES: Company names, suppliers, clients (maximum 5)
+3. MAIN TOPICS: Key concepts like "payments", "taxes", "contracts" (maximum 5)
+
+DOCUMENT FRAGMENT:
+{text_sample[:2000]}
+
+FILE NAME: {file_name}
+
+IMPORTANT: Respond ONLY in valid JSON, no additional text:
+{{
+    "document_type": "invoice|contract|financial_statement|balance_sheet|receipt|bank_statement|report|other",
+    "entities": ["entity1", "entity2"],
+    "topics": ["topic1", "topic2"]
+}}"""
+        
+        try:
+            # Usar fast_llm si está disponible, sino usar llm principal
+            llm_to_use = self.fast_llm if hasattr(self, 'fast_llm') else self.llm
+            
+            response = llm_to_use.invoke(prompt).content.strip()
+            
+            # Limpiar respuesta
+            if "```json" in response:
+                response = response.split("```json")[1].split("```")[0].strip()
+            elif "```" in response:
+                response = response.split("```")[1].split("```")[0].strip()
+            
+            data = json.loads(response)
+            doc_type = data.get("document_type", "other")
+            # Validar tipo
+            valid_types = ["invoice", "contract", "financial_statement", "balance_sheet", "receipt", "bank_statement", "report", "other"]
+            if doc_type not in valid_types:
+                doc_type = "other"
+            
+            return (
+                doc_type,
+                list(data.get("entities", []))[:5],
+                list(data.get("topics", []))[:5],
+            )
+        except json.JSONDecodeError as e:
+            print(f"⚠️ [Accountability] Error parsing JSON in classification of {file_name}: {e}")
+            return ("other", [], [])
+        except Exception as e:
+            print(f"⚠️ [Accountability] Error classifying document {file_name}: {e}")
+            return ("other", [], [])
+    
+    def _extract_accounting_structured_data_parallel(
+        self,
+        docs: List[Document],
+        gists: List[AccountingDocumentGist],
+    ) -> List[AccountingStructuredData]:
+        """Extracción estructurada en paralelo especializada para documentos contables."""
+        from collections import defaultdict
+        
+        # Agrupar chunks por archivo
+        docs_by_file: Dict[str, List[Document]] = defaultdict(list)
+        for doc in docs:
+            src = doc.metadata.get("source") or doc.metadata.get("file_name") or "documento"
+            docs_by_file[src].append(doc)
+        
+        # Mapear tipos desde gists
+        doc_type_map = {g.file_name: g.document_type for g in gists}
+        
+        def _extract_for_file(file_name: str, file_docs: List[Document], doc_type: str) -> AccountingStructuredData:
+            # Construir contexto
+            parts = []
+            max_chars = 8000
+            total_chars = 0
+            for d in file_docs[:50]:
+                if total_chars >= max_chars:
+                    break
+                piece = d.page_content[:400]
+                parts.append(piece)
+                total_chars += len(piece)
+            context = "\n\n".join(parts)
+            
+            # Prompt especializado según tipo
+            if doc_type == "invoice":
+                prompt = self._get_invoice_extraction_prompt(file_name, context)
+            elif doc_type == "contract":
+                prompt = self._get_contract_extraction_prompt(file_name, context)
+            elif doc_type in ["financial_statement", "balance_sheet", "report"]:
+                prompt = self._get_financial_report_extraction_prompt(file_name, context, doc_type)
+            else:
+                prompt = self._get_generic_accounting_extraction_prompt(file_name, context, doc_type)
+            
+            try:
+                # Usar fast_llm si está disponible, sino usar llm principal
+                llm_to_use = self.fast_llm if hasattr(self, 'fast_llm') else self.llm
+                
+                raw = llm_to_use.invoke(prompt).content.strip()
+                
+                # Limpiar respuesta JSON
+                if "```json" in raw:
+                    raw = raw.split("```json")[1].split("```")[0].strip()
+                elif "```" in raw:
+                    # Buscar el bloque de código
+                    parts = raw.split("```")
+                    for i, part in enumerate(parts):
+                        if i > 0 and i < len(parts) - 1:
+                            stripped = part.strip()
+                            if stripped.startswith("{") or stripped.startswith("["):
+                                raw = stripped
+                                break
+                
+                # Parsear JSON con manejo robusto
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    # Intentar encontrar el JSON en el texto
+                    import re
+                    json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+                    if json_match:
+                        data = json.loads(json_match.group())
+                    else:
+                        raise ValueError(f"No se pudo encontrar JSON válido en la respuesta")
+                
+                # Validar estructura básica
+                if not isinstance(data, dict):
+                    raise ValueError("La respuesta no es un objeto JSON válido")
+                
+                # Normalizar extracted_fields
+                extracted_fields = data.get("extracted_fields", {})
+                if not isinstance(extracted_fields, dict):
+                    extracted_fields = {}
+                
+                return AccountingStructuredData(
+                    document_id=file_name,
+                    document_type=doc_type,
+                    extracted_fields=extracted_fields,
+                    entities=data.get("entities", []) if isinstance(data.get("entities"), list) else [],
+                    dates=data.get("dates", []) if isinstance(data.get("dates"), list) else [],
+                    amounts=data.get("amounts", []) if isinstance(data.get("amounts"), list) else [],
+                    risk_flags=data.get("risk_flags", []) if isinstance(data.get("risk_flags"), list) else [],
+                    opportunity_flags=data.get("opportunity_flags", []) if isinstance(data.get("opportunity_flags"), list) else [],
+                    errors_detected=data.get("errors_detected", []) if isinstance(data.get("errors_detected"), list) else [],
+                    reconciliation_status=data.get("reconciliation_status")
+                )
+            except json.JSONDecodeError as e:
+                print(f"⚠️ [Accountability] Error parsing JSON for {file_name}: {e}")
+                return AccountingStructuredData(
+                    document_id=file_name,
+                    document_type=doc_type,
+                    extracted_fields={},
+                    entities=[],
+                    dates=[],
+                    amounts=[],
+                    risk_flags=[],
+                    opportunity_flags=[],
+                    errors_detected=[f"Error parsing JSON: {str(e)}"],
+                    reconciliation_status=None
+                )
+            except Exception as e:
+                print(f"⚠️ [Accountability] Error in structured extraction for {file_name}: {e}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
+                return AccountingStructuredData(
+                    document_id=file_name,
+                    document_type=doc_type,
+                    extracted_fields={},
+                    entities=[],
+                    dates=[],
+                    amounts=[],
+                    risk_flags=[],
+                    opportunity_flags=[],
+                    errors_detected=[f"Error in extraction: {str(e)}"],
+                    reconciliation_status=None
+                )
+        
+        # Ejecutar en paralelo
+        structured_data_list: List[AccountingStructuredData] = []
+        max_workers = min(8, len(docs_by_file) or 1)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _extract_for_file,
+                    name,
+                    docs_by_file.get(name, []),
+                    doc_type_map.get(name, "other")
+                ): name
+                for name in docs_by_file.keys()
+                if docs_by_file.get(name)
+            }
+            
+            for future in as_completed(futures):
+                try:
+                    sd = future.result()
+                    structured_data_list.append(sd)
+                except Exception as e:
+                    print(f"⚠️ Error in parallel extraction: {e}")
+        
+        return structured_data_list
+    
+    def _get_invoice_extraction_prompt(self, file_name: str, context: str) -> str:
+        """Specialized prompt for invoice extraction with maximum precision."""
+        return f"""You are an expert accountant and auditor specialized in invoices. Extract ALL data with MAXIMUM PRECISION.
+
+DOCUMENT: {file_name}
+CONTENT:
+{context[:8000]}
+
+CRITICAL INSTRUCTIONS:
+- Extract ALL visible fields, even if they seem redundant
+- If a field is not visible, use null (DO NOT invent values)
+- For dates: try to parse to ISO format (YYYY-MM-DD), if not possible, save the original text
+- For amounts: use decimal numbers (e.g., 1234.56), NOT strings
+- Verify mathematical consistency: subtotal + taxes - discounts = total
+- Detect errors: missing critical fields, inconsistencies, invalid dates
+
+FIELDS TO EXTRACT:
+1. SUPPLIER: Full name of issuer/supplier
+2. CLIENT: Name of client/recipient (if applicable)
+3. INVOICE NUMBER: Unique number, series + number
+4. ISSUE DATE: Date when issued
+5. DUE DATE: Payment deadline
+6. TOTAL AMOUNT: Final total amount
+7. CURRENCY: USD, EUR, etc.
+8. SUBTOTAL: Amount before taxes
+9. TAXES: VAT, taxes, fees (detail if multiple)
+10. DISCOUNTS: Applied discounts
+11. PAYMENT METHOD: Wire transfer, cash, check, credit, etc.
+12. PAYMENT STATUS: paid/pending/overdue/partial
+13. PRODUCTS/SERVICES: Detailed list of items
+14. ERRORS: Mathematical inconsistencies, missing critical fields
+15. RISKS: Overdue invoices, anomalous amounts, new suppliers
+
+IMPORTANT: Respond ONLY in valid JSON:
+{{
+    "extracted_fields": {{
+        "supplier": "string or null",
+        "client": "string or null",
+        "invoice_number": "string or null",
+        "issue_date": "YYYY-MM-DD or original text or null",
+        "due_date": "YYYY-MM-DD or original text or null",
+        "total_amount": decimal number or null,
+        "currency": "USD/EUR/etc or null",
+        "subtotal": decimal number or null,
+        "taxes": decimal number or null,
+        "discounts": decimal number or null,
+        "payment_method": "string or null",
+        "payment_status": "paid|pending|overdue|partial|null",
+        "products": [{{"description": "string", "quantity": number, "unit_price": number, "total": number}}]
+    }},
+    "entities": [
+        {{"type": "supplier|client|product", "name": "string", "value": "string"}}
+    ],
+    "dates": [
+        {{"type": "issue|due|payment", "value": "original text", "parsed": "YYYY-MM-DD or null"}}
+    ],
+    "amounts": [
+        {{"type": "total|subtotal|tax|discount", "value": number, "currency": "string", "description": "string"}}
+    ],
+    "risk_flags": ["risk1", "risk2"],
+    "opportunity_flags": ["opportunity1"],
+    "errors_detected": ["error1", "error2"],
+    "reconciliation_status": "reconciled|pending|error|null"
+}}"""
+    
+    def _get_contract_extraction_prompt(self, file_name: str, context: str) -> str:
+        """Specialized prompt for contract extraction with legal and accounting focus."""
+        return f"""You are an expert in legal and accounting contracts. Extract ALL data with MAXIMUM PRECISION.
+
+DOCUMENT: {file_name}
+CONTENT:
+{context[:8000]}
+
+INSTRUCTIONS:
+- Extract ALL parties, dates, amounts, and important clauses
+- Identify risks, obligations, and opportunities
+- Detect inconsistencies, contradictory dates, ambiguous clauses
+- For dates: parse to ISO (YYYY-MM-DD) when possible
+- For amounts: use decimal numbers, NOT strings
+
+FIELDS TO EXTRACT:
+1. PARTIES: Full name of contracting party and counterparty
+2. DATES: Start, end, signature, expiration, renewal
+3. AMOUNT: Total value, currency, payment method, frequency
+4. TERMS: Duration, conditions, special clauses
+5. RENEWAL: Automatic, manual, conditions, notice period
+6. ENTITIES: Companies, people, products/services contracted
+7. RISKS: Penalties, fines, risk clauses, guarantees
+8. OBLIGATIONS: Responsibilities of each party
+9. DEADLINES: Critical dates requiring immediate attention
+10. ERRORS: Contradictory clauses, inconsistent dates, missing data
+
+IMPORTANT: Respond ONLY in valid JSON:
+{{
+    "extracted_fields": {{
+        "contracting_party": "string or null",
+        "counterparty": "string or null",
+        "start_date": "YYYY-MM-DD or text or null",
+        "end_date": "YYYY-MM-DD or text or null",
+        "signature_date": "YYYY-MM-DD or text or null",
+        "expiration_date": "YYYY-MM-DD or text or null",
+        "total_amount": decimal number or null,
+        "currency": "USD/EUR/etc or null",
+        "term": "string or null",
+        "automatic_renewal": true/false/null,
+        "renewal_period": "string or null",
+        "payment_method": "string or null",
+        "risk_clauses": ["clause1", "clause2"],
+        "guarantees": ["guarantee1", "guarantee2"],
+        "obligations": ["obligation1", "obligation2"],
+        "penalties": ["penalty1"]
+    }},
+    "entities": [
+        {{"type": "company|person|product|service", "name": "string", "value": "string"}}
+    ],
+    "dates": [
+        {{"type": "start|end|expiration|signature|renewal", "value": "original text", "parsed": "YYYY-MM-DD or null"}}
+    ],
+    "amounts": [
+        {{"type": "total|partial|penalty|guarantee", "value": number, "currency": "string", "description": "string"}}
+    ],
+    "risk_flags": ["risk1", "risk2"],
+    "opportunity_flags": ["opportunity1"],
+    "errors_detected": ["error1", "error2"],
+    "reconciliation_status": null
+}}"""
+    
+    def _get_financial_report_extraction_prompt(self, file_name: str, context: str, doc_type: str) -> str:
+        """Specialized prompt for financial report extraction with deep analysis."""
+        return f"""You are an expert accountant and financial analyst. Extract ALL data with MAXIMUM PRECISION.
+
+DOCUMENT: {file_name} (Type: {doc_type})
+CONTENT:
+{context[:8000]}
+
+INSTRUCTIONS:
+- Extract ALL numbers, dates, categories, and KPIs
+- Verify mathematical consistency (income - expenses = result)
+- Identify trends, anomalies, and critical values
+- For amounts: use decimal numbers, NOT strings
+- For dates: parse to ISO (YYYY-MM-DD) when possible
+
+FIELDS TO EXTRACT:
+1. PERIOD: Month, quarter, year of report (start and end)
+2. INCOME: Total, by category, by division/project
+3. EXPENSES: Total, by category, by division/project
+4. BALANCES: Opening balance, closing balance, balance
+5. KPIS: Margin, ROI, EBITDA, financial ratios
+6. ENTITIES: Companies, divisions, projects, accounts
+7. TRENDS: Comparison with previous periods (if available)
+8. ANOMALIES: Unusual values, significant deviations
+9. ERRORS: Mathematical inconsistencies, missing critical data
+10. ALERTS: Critical values, exceeded thresholds
+
+IMPORTANT: Respond ONLY in valid JSON:
+{{
+    "extracted_fields": {{
+        "period": "string (e.g., January 2024, Q1 2024, Year 2024)",
+        "period_start": "YYYY-MM-DD or text or null",
+        "period_end": "YYYY-MM-DD or text or null",
+        "total_income": decimal number or null,
+        "total_expenses": decimal number or null,
+        "net_result": decimal number or null,
+        "opening_balance": decimal number or null,
+        "closing_balance": decimal number or null,
+        "currency": "USD/EUR/etc or null",
+        "income_by_category": {{"category1": number, "category2": number}},
+        "expenses_by_category": {{"category1": number, "category2": number}},
+        "kpis": {{
+            "gross_margin": number or null,
+            "net_margin": number or null,
+            "roi": number or null,
+            "ebitda": number or null
+        }}
+    }},
+    "entities": [
+        {{"type": "company|division|project|account", "name": "string", "value": "string"}}
+    ],
+    "dates": [
+        {{"type": "period_start|period_end|report_date", "value": "original text", "parsed": "YYYY-MM-DD or null"}}
+    ],
+    "amounts": [
+        {{"type": "income|expense|balance|kpi|balance", "value": number, "currency": "string", "description": "string"}}
+    ],
+    "risk_flags": ["risk1", "risk2"],
+    "opportunity_flags": ["opportunity1"],
+    "errors_detected": ["error1", "error2"],
+    "reconciliation_status": null
+}}"""
+    
+    def _get_generic_accounting_extraction_prompt(self, file_name: str, context: str, doc_type: str) -> str:
+        """Generic prompt for other types of accounting documents."""
+        return f"""You are a specialist in accounting data extraction. Extract relevant data.
+
+DOCUMENT: {file_name} (Type: {doc_type})
+CONTENT:
+{context[:6000]}
+
+Extract relevant structured data:
+- Main entities (companies, people, products)
+- Important dates
+- Relevant amounts/numbers
+- Key fields according to document type
+- Identified risks and opportunities
+- Detected errors
+
+Respond ONLY in JSON:
+{{
+    "extracted_fields": {{"field1": "value1", ...}},
+    "entities": [
+        {{"type": "type", "name": "...", "value": "..."}}
+    ],
+    "dates": [
+        {{"type": "type", "value": "...", "parsed": "YYYY-MM-DD or null"}}
+    ],
+    "amounts": [
+        {{"type": "type", "value": number, "currency": "...", "description": "..."}}
+    ],
+    "risk_flags": ["risk1", ...],
+    "opportunity_flags": ["opportunity1", ...],
+    "errors_detected": ["error1", ...],
+    "reconciliation_status": null
+}}"""
+    
+    def _detect_accounting_errors(self, structured_data_list: List[AccountingStructuredData]) -> List[str]:
+        """Detecta errores contables automáticamente con validaciones robustas."""
+        errors = []
+        
+        for sd in structured_data_list:
+            # Errores ya detectados en extracción
+            if sd.errors_detected:
+                errors.extend([f"[{sd.document_id}]: {e}" for e in sd.errors_detected])
+            
+            # Validaciones adicionales por tipo de documento
+            if sd.document_type == "invoice":
+                fields = sd.extracted_fields
+                
+                # Validar campos críticos faltantes
+                critical_fields = ["invoice_number", "supplier", "total_amount"]
+                for field in critical_fields:
+                    if not fields.get(field):
+                        errors.append(f"[{sd.document_id}]: Campo crítico faltante: {field}")
+                
+                # Verificar cálculos matemáticos
+                subtotal = fields.get("subtotal")
+                taxes = fields.get("taxes")
+                discounts = fields.get("discounts")
+                total = fields.get("total_amount")
+                
+                if subtotal is not None and total is not None:
+                    calculated = float(subtotal) if isinstance(subtotal, (int, float)) else 0
+                    if taxes is not None:
+                        calculated += float(taxes) if isinstance(taxes, (int, float)) else 0
+                    if discounts is not None:
+                        calculated -= float(discounts) if isinstance(discounts, (int, float)) else 0
+                    
+                    # Permitir diferencia menor al 0.1% o $0.01 (errores de redondeo)
+                    diff = abs(calculated - float(total)) if isinstance(total, (int, float)) else 0
+                    threshold = max(float(total) * 0.001, 0.01) if total else 0.01
+                    
+                    if diff > threshold and total and total > 0:
+                        errors.append(f"[{sd.document_id}]: ⚠️ Inconsistencia matemática - Calculado: {calculated:,.2f} ≠ Total: {total:,.2f} (Diferencia: {diff:,.2f})")
+                
+                # Validate dates
+                issue_date = fields.get("issue_date")
+                due_date = fields.get("due_date")
+                
+                if issue_date and due_date:
+                    try:
+                        from datetime import datetime
+                        # Try to parse if in ISO format
+                        if isinstance(issue_date, str) and len(issue_date) == 10:
+                            issue_dt = datetime.fromisoformat(issue_date)
+                            due_dt = datetime.fromisoformat(due_date)
+                            if due_dt < issue_dt:
+                                errors.append(f"[{sd.document_id}]: ⚠️ Due date ({due_date}) is before issue date ({issue_date})")
+                    except:
+                        pass
+            
+            # Check past due dates
+            for date in sd.dates:
+                if date.get("type") == "due" and date.get("parsed"):
+                    try:
+                        from datetime import datetime
+                        if isinstance(date["parsed"], str) and len(date["parsed"]) == 10:
+                            due_dt = datetime.fromisoformat(date["parsed"])
+                            if due_dt < datetime.now():
+                                days_past = (datetime.now() - due_dt).days
+                                errors.append(f"[{sd.document_id}]: ⚠️ Document overdue by {days_past} days: {date['parsed']}")
+                    except:
+                        pass
+            
+            # Validate negative or zero amounts in invoices
+            if sd.document_type == "invoice":
+                total = sd.extracted_fields.get("total_amount")
+                if total is not None:
+                    try:
+                        total_float = float(total)
+                        if total_float <= 0:
+                            errors.append(f"[{sd.document_id}]: ⚠️ Invalid total amount (≤ 0): {total}")
+                    except:
+                        pass
+        
+        return errors
+    
+    def _reconcile_accounts(self, structured_data_list: List[AccountingStructuredData]) -> Dict[str, Any]:
+        """Realiza conciliación automática de facturas y pagos con algoritmo mejorado."""
+        invoices = [sd for sd in structured_data_list if sd.document_type == "invoice"]
+        payments = [sd for sd in structured_data_list if sd.document_type in ["receipt", "bank_statement", "invoice"]]
+        
+        reconciled_count = 0
+        payments_reconciled = 0
+        discrepancies = 0
+        partial_matches = 0
+        
+        # Crear índices para búsqueda rápida
+        payment_by_number = {}
+        payment_by_amount = {}
+        
+        for payment in payments:
+            # Indexar por número de factura mencionado
+            payment_num = payment.extracted_fields.get("invoice_number") or payment.extracted_fields.get("reference")
+            if payment_num:
+                payment_by_number[payment_num] = payment
+            
+            # Index by amount
+            payment_amount = payment.extracted_fields.get("total_amount") or payment.extracted_fields.get("amount")
+            if payment_amount:
+                try:
+                    amt = float(payment_amount)
+                    if amt not in payment_by_amount:
+                        payment_by_amount[amt] = []
+                    payment_by_amount[amt].append(payment)
+                except:
+                    pass
+        
+        # Process invoices
+        for invoice in invoices:
+            invoice_num = invoice.extracted_fields.get("invoice_number")
+            invoice_amount = invoice.extracted_fields.get("total_amount")
+            
+            if not invoice_amount:
+                invoice.reconciliation_status = "pending"
+                discrepancies += 1
+                continue
+            
+            try:
+                invoice_amt = float(invoice_amount)
+            except:
+                invoice.reconciliation_status = "pending"
+                discrepancies += 1
+                continue
+            
+            matched = False
+            matched_payment = None
+            
+            # Método 1: Match por número de factura (más confiable)
+            if invoice_num:
+                matched_payment = payment_by_number.get(invoice_num)
+                if matched_payment:
+                    matched = True
+            
+            # Método 2: Match por monto exacto o muy cercano
+            if not matched:
+                # Búsqueda exacta
+                if invoice_amt in payment_by_amount:
+                    matched_payment = payment_by_amount[invoice_amt][0]
+                    matched = True
+                else:
+                    # Búsqueda por tolerancia ($0.01 o 0.1%)
+                    tolerance = max(0.01, invoice_amt * 0.001)
+                    for amt, payment_list in payment_by_amount.items():
+                        if abs(amt - invoice_amt) <= tolerance:
+                            matched_payment = payment_list[0]
+                            matched = True
+                            break
+            
+            # Método 3: Match parcial (si no hay match exacto)
+            if not matched and invoice_amt > 0:
+                for payment in payments:
+                    payment_amount = payment.extracted_fields.get("total_amount") or payment.extracted_fields.get("amount")
+                    if payment_amount:
+                        try:
+                            pay_amt = float(payment_amount)
+                            # Match parcial: 50% o más del monto
+                            if pay_amt >= invoice_amt * 0.5 and pay_amt <= invoice_amt * 1.5:
+                                partial_matches += 1
+                                invoice.reconciliation_status = "partial"
+                                break
+                        except:
+                            pass
+            
+            if matched:
+                reconciled_count += 1
+                payments_reconciled += 1
+                invoice.reconciliation_status = "reconciled"
+            elif invoice.reconciliation_status != "partial":
+                discrepancies += 1
+                invoice.reconciliation_status = "pending"
+        
+        return {
+            "invoices_reconciled": reconciled_count,
+            "payments_reconciled": payments_reconciled,
+            "discrepancies": discrepancies,
+            "partial_matches": partial_matches,
+            "total_invoices": len(invoices),
+            "total_payments": len([p for p in payments if p.document_type != "invoice"])
+        }
+    
+    def _generate_accounting_executive_summary(
+        self,
+        structured_data_list: List[AccountingStructuredData],
+        errors: List[str],
+        reconciliation: Dict[str, Any]
+    ) -> AccountingExecutiveSummary:
+        """Generates automatic executive summary of accounting documents."""
+        from collections import defaultdict, Counter
+        
+        # Contar tipos
+        doc_types = Counter([sd.document_type for sd in structured_data_list])
+        
+        # Calcular totales
+        invoices = [sd for sd in structured_data_list if sd.document_type == "invoice"]
+        contracts = [sd for sd in structured_data_list if sd.document_type == "contract"]
+        financial = [sd for sd in structured_data_list if sd.document_type in ["financial_statement", "balance_sheet", "report"]]
+        
+        # Sumar montos
+        total_amount = 0
+        total_invoices = 0
+        total_contracts = 0
+        currency = None
+        
+        for sd in structured_data_list:
+            amount = sd.extracted_fields.get("total_amount") or sd.extracted_fields.get("amount")
+            if amount:
+                total_amount += amount
+                if not currency:
+                    currency = sd.extracted_fields.get("currency")
+                
+                if sd.document_type == "invoice":
+                    total_invoices += amount
+                elif sd.document_type == "contract":
+                    total_contracts += amount
+        
+        # Top suppliers (from invoices)
+        suppliers = defaultdict(float)
+        for invoice in invoices:
+            supplier = invoice.extracted_fields.get("supplier")
+            amount = invoice.extracted_fields.get("total_amount", 0)
+            if supplier:
+                suppliers[supplier] += amount
+        
+        top_suppliers = [
+            {"name": name, "amount": amt, "currency": currency}
+            for name, amt in sorted(suppliers.items(), key=lambda x: x[1], reverse=True)[:10]
+        ]
+        
+        # Top clients (from issued invoices)
+        clients = defaultdict(float)
+        for invoice in invoices:
+            client = invoice.extracted_fields.get("client")
+            amount = invoice.extracted_fields.get("total_amount", 0)
+            if client:
+                clients[client] += amount
+        
+        top_clients = [
+            {"name": name, "amount": amt, "currency": currency}
+            for name, amt in sorted(clients.items(), key=lambda x: x[1], reverse=True)[:10]
+        ]
+        
+        # Upcoming deadlines
+        upcoming_deadlines = []
+        for sd in structured_data_list:
+            for date in sd.dates:
+                if date.get("type") in ["due", "end", "expiration"] and date.get("parsed"):
+                    try:
+                        from datetime import datetime, timedelta
+                        due_dt = datetime.fromisoformat(date["parsed"])
+                        if datetime.now() <= due_dt <= datetime.now() + timedelta(days=30):
+                            amount = sd.extracted_fields.get("total_amount", 0)
+                            upcoming_deadlines.append({
+                                "document": sd.document_id,
+                                "date": date["parsed"],
+                                "amount": amount,
+                                "currency": sd.extracted_fields.get("currency")
+                            })
+                    except:
+                        pass
+        
+        # Alerts
+        alerts = []
+        if errors:
+            alerts.append(f"⚠️ {len(errors)} accounting errors detected requiring review")
+        if reconciliation.get("discrepancies", 0) > 0:
+            alerts.append(f"⚠️ {reconciliation.get('discrepancies')} invoices pending reconciliation")
+        if upcoming_deadlines:
+            alerts.append(f"📅 {len(upcoming_deadlines)} documents with upcoming deadlines (30 days)")
+        
+        # Recommendations
+        recommendations = []
+        if len(errors) > 5:
+            recommendations.append("🔍 Review accounting processes - multiple errors detected")
+        if reconciliation.get("discrepancies", 0) > 0:
+            recommendations.append("💳 Prioritize reconciliation of pending invoices")
+        if total_amount > 100000:
+            recommendations.append("💰 Consider audit review for high amounts")
+        
+        # Anomalies
+        anomalies = []
+        if total_amount > 0:
+            avg_invoice = total_invoices / len(invoices) if invoices else 0
+            for invoice in invoices:
+                amount = invoice.extracted_fields.get("total_amount", 0)
+                if amount > avg_invoice * 3:  # Invoice 3x greater than average
+                    anomalies.append({
+                        "type": "Anomalous amount",
+                        "description": f"Invoice {invoice.extracted_fields.get('invoice_number', 'N/A')} with unusual amount: {amount:,.2f}"
+                    })
+        
+        return AccountingExecutiveSummary(
+            total_documents=len(structured_data_list),
+            document_types=dict(doc_types),
+            total_amount=total_amount if total_amount > 0 else None,
+            currency=currency,
+            invoices_count=len(invoices),
+            contracts_count=len(contracts),
+            financial_reports_count=len(financial),
+            total_invoices_amount=total_invoices if total_invoices > 0 else None,
+            total_contracts_amount=total_contracts if total_contracts > 0 else None,
+            errors_detected=errors[:20],  # Top 20
+            alerts=alerts,
+            recommendations=recommendations,
+            reconciliation_summary=reconciliation,
+            top_suppliers=top_suppliers,
+            top_clients=top_clients,
+            vencimientos_proximos=sorted(upcoming_deadlines, key=lambda x: x.get("date", ""))[:20],
+            anomalies=anomalies[:20]
+        )
+    
+    def process_accounting_documents_streaming(
+        self,
+        files: List[Any],
+        auto_classify: bool = True,
+        auto_reconcile: bool = True,
+        auto_detect_errors: bool = True,
+    ) -> Iterator[str]:
+        """
+        Automatically processes accounting/financial PDFs without requiring prompts.
+        
+        Uses the same methods as Enterprise API and Chat Conversational 2 Enterprise:
+        - Specialized structured extraction (invoices, contracts, reports)
+        - Automatic classification by document type
+        - Automatic reconciliation and comparison
+        - Error and inconsistency detection
+        - Automatic executive summaries
+        - Alerts and recommendations
+        
+        Args:
+            files: List of PDF files to process
+            auto_classify: Automatically classify documents by type
+            auto_reconcile: Perform automatic reconciliation of invoices/payments
+            auto_detect_errors: Automatically detect accounting errors
+            
+        Yields:
+            str: Result fragments in markdown format for streaming
+        """
+        yield "## 🏢 Automatic Accounting Document Processing - Accountability\n\n"
+        yield "📄 Processing documents...\n\n"
+        
+        try:
+            # Validate files
+            if not files:
+                yield "❌ **Error**: No files provided for processing.\n"
+                return
+            
+            # PHASE 1: DOCUMENT PROCESSING (same as Enterprise API)
+            yield "🔄 Processing PDF documents...\n"
+            docs = self.processor.process(files)
+            yield f"✅ **Documents processed**: {len(files)}\n"
+            yield f"✅ **Chunks generated**: {len(docs)}\n\n"
+            
+            if not docs:
+                yield "⚠️ **Warning**: Could not process documents. Verify they are valid PDFs.\n"
+                return
+            
+            # PHASE 2: GENERATE GISTS FOR RAPID CLASSIFICATION
+            yield "### 📋 PHASE 1: Automatic Document Classification\n\n"
+            yield "🔄 Classifying documents by type...\n"
+            
+            try:
+                gists = self._generate_accounting_gists(docs)
+                yield f"- ✅ Gists generated: {len(gists)}\n"
+                
+                if not gists:
+                    yield "⚠️ **Warning**: Could not classify documents.\n"
+                    return
+                
+                # Classify by type
+                doc_types = {}
+                for gist in gists:
+                    doc_type = gist.document_type
+                    doc_types[doc_type] = doc_types.get(doc_type, 0) + 1
+                
+                yield f"- 📊 Document distribution:\n"
+                for doc_type, count in sorted(doc_types.items(), key=lambda x: x[1], reverse=True):
+                    yield f"  - **{doc_type}**: {count}\n"
+                yield "\n"
+            except Exception as e:
+                yield f"⚠️ **Error in classification**: {str(e)}\n"
+                yield "🔄 Continuing with generic processing...\n\n"
+                # Crear gists básicos para continuar
+                from collections import defaultdict
+                docs_by_file = defaultdict(list)
+                for doc in docs:
+                    src = doc.metadata.get("source") or doc.metadata.get("file_name") or "document"
+                    docs_by_file[src].append(doc)
+                
+                gists = []
+                for file_name, file_docs in docs_by_file.items():
+                    gists.append(AccountingDocumentGist(
+                        file_name=file_name,
+                        file_hash="",
+                        text_sample="",
+                        chunk_count=len(file_docs),
+                        size_mb=0,
+                        document_type="other",
+                        key_entities=[],
+                        key_topics=[]
+                    ))
+            
+            # PHASE 3: SPECIALIZED STRUCTURED EXTRACTION
+            yield "### 🏗️ PHASE 2: Structured Accounting Data Extraction\n\n"
+            yield "🔄 Extracting structured data...\n"
+            
+            try:
+                structured_data_list = self._extract_accounting_structured_data_parallel(docs, gists)
+                yield f"- ✅ Documents with structured data: {len(structured_data_list)}\n"
+                
+                if not structured_data_list:
+                    yield "⚠️ **Warning**: Could not extract structured data from documents.\n"
+                    return
+                
+                # Summary by type
+                invoices = [sd for sd in structured_data_list if sd.document_type == "invoice"]
+                contracts = [sd for sd in structured_data_list if sd.document_type == "contract"]
+                financial = [sd for sd in structured_data_list if sd.document_type in ["financial_statement", "balance_sheet", "report"]]
+                
+                yield f"- 📄 **Invoices**: {len(invoices)}\n"
+                yield f"- 📝 **Contracts**: {len(contracts)}\n"
+                yield f"- 💰 **Financial Reports**: {len(financial)}\n\n"
+            except Exception as e:
+                yield f"❌ **Error in structured extraction**: {str(e)}\n"
+                import traceback
+                yield f"```\n{traceback.format_exc()}\n```\n"
+                return
+            
+            # PHASE 4: AUTOMATIC ANALYSIS
+            yield "### 🔍 PHASE 3: Automatic Analysis\n\n"
+            
+            # Error detection
+            if auto_detect_errors:
+                yield "🔎 Detecting errors and inconsistencies...\n"
+                errors = self._detect_accounting_errors(structured_data_list)
+                if errors:
+                    yield f"- ⚠️ **Errors detected**: {len(errors)}\n"
+                    for error in errors[:10]:  # Top 10
+                        yield f"  - {error}\n"
+                else:
+                    yield "- ✅ No accounting errors detected\n"
+                yield "\n"
+            
+            # Reconciliation
+            if auto_reconcile:
+                yield "🔗 Performing automatic reconciliation...\n"
+                reconciliation = self._reconcile_accounts(structured_data_list)
+                yield f"- ✅ **Reconciliation completed**\n"
+                yield f"  - Invoices reconciled: {reconciliation.get('invoices_reconciled', 0)}\n"
+                yield f"  - Payments reconciled: {reconciliation.get('payments_reconciled', 0)}\n"
+                yield f"  - Discrepancies: {reconciliation.get('discrepancies', 0)}\n"
+                yield "\n"
+            
+            # PHASE 5: AUTOMATIC EXECUTIVE SUMMARY
+            yield "### 📊 PHASE 4: Automatic Executive Summary\n\n"
+            executive_summary = self._generate_accounting_executive_summary(
+                structured_data_list, 
+                errors if auto_detect_errors else [],
+                reconciliation if auto_reconcile else {}
+            )
+            
+            yield "## 📋 EXECUTIVE SUMMARY - ACCOUNTING DOCUMENTS\n\n"
+            yield f"**Total documents processed**: {executive_summary.total_documents}\n\n"
+            
+            yield "### 📊 Distribution by Type:\n"
+            for doc_type, count in executive_summary.document_types.items():
+                yield f"- **{doc_type}**: {count}\n"
+            yield "\n"
+            
+            if executive_summary.total_amount:
+                yield f"### 💰 Financial Totals:\n"
+                yield f"- **Total amount**: {executive_summary.currency or ''} {executive_summary.total_amount:,.2f}\n"
+                if executive_summary.total_invoices_amount:
+                    yield f"- **Total invoices**: {executive_summary.currency or ''} {executive_summary.total_invoices_amount:,.2f}\n"
+                if executive_summary.total_contracts_amount:
+                    yield f"- **Total contracts**: {executive_summary.currency or ''} {executive_summary.total_contracts_amount:,.2f}\n"
+                yield "\n"
+            
+            # Alerts
+            if executive_summary.alerts:
+                yield "### ⚠️ IMPORTANT ALERTS:\n"
+                for alert in executive_summary.alerts[:10]:  # Top 10
+                    yield f"- {alert}\n"
+                yield "\n"
+            
+            # Errors detected
+            if executive_summary.errors_detected:
+                yield "### ❌ ERRORS DETECTED:\n"
+                for error in executive_summary.errors_detected[:10]:  # Top 10
+                    yield f"- {error}\n"
+                yield "\n"
+            
+            # Recommendations
+            if executive_summary.recommendations:
+                yield "### 💡 RECOMMENDATIONS:\n"
+                for rec in executive_summary.recommendations[:10]:  # Top 10
+                    yield f"- {rec}\n"
+                yield "\n"
+            
+            # Top suppliers and clients
+            if executive_summary.top_suppliers:
+                yield "### 🏢 TOP SUPPLIERS:\n"
+                for i, supplier in enumerate(executive_summary.top_suppliers[:5], 1):
+                    yield f"{i}. **{supplier.get('name', 'N/A')}**: {supplier.get('amount', 0):,.2f} {supplier.get('currency', '')}\n"
+                yield "\n"
+            
+            if executive_summary.top_clients:
+                yield "### 👥 TOP CLIENTS:\n"
+                for i, client in enumerate(executive_summary.top_clients[:5], 1):
+                    yield f"{i}. **{client.get('name', 'N/A')}**: {client.get('amount', 0):,.2f} {client.get('currency', '')}\n"
+                yield "\n"
+            
+            # Upcoming deadlines
+            if executive_summary.vencimientos_proximos:
+                yield "### 📅 UPCOMING DEADLINES:\n"
+                for venc in executive_summary.vencimientos_proximos[:10]:
+                    yield f"- **{venc.get('document', 'N/A')}**: {venc.get('date', 'N/A')} - {venc.get('amount', 0):,.2f} {venc.get('currency', '')}\n"
+                yield "\n"
+            
+            # Anomalies
+            if executive_summary.anomalies:
+                yield "### 🔍 DETECTED ANOMALIES:\n"
+                for anomaly in executive_summary.anomalies[:10]:
+                    yield f"- **{anomaly.get('type', 'N/A')}**: {anomaly.get('description', 'N/A')}\n"
+                yield "\n"
+            
+            # PHASE 6: DOCUMENT DETAIL
+            yield "### 📄 DOCUMENT DETAIL\n\n"
+            for sd in structured_data_list[:20]:  # Top 20 documents
+                yield f"#### 📋 {sd.document_id}\n\n"
+                yield f"**Type**: {sd.document_type}\n\n"
+                
+                if sd.extracted_fields:
+                    yield "**Extracted data**:\n"
+                    for key, value in list(sd.extracted_fields.items())[:10]:
+                        yield f"- {key}: {value}\n"
+                    yield "\n"
+                
+                if sd.amounts:
+                    yield "**Amounts**:\n"
+                    for amt in sd.amounts[:5]:
+                        yield f"- {amt.get('type', 'N/A')}: {amt.get('currency', '')} {amt.get('value', 0):,.2f} - {amt.get('description', '')}\n"
+                    yield "\n"
+                
+                if sd.errors_detected:
+                    yield "**Errors detected**:\n"
+                    for error in sd.errors_detected:
+                        yield f"- ⚠️ {error}\n"
+                    yield "\n"
+                
+                if sd.risk_flags:
+                    yield "**Risks**:\n"
+                    for risk in sd.risk_flags[:5]:
+                        yield f"- ⚠️ {risk}\n"
+                    yield "\n"
+                
+                yield "---\n\n"
+            
+            yield "✅ **Automatic processing completed successfully!**\n"
+            yield f"\n📈 **Final Metrics:**\n"
+            yield f"- Documents processed: {len(files)}\n"
+            yield f"- Chunks generated: {len(docs)}\n"
+            yield f"- Structured data: {len(structured_data_list)}\n"
+            yield f"- Invoices: {len(invoices)}\n"
+            yield f"- Contracts: {len(contracts)}\n"
+            yield f"- Financial reports: {len(financial)}\n"
+            if auto_detect_errors:
+                yield f"- Errors detected: {len(executive_summary.errors_detected)}\n"
+            if auto_reconcile:
+                yield f"- Invoices reconciled: {reconciliation.get('invoices_reconciled', 0) if auto_reconcile else 0}\n"
+            
+        except KeyboardInterrupt:
+            yield "\n⚠️ **Processing canceled by user**\n"
+        except Exception as e:
+            yield f"\n❌ **Critical error in automatic processing**: {str(e)}\n"
+            import traceback
+            yield f"\n<details>\n<summary>Technical error details</summary>\n\n```\n{traceback.format_exc()}\n```\n\n</details>\n"
+            yield "\n💡 **Suggestions**:\n"
+            yield "- Verify that PDFs are valid and not password-protected\n"
+            yield "- Ensure you have internet connection (OpenAI API required)\n"
+            yield "- Try with fewer documents if the error persists\n"
 
 
 # Instancia global
-_company_knowledge_instance: Optional[CompanyKnowledge] = None
+_accountability_instance: Optional[Accountability] = None
 
 
-def get_company_knowledge(
+def get_accountability(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> CompanyKnowledge:
-    """Obtiene o crea la instancia global de Company Knowledge."""
-    global _company_knowledge_instance
+) -> Accountability:
+    """Gets or creates the global Accountability instance."""
+    global _accountability_instance
     
-    if _company_knowledge_instance is None:
-        _company_knowledge_instance = CompanyKnowledge(
+    if _accountability_instance is None:
+        _accountability_instance = Accountability(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _company_knowledge_instance
+    return _accountability_instance
 
 
-def run_company_knowledge(
+def run_accountability(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -2408,7 +3032,7 @@ def run_company_knowledge(
     context_manager: Optional[Any] = None
 ):
     """
-    Función principal para ejecutar Company Knowledge con streaming.
+    Función principal para ejecutar Accountability con streaming.
     Compatible con Gradio (devuelve generador para streaming).
     """
     if not config or not processor or not retriever_builder:
@@ -2416,7 +3040,7 @@ def run_company_knowledge(
         return
     
     # Obtener instancia
-    company_knowledge = get_company_knowledge(
+    accountability = get_accountability(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -2425,7 +3049,7 @@ def run_company_knowledge(
     
     # Procesar documentos si hay
     if files:
-        result = company_knowledge.process_documents(session_id, files)
+        result = accountability.process_documents(session_id, files)
         if result.get("status") == "error":
             yield history, f"❌ Error procesando documentos: {result.get('error')}", None
             return
@@ -2444,7 +3068,7 @@ def run_company_knowledge(
             full_response = ""
             
             # Procesar query con streaming
-            async for chunk in company_knowledge.process_query_async_stream(
+            async for chunk in accountability.process_query_async_stream(
                 session_id=session_id,
                 message=message,
                 history=history,
@@ -2479,4 +3103,72 @@ def run_company_knowledge(
             loop.close()
     except Exception as e:
         yield history, f"❌ Error: {str(e)}", None
+
+
+# ===================================================================
+# ESTRUCTURAS DE DATOS PARA PROCESAMIENTO AUTOMÁTICO CONTABLE
+# ===================================================================
+
+@dataclass
+class AccountingDocumentGist:
+    """Gist/memoria ligera por documento contable."""
+    file_name: str
+    file_hash: str
+    text_sample: str
+    chunk_count: int
+    size_mb: float
+    document_type: str = "unknown"  # "invoice", "contract", "financial_statement", "balance_sheet", "receipt", etc.
+    key_entities: List[str] = None
+    key_topics: List[str] = None
+    
+    def __post_init__(self):
+        if self.key_entities is None:
+            self.key_entities = []
+        if self.key_topics is None:
+            self.key_topics = []
+
+
+@dataclass
+class AccountingStructuredData:
+    """Datos estructurados extraídos de documentos contables/financieros."""
+    document_id: str
+    document_type: str  # "invoice", "contract", "financial_statement", "receipt", etc.
+    extracted_fields: Dict[str, Any]  # Campos específicos según tipo
+    entities: List[Dict[str, str]]  # Entidades con tipo y valor
+    dates: List[Dict[str, str]]  # Fechas con tipo (emisión, vencimiento, pago, etc.)
+    amounts: List[Dict[str, Any]]  # Montos con moneda y tipo
+    risk_flags: List[str] = None
+    opportunity_flags: List[str] = None
+    errors_detected: List[str] = None  # Errores contables detectados
+    reconciliation_status: Optional[str] = None  # "reconciled", "pending", "error", etc.
+    
+    def __post_init__(self):
+        if self.risk_flags is None:
+            self.risk_flags = []
+        if self.opportunity_flags is None:
+            self.opportunity_flags = []
+        if self.errors_detected is None:
+            self.errors_detected = []
+
+
+@dataclass
+class AccountingExecutiveSummary:
+    """Resumen ejecutivo de un lote de documentos contables."""
+    total_documents: int
+    document_types: Dict[str, int]  # Tipo -> cantidad
+    total_amount: Optional[float]
+    currency: Optional[str]
+    invoices_count: int
+    contracts_count: int
+    financial_reports_count: int
+    total_invoices_amount: Optional[float]
+    total_contracts_amount: Optional[float]
+    errors_detected: List[str]
+    alerts: List[str]
+    recommendations: List[str]
+    reconciliation_summary: Dict[str, Any]
+    top_suppliers: List[Dict[str, Any]]
+    top_clients: List[Dict[str, Any]]
+    vencimientos_proximos: List[Dict[str, Any]]
+    anomalies: List[Dict[str, Any]]
 
