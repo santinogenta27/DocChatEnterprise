@@ -765,7 +765,9 @@ class CompanyKnowledge:
         task_description: str,
         task_type: str,
         session_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
     ) -> Dict[str, Any]:
         """
         Ejecuta una tarea autónoma usando apps conectadas.
@@ -776,6 +778,7 @@ class CompanyKnowledge:
         - "create_report": Crear un informe basado en datos
         - "plan": Crear un plan basado en información disponible
         - "compare": Comparar información de diferentes fuentes
+        - "prebrief": Pre-brief de campaña/meeting combinando apps
         """
         if not self.app_integrations:
             return {
@@ -783,12 +786,462 @@ class CompanyKnowledge:
                 "error": "Sistema de integraciones no disponible"
             }
         
+        # Flujo especial para pre-brief: detectar apps relevantes y combinar resultados
+        if task_type == "prebrief":
+            try:
+                app_types = self._detect_apps_for_prebrief(task_description)
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    app_types=app_types,
+                    filters=filters
+                )
+                if not search_results:
+                    return {
+                        "success": False,
+                        "error": "No se encontró información en las apps conectadas."
+                    }
+                
+                # Preparar contexto breve para el LLM (limitado a 10 fuentes)
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = r.snippet or r.content
+                    snippet = (snippet or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {
+                            "app": r.app_name,
+                            "source": r.source_name,
+                            "url": r.url
+                        } for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Error generando pre-brief: {e}"
+                }
+
+        # Flujo para tareas de análisis de datos / outliers / KPIs / limpieza de Excel
+        if task_type in ["data_analysis", "data_insights", "kpi_dashboard", "excel_cleanup"] or any(
+            k in task_description.lower() for k in ["ventas", "outlier", "kpi", "excel", "dashboard", "insight"]
+        ):
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {
+                        "success": False,
+                        "error": "No se encontró información en las apps conectadas."
+                    }
+
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = r.snippet or r.content
+                    snippet = (snippet or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias de ventas/volumen, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+
+                llm_summary = self.llm.predict(prompt)
+
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {
+                            "app": r.app_name,
+                            "source": r.source_name,
+                            "url": r.url
+                        } for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Error generando análisis de datos: {e}"
+                }
+        
         return await self.app_integrations.execute_autonomous_task(
             task_description=task_description,
             task_type=task_type,
             context=context
         )
+
+    async def execute_autonomous_task_v2(
+        self,
+        task_description: str,
+        task_type: str,
+        session_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
+        """
+        if not self.app_integrations:
+            return {"success": False, "error": "Sistema de integraciones no disponible"}
+        
+        if task_type == "prebrief":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando pre-brief: {e}"}
+
+        if task_type == "data_analysis":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
+
+        return await self.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            session_id=session_id,
+            context=context
+        )
     
+    def _detect_apps_for_prebrief(self, task_description: str) -> List[IntegrationType]:
+        """Detecta apps relevantes para pre-brief según palabras clave en el prompt."""
+        desc = task_description.lower()
+        apps = []
+        if any(k in desc for k in ["slack", "mensaje", "canal"]):
+            apps.append(IntegrationType.SLACK)
+        if any(k in desc for k in ["drive", "documento", "google doc", "gdoc"]):
+            apps.append(IntegrationType.GOOGLE_DRIVE)
+        if any(k in desc for k in ["hubspot", "crm", "deal", "contacto", "lead"]):
+            apps.append(IntegrationType.HUBSPOT)
+        if any(k in desc for k in ["jira", "ticket", "issue", "bug"]):
+            apps.append(IntegrationType.JIRA)
+        if any(k in desc for k in ["confluence", "wiki", "doc interna"]):
+            apps.append(IntegrationType.CONFLUENCE)
+        # fallback si no se detecta nada
+        if not apps:
+            apps = [IntegrationType.SLACK, IntegrationType.GOOGLE_DRIVE, IntegrationType.HUBSPOT]
+        return apps
+    
+    async def execute_autonomous_task_v2(
+        self,
+        task_description: str,
+        task_type: str,
+        session_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
+        """
+        if not self.app_integrations:
+            return {"success": False, "error": "Sistema de integraciones no disponible"}
+        
+        if task_type == "prebrief":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando pre-brief: {e}"}
+
+        if task_type == "data_analysis":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
+        
+        return await self.app_integrations.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            context=context
+        )
+
+    async def execute_autonomous_task_v2(
+        self,
+        task_description: str,
+        task_type: str,
+        session_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
+        """
+        if not self.app_integrations:
+            return {"success": False, "error": "Sistema de integraciones no disponible"}
+        
+        if task_type == "prebrief":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando pre-brief: {e}"}
+
+        if task_type == "data_analysis":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
+
+        return await self.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            session_id=session_id,
+            context=context
+        )
+
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
@@ -857,6 +1310,8 @@ def run_company_knowledge(
     session_id: str,
     speed_mode: str = "balanced",
     provider: str = "openai",
+    filters: Optional[Dict[str, Any]] = None,
+    urls_in_bullets: bool = False,
     config: Optional[AppConfig] = None,
     processor: Optional[DocumentProcessor] = None,
     retriever_builder: Optional[RetrieverBuilder] = None,
