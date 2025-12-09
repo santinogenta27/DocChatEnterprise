@@ -71,6 +71,9 @@ from .path_dependent_reasoning import PathDependentReasoner, ReasoningPath  # no
 from .goal_decomposition import GoalDecomposer, Goal, Subtask  # noqa: F401
 # Chat Conversacional 2 - Modo avanzado para empresas
 from .chat_conversational_2 import ChatConversational2, run_chat_conversational_2, get_chat_conversational_2  # noqa: F401
+# Alien Mode - Clonado de Chat Conversational 2 Enterprise
+from .alien_mode import AlienMode, run_alien_mode, get_alien_mode  # noqa: F401
+from .invoice import InvoiceMode, run_invoice_mode, get_invoice_mode  # noqa: F401
 from .context_folding import ContextFolder, ContextBranch, FoldedContext, BranchStatus  # noqa: F401
 from .data_provenance import DataProvenanceTracker, DataProvenance, DataSourceType, ProvenanceRecord  # noqa: F401
 from .chain_of_thought import ChainOfThoughtReasoner, ThoughtChain, ReasoningStep, ReasoningStepType  # noqa: F401
@@ -312,6 +315,13 @@ __all__ = [
     "ChatConversational2",
     "run_chat_conversational_2",
     "get_chat_conversational_2",
+    # Alien Mode
+    "AlienMode",
+    "run_alien_mode",
+    "get_alien_mode",
+    "InvoiceMode",
+    "run_invoice_mode",
+    "get_invoice_mode",
     "ContextFolder",
     "ContextBranch",
     "FoldedContext",

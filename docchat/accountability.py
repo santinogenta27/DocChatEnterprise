@@ -236,6 +236,889 @@ class Accountability:
                 "error": str(e)
             }
     
+    async def process_pdfs_from_connected_apps(
+        self,
+        session_id: str,
+        max_pdfs: int = 100,
+        generate_summary: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Busca y procesa PDFs automáticamente desde SharePoint y Google Drive conectados.
+        
+        OPTIMIZADO para Accountability:
+        - Busca solo PDFs contables (facturas, contratos, reportes financieros)
+        - Descarga y procesa automáticamente
+        - Genera resumen ejecutivo completo
+        
+        Args:
+            session_id: ID de sesión
+            max_pdfs: Máximo número de PDFs a procesar (default: 100)
+            generate_summary: Si generar resumen ejecutivo (default: True)
+        
+        Returns:
+            Dict con resultados del procesamiento automático
+        """
+        if not self.app_integrations:
+            return {
+                "status": "error",
+                "error": "No hay apps conectadas. Conecta SharePoint o Google Drive primero."
+            }
+        
+        connected_apps = self.app_integrations.get_connected_apps()
+        if not connected_apps:
+            return {
+                "status": "error",
+                "error": "No hay apps conectadas. Conecta SharePoint o Google Drive primero."
+            }
+        
+        # Filtrar solo SharePoint y Google Drive
+        target_apps = [
+            app for app in connected_apps
+            if app.app_type in [IntegrationType.SHAREPOINT, IntegrationType.GOOGLE_DRIVE]
+        ]
+        
+        if not target_apps:
+            return {
+                "status": "error",
+                "error": "No hay SharePoint o Google Drive conectados. Conecta estas apps primero."
+            }
+        
+        print(f"📊 [Accountability] Buscando PDFs en {len(target_apps)} apps conectadas (SharePoint/Google Drive)...")
+        
+        # Buscar PDFs contables en todas las apps
+        all_pdfs = []
+        for app in target_apps:
+            try:
+                print(f"🔍 [Accountability] Buscando PDFs en {app.app_name}...")
+                
+                # OPTIMIZACIÓN: Buscar PDFs con queries específicas para documentos contables
+                # Priorizar búsquedas más específicas primero
+                queries = [
+                    # Búsqueda general de PDFs (más amplia, hacer primero para tener base)
+                    "mimeType:application/pdf",
+                    # Búsquedas específicas de documentos contables
+                    "factura OR invoice OR bill",
+                    "contrato OR contract OR agreement",
+                    "reporte financiero OR financial statement OR balance sheet",
+                    "recibo OR receipt OR voucher",
+                    "nómina OR payroll OR salary",
+                    "estado de cuenta OR statement OR extract"
+                ]
+                
+                for query in queries:
+                    if len(all_pdfs) >= max_pdfs:
+                        break
+                    
+                    print(f"🔍 [Accountability] Buscando: '{query}' en {app.app_name}...")
+                    results = await self.app_integrations.search_across_apps(
+                        query=query,
+                        app_types=[app.app_type],
+                        filters={"max_pdfs": max_pdfs}
+                    )
+                    
+                    # Filtrar solo PDFs (optimizado)
+                    pdfs = []
+                    for r in results:
+                        # Verificar si es PDF por mime_type o extensión
+                        is_pdf = (
+                            r.metadata.get("mime_type") == "application/pdf" or
+                            ".pdf" in r.source_name.lower() or
+                            (hasattr(r, 'content') and isinstance(r.content, bytes) and r.content[:4] == b'%PDF')
+                        )
+                        if is_pdf:
+                            pdfs.append(r)
+                    
+                    # Agregar PDFs únicos
+                    existing_ids = {p.source_id for p in all_pdfs}
+                    new_pdfs = [p for p in pdfs if p.source_id not in existing_ids]
+                    all_pdfs.extend(new_pdfs)
+                    
+                    print(f"✅ [Accountability] Encontrados {len(new_pdfs)} PDFs nuevos con query '{query}' (Total: {len(all_pdfs)})")
+                    
+                    if len(all_pdfs) >= max_pdfs:
+                        break
+                
+                # Eliminar duplicados por source_id
+                seen_ids = set()
+                unique_pdfs = []
+                for pdf in all_pdfs:
+                    if pdf.source_id not in seen_ids:
+                        seen_ids.add(pdf.source_id)
+                        unique_pdfs.append(pdf)
+                
+                all_pdfs = unique_pdfs[:max_pdfs]
+                print(f"✅ [Accountability] Encontrados {len(all_pdfs)} PDFs únicos en {app.app_name}")
+                
+            except Exception as e:
+                print(f"⚠️ [Accountability] Error buscando en {app.app_name}: {e}")
+                continue
+        
+        if not all_pdfs:
+            return {
+                "status": "error",
+                "error": "No se encontraron PDFs en SharePoint o Google Drive conectados."
+            }
+        
+        print(f"📥 [Accountability] Descargando y procesando {len(all_pdfs)} PDFs...")
+        
+        # Descargar PDFs y convertirlos a formato de archivo para procesamiento
+        downloaded_files = []
+        for pdf_result in all_pdfs[:max_pdfs]:
+            try:
+                # Descargar PDF desde la app
+                pdf_bytes = await self._download_pdf_from_app(pdf_result)
+                if pdf_bytes:
+                    # Crear objeto archivo temporal
+                    import tempfile
+                    import os
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+                    temp_file.write(pdf_bytes)
+                    temp_file.close()
+                    
+                    # Crear objeto similar a Gradio File
+                    class TempFile:
+                        def __init__(self, path, name):
+                            self.name = path
+                            self.original_name = name
+                    
+                    downloaded_files.append(TempFile(temp_file.name, pdf_result.source_name))
+                    print(f"✅ [Accountability] PDF descargado: {pdf_result.source_name}")
+                else:
+                    print(f"⚠️ [Accountability] No se pudo descargar: {pdf_result.source_name}")
+            except Exception as e:
+                print(f"⚠️ [Accountability] Error descargando {pdf_result.source_name}: {e}")
+                continue
+        
+        if not downloaded_files:
+            return {
+                "status": "error",
+                "error": "No se pudieron descargar PDFs desde las apps conectadas."
+            }
+        
+        # Procesar PDFs descargados automáticamente
+        return self.process_accounting_documents_automatically(
+            session_id=session_id,
+            files=downloaded_files,
+            generate_summary=generate_summary
+        )
+    
+    async def _download_pdf_from_app(self, pdf_result: Any) -> Optional[bytes]:
+        """Descarga un PDF desde una app conectada (OPTIMIZADO)."""
+        try:
+            if not self.app_integrations:
+                return None
+            
+            connected_apps = self.app_integrations.get_connected_apps()
+            app = next((a for a in connected_apps if a.app_type == pdf_result.app_type), None)
+            if not app:
+                return None
+            
+            token = app.credentials.get("token", "")
+            if not token:
+                return None
+            
+            import requests
+            
+            if pdf_result.app_type == IntegrationType.GOOGLE_DRIVE:
+                # OPTIMIZADO: Descargar directamente desde Google Drive API
+                file_id = pdf_result.source_id
+                url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+                response = requests.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=60,
+                    stream=True
+                )
+                if response.status_code == 200:
+                    return response.content
+                else:
+                    print(f"⚠️ [Accountability] Error descargando de Google Drive: {response.status_code}")
+                    return None
+            
+            elif pdf_result.app_type == IntegrationType.SHAREPOINT:
+                # OPTIMIZADO: Descargar desde SharePoint usando Microsoft Graph API
+                file_id = pdf_result.source_id
+                
+                # Intentar diferentes endpoints según la estructura del file_id
+                # Si file_id contiene drive_id, usarlo directamente
+                if "/" in file_id:
+                    # Formato: drive_id/item_id
+                    parts = file_id.split("/")
+                    if len(parts) == 2:
+                        drive_id, item_id = parts
+                        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/content"
+                    else:
+                        # Solo item_id, intentar con /me/drive
+                        url = f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/content"
+                else:
+                    # Solo item_id
+                    url = f"https://graph.microsoft.com/v1.0/me/drive/items/{file_id}/content"
+                
+                response = requests.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=60,
+                    stream=True
+                )
+                if response.status_code == 200:
+                    return response.content
+                else:
+                    # Intentar con sites si falla con /me/drive
+                    if response.status_code == 404:
+                        # Buscar en sites
+                        sites_resp = requests.get(
+                            "https://graph.microsoft.com/v1.0/sites?search=*",
+                            headers={"Authorization": f"Bearer {token}"},
+                            timeout=10
+                        )
+                        if sites_resp.status_code == 200:
+                            sites = sites_resp.json().get("value", [])
+                            for site in sites[:5]:  # Probar primeros 5 sitios
+                                site_id = site.get("id", "")
+                                try:
+                                    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive/items/{file_id}/content"
+                                    response = requests.get(
+                                        url,
+                                        headers={"Authorization": f"Bearer {token}"},
+                                        timeout=60,
+                                        stream=True
+                                    )
+                                    if response.status_code == 200:
+                                        return response.content
+                                except:
+                                    continue
+                    print(f"⚠️ [Accountability] Error descargando de SharePoint: {response.status_code}")
+                    return None
+            
+            return None
+        except Exception as e:
+            print(f"⚠️ [Accountability] Error descargando PDF: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def process_accounting_documents_automatically(
+        self,
+        session_id: str,
+        files: List[Any],
+        generate_summary: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Procesa documentos contables automáticamente sin prompts.
+        
+        OPTIMIZADO AL MÁXIMO:
+        - Procesamiento paralelo de documentos
+        - Detección automática de tipo
+        - Extracción estructurada optimizada
+        - Clasificación y organización automática
+        - Resumen ejecutivo completo
+        - Alertas y recomendaciones automáticas
+        - Conciliación básica
+        
+        Returns:
+            Dict con:
+            - status: "success" o "error"
+            - document_types: Dict[tipo -> cantidad]
+            - structured_data: List[AccountingStructuredData]
+            - executive_summary: AccountingExecutiveSummary (si generate_summary=True)
+            - alerts: List[str]
+            - errors: List[str]
+        """
+        session = self.initialize_session(session_id)
+        
+        # Procesar documentos
+        process_result = self.process_documents(session_id, files)
+        if process_result.get("status") == "error":
+            return {
+                "status": "error",
+                "error": process_result.get("error")
+            }
+        
+        docs = session["docs"]
+        if not docs:
+            return {
+                "status": "error",
+                "error": "No se pudieron procesar los documentos"
+            }
+        
+        print(f"📊 [Accountability] Procesando {len(docs)} documentos automáticamente...")
+        
+        # Agrupar documentos por archivo
+        docs_by_file: Dict[str, List[Document]] = {}
+        for doc in docs:
+            file_name = doc.metadata.get("source") or doc.metadata.get("file_name") or "unknown"
+            if file_name not in docs_by_file:
+                docs_by_file[file_name] = []
+            docs_by_file[file_name].append(doc)
+        
+        # 1. Detectar tipo de documento automáticamente (OPTIMIZADO: procesamiento paralelo)
+        print("🔍 [Accountability] Detectando tipos de documentos...")
+        document_types = {}
+        structured_data_list = []
+        
+        # OPTIMIZACIÓN: Procesar documentos en paralelo para mayor velocidad
+        def process_single_file(file_name: str, file_docs: List[Document]) -> Tuple[str, Optional[AccountingStructuredData]]:
+            """Procesa un solo archivo y retorna (doc_type, structured_data)."""
+            try:
+                # Construir contexto del archivo (optimizado: solo primeros chunks relevantes)
+                context = "\n\n".join([d.page_content[:2000] for d in file_docs[:10]])
+                
+                # Detectar tipo (rápido con keywords primero, LLM solo si necesario)
+                doc_type = self._detect_document_type(file_name, context)
+                
+                # Extraer datos estructurados
+                structured_data = self._extract_structured_accounting_data(
+                    file_name=file_name,
+                    document_type=doc_type,
+                    documents=file_docs
+                )
+                return doc_type, structured_data
+            except Exception as e:
+                print(f"⚠️ [Accountability] Error procesando {file_name}: {e}")
+                return "other", None
+        
+        # Procesar en paralelo (máximo 5 threads para no sobrecargar)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                executor.submit(process_single_file, file_name, file_docs): file_name
+                for file_name, file_docs in docs_by_file.items()
+            }
+            
+            for future in as_completed(futures):
+                file_name = futures[future]
+                try:
+                    doc_type, structured_data = future.result()
+                    document_types[doc_type] = document_types.get(doc_type, 0) + 1
+                    if structured_data:
+                        structured_data_list.append(structured_data)
+                        print(f"✅ [Accountability] {file_name} procesado: {doc_type}")
+                except Exception as e:
+                    print(f"⚠️ [Accountability] Error procesando {file_name}: {e}")
+        
+        # 2. Clasificar y organizar
+        print("📁 [Accountability] Clasificando y organizando documentos...")
+        classification = self._classify_and_organize_documents(structured_data_list)
+        
+        # 3. Detectar errores y alertas
+        print("⚠️ [Accountability] Detectando errores y alertas...")
+        errors = []
+        alerts = []
+        for data in structured_data_list:
+            errors.extend(data.errors_detected or [])
+            alerts.extend(self._generate_document_alerts(data))
+        
+        # 4. Conciliación básica
+        print("🔗 [Accountability] Realizando conciliación básica...")
+        reconciliation = self._reconcile_accounts_basic(structured_data_list)
+        
+        # 5. Generar resumen ejecutivo si se solicita
+        executive_summary = None
+        if generate_summary:
+            print("📊 [Accountability] Generando resumen ejecutivo...")
+            executive_summary = self._generate_executive_summary(
+                structured_data_list=structured_data_list,
+                document_types=document_types,
+                errors=errors,
+                alerts=alerts,
+                reconciliation=reconciliation
+            )
+        
+        # Guardar en sesión
+        session["accounting_data"] = {
+            "structured_data": structured_data_list,
+            "document_types": document_types,
+            "executive_summary": executive_summary,
+            "alerts": alerts,
+            "errors": errors,
+            "classification": classification,
+            "reconciliation": reconciliation
+        }
+        
+        return {
+            "status": "success",
+            "document_types": document_types,
+            "structured_data": [asdict(sd) for sd in structured_data_list],
+            "executive_summary": asdict(executive_summary) if executive_summary else None,
+            "alerts": alerts,
+            "errors": errors,
+            "classification": classification,
+            "reconciliation": reconciliation,
+            "total_documents": len(docs_by_file)
+        }
+    
+    def _detect_document_type(self, file_name: str, context: str) -> str:
+        """Detecta automáticamente el tipo de documento contable."""
+        context_lower = context.lower()
+        file_lower = file_name.lower()
+        
+        # Palabras clave por tipo
+        invoice_keywords = ["factura", "invoice", "bill", "recibo", "número de factura", "invoice number", "proveedor", "supplier", "monto", "amount", "total", "iva", "tax"]
+        contract_keywords = ["contrato", "contract", "acuerdo", "agreement", "partes", "parties", "fecha de inicio", "start date", "fecha de fin", "end date", "vencimiento", "expiration"]
+        financial_report_keywords = ["balance", "estado financiero", "financial statement", "ingresos", "revenue", "gastos", "expenses", "pérdidas", "losses", "ganancias", "profit", "activo", "assets", "pasivo", "liabilities"]
+        receipt_keywords = ["recibo", "receipt", "comprobante", "voucher", "pago", "payment"]
+        
+        # Contar coincidencias
+        invoice_score = sum(1 for kw in invoice_keywords if kw in context_lower or kw in file_lower)
+        contract_score = sum(1 for kw in contract_keywords if kw in context_lower or kw in file_lower)
+        financial_score = sum(1 for kw in financial_report_keywords if kw in context_lower or kw in file_lower)
+        receipt_score = sum(1 for kw in receipt_keywords if kw in context_lower or kw in file_lower)
+        
+        # Usar LLM para detección más precisa si hay ambigüedad
+        if max(invoice_score, contract_score, financial_score, receipt_score) < 2:
+            # Usar LLM para clasificación
+            try:
+                prompt = f"""Clasifica este documento contable en UNA de estas categorías:
+- invoice (factura)
+- contract (contrato)
+- financial_statement (reporte financiero/balance)
+- receipt (recibo/comprobante)
+- other (otro)
+
+Nombre del archivo: {file_name}
+Contenido (primeros 1000 caracteres): {context[:1000]}
+
+Responde SOLO con una palabra: invoice, contract, financial_statement, receipt, o other"""
+                
+                response = self.fast_llm.invoke(prompt)
+                doc_type = response.content.strip().lower() if hasattr(response, 'content') else str(response).strip().lower()
+                
+                if doc_type in ["invoice", "contract", "financial_statement", "receipt", "other"]:
+                    return doc_type
+            except Exception as e:
+                print(f"⚠️ [Accountability] Error en detección LLM: {e}")
+        
+        # Decisión basada en scores
+        scores = {
+            "invoice": invoice_score,
+            "contract": contract_score,
+            "financial_statement": financial_score,
+            "receipt": receipt_score
+        }
+        max_type = max(scores.items(), key=lambda x: x[1])
+        return max_type[0] if max_type[1] > 0 else "other"
+    
+    def _extract_structured_accounting_data(
+        self,
+        file_name: str,
+        document_type: str,
+        documents: List[Document]
+    ) -> Optional[AccountingStructuredData]:
+        """Extrae datos estructurados de un documento contable automáticamente."""
+        # Construir contexto completo
+        context_parts = []
+        max_chars = 100000  # Context window grande para máxima calidad
+        total_chars = 0
+        
+        for doc in documents[:50]:  # Limitar número de chunks
+            if total_chars >= max_chars:
+                break
+            content = doc.page_content
+            if total_chars + len(content) <= max_chars:
+                context_parts.append(content)
+                total_chars += len(content)
+            else:
+                remaining = max_chars - total_chars
+                if remaining > 1000:
+                    context_parts.append(content[:remaining])
+                break
+        
+        context = "\n\n".join(context_parts)
+        
+        # Prompt especializado según tipo
+        if document_type == "invoice":
+            prompt = self._get_invoice_extraction_prompt(file_name, context)
+        elif document_type == "contract":
+            prompt = self._get_contract_extraction_prompt(file_name, context)
+        elif document_type == "financial_statement":
+            prompt = self._get_financial_report_extraction_prompt(file_name, context)
+        elif document_type == "receipt":
+            prompt = self._get_receipt_extraction_prompt(file_name, context)
+        else:
+            prompt = self._get_generic_accounting_extraction_prompt(file_name, context)
+        
+        try:
+            response = self.llm.invoke(prompt)
+            response_text = response.content if hasattr(response, 'content') else str(response)
+            
+            # Parsear JSON
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+            else:
+                # Intentar parsear directamente
+                data = json.loads(response_text)
+            
+            # Crear AccountingStructuredData
+            file_hash = str(hash(file_name + context[:100]))
+            structured_data = AccountingStructuredData(
+                document_id=file_hash,
+                document_type=document_type,
+                extracted_fields=data.get("extracted_fields", {}),
+                entities=data.get("entities", []),
+                dates=data.get("dates", []),
+                amounts=data.get("amounts", []),
+                risk_flags=data.get("risk_flags", []),
+                opportunity_flags=data.get("opportunity_flags", []),
+                errors_detected=data.get("errors_detected", []),
+                reconciliation_status=None
+            )
+            
+            return structured_data
+            
+        except Exception as e:
+            print(f"⚠️ [Accountability] Error extrayendo datos de {file_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _get_receipt_extraction_prompt(self, file_name: str, context: str) -> str:
+        """Prompt especializado para extracción de recibos/comprobantes."""
+        return f"""Eres un especialista en extracción de datos de recibos y comprobantes. Extrae TODOS los datos con MÁXIMA PRECISIÓN.
+
+DOCUMENTO: {file_name}
+CONTENIDO:
+{context[:8000]}
+
+INSTRUCCIONES CRÍTICAS:
+- Extrae TODOS los campos visibles, incluso si parecen redundantes
+- Si un campo no es visible, usa null (NO inventes valores)
+- Para fechas: intenta parsear a formato ISO (YYYY-MM-DD), si no es posible, guarda el texto original
+- Para montos: usa números decimales (ej: 1234.56), NO strings
+- Verifica consistencia matemática: subtotal + impuestos - descuentos = total
+
+CAMPOS A EXTRAER:
+1. PROVEEDOR: Nombre completo del emisor/proveedor
+2. CLIENTE: Nombre del cliente/receptor (si aplica)
+3. NÚMERO DE RECIBO: Número único, serie + número
+4. FECHA DE EMISIÓN: Fecha cuando se emitió
+5. FECHA DE PAGO: Fecha de pago (si aplica)
+6. MONTO TOTAL: Monto total final
+7. MONEDA: USD, EUR, etc.
+8. SUBTOTAL: Monto antes de impuestos
+9. IMPUESTOS: IVA, impuestos, cargos (detallar si hay múltiples)
+10. DESCUENTOS: Descuentos aplicados
+11. MÉTODO DE PAGO: Transferencia, efectivo, cheque, tarjeta, etc.
+12. ESTADO DE PAGO: pagado/pendiente/parcial
+13. PRODUCTOS/SERVICIOS: Lista detallada de items
+14. ERRORES: Inconsistencias matemáticas, campos críticos faltantes
+
+IMPORTANTE: Responde SOLO en JSON válido:
+{{
+    "extracted_fields": {{
+        "supplier": "string o null",
+        "client": "string o null",
+        "receipt_number": "string o null",
+        "issue_date": "YYYY-MM-DD o texto original o null",
+        "payment_date": "YYYY-MM-DD o texto original o null",
+        "total_amount": número decimal o null,
+        "currency": "USD/EUR/etc o null",
+        "subtotal": número decimal o null,
+        "taxes": número decimal o null,
+        "discounts": número decimal o null,
+        "payment_method": "string o null",
+        "payment_status": "paid|pending|partial|null",
+        "products": [{{"description": "string", "quantity": número, "unit_price": número, "total": número}}]
+    }},
+    "entities": [
+        {{"type": "supplier|client|product", "name": "string", "value": "string"}}
+    ],
+    "dates": [
+        {{"type": "issue|payment", "value": "texto original", "parsed": "YYYY-MM-DD o null"}}
+    ],
+    "amounts": [
+        {{"type": "total|subtotal|tax|discount", "value": número, "currency": "string", "description": "string"}}
+    ],
+    "risk_flags": ["risk1", "risk2"],
+    "opportunity_flags": ["opportunity1"],
+    "errors_detected": ["error1", "error2"],
+    "reconciliation_status": "reconciled|pending|error|null"
+}}"""
+    
+    def _get_generic_accounting_extraction_prompt(self, file_name: str, context: str) -> str:
+        """Prompt genérico para otros tipos de documentos contables."""
+        return f"""Eres un especialista en extracción de datos contables. Extrae información relevante.
+
+DOCUMENTO: {file_name}
+CONTENIDO:
+{context[:6000]}
+
+Extrae datos estructurados relevantes:
+- Entidades principales (empresas, personas, productos)
+- Fechas importantes (emisión, vencimiento, pago, etc.)
+- Montos y valores numéricos
+- Información de identificación (números, referencias)
+- Errores o inconsistencias detectadas
+
+Responde SOLO en JSON válido:
+{{
+    "extracted_fields": {{
+        "document_type": "tipo específico detectado",
+        "main_entities": ["entidad1", "entidad2"],
+        "reference_numbers": ["ref1", "ref2"],
+        "total_amount": número o null,
+        "currency": "string o null"
+    }},
+    "entities": [
+        {{"type": "company|person|product|account", "name": "string", "value": "string"}}
+    ],
+    "dates": [
+        {{"type": "issue|due|payment|other", "value": "texto original", "parsed": "YYYY-MM-DD o null"}}
+    ],
+    "amounts": [
+        {{"type": "total|partial|other", "value": número, "currency": "string", "description": "string"}}
+    ],
+    "risk_flags": ["risk1"],
+    "opportunity_flags": ["opportunity1"],
+    "errors_detected": ["error1"],
+    "reconciliation_status": null
+}}"""
+    
+    def _classify_and_organize_documents(self, structured_data_list: List[AccountingStructuredData]) -> Dict[str, Any]:
+        """Clasifica y organiza documentos automáticamente."""
+        classification = {
+            "by_type": {},
+            "by_supplier": {},
+            "by_client": {},
+            "by_status": {},
+            "by_date_range": {}
+        }
+        
+        for data in structured_data_list:
+            doc_type = data.document_type
+            classification["by_type"][doc_type] = classification["by_type"].get(doc_type, 0) + 1
+            
+            # Clasificar por proveedor/cliente
+            supplier = data.extracted_fields.get("supplier") or data.extracted_fields.get("contracting_party")
+            if supplier:
+                classification["by_supplier"][supplier] = classification["by_supplier"].get(supplier, 0) + 1
+            
+            client = data.extracted_fields.get("client") or data.extracted_fields.get("counterparty")
+            if client:
+                classification["by_client"][client] = classification["by_client"].get(client, 0) + 1
+            
+            # Clasificar por estado
+            status = data.extracted_fields.get("payment_status") or data.reconciliation_status
+            if status:
+                classification["by_status"][status] = classification["by_status"].get(status, 0) + 1
+        
+        return classification
+    
+    def _generate_document_alerts(self, structured_data: AccountingStructuredData) -> List[str]:
+        """Genera alertas automáticas para un documento."""
+        alerts = []
+        
+        # Alertas de facturas vencidas
+        if structured_data.document_type == "invoice":
+            due_date = structured_data.extracted_fields.get("due_date")
+            payment_status = structured_data.extracted_fields.get("payment_status")
+            
+            if due_date and payment_status in ["pending", "overdue"]:
+                try:
+                    from datetime import datetime
+                    if isinstance(due_date, str):
+                        # Intentar parsear fecha
+                        try:
+                            due_dt = datetime.strptime(due_date, "%Y-%m-%d")
+                            if due_dt < datetime.now():
+                                alerts.append(f"⚠️ Factura vencida: {structured_data.extracted_fields.get('invoice_number', 'N/A')} - Vencimiento: {due_date}")
+                        except:
+                            if "vencido" in due_date.lower() or "overdue" in due_date.lower():
+                                alerts.append(f"⚠️ Factura vencida detectada: {structured_data.extracted_fields.get('invoice_number', 'N/A')}")
+                except:
+                    pass
+        
+        # Alertas de contratos próximos a vencer
+        if structured_data.document_type == "contract":
+            end_date = structured_data.extracted_fields.get("end_date") or structured_data.extracted_fields.get("expiration_date")
+            if end_date:
+                try:
+                    from datetime import datetime, timedelta
+                    if isinstance(end_date, str):
+                        try:
+                            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                            days_until = (end_dt - datetime.now()).days
+                            if 0 <= days_until <= 30:
+                                alerts.append(f"🔔 Contrato próximo a vencer (en {days_until} días): {structured_data.extracted_fields.get('counterparty', 'N/A')}")
+                        except:
+                            pass
+                except:
+                    pass
+        
+        # Alertas de errores detectados
+        if structured_data.errors_detected:
+            alerts.extend([f"❌ Error detectado: {error}" for error in structured_data.errors_detected[:3]])
+        
+        # Alertas de riesgos
+        if structured_data.risk_flags:
+            alerts.extend([f"⚠️ Riesgo: {risk}" for risk in structured_data.risk_flags[:3]])
+        
+        return alerts
+    
+    def _reconcile_accounts_basic(self, structured_data_list: List[AccountingStructuredData]) -> Dict[str, Any]:
+        """Realiza conciliación básica automática."""
+        reconciliation = {
+            "total_invoices": 0,
+            "total_invoices_amount": 0.0,
+            "paid_invoices": 0,
+            "pending_invoices": 0,
+            "overdue_invoices": 0,
+            "total_contracts": 0,
+            "total_contracts_amount": 0.0,
+            "active_contracts": 0,
+            "expiring_soon": 0,
+            "discrepancies": []
+        }
+        
+        for data in structured_data_list:
+            if data.document_type == "invoice":
+                reconciliation["total_invoices"] += 1
+                amount = data.extracted_fields.get("total_amount")
+                if amount:
+                    try:
+                        reconciliation["total_invoices_amount"] += float(amount)
+                    except:
+                        pass
+                
+                status = data.extracted_fields.get("payment_status", "").lower()
+                if "paid" in status:
+                    reconciliation["paid_invoices"] += 1
+                elif "pending" in status or "overdue" in status:
+                    reconciliation["pending_invoices"] += 1
+                    if "overdue" in status:
+                        reconciliation["overdue_invoices"] += 1
+            
+            elif data.document_type == "contract":
+                reconciliation["total_contracts"] += 1
+                amount = data.extracted_fields.get("total_amount")
+                if amount:
+                    try:
+                        reconciliation["total_contracts_amount"] += float(amount)
+                    except:
+                        pass
+                
+                # Verificar si está activo
+                end_date = data.extracted_fields.get("end_date") or data.extracted_fields.get("expiration_date")
+                if end_date:
+                    try:
+                        from datetime import datetime
+                        if isinstance(end_date, str):
+                            try:
+                                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                                if end_dt >= datetime.now():
+                                    reconciliation["active_contracts"] += 1
+                                    if (end_dt - datetime.now()).days <= 30:
+                                        reconciliation["expiring_soon"] += 1
+                            except:
+                                pass
+                    except:
+                        pass
+        
+        return reconciliation
+    
+    def _generate_executive_summary(
+        self,
+        structured_data_list: List[AccountingStructuredData],
+        document_types: Dict[str, int],
+        errors: List[str],
+        alerts: List[str],
+        reconciliation: Dict[str, Any]
+    ) -> AccountingExecutiveSummary:
+        """Genera resumen ejecutivo automático (1-2 páginas)."""
+        # Calcular totales
+        total_amount = 0.0
+        currency = None
+        invoices_amount = 0.0
+        contracts_amount = 0.0
+        
+        suppliers = {}
+        clients = {}
+        vencimientos = []
+        
+        for data in structured_data_list:
+            amount = data.extracted_fields.get("total_amount")
+            if amount:
+                try:
+                    amt = float(amount)
+                    total_amount += amt
+                    if not currency:
+                        currency = data.extracted_fields.get("currency")
+                    
+                    if data.document_type == "invoice":
+                        invoices_amount += amt
+                        supplier = data.extracted_fields.get("supplier")
+                        if supplier:
+                            suppliers[supplier] = suppliers.get(supplier, 0) + amt
+                    elif data.document_type == "contract":
+                        contracts_amount += amt
+                        client = data.extracted_fields.get("counterparty")
+                        if client:
+                            clients[client] = clients.get(client, 0) + amt
+                except:
+                    pass
+            
+            # Recolectar vencimientos
+            due_date = data.extracted_fields.get("due_date") or data.extracted_fields.get("expiration_date")
+            if due_date:
+                vencimientos.append({
+                    "document_type": data.document_type,
+                    "document_id": data.document_id,
+                    "due_date": due_date,
+                    "amount": data.extracted_fields.get("total_amount"),
+                    "entity": data.extracted_fields.get("supplier") or data.extracted_fields.get("counterparty")
+                })
+        
+        # Top suppliers y clients
+        top_suppliers = sorted(suppliers.items(), key=lambda x: x[1], reverse=True)[:10]
+        top_clients = sorted(clients.items(), key=lambda x: x[1], reverse=True)[:10]
+        
+        # Anomalías
+        anomalies = []
+        if reconciliation.get("overdue_invoices", 0) > 0:
+            anomalies.append({
+                "type": "overdue_invoices",
+                "count": reconciliation["overdue_invoices"],
+                "description": f"{reconciliation['overdue_invoices']} facturas vencidas detectadas"
+            })
+        
+        if errors:
+            anomalies.append({
+                "type": "errors",
+                "count": len(errors),
+                "description": f"{len(errors)} errores contables detectados"
+            })
+        
+        # Recomendaciones
+        recommendations = []
+        if reconciliation.get("overdue_invoices", 0) > 0:
+            recommendations.append("Revisar y procesar facturas vencidas urgentemente")
+        if reconciliation.get("expiring_soon", 0) > 0:
+            recommendations.append(f"Renovar o evaluar {reconciliation['expiring_soon']} contratos próximos a vencer")
+        if errors:
+            recommendations.append("Corregir errores contables detectados antes del cierre")
+        if not recommendations:
+            recommendations.append("Estado contable saludable, continuar con el monitoreo regular")
+        
+        return AccountingExecutiveSummary(
+            total_documents=len(structured_data_list),
+            document_types=document_types,
+            total_amount=total_amount if total_amount > 0 else None,
+            currency=currency,
+            invoices_count=document_types.get("invoice", 0),
+            contracts_count=document_types.get("contract", 0),
+            financial_reports_count=document_types.get("financial_statement", 0),
+            total_invoices_amount=invoices_amount if invoices_amount > 0 else None,
+            total_contracts_amount=contracts_amount if contracts_amount > 0 else None,
+            errors_detected=errors[:20],  # Limitar a 20
+            alerts=alerts[:20],  # Limitar a 20
+            recommendations=recommendations,
+            reconciliation_summary=reconciliation,
+            top_suppliers=[{"name": name, "total": amt} for name, amt in top_suppliers],
+            top_clients=[{"name": name, "total": amt} for name, amt in top_clients],
+            vencimientos_proximos=vencimientos[:20],  # Limitar a 20
+            anomalies=anomalies
+        )
+    
     async def process_query_async(
         self,
         session_id: str,

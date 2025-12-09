@@ -24,6 +24,7 @@ class AgentState(TypedDict, total=False):
     answer: str
     should_continue: Literal["re_research", "end"]
     conversational_mode: bool  # Modo conversacional (solo para Chat Conversacional)
+    iteration_count: int  # Contador de iteraciones para self-correction
 
 
 @dataclass
@@ -264,14 +265,51 @@ class AgentWorkflow:
             documents=state.get("context_docs", []),
         )
         print("✅ Verificación completada\n")
-        # Always end after verification to prevent infinite loops
-        # The answer is returned even if verification fails
-        return {
-            **state,
-            "verification": verification,
-            "should_continue": "end",  # Always end, no re-research
-            "answer": state.get("draft_answer", ""),
-        }
+        
+        # SELF-CORRECTION MECHANISM: Re-research si hay contradicciones o claims sin soporte
+        # Pero limitar a máximo 3 iteraciones para evitar loops infinitos
+        iteration_count = state.get("iteration_count", 0)
+        max_iterations = 3
+        
+        should_re_research = False
+        if iteration_count < max_iterations:
+            # Re-research si:
+            # 1. La respuesta NO está soportada por los documentos
+            # 2. Hay contradicciones
+            # 3. Hay claims sin soporte
+            if not verification.supported:
+                print(f"⚠️ Respuesta NO soportada - Re-ejecutando research (iteración {iteration_count + 1}/{max_iterations})")
+                should_re_research = True
+            elif verification.contradictions:
+                print(f"⚠️ Contradicciones detectadas: {verification.contradictions}")
+                print(f"   Re-ejecutando research (iteración {iteration_count + 1}/{max_iterations})")
+                should_re_research = True
+            elif verification.unsupported_claims:
+                print(f"⚠️ Claims sin soporte: {verification.unsupported_claims}")
+                print(f"   Re-ejecutando research (iteración {iteration_count + 1}/{max_iterations})")
+                should_re_research = True
+        
+        if should_re_research:
+            return {
+                **state,
+                "verification": verification,
+                "should_continue": "re_research",
+                "iteration_count": iteration_count + 1,
+                "answer": state.get("draft_answer", ""),  # Mantener draft_answer como fallback
+            }
+        else:
+            # Respuesta verificada o máximo de iteraciones alcanzado
+            if iteration_count >= max_iterations:
+                print(f"⚠️ Máximo de iteraciones alcanzado ({max_iterations}). Retornando respuesta actual.")
+            else:
+                print("✅ Respuesta verificada y soportada por los documentos.")
+            
+            return {
+                **state,
+                "verification": verification,
+                "should_continue": "end",
+                "answer": state.get("draft_answer", ""),
+            }
 
     @staticmethod
     def _decide_after_verification(state: AgentState) -> str:
@@ -297,6 +335,7 @@ class AgentWorkflow:
             "retriever": retriever,
             "all_documents": all_documents or [],
             "conversational_mode": conversational_mode,
+            "iteration_count": 0,  # Inicializar contador de iteraciones para self-correction
         }
         result = self.graph.invoke(initial_state, config=config)
         print("\n" + "="*60)

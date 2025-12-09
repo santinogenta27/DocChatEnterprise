@@ -126,7 +126,9 @@ from docchat.email_autonomous_agent import EmailAutonomousAgent
 from docchat.multi_format_processor import MultiFormatProcessor
 from docchat.iterative_learning_agent import IterativeLearningAgent
 from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
+from docchat.alien_mode import run_alien_mode, get_alien_mode
 from docchat.company_knowledge import get_company_knowledge, run_company_knowledge
+from docchat.invoice import get_invoice_mode, run_invoice_mode
 from docchat.fullstack_text_to_action import FullStackTextToAction
 from docchat.web_recency_agent import WebRecencyAgent
 from docchat.deep_chain_of_thought import DeepChainOfThoughtAgent
@@ -154,6 +156,25 @@ except Exception as e:
     print(f"⚠️ Advertencia: Modo BANKS no disponible: {e}")
     BANKS_MODE_AVAILABLE = False
     BanksMode = None
+
+try:
+    from docchat.accountability import get_accountability, run_accountability
+    ACCOUNTABILITY_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Advertencia: Accountability no disponible: {e}")
+    ACCOUNTABILITY_AVAILABLE = False
+    get_accountability = None
+    run_accountability = None
+
+try:
+    from docchat.gmail_company_knowledge import GmailCompanyKnowledge
+    from docchat.company_knowledge import get_company_knowledge
+    GMAIL_COMPANY_KNOWLEDGE_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Advertencia: Gmail Company Knowledge no disponible: {e}")
+    GMAIL_COMPANY_KNOWLEDGE_AVAILABLE = False
+    GmailCompanyKnowledge = None
+    get_company_knowledge = None
 
 # Check for vector store availability
 try:
@@ -10017,6 +10038,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             
                             def process_banks_compliance(input_path: str, files, jurisdiction: str, steering: str, action_config_json: str) -> str:
                                 try:
+                                    from pathlib import Path
                                     # Si hay archivos subidos, usar esos
                                     if files:
                                         import tempfile
@@ -10125,6 +10147,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             
                             def list_banks_reports():
                                 try:
+                                    from pathlib import Path
                                     reports_dir = Path(config.cache_dir) / "banks" / "reports"
                                     if not reports_dir.exists():
                                         return "📁 No reports generated yet"
@@ -10282,6 +10305,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             
                             def verify_biometric(id_photo, selfie, provider: str, threshold: float) -> str:
                                 try:
+                                    from pathlib import Path
                                     if not id_photo or not selfie:
                                         return "❌ Error: Debes subir ambas fotos (DNI y selfie)"
                                     
@@ -15457,6 +15481,255 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 outputs=[chat2_stats_output],
             )
         
+        # Tab 4.5.5.5: Alien Mode - Sistema Multi-Agente RAG DocChat Completo
+        with gr.Tab("👽 Alien Mode"):
+            gr.Markdown("### 👽 Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            
+            **💡 Ejemplo del Proceso Multi-Agente:**
+            1. Subes 500 PDFs de documentos legales
+            2. Preguntas: "¿Cuáles son los valores de eficiencia PUE del centro de datos en Singapur?"
+            3. **Relevance Checker** verifica que los documentos contengan información relevante
+            4. **Hybrid Retriever** busca usando BM25 (keywords) + Vector Search (semántica)
+            5. **Research Agent** genera respuesta inicial basada en documentos recuperados
+            6. **Verification Agent** verifica que la respuesta esté soportada por los documentos
+            7. Si hay contradicciones o claims sin soporte, **Self-Correction** re-ejecuta research
+            8. El sistema retorna respuesta verificada con reporte completo de verificación
+            9. **RL & Planning** aprende qué estrategias funcionan mejor para futuras consultas similares
+            10. **Data Provenance** rastrea cada fuente para compliance y auditoría
+            
+            **🎯 Ventajas sobre ChatGPT/DeepSeek:**
+            - ✅ **Sin alucinaciones**: Cada respuesta es verificada contra los documentos
+            - ✅ **Precisión en tablas**: Lee correctamente tablas complejas y datos estructurados
+            - ✅ **Múltiples documentos**: Encuentra inteligentemente el documento correcto entre muchos
+            - ✅ **Auto-corrección**: Re-ejecuta research si detecta problemas
+            - ✅ **Trazabilidad completa**: Rastrea cada pieza de información hasta su fuente
+            """)
+            
+            # Generar session_id único
+            alien_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                alien_files = gr.Files(
+                    label="📂 Alien Mode Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                alien_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                alien_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            alien_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                alien_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                alien_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_alien_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_alien_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                alien_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            alien_status = gr.Markdown(label="ℹ️ Chat Status")
+            alien_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def alien_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_alien_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_alien(history, session_id):
+                # Clear session for alien mode
+                alien_mode = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(alien_mode, 'sessions') and session_id in alien_mode.sessions:
+                    alien_mode.sessions[session_id]["history"] = []
+                    alien_mode.sessions[session_id]["docs"] = []
+                    alien_mode.sessions[session_id]["retriever"] = None
+                    alien_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_alien_files(files, session_id):
+                alien_mode = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(alien_mode, 'sessions') and session_id in alien_mode.sessions:
+                    alien_mode.sessions[session_id]["processed_files"].clear()
+                    alien_mode.sessions[session_id]["docs"] = []
+                    alien_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_alien_stats(session_id):
+                alien_mode = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = alien_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - Alien Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+                
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+                
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            alien_submit_btn.click(
+                fn=alien_submit,
+                inputs=[alien_input, alien_bot, alien_files, alien_session_id, alien_speed_mode, alien_provider_toggle],
+                outputs=[alien_bot, alien_bot, alien_status, alien_stats_output],
+            ).then(
+                lambda: "", None, alien_input
+            )
+            
+            alien_input.submit(
+                fn=alien_submit,
+                inputs=[alien_input, alien_bot, alien_files, alien_session_id, alien_speed_mode, alien_provider_toggle],
+                outputs=[alien_bot, alien_bot, alien_status, alien_stats_output],
+            ).then(
+                lambda: "", None, alien_input
+            )
+            
+            clear_alien_btn.click(
+                fn=clear_alien,
+                inputs=[alien_bot, alien_session_id],
+                outputs=[alien_bot, alien_status, alien_stats_output],
+            )
+            
+            clear_alien_files_btn.click(
+                fn=clear_alien_files,
+                inputs=[alien_files, alien_session_id],
+                outputs=[alien_files, alien_status, alien_stats_output],
+            )
+            
+            alien_stats_btn.click(
+                fn=show_alien_stats,
+                inputs=[alien_session_id],
+                outputs=[alien_stats_output],
+            )
+        
         # Tab 4.5.6: Company Knowledge (NUEVO - Con conexión de apps y tareas autónomas)
         with gr.Tab("📚 Company Knowledge"):
             gr.Markdown("### 📚 Company Knowledge - Sistema de Conocimiento Empresarial con Apps Conectadas")
@@ -15725,6 +15998,132 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
 ```
 
 ✅ **Done!** Paste the Access Token in the "Token / API Key" field
+                            """,
+                            "sharepoint": """
+### 🔑 How to get SharePoint access (3 minutes):
+
+**Option A: App Registration (Recommended)**
+
+**Step 1:** Go to https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
+
+**Step 2:** Click "New registration"
+- **Name:** "Company Knowledge"
+- **Supported account types:** "Accounts in any organizational directory"
+- **Redirect URI:** `http://localhost:7860/oauth/callback?provider=microsoft`
+- Click "Register"
+
+**Step 3:** Copy the "Application (client) ID" and "Directory (tenant) ID"
+
+**Step 4:** Go to "Certificates & secrets" → "New client secret"
+- **Description:** "Company Knowledge Secret"
+- **Expires:** Choose expiration (recommend 24 months)
+- Copy the "Value" immediately (you won't see it again)
+
+**Step 5:** Go to "API permissions" → "Add a permission" → "Microsoft Graph" → "Delegated permissions"
+- Add: `Sites.Read.All`, `Files.Read.All`, `User.Read`
+
+**Step 6:** Click "Grant admin consent" (if you're admin)
+
+**Step 7:** In "Extra Credentials", add:
+```json
+{
+  "tenant_id": "YOUR_TENANT_ID",
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "site_url": "https://yourcompany.sharepoint.com/sites/YOURSITE"
+}
+```
+
+**Step 8:** For the token, use the Access Token from OAuth flow or use:
+- Token format: `Bearer ACCESS_TOKEN` (get from OAuth flow)
+
+✅ **Done!** Paste the Access Token in the "Token / API Key" field
+
+**Option B: Personal Access Token (Simpler, but limited)**
+- Go to your SharePoint site
+- Click your profile → "Advanced" → "Access tokens"
+- Generate token with read permissions
+- Paste token directly
+                            """,
+                            "outlook": """
+### 🔑 How to get Outlook/Microsoft 365 access (3 minutes):
+
+**Step 1:** Go to https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
+
+**Step 2:** Click "New registration"
+- **Name:** "Company Knowledge"
+- **Supported account types:** "Accounts in any organizational directory"
+- **Redirect URI:** `http://localhost:7860/oauth/callback?provider=microsoft`
+- Click "Register"
+
+**Step 3:** Copy the "Application (client) ID" and "Directory (tenant) ID"
+
+**Step 4:** Go to "Certificates & secrets" → "New client secret"
+- **Description:** "Company Knowledge Secret"
+- **Expires:** Choose expiration (recommend 24 months)
+- Copy the "Value" immediately (you won't see it again)
+
+**Step 5:** Go to "API permissions" → "Add a permission" → "Microsoft Graph" → "Delegated permissions"
+- Add: `Mail.Read`, `Mail.ReadWrite`, `User.Read`
+
+**Step 6:** Click "Grant admin consent" (if you're admin)
+
+**Step 7:** In "Extra Credentials", add:
+```json
+{
+  "tenant_id": "YOUR_TENANT_ID",
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET"
+}
+```
+
+**Step 8:** For the token, use the Access Token from OAuth flow:
+- Use Microsoft OAuth flow to get Access Token
+- Token format: `Bearer ACCESS_TOKEN`
+
+✅ **Done!** Paste the Access Token in the "Token / API Key" field
+
+**💡 Tip:** You can also use the OAuth flow in the app if configured.
+                            """,
+                            "teams": """
+### 🔑 How to get Microsoft Teams access (3 minutes):
+
+**Step 1:** Go to https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade
+
+**Step 2:** Click "New registration"
+- **Name:** "Company Knowledge"
+- **Supported account types:** "Accounts in any organizational directory"
+- **Redirect URI:** `http://localhost:7860/oauth/callback?provider=microsoft`
+- Click "Register"
+
+**Step 3:** Copy the "Application (client) ID" and "Directory (tenant) ID"
+
+**Step 4:** Go to "Certificates & secrets" → "New client secret"
+- **Description:** "Company Knowledge Secret"
+- **Expires:** Choose expiration (recommend 24 months)
+- Copy the "Value" immediately (you won't see it again)
+
+**Step 5:** Go to "API permissions" → "Add a permission" → "Microsoft Graph" → "Delegated permissions"
+- Add: `ChannelMessage.Read.All`, `Chat.Read`, `User.Read`
+
+**Step 6:** Click "Grant admin consent" (if you're admin)
+
+**Step 7:** In "Extra Credentials", add:
+```json
+{
+  "tenant_id": "YOUR_TENANT_ID",
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET"
+}
+```
+
+**Step 8:** For the token, use the Access Token from OAuth flow:
+- Use Microsoft OAuth flow to get Access Token
+- Token format: `Bearer ACCESS_TOKEN`
+
+✅ **Done!** Paste the Access Token in the "Token / API Key" field
+
+**💡 Tip:** You can also use the OAuth flow in the app if configured.
                             """
                         }
                         
@@ -16131,6 +16530,17 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     list_apps_btn = gr.Button("📋 List Connected Apps", variant="secondary")
                     apps_list_output = gr.Markdown(label="📊 Connected Apps")
                     
+                    # Componentes para eliminar apps
+                    delete_app_dropdown = gr.Dropdown(
+                        label="🗑️ Select App to Delete",
+                        choices=[],
+                        visible=False,
+                        interactive=True,
+                        info="Select an app from the list above to delete it"
+                    )
+                    delete_app_btn = gr.Button("🗑️ Delete Selected App", variant="stop", visible=False)
+                    delete_app_status = gr.Markdown(visible=False)
+                    
                     def list_connected_apps():
                         try:
                             company_knowledge = get_company_knowledge(
@@ -16141,30 +16551,125 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             )
                             
                             if not company_knowledge.app_integrations:
-                                return "❌ Integration system not available."
+                                return (
+                                    "❌ Integration system not available.",
+                                    gr.Dropdown(choices=[], visible=False),
+                                    gr.Button(visible=False),
+                                    gr.Markdown(visible=False)
+                                )
                             
+                            # Obtener TODAS las conexiones (no solo las conectadas) para poder eliminarlas
+                            all_connections = list(company_knowledge.app_integrations.connections.values())
                             apps = company_knowledge.app_integrations.get_connected_apps()
                             
-                            if not apps:
-                                return "## 📋 No apps connected\n\nConnect apps in the 'Connect Apps' tab."
+                            if not all_connections:
+                                return (
+                                    "## 📋 No apps connected\n\nConnect apps in the 'Connect Apps' tab.",
+                                    gr.Dropdown(choices=[], visible=False),
+                                    gr.Button(visible=False),
+                                    gr.Markdown(visible=False)
+                                )
                             
-                            output = f"## 📋 Connected Apps: {len(apps)}\n\n"
-                            for app in apps:
-                                output += f"### 📱 {app.app_name}\n\n"
+                            # Crear output con lista de apps
+                            output = f"## 📋 Connected Apps: {len(apps)} / Total: {len(all_connections)}\n\n"
+                            
+                            # Crear opciones para el dropdown (formato: "App Name (ID)")
+                            dropdown_choices = []
+                            
+                            for app in all_connections:
+                                status_icon = "✅" if app.status == "connected" and app.enabled else "❌"
+                                output += f"### {status_icon} 📱 {app.app_name}\n\n"
                                 output += f"- **Type:** {app.app_type.value}\n"
                                 output += f"- **Status:** {app.status}\n"
                                 output += f"- **Connected:** {app.connected_at}\n"
                                 output += f"- **Last sync:** {app.last_sync or 'N/A'}\n"
                                 output += f"- **ID:** `{app.connection_id}`\n\n"
+                                
+                                # Agregar al dropdown
+                                dropdown_choices.append((f"{app.app_name} ({app.app_type.value}) - {app.connection_id}", app.connection_id))
                             
-                            return output
+                            return (
+                                output,
+                                gr.Dropdown(choices=dropdown_choices, visible=True, value=None),
+                                gr.Button(visible=True),
+                                gr.Markdown(visible=False)
+                            )
                         except Exception as e:
-                            return f"❌ Error: {str(e)}"
+                            return (
+                                f"❌ Error: {str(e)}",
+                                gr.Dropdown(choices=[], visible=False),
+                                gr.Button(visible=False),
+                                gr.Markdown(visible=False)
+                            )
+                    
+                    def delete_app(connection_id):
+                        """Elimina una app conectada."""
+                        if not connection_id:
+                            list_result = list_connected_apps()
+                            return (
+                                gr.Markdown("⚠️ Por favor, selecciona una app para eliminar.", visible=True),
+                                list_result[1],  # dropdown
+                                list_result[2],  # button
+                                list_result[0]    # apps_list_output
+                            )
+                        
+                        try:
+                            company_knowledge = get_company_knowledge(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            if not company_knowledge.app_integrations:
+                                list_result = list_connected_apps()
+                                return (
+                                    gr.Markdown("❌ Integration system not available.", visible=True),
+                                    list_result[1],  # dropdown
+                                    list_result[2],  # button
+                                    list_result[0]   # apps_list_output
+                                )
+                            
+                            # Eliminar la app
+                            result = company_knowledge.app_integrations.remove_app(connection_id)
+                            
+                            if result.get("success"):
+                                status_msg = f"✅ {result.get('message', 'App eliminada exitosamente')}"
+                            else:
+                                status_msg = f"❌ Error: {result.get('error', 'No se pudo eliminar la app')}"
+                            
+                            # Refrescar lista
+                            list_result = list_connected_apps()
+                            
+                            return (
+                                gr.Markdown(status_msg, visible=True),
+                                list_result[1],  # dropdown
+                                list_result[2],  # button
+                                list_result[0]   # apps_list_output
+                            )
+                        except Exception as e:
+                            list_result = list_connected_apps()
+                            return (
+                                gr.Markdown(f"❌ Error eliminando app: {str(e)}", visible=True),
+                                list_result[1],  # dropdown
+                                list_result[2],  # button
+                                list_result[0]   # apps_list_output
+                            )
                     
                     list_apps_btn.click(
                         fn=list_connected_apps,
                         inputs=[],
-                        outputs=[apps_list_output]
+                        outputs=[apps_list_output, delete_app_dropdown, delete_app_btn, delete_app_status]
+                    )
+                    
+                    delete_app_btn.click(
+                        fn=delete_app,
+                        inputs=[delete_app_dropdown],
+                        outputs=[delete_app_status, delete_app_dropdown, delete_app_btn, apps_list_output]
+                    ).then(
+                        fn=lambda: gr.Dropdown(value=None),
+                        inputs=[],
+                        outputs=[delete_app_dropdown]
                     )
                 
                 # Sub-tab: Chat with Apps
@@ -16179,6 +16684,9 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     
                     # Generate unique session_id
                     company_knowledge_session_id = gr.State(value=str(uuid.uuid4()))
+                    # State para guardar lista completa de PDFs y selección
+                    company_knowledge_pdfs_list = gr.State(value=[])  # Lista completa de PDFs con IDs
+                    company_knowledge_selected_pdfs = gr.State(value=[])  # IDs de PDFs seleccionados
                     
                     with gr.Row():
                         company_knowledge_files = gr.Files(
@@ -16228,6 +16736,34 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             value=False,
                             info="Include source URLs directly in summary bullet points (if applicable)"
                         )
+                        company_knowledge_max_pdfs = gr.Dropdown(
+                            label="📄 Max PDFs to process",
+                            choices=[
+                                ("5 PDFs", 5),
+                                ("10 PDFs", 10),
+                                ("25 PDFs", 25),
+                                ("50 PDFs", 50),
+                                ("100 PDFs", 100),
+                                ("250 PDFs", 250),
+                                ("500 PDFs", 500)
+                            ],
+                            value=100,
+                            info="Maximum number of PDFs to automatically process from connected apps"
+                        )
+                    
+                    with gr.Row():
+                        view_connected_pdfs_btn = gr.Button("📚 View Connected PDFs", variant="secondary")
+                        apply_pdf_selection_btn = gr.Button("✅ Apply Selection", variant="primary", visible=False)
+                    
+                    with gr.Row():
+                        view_connected_pdfs_output = gr.CheckboxGroup(
+                            label="📚 Select PDFs to Process",
+                            choices=[],
+                            visible=False,
+                            interactive=True,
+                            info="Select which PDFs from connected apps should be processed for your queries"
+                        )
+                        pdf_selection_status = gr.Markdown(label="📊 Selection Status", visible=False)
                     
                     # Real-time sidebar (show apps being searched)
                     with gr.Row():
@@ -16294,16 +16830,143 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             status = error
                         return new_history, new_history, status, gr.Markdown(visible=False)
                     
-                    def company_knowledge_submit_v2(message, history, files, session_id, speed_mode, provider, days, urls_in_bullets, task_type):
+                    def view_connected_pdfs(pdfs_list_state, selected_pdfs_state):
+                        """Muestra todos los PDFs conectados de las apps en un CheckboxGroup seleccionable."""
+                        try:
+                            company_knowledge = get_company_knowledge(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            if not hasattr(company_knowledge, 'app_integrations') or not company_knowledge.app_integrations:
+                                return (
+                                    gr.CheckboxGroup(choices=[], visible=False),
+                                    [],
+                                    gr.Button(visible=False),
+                                    gr.Markdown("⚠️ No apps connected. Go to 'Connect Apps' to connect your applications.", visible=True)
+                                )
+                            
+                            import asyncio
+                            
+                            # Buscar todos los PDFs en apps conectadas
+                            async def get_all_pdfs():
+                                results = await company_knowledge.app_integrations.search_across_apps(
+                                    query="filetype:pdf OR mimeType:application/pdf",
+                                    filters={"max_pdfs": 1000}  # Obtener hasta 1000 para mostrar
+                                )
+                                
+                                # Filtrar solo PDFs
+                                pdfs = [r for r in results if r.metadata.get("mime_type") == "application/pdf" or ".pdf" in r.source_name.lower()]
+                                
+                                return pdfs
+                            
+                            pdfs = asyncio.run(get_all_pdfs())
+                            
+                            if not pdfs:
+                                return (
+                                    gr.CheckboxGroup(choices=[], visible=False),
+                                    [],
+                                    gr.Button(visible=False),
+                                    gr.Markdown("📚 **No PDFs found in connected apps.**\n\nConnect apps in 'Connect Apps' tab to see PDFs.", visible=True)
+                                )
+                            
+                            # Crear lista de opciones para CheckboxGroup
+                            # Formato: "App Name: PDF Name (ID)"
+                            choices = []
+                            pdfs_data = []  # Guardar datos completos de cada PDF
+                            
+                            for pdf in pdfs:
+                                # Obtener ID único del PDF (puede ser file_id de Google Drive, etc.)
+                                pdf_id = pdf.metadata.get("file_id") or pdf.metadata.get("id") or pdf.url or pdf.source_name
+                                
+                                # Crear label descriptivo
+                                app_name = pdf.app_name
+                                pdf_name = pdf.source_name
+                                label = f"[{app_name}] {pdf_name}"
+                                
+                                choices.append(label)
+                                pdfs_data.append({
+                                    "id": pdf_id,
+                                    "name": pdf_name,
+                                    "app": app_name,
+                                    "url": pdf.url,
+                                    "source_name": pdf.source_name,
+                                    "metadata": pdf.metadata
+                                })
+                            
+                            # Si hay PDFs previamente seleccionados, mantener la selección
+                            # Buscar los labels correspondientes a los IDs seleccionados
+                            selected_labels = []
+                            if selected_pdfs_state:
+                                for pdf_data in pdfs_data:
+                                    if pdf_data["id"] in selected_pdfs_state:
+                                        label = f"[{pdf_data['app']}] {pdf_data['name']}"
+                                        if label in choices:
+                                            selected_labels.append(label)
+                            
+                            return (
+                                gr.CheckboxGroup(choices=choices, value=selected_labels, visible=True),
+                                pdfs_data,  # Guardar lista completa en State
+                                gr.Button(visible=True),  # Mostrar botón "Apply Selection"
+                                gr.Markdown(f"📚 **Found {len(pdfs)} PDFs in connected apps.**\n\nSelect which PDFs to process, then click 'Apply Selection'.", visible=True)
+                            )
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return (
+                                gr.CheckboxGroup(choices=[], visible=False),
+                                [],
+                                gr.Button(visible=False),
+                                gr.Markdown(f"❌ Error: {str(e)}", visible=True)
+                            )
+                    
+                    def apply_pdf_selection(selected_labels, pdfs_list_state):
+                        """Guarda la selección de PDFs del usuario."""
+                        if not selected_labels or not pdfs_list_state:
+                            return (
+                                [],
+                                gr.Markdown("⚠️ No PDFs selected. Please select PDFs first.", visible=True)
+                            )
+                        
+                        # Mapear labels seleccionados a IDs
+                        selected_ids = []
+                        for pdf_data in pdfs_list_state:
+                            label = f"[{pdf_data['app']}] {pdf_data['name']}"
+                            if label in selected_labels:
+                                selected_ids.append(pdf_data["id"])
+                        
+                        status_text = f"✅ **{len(selected_ids)} PDFs selected for processing:**\n\n"
+                        for pdf_data in pdfs_list_state:
+                            if pdf_data["id"] in selected_ids:
+                                status_text += f"- [{pdf_data['app']}] {pdf_data['name']}\n"
+                        
+                        return (
+                            selected_ids,
+                            gr.Markdown(status_text, visible=True)
+                        )
+                    
+                    def company_knowledge_submit_v2(message, history, files, session_id, speed_mode, provider, days, urls_in_bullets, task_type, max_pdfs, selected_pdfs):
                         if not message.strip():
-                            return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                            return history, history, "⚠️ Write a question.", gr.Markdown(visible=False), gr.Markdown(visible=False)
                         
                         # Prepare filters
                         filters = {}
                         if days:
                             filters["days"] = days
+                        # Siempre pasar max_pdfs (incluso si es None, usar valor por defecto)
+                        if max_pdfs is not None:
+                            filters["max_pdfs"] = max_pdfs
+                        else:
+                            filters["max_pdfs"] = 100  # Valor por defecto
                         
-                        # If it's an autonomous task (prebrief, data_analysis, or email_response), use execute_autonomous_task_v2
+                        # Agregar PDFs seleccionados a filters (si hay selección)
+                        if selected_pdfs and len(selected_pdfs) > 0:
+                            filters["selected_pdf_ids"] = selected_pdfs
+                            print(f"📋 [Company Knowledge] Procesando {len(selected_pdfs)} PDFs seleccionados específicamente")
+                        
+                        # If it's an autonomous task (prebrief, data_analysis, or email_response), use execute_autonomous_task_v2 WITH STREAMING
                         if task_type in ["prebrief", "data_analysis", "email_response"]:
                             try:
                                 company_knowledge = get_company_knowledge(
@@ -16316,28 +16979,201 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                 if not hasattr(company_knowledge, 'app_integrations') or not company_knowledge.app_integrations:
                                     error_msg = "⚠️ No apps connected. Go to the 'Connect Apps' tab to connect your applications."
                                     new_history = history + [(message, error_msg)]
-                                    return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                                    return new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ No apps connected**", visible=True)
                                 
-                                # Execute autonomous task
+                                # STREAMING EN TIEMPO REAL para tareas autónomas
                                 import asyncio
                                 
-                                # Show initial search status
+                                # Mostrar estado inicial
                                 search_status_text = "**🔍 Searching in connected apps...**\n\n"
+                                yield history + [(message, "")], history + [(message, "")], "🔍 Searching in apps...", gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
                                 
-                                result = asyncio.run(
-                                    company_knowledge.execute_autonomous_task_v2(
-                                        task_description=message,
-                                        task_type=task_type,
-                                        filters=filters,
-                                        urls_in_bullets=urls_in_bullets
+                                # Buscar información primero
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                
+                                # Buscar en apps
+                                search_query = company_knowledge._extract_search_query_from_task(message)
+                                app_results = loop.run_until_complete(
+                                    company_knowledge.app_integrations.search_across_apps(
+                                        query=search_query,
+                                        filters=filters
                                     )
                                 )
                                 
-                                if result.get("success"):
-                                    if task_type == "prebrief":
-                                        response_text = result.get("prebrief_summary", "No summary generated.")
-                                    elif task_type == "email_response":
-                                        # Format email responses
+                                if not app_results:
+                                    error_msg = "No se encontró información en las apps conectadas."
+                                    new_history = history + [(message, f"❌ {error_msg}")]
+                                    yield new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ No results**", visible=True)
+                                    return
+                                
+                                # Aplicar ranking
+                                ranked_results = company_knowledge._rank_results_by_relevance_and_recency(
+                                    query=search_query,
+                                    results=app_results,
+                                    filters=filters
+                                )
+                                
+                                # Construir contexto
+                                ctx_lines = []
+                                search_status = []
+                                total_chars = 0
+                                max_chars = 500000
+                                
+                                for r in ranked_results:
+                                    app_display = f"[{r.app_name}]"
+                                    search_status.append({
+                                        "app": r.app_name,
+                                        "source": r.source_name,
+                                        "status": "found"
+                                    })
+                                    
+                                    if r.content and len(r.content) > 1000:
+                                        content_to_use = r.content[:80000]
+                                        if total_chars + len(content_to_use) <= max_chars:
+                                            if urls_in_bullets and r.url:
+                                                ctx_lines.append(f"{app_display} {r.source_name} (URL: {r.url}):\n{content_to_use}\n")
+                                            else:
+                                                ctx_lines.append(f"{app_display} {r.source_name}:\n{content_to_use}\n")
+                                            total_chars += len(content_to_use)
+                                        else:
+                                            remaining = max_chars - total_chars
+                                            if remaining > 1000:
+                                                ctx_lines.append(f"{app_display} {r.source_name}:\n{r.content[:remaining]}\n")
+                                                total_chars = max_chars
+                                            break
+                                    else:
+                                        snippet = (r.snippet or r.content or "")[:5000]
+                                        if total_chars + len(snippet) <= max_chars:
+                                            if urls_in_bullets and r.url:
+                                                ctx_lines.append(f"{app_display} {r.source_name} (URL: {r.url}): {snippet}")
+                                            else:
+                                                ctx_lines.append(f"{app_display} {r.source_name}: {snippet}")
+                                            total_chars += len(snippet)
+                                        else:
+                                            break
+                                
+                                context_block = "\n".join(ctx_lines)
+                                
+                                # Construir prompt según tipo de tarea
+                                from langchain_core.messages import HumanMessage
+                                
+                                if task_type == "prebrief":
+                                    sources_by_app = {}
+                                    for r in ranked_results[:15]:
+                                        app = r.app_name
+                                        if app not in sources_by_app:
+                                            sources_by_app[app] = []
+                                        sources_by_app[app].append({
+                                            "name": r.source_name,
+                                            "url": r.url
+                                        })
+                                    
+                                    sources_summary = "\n".join([
+                                        f"- **{app}**: {len(sources)} fuente(s) - {', '.join([s['name'] for s in sources[:3]])}"
+                                        for app, sources in list(sources_by_app.items())[:5]
+                                    ])
+                                    
+                                    prompt = f"""
+Eres un asistente experto en preparar pre-briefs ejecutivos estilo ChatGPT Enterprise Company Knowledge.
+
+Genera un pre-brief profesional y detallado basado en la información de múltiples fuentes conectadas.
+
+FORMATO REQUERIDO (EXACTAMENTE como ChatGPT Enterprise):
+
+## Executive summary
+
+[Un párrafo fluido de 3-5 oraciones que resume los hallazgos más importantes. DEBE incluir métricas específicas cuando estén disponibles: porcentajes exactos (+42%), números concretos, fechas específicas, comparaciones temporales (vs September, vs Q3 baseline).]
+
+## Key insights
+
+[Bullets con insights clave. Cada bullet DEBE incluir métricas específicas cuando estén disponibles (números exactos, porcentajes, fechas), contexto temporal, referencias a eventos específicos, impacto cuantificado cuando sea posible.]
+
+## Risks / Issues (si aplica)
+
+[Si hay riesgos o issues identificados en las fuentes, listarlos aquí con detalles específicos. Si no hay, OMITIR completamente esta sección]
+
+## Next actions
+
+[3-5 acciones recomendadas basadas en los insights. Cada acción debe ser específica, accionable y con contexto temporal cuando aplique]
+
+---
+
+**Fuentes consultadas:** {len(ranked_results)} fuentes de {len(sources_by_app)} apps
+{sources_summary}
+
+INSTRUCCIONES CRÍTICAS:
+1. USA SOLO la información proporcionada en las fuentes. NO inventes datos ni métricas.
+2. Incluye métricas específicas (números exactos, porcentajes, fechas) SOLO cuando estén disponibles en las fuentes.
+3. Si encuentras información contradictoria, presenta ambas perspectivas de forma balanceada.
+4. Si no hay una respuesta clara, explica la ambigüedad y qué información falta.
+5. Prioriza información más reciente cuando sea relevante.
+6. Formatea las métricas de forma destacada (ej: "+42% lift", "+18% MoM", "3-point increase", "Week 2").
+7. Incluye referencias a las fuentes cuando sea relevante (ej: "según [App] Source Name").
+8. El Executive Summary debe ser un párrafo fluido y continuo, NO bullets.
+9. Los Key Insights deben ser bullets concisos con métricas específicas.
+
+Información de las apps conectadas:
+{context_block}
+
+Tarea original: {message}
+
+Genera el pre-brief ahora siguiendo EXACTAMENTE el formato especificado arriba.
+"""
+                                elif task_type == "data_analysis":
+                                    prompt = f"""
+Eres un analista de Business Intelligence experto. Tu tarea es analizar los datos proporcionados
+de múltiples fuentes conectadas y generar un reporte profesional con insights clave, detección de KPIs,
+análisis de tendencias y outliers, y recomendaciones accionables.
+
+INSTRUCCIONES ESPECIALES:
+1. Si encuentras datos contradictorios, identifica las discrepancias y explica posibles causas.
+2. Prioriza datos más recientes para análisis de tendencias.
+3. Si no hay suficiente información para un análisis completo, indica qué datos faltan.
+4. Incluye URLs de las fuentes en los bullets cuando aplique.
+
+Estructura tu respuesta de la siguiente manera:
+
+## 📊 Reporte de Análisis de Datos y KPIs
+
+### 📝 Resumen Ejecutivo
+[Un resumen conciso de los hallazgos más importantes.]
+
+### 📈 KPIs Clave Identificados y Análisis
+[Lista de KPIs relevantes detectados automáticamente en los datos, con su valor, tendencia y una breve explicación.]
+
+### 📉 Tendencias, Patrones y Outliers
+[Identifica tendencias significativas (crecimiento, decrecimiento), patrones recurrentes y cualquier anomalía o "outlier"
+inesperado en los datos, explicando su posible causa o implicación.]
+
+### 🛠️ Plan de Limpieza y Normalización de Datos (si aplica)
+[Si se detectan inconsistencias o problemas de calidad de datos, propone un plan para limpiarlos y normalizarlos.]
+
+### 💡 Propuesta de Dashboard de KPIs
+[Sugiere un dashboard con los KPIs más críticos, incluyendo métrica, fórmula, periodicidad, segmentación sugerida, gráfico sugerido.]
+
+### 🚀 Próximas Acciones y Recomendaciones Estratégicas
+[Recomendaciones de negocio concretas y accionables, estilo consultor, para mejorar los resultados basados en el análisis.]
+
+Información de las apps conectadas:
+{context_block}
+
+Tarea original: {message}
+
+Genera el análisis ahora siguiendo EXACTAMENTE el formato especificado arriba.
+"""
+                                else:
+                                    # email_response - usar método existente
+                                    result = loop.run_until_complete(
+                                        company_knowledge.execute_autonomous_task_v2(
+                                            task_description=message,
+                                            task_type=task_type,
+                                            filters=filters,
+                                            urls_in_bullets=urls_in_bullets
+                                        )
+                                    )
+                                    
+                                    if result.get("success"):
                                         responses = result.get("responses", [])
                                         response_text = f"✅ **{result.get('responses_generated', 0)} responses generated**\n\n"
                                         for i, resp in enumerate(responses, 1):
@@ -16348,79 +17184,134 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                             if resp.get('gmail_url'):
                                                 response_text += f"🔗 [View original email]({resp.get('gmail_url')})\n\n"
                                             response_text += "---\n\n"
-                                        if result.get("errors"):
-                                            response_text += f"\n⚠️ **Errors:**\n" + "\n".join(f"- {e}" for e in result.get("errors", []))
+                                        
+                                        new_history = history + [(message, response_text)]
+                                        status = f"✅ Task {task_type} completed."
+                                        yield new_history, new_history, status, gr.Markdown(visible=False), gr.Markdown("**✅ Completed**", visible=True)
+                                        return
                                     else:
-                                        response_text = result.get("summary", "No analysis generated.")
-                                    
-                                    # Add conflict information if exists
-                                    if result.get("conflicts_detected"):
-                                        response_text = f"⚠️ **Note:** Discrepancies detected between sources. Balanced perspectives are presented.\n\n{response_text}"
-                                    
-                                    # Add improved sources with citations
-                                    sources = result.get("sources", [])
-                                    total_sources = result.get("total_sources", len(sources))
-                                    search_status = result.get("search_status", [])
-                                    
-                                    # Build search sidebar
-                                    if search_status:
-                                        search_status_text = "**🔍 Apps queried:**\n\n"
-                                        apps_searched = {}
-                                        for status_item in search_status:
-                                            app = status_item.get("app", "Unknown")
-                                            source = status_item.get("source", "Unknown")
-                                            if app not in apps_searched:
-                                                apps_searched[app] = []
-                                            apps_searched[app].append(source)
-                                        
-                                        for app, sources_list in apps_searched.items():
-                                            search_status_text += f"**{app}**\n"
-                                            for src in sources_list[:3]:  # Show top 3 per app
-                                                search_status_text += f"  • {src}\n"
-                                            if len(sources_list) > 3:
-                                                search_status_text += f"  • ... and {len(sources_list) - 3} more\n"
-                                            search_status_text += "\n"
-                                        
-                                        search_status_text += f"\n**Total:** {total_sources} sources found"
-                                    else:
-                                        search_status_text = f"**✅ Search completed**\n\n{total_sources} sources queried"
-                                    
-                                    # Add sources section with clickable links
-                                    if sources:
-                                        response_text += "\n\n---\n\n### 📚 Sources Consulted\n\n"
-                                        for i, src in enumerate(sources[:15], 1):  # Top 15 sources
-                                            app_name = src.get("app", "Unknown")
-                                            source_name = src.get("source", "Unknown")
-                                            url = src.get("url", "")
-                                            if url:
-                                                response_text += f"{i}. **[{app_name}]** {source_name}\n   🔗 [Open source]({url})\n\n"
-                                            else:
-                                                response_text += f"{i}. **[{app_name}]** {source_name}\n\n"
-                                        
-                                        if len(sources) > 15:
-                                            response_text += f"\n*... and {len(sources) - 15} additional sources*\n"
-                                    
-                                    new_history = history + [(message, response_text)]
-                                    status = f"✅ Task {task_type} completed. {total_sources} sources queried."
-                                    if result.get("conflicts_detected"):
-                                        status += " ⚠️ Conflicts detected and resolved."
-                                else:
-                                    error_msg = result.get("error", "Unknown error executing task.")
-                                    # Check if it's a scopes/tokens error
-                                    if "token" in error_msg.lower() or "scope" in error_msg.lower() or "permission" in error_msg.lower() or "permiso" in error_msg.lower():
-                                        error_msg += "\n\n💡 **Suggestion:** Verify that apps are connected correctly and have the necessary permissions. Go to 'Connect Apps' to reconnect."
-                                    new_history = history + [(message, f"❌ {error_msg}")]
-                                    status = error_msg
-                                    search_status_text = "**❌ Search error**\n\nCould not query apps."
+                                        error_msg = result.get("error", "Unknown error")
+                                        new_history = history + [(message, f"❌ {error_msg}")]
+                                        yield new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
+                                        return
                                 
-                                return new_history, new_history, status, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                # STREAMING: Generar respuesta en tiempo real
+                                response_text = ""
+                                sources_list = [{"app": r.app_name, "source": r.source_name, "url": r.url} for r in ranked_results if r.url]
+                                
+                                # Actualizar estado de búsqueda
+                                if search_status:
+                                    search_status_text = "**🔍 Apps queried:**\n\n"
+                                    apps_searched = {}
+                                    for status_item in search_status:
+                                        app = status_item.get("app", "Unknown")
+                                        source = status_item.get("source", "Unknown")
+                                        if app not in apps_searched:
+                                            apps_searched[app] = []
+                                        apps_searched[app].append(source)
+                                    
+                                    for app, sources_list_sidebar in apps_searched.items():
+                                        search_status_text += f"**{app}**\n"
+                                        for src in sources_list_sidebar[:3]:
+                                            search_status_text += f"  • {src}\n"
+                                        if len(sources_list_sidebar) > 3:
+                                            search_status_text += f"  • ... and {len(sources_list_sidebar) - 3} more\n"
+                                        search_status_text += "\n"
+                                    
+                                    search_status_text += f"\n**Total:** {len(ranked_results)} sources found"
+                                
+                                # Stream tokens en tiempo real
+                                yield history + [(message, "⏳ Generando respuesta...")], history + [(message, "⏳ Generando respuesta...")], "⏳ Generating response...", gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                
+                                # Stream respuesta del LLM en tiempo real usando queue
+                                import queue
+                                token_queue = queue.Queue()
+                                done_event = asyncio.Event()
+                                
+                                async def stream_tokens_to_queue():
+                                    """Stream tokens a una queue para acceso síncrono"""
+                                    try:
+                                        async for chunk in company_knowledge.llm.astream([HumanMessage(content=prompt)]):
+                                            if hasattr(chunk, 'content'):
+                                                token = chunk.content
+                                            else:
+                                                token = str(chunk)
+                                            token_queue.put(token)
+                                        token_queue.put(None)  # Señal de fin
+                                    except Exception as e:
+                                        token_queue.put(f"ERROR: {str(e)}")
+                                        token_queue.put(None)
+                                    finally:
+                                        done_event.set()
+                                
+                                # Iniciar streaming en background
+                                stream_task = loop.create_task(stream_tokens_to_queue())
+                                
+                                # Leer tokens de la queue y yield en tiempo real
+                                response_text = ""
+                                try:
+                                    while True:
+                                        try:
+                                            # Obtener token de la queue (con timeout)
+                                            token = token_queue.get(timeout=0.1)
+                                            if token is None:  # Señal de fin
+                                                break
+                                            
+                                            response_text += token
+                                            
+                                            # Yield actualización en tiempo real
+                                            new_history = history + [(message, response_text)]
+                                            yield new_history, new_history, "⏳ Generating...", gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                        except queue.Empty:
+                                            # No hay tokens nuevos, continuar esperando
+                                            continue
+                                    
+                                    # Esperar a que termine el task
+                                    loop.run_until_complete(stream_task)
+                                    
+                                except Exception as e:
+                                    # Si hay error, usar método no-streaming
+                                    try:
+                                        response_obj = loop.run_until_complete(company_knowledge.llm.ainvoke([HumanMessage(content=prompt)]))
+                                        response_text = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                                    except Exception as e2:
+                                        response_text = f"Error generando respuesta: {str(e2)}"
+                                
+                                # Agregar fuentes al final
+                                if sources_list:
+                                    response_text += "\n\n---\n\n### 📚 Sources Consulted\n\n"
+                                    for i, src in enumerate(sources_list[:15], 1):
+                                        app_name = src.get("app", "Unknown")
+                                        source_name = src.get("source", "Unknown")
+                                        url = src.get("url", "")
+                                        if url:
+                                            response_text += f"{i}. **[{app_name}]** {source_name}\n   🔗 [Open source]({url})\n\n"
+                                        else:
+                                            response_text += f"{i}. **[{app_name}]** {source_name}\n\n"
+                                    
+                                    if len(sources_list) > 15:
+                                        response_text += f"\n*... and {len(sources_list) - 15} additional sources*\n"
+                                
+                                # Respuesta final
+                                new_history = history + [(message, response_text)]
+                                status = f"✅ Task {task_type} completed. {len(ranked_results)} sources queried."
+                                yield new_history, new_history, status, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
                                 
                             except Exception as e:
+                                import traceback
+                                traceback.print_exc()
                                 error_msg = f"❌ Error executing autonomous task: {str(e)}"
                                 new_history = history + [(message, error_msg)]
-                                return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                                yield new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
                         else:
                             # Tarea normal (chat) - CON STREAMING EN TIEMPO REAL
+                            # Convertir la función en un generador directamente
+                            import asyncio
+                            full_response = ""
+                            
+                            # Inicializar con mensaje vacío
+                            yield history + [(message, "")], history + [(message, "")], "⏳ Generando respuesta...", gr.Markdown(visible=False), gr.Markdown("**🔍 Buscando información...**", visible=True)
+                            
                             try:
                                 company_knowledge = get_company_knowledge(
                                     config=config,
@@ -16429,120 +17320,164 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                     context_manager=context_manager
                                 )
                                 
-                                # Función generadora para streaming (Gradio detecta automáticamente)
-                                def stream_response():
-                                    import asyncio
-                                    full_response = ""
+                                # Ejecutar query con streaming del LLM
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                
+                                # Ejecutar streaming usando el loop - STREAMING EN TIEMPO REAL
+                                try:
+                                    session = company_knowledge.initialize_session(session_id)
                                     
-                                    # Inicializar con mensaje vacío
-                                    yield history + [(message, "")], history + [(message, "")], "⏳ Generando respuesta...", gr.Markdown(visible=False), gr.Markdown("**🔍 Buscando información...**", visible=True)
-                                    
-                                    try:
-                                        # Ejecutar query con streaming del LLM
-                                        loop = asyncio.new_event_loop()
-                                        asyncio.set_event_loop(loop)
-                                        
-                                        async def get_streaming_response():
-                                            # Obtener instancia y preparar contexto
-                                            session = company_knowledge.initialize_session(session_id)
-                                            
-                                            # Buscar en apps si están conectadas
-                                            app_results = []
-                                            if company_knowledge.app_integrations:
-                                                connected_apps = company_knowledge.app_integrations.get_connected_apps()
-                                                if connected_apps:
-                                                    app_results = await company_knowledge.app_integrations.search_across_apps(
-                                                        query=message,
-                                                        filters=filters
-                                                    )
-                                            
-                                            # Si hay resultados de apps, generar respuesta con streaming
-                                            if app_results:
-                                                ranked_results = company_knowledge._rank_results_by_relevance_and_recency(
+                                    # Buscar en apps si están conectadas
+                                    app_results = []
+                                    if company_knowledge.app_integrations:
+                                        connected_apps = company_knowledge.app_integrations.get_connected_apps()
+                                        if connected_apps:
+                                            app_results = loop.run_until_complete(
+                                                company_knowledge.app_integrations.search_across_apps(
                                                     query=message,
-                                                    results=app_results,
                                                     filters=filters
                                                 )
-                                                
-                                                # Construir contexto
-                                                ctx_lines = []
-                                                sources_list = []
-                                                for r in ranked_results[:10]:
-                                                    snippet = (r.snippet or r.content or "")[:5000]
-                                                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
-                                                    if r.url:
-                                                        sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
-                                                
-                                                context_block = "\n".join(ctx_lines)
-                                                prompt = f"""Eres un asistente experto. Responde la pregunta del usuario usando SOLO la información proporcionada.
-
-INFORMACIÓN DISPONIBLE:
-{context_block}
-
-PREGUNTA: {message}
-
-Responde de forma clara, profesional y detallada:"""
-                                                
-                                                # Stream tokens del LLM
-                                                from langchain_core.messages import HumanMessage
-                                                async for chunk in company_knowledge.llm.astream([HumanMessage(content=prompt)]):
-                                                    if hasattr(chunk, 'content'):
-                                                        token = chunk.content
-                                                    else:
-                                                        token = str(chunk)
-                                                    full_response += token
-                                                    # Yield actualización incremental
-                                                    yield history + [(message, full_response)]
-                                                
-                                                # Agregar fuentes
-                                                if sources_list:
-                                                    sources_text = "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
-                                                    for i, src in enumerate(sources_list[:10], 1):
-                                                        app_name = src.get("app", "Unknown")
-                                                        source_name = src.get("source", "Unknown")
-                                                        url = src.get("url", "")
-                                                        if url:
-                                                            sources_text += f"{i}. **[{app_name}]** {source_name} - [🔗 Abrir]({url})\n"
-                                                        else:
-                                                            sources_text += f"{i}. **[{app_name}]** {source_name}\n"
-                                                    full_response += sources_text
-                                                    yield history + [(message, full_response)]
-                                            else:
-                                                # Sin resultados de apps, usar método normal
-                                                new_hist, err, meta = await company_knowledge.process_query_async(
-                                                    session_id=session_id,
-                                                    message=message,
-                                                    history=history,
-                                                    speed_mode=speed_mode,
-                                                    provider=provider,
-                                                    filters=filters,
-                                                    urls_in_bullets=urls_in_bullets
-                                                )
-                                                yield new_hist
+                                            )
+                                    
+                                    # OPTIMIZACIÓN CRÍTICA: Streaming en tiempo real del sidebar durante búsqueda
+                                    connected_apps = company_knowledge.app_integrations.get_connected_apps() if company_knowledge.app_integrations else []
+                                    
+                                    # Mostrar sidebar inicial
+                                    results_by_app_live = {}
+                                    
+                                    if connected_apps:
+                                        # OPTIMIZACIÓN CRÍTICA: Búsqueda con streaming para actualizar sidebar en tiempo real
+                                        all_app_results = []
                                         
-                                        # Ejecutar streaming usando el loop
-                                        async_gen = get_streaming_response()
+                                        async def search_with_sidebar_updates():
+                                            nonlocal all_app_results
+                                            async for app_name, status, count, results in company_knowledge.app_integrations.search_across_apps_streaming(
+                                                query=message,
+                                                filters=filters
+                                            ):
+                                                if app_name == "all":
+                                                    all_app_results = results
+                                                    # Generar sidebar final
+                                                    sidebar_text = company_knowledge._generate_realtime_sidebar_status(
+                                                        apps_searched=connected_apps,
+                                                        results_found=results_by_app_live,
+                                                        is_searching=False
+                                                    )
+                                                    yield sidebar_text
+                                                    break
+                                                
+                                                # Actualizar tracking en tiempo real
+                                                if status == "completed":
+                                                    results_by_app_live[app_name] = count
+                                                elif status == "error":
+                                                    results_by_app_live[app_name] = 0
+                                                
+                                                # Generar sidebar actualizado
+                                                sidebar_text = company_knowledge._generate_realtime_sidebar_status(
+                                                    apps_searched=connected_apps,
+                                                    results_found=results_by_app_live,
+                                                    current_app=app_name if status == "searching" else None,
+                                                    is_searching=(status == "searching")
+                                                )
+                                                
+                                                # Yield actualización del sidebar
+                                                yield sidebar_text
+                                        
+                                        # Ejecutar búsqueda con streaming y actualizar sidebar en tiempo real
+                                        search_gen = search_with_sidebar_updates()
+                                        
                                         try:
                                             while True:
                                                 try:
-                                                    # Usar run_until_complete para obtener el siguiente valor del async generator
-                                                    result = loop.run_until_complete(async_gen.__anext__())
-                                                    # Yield actualización del chatbot
-                                                    status = f"✅ {len(result)} mensajes"
-                                                    yield result, result, status, gr.Markdown(visible=False), gr.Markdown("**✅ Búsqueda completada**", visible=True)
+                                                    sidebar_update = loop.run_until_complete(search_gen.__anext__())
+                                                    # Yield actualización del sidebar en tiempo real
+                                                    yield history + [(message, "")], history + [(message, "")], "⏳ Buscando en apps...", gr.Markdown(visible=False), gr.Markdown(sidebar_update, visible=True)
                                                 except StopAsyncIteration:
                                                     break
-                                        finally:
-                                            loop.close()
-                                    except Exception as e:
-                                        import traceback
-                                        traceback.print_exc()
-                                        error_msg = f"❌ Error: {str(e)}"
-                                        error_history = history + [(message, error_msg)]
-                                        yield error_history, error_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
-                                
-                                # Devolver generador para streaming (Gradio lo detecta automáticamente)
-                                return stream_response()
+                                        except Exception as e:
+                                            print(f"Error en streaming de sidebar: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                                            # Continuar sin streaming si falla
+                                    
+                                    # Ejecutar process_query_async (ya optimizado con todas las mejoras)
+                                    # Si ya tenemos resultados de la búsqueda con streaming, pasarlos directamente
+                                    new_hist, err, meta = loop.run_until_complete(
+                                        company_knowledge.process_query_async(
+                                            session_id=session_id,
+                                            message=message,
+                                            history=history,
+                                            speed_mode=speed_mode,
+                                            provider=provider,
+                                            filters=filters,
+                                            urls_in_bullets=urls_in_bullets
+                                        )
+                                    )
+                                    
+                                    if err:
+                                        error_history = history + [(message, f"❌ {err}")]
+                                        yield error_history, error_history, err, gr.Markdown(visible=False), gr.Markdown("**❌ Error en búsqueda**", visible=True)
+                                        return
+                                    
+                                    # Extraer respuesta y metadata
+                                    if new_hist and len(new_hist) > 0:
+                                        response_text = new_hist[-1][1] if len(new_hist[-1]) > 1 else ""
+                                    else:
+                                        response_text = ""
+                                    
+                                    # Construir sidebar mejorado con metadata
+                                    search_status_text = "**🔍 Búsqueda Completada**\n\n"
+                                    
+                                    # Usar metadata mejorado
+                                    search_status = meta.get("search_status", [])
+                                    results_by_app = meta.get("results_by_app", {})
+                                    total_sources = meta.get("total_sources", 0)
+                                    conflicts_detected = meta.get("conflicts_detected", False)
+                                    consensus_level = meta.get("consensus_level", 1.0)
+                                    
+                                    if search_status:
+                                        search_status_text += "**📱 Apps consultadas:**\n\n"
+                                        for status_item in search_status:
+                                            if isinstance(status_item, dict):
+                                                app_name = status_item.get("app", "Unknown")
+                                                source = status_item.get("source", "Unknown")
+                                                status_icon = "✅" if status_item.get("status") == "completed" else "⏳"
+                                                search_status_text += f"{status_icon} **{app_name}** - {source}\n"
+                                        search_status_text += "\n"
+                                    elif results_by_app:
+                                        search_status_text += "**📱 Apps consultadas:**\n\n"
+                                        for app_name, count in results_by_app.items():
+                                            search_status_text += f"✅ **{app_name}** ({count} resultados)\n"
+                                        search_status_text += "\n"
+                                    
+                                    search_status_text += f"**Total:** {total_sources} fuentes encontradas\n\n"
+                                    
+                                    conflicts_resolved = meta.get("conflicts_resolved", False)
+                                    if conflicts_detected:
+                                        if conflicts_resolved:
+                                            search_status_text += f"✅ **Conflictos resueltos automáticamente** (Consenso inicial: {consensus_level*100:.0f}%)\n"
+                                            search_status_text += "*Se realizaron búsquedas adicionales para resolver discrepancias.*\n"
+                                        else:
+                                            search_status_text += f"⚠️ **Conflictos detectados** (Consenso: {consensus_level*100:.0f}%)\n"
+                                            search_status_text += "*Se presentan perspectivas balanceadas.*\n"
+                                    else:
+                                        search_status_text += f"✅ **Consenso alto** ({consensus_level*100:.0f}%)\n"
+                                    
+                                    # Yield final con respuesta completa y sidebar mejorado
+                                    new_history = history + [(message, response_text)]
+                                    status_msg = f"✅ Respuesta completada ({total_sources} fuentes)"
+                                    if conflicts_detected:
+                                        status_msg += " - Conflictos detectados"
+                                    yield new_history, new_history, status_msg, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                finally:
+                                    loop.close()
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                error_msg = f"❌ Error: {str(e)}"
+                                error_history = history + [(message, error_msg)]
+                                yield error_history, error_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
                                 
                             except Exception as e:
                                 import traceback
@@ -16665,9 +17600,21 @@ Responde de forma clara, profesional y detallada:"""
                         
                         return gr.Markdown(output, visible=True)
                     
+                    view_connected_pdfs_btn.click(
+                        fn=view_connected_pdfs,
+                        inputs=[company_knowledge_pdfs_list, company_knowledge_selected_pdfs],
+                        outputs=[view_connected_pdfs_output, company_knowledge_pdfs_list, apply_pdf_selection_btn, pdf_selection_status]
+                    )
+                    
+                    apply_pdf_selection_btn.click(
+                        fn=apply_pdf_selection,
+                        inputs=[view_connected_pdfs_output, company_knowledge_pdfs_list],
+                        outputs=[company_knowledge_selected_pdfs, pdf_selection_status]
+                    )
+                    
                     company_knowledge_submit_btn.click(
                         fn=company_knowledge_submit_v2,
-                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type],
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type, company_knowledge_max_pdfs, company_knowledge_selected_pdfs],
                         outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output, search_status_sidebar],
                     ).then(
                         fn=lambda: gr.Markdown(visible=False),
@@ -16676,7 +17623,7 @@ Responde de forma clara, profesional y detallada:"""
                     
                     company_knowledge_input.submit(
                         fn=company_knowledge_submit_v2,
-                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type],
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type, company_knowledge_max_pdfs, company_knowledge_selected_pdfs],
                         outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output, search_status_sidebar],
                     ).then(
                         fn=lambda: gr.Markdown(visible=False),
@@ -16792,6 +17739,2290 @@ Responde de forma clara, profesional y detallada:"""
                         inputs=[task_type_select, task_description_input],
                         outputs=[task_output]
                     )
+        
+        # Tab 4.5.7: Accountability (NUEVO - Con conexión de apps y tareas autónomas)
+        with gr.Tab("📋 Accountability"):
+            if not ACCOUNTABILITY_AVAILABLE or not get_accountability:
+                gr.Markdown("### ⚠️ Accountability no disponible")
+                gr.Markdown("""
+                **Error cargando Accountability.**
+                
+                Por favor, verifica que todas las dependencias estén instaladas.
+                """)
+            else:
+                gr.Markdown("### 📋 Accountability - Sistema Automático de Contabilidad y Finanzas")
+                gr.Markdown("""
+                **💰 Sistema especializado de procesamiento automático de documentos contables y financieros**
+                
+                **🚀 Procesamiento Automático SIN Prompts:**
+                - 📄 **Sube PDFs → Obtén Resumen Automático**: Solo sube tus PDFs y recibe información estructurada automáticamente
+                - 🔍 **Detección Automática**: Identifica automáticamente facturas, contratos, reportes financieros, recibos
+                - 📊 **Extracción Estructurada**: Extrae datos clave automáticamente (proveedor, monto, fecha, impuestos, número de factura, etc.)
+                - 🔗 **Conciliación Automática**: Compara facturas con pagos, detecta inconsistencias y errores
+                - 📈 **Resúmenes Ejecutivos**: Genera resúmenes de 1-2 páginas automáticamente por lote de PDFs
+                - 🏷️ **Clasificación Automática**: Separa y etiqueta PDFs por tipo (factura, contrato, reporte)
+                - ⚠️ **Alertas Automáticas**: Señala documentos vencidos, pagos pendientes, riesgos, errores contables
+                
+                **✨ Capacidades Avanzadas:**
+                - 📦 **Procesamiento Masivo**: Procesa 500+ PDFs automáticamente en minutos
+                - 🔍 **Data Provenance**: Rastrea el origen de cada información para compliance y auditoría
+                - 🧠 **Análisis Inteligente**: Detecta errores, inconsistencias, duplicados y anomalías
+                - 📱 **Integraciones**: SharePoint, Google Drive, Box, Confluence, Dropbox (máximo impacto $$$)
+                - 💼 **Ahorro de Tiempo**: Reemplaza 20-40 horas de trabajo manual por minutos de procesamiento automático
+                
+                **💼 Perfecto para:**
+                - **Procesar facturas y recibos**: Extrae automáticamente proveedor, monto, fecha, impuestos, estado de pago
+                - **Analizar contratos**: Fechas de vencimiento, obligaciones, cláusulas críticas, partes involucradas
+                - **Reportes financieros**: Totales, ingresos, gastos, KPIs, balances
+                - **Auditorías internas**: Detecta inconsistencias, errores, duplicados, anomalías
+                - **Conciliación de cuentas**: Compara automáticamente registros de bancos, pagos y facturas
+                - **Empresas grandes**: Ahorro masivo de tiempo y dinero (ROI enorme)
+                
+                **💡 Ejemplo de uso:**
+                1. Sube 500 PDFs de facturas, contratos y reportes financieros
+                2. El sistema automáticamente:
+                   - Detecta el tipo de cada documento
+                   - Extrae todos los datos estructurados
+                   - Clasifica y organiza
+                   - Genera resumen ejecutivo completo
+                   - Detecta errores y alertas
+                   - Hace conciliación básica
+                3. Recibe resumen ejecutivo automático con:
+                   - Total de documentos por tipo
+                   - Montos totales (facturas, contratos)
+                   - Top proveedores y clientes
+                   - Facturas vencidas
+                   - Errores detectados
+                   - Recomendaciones
+                4. Haz preguntas específicas sobre los documentos procesados
+                
+                **💰 Ahorro Estimado:**
+                - 1 contable senior: ~$50-80 USD/hora
+                - Procesar 500 PDFs manualmente: 20-40 horas → $1,000-3,000 USD
+                - Con Accountability: minutos → Ahorro casi total
+                """)
+                
+                with gr.Tabs():
+                    # Sub-tab: Conectar Apps
+                    with gr.Tab("🔌 Conectar Apps"):
+                        gr.Markdown("## 🚀 Conecta tus Aplicaciones Empresariales")
+                        gr.Markdown("""
+                        ### ✨ Conecta tus apps en 3 pasos simples:
+                        
+                        1. **Selecciona** el tipo de app que quieres conectar
+                        2. **Ingresa** tu token/API key (te guiamos paso a paso)
+                        3. **Conecta** y listo - ¡Ya puedes hacer preguntas sobre tus apps!
+                        
+                        **📱 Apps Disponibles:**
+                        - 💬 **Comunicación:** Slack, Teams, Gmail, Outlook
+                        - 📁 **Documentos:** Google Drive, SharePoint, Dropbox, Box
+                        - 💻 **Desarrollo:** GitHub, GitLab, Linear, Asana, ClickUp
+                        - 📊 **Negocio:** HubSpot, Salesforce, Intercom
+                        - 🎯 **Proyectos:** Jira, Confluence
+                        
+                        **🔐 Seguridad Total:**
+                        - ✅ Credenciales almacenadas localmente (solo en tu computadora)
+                        - ✅ Validación automática de tokens antes de guardar
+                        - ✅ Solo accede a lo que ya tienes permiso de ver
+                        - ✅ Nunca compartimos tus datos con terceros
+                        """)
+                        
+                        # Indicador de estado global
+                        with gr.Row():
+                            global_status = gr.Markdown(
+                                value="**Estado:** Esperando conexión...",
+                                visible=True
+                            )
+                        
+                        gr.Markdown("### 📝 Paso 1: Selecciona tu App")
+                        with gr.Row():
+                            app_type_select = gr.Dropdown(
+                                label="📱 ¿Qué app quieres conectar?",
+                                choices=[
+                                    ("💬 Slack - Mensajes y canales", "slack"),
+                                    ("📁 Google Drive - Documentos y archivos", "google_drive"),
+                                    ("📂 SharePoint - Documentos empresariales", "sharepoint"),
+                                    ("💻 GitHub - Código y repositorios", "github"),
+                                    ("📧 Gmail - Emails y calendario", "gmail"),
+                                    ("📧 Outlook - Emails de Microsoft", "outlook"),
+                                    ("📦 Dropbox - Almacenamiento en la nube", "dropbox"),
+                                    ("📦 Box - Almacenamiento empresarial", "box"),
+                                    ("💬 Teams - Colaboración Microsoft", "teams"),
+                                    ("📊 HubSpot - CRM y marketing", "hubspot"),
+                                    ("☁️ Salesforce - CRM empresarial", "salesforce"),
+                                    ("📋 Linear - Gestión de proyectos", "linear"),
+                                    ("✅ Asana - Tareas y proyectos", "asana"),
+                                    ("🔧 GitLab - DevOps y código", "gitlab"),
+                                    ("📝 ClickUp - Productividad", "clickup"),
+                                    ("💬 Intercom - Soporte al cliente", "intercom"),
+                                    ("🎯 Jira - Tickets y issues", "jira"),
+                                    ("📚 Confluence - Wiki y documentación", "confluence")
+                                ],
+                                value="slack",
+                                info="💡 Selecciona la app que usas más en tu trabajo diario"
+                            )
+                        
+                        # Guía dinámica que cambia según la app seleccionada
+                        app_guide_output = gr.Markdown(
+                            value="**💡 Selecciona una app arriba para ver la guía paso a paso**",
+                            visible=True
+                        )
+                        
+                        def update_app_guide(app_type):
+                            guides = {
+                                "slack": """
+### 🔑 Cómo obtener tu token de Slack (2 minutos):
+
+**Paso 1:** Ve a https://api.slack.com/apps y haz clic en "Create New App"
+
+**Paso 2:** Selecciona "From scratch"
+- **App Name:** "Accountability" (o el nombre que prefieras)
+- **Workspace:** Selecciona tu workspace
+
+**Paso 3:** En el menú lateral, ve a "OAuth & Permissions"
+
+**Paso 4:** En "Scopes" → "Bot Token Scopes", agrega:
+- `channels:read` - Leer canales
+- `channels:history` - Ver historial de mensajes
+- `search:read` - Buscar mensajes
+
+**Paso 5:** Ve arriba y haz clic en "Install to Workspace"
+- Autoriza la app en tu workspace
+
+**Paso 6:** Copia el "Bot User OAuth Token" (empieza con `xoxb-`)
+- Este es el token que necesitas pegar abajo
+
+✅ **Listo!** Pega el token en el campo "Token / API Key"
+                            """,
+                                "google_drive": """
+### 🔑 Cómo obtener acceso a Google Drive (3 minutos):
+
+**Opción A: Service Account (Recomendado para empresas)**
+
+**Paso 1:** Ve a https://console.cloud.google.com/
+- Crea un proyecto nuevo o selecciona uno existente
+
+**Paso 2:** Ve a "APIs & Services" → "Credentials" → "Create Credentials" → "Service Account"
+- Nombre: "Accountability"
+- Crea y continúa
+
+**Paso 3:** En "Grant this service account access to project", selecciona "Editor"
+- Haz clic en "Done"
+
+**Paso 4:** Haz clic en el service account creado → "Keys" → "Add Key" → "Create new key"
+- Selecciona "JSON" y descarga el archivo
+
+**Paso 5:** Abre el archivo JSON descargado
+- Copia todo el contenido del campo `private_key` (sin las comillas)
+- Este es tu token
+
+**Paso 6 (Opcional):** Si quieres limitar a una carpeta específica:
+- Comparte la carpeta con el email del service account (está en el JSON como `client_email`)
+- En "Credenciales extra", agrega: `{"folder_id": "ID_DE_LA_CARPETA"}`
+
+✅ **Listo!** Pega el private_key en el campo "Token / API Key"
+
+**Opción B: OAuth 2.0 (Para uso personal)**
+- Más complejo, requiere configuración de OAuth
+- Recomendamos Service Account para empresas
+                            """,
+                                "hubspot": """
+### 🔑 Cómo obtener tu token de HubSpot (2 minutos):
+
+**Paso 1:** Inicia sesión en HubSpot y ve a Settings (⚙️)
+
+**Paso 2:** En el menú lateral, ve a "Integrations" → "Private Apps"
+
+**Paso 3:** Haz clic en "Create a private app"
+- **Name:** "Accountability"
+- **Description:** "Para búsqueda y análisis de datos"
+
+**Paso 4:** En "Scopes", selecciona los permisos que necesitas:
+- `content` - Leer contenido
+- `contacts` - Leer contactos
+- `deals` - Leer deals
+- `engagements` - Leer emails y llamadas
+
+**Paso 5:** Haz clic en "Create app" en la parte superior
+
+**Paso 6:** Copia el "Private app access token" (empieza con `pat-`)
+- Este es el token que necesitas pegar abajo
+
+✅ **Listo!** Pega el token en el campo "Token / API Key"
+                            """,
+                                "github": """
+### 🔑 Cómo obtener tu token de GitHub (1 minuto):
+
+**Paso 1:** Ve a GitHub.com y haz clic en tu foto de perfil (arriba derecha)
+
+**Paso 2:** Selecciona "Settings"
+
+**Paso 3:** En el menú lateral, ve a "Developer settings" (al final)
+
+**Paso 4:** Selecciona "Personal access tokens" → "Tokens (classic)"
+
+**Paso 5:** Haz clic en "Generate new token" → "Generate new token (classic)"
+
+**Paso 6:** Configura el token:
+- **Note:** "Accountability"
+- **Expiration:** Elige cuánto tiempo quieres que dure
+- **Scopes:** Selecciona:
+  - `repo` - Acceso completo a repositorios
+  - `read:org` - Leer datos de organización
+
+**Paso 7:** Haz clic en "Generate token" al final
+- ⚠️ **IMPORTANTE:** Copia el token inmediatamente (empieza con `ghp_`)
+- No podrás verlo de nuevo
+
+✅ **Listo!** Pega el token en el campo "Token / API Key"
+                            """,
+                                "jira": """
+### 🔑 Cómo obtener acceso a Jira (2 minutos):
+
+**Paso 1:** Inicia sesión en tu instancia de Jira (ej: tuempresa.atlassian.net)
+
+**Paso 2:** Haz clic en tu foto de perfil (arriba derecha) → "Account settings"
+
+**Paso 3:** En el menú lateral, ve a "Security" → "API tokens"
+
+**Paso 4:** Haz clic en "Create API token"
+- **Label:** "Accountability"
+- Copia el token generado
+
+**Paso 5:** En "Credenciales extra", agrega:
+```json
+{
+  "base_url": "https://tuempresa.atlassian.net"
+}
+```
+- Reemplaza `tuempresa` con el nombre de tu instancia
+
+**Paso 6:** Para el token, usa el formato: `email@tudominio.com:TOKEN_GENERADO`
+- Ejemplo: `juan@empresa.com:ATATT3xFfGF0...`
+
+✅ **Listo!** Pega el email:token en el campo "Token / API Key"
+                            """,
+                                "salesforce": """
+### 🔑 Cómo obtener acceso a Salesforce (3 minutos):
+
+**Paso 1:** Inicia sesión en Salesforce como administrador
+
+**Paso 2:** Ve a Setup (⚙️) → "App Manager" → "New Connected App"
+
+**Paso 3:** Completa el formulario:
+- **Connected App Name:** "Accountability"
+- **API Name:** Se genera automáticamente
+- **Contact Email:** Tu email
+
+**Paso 4:** En "API (Enable OAuth Settings)":
+- ✅ Marca "Enable OAuth Settings"
+- **Callback URL:** `https://localhost` (puede ser cualquier URL)
+- **Selected OAuth Scopes:** 
+  - `Full access (full)`
+  - `Perform requests on your behalf at any time (refresh_token, offline_access)`
+
+**Paso 5:** Guarda y continúa
+- Copia el "Consumer Key" y "Consumer Secret"
+
+**Paso 6:** Para obtener el Access Token:
+- Usa OAuth flow o Username/Password flow
+- El token que necesitas es el "Access Token"
+
+**Paso 7:** En "Credenciales extra", agrega:
+```json
+{
+  "instance_url": "https://tuinstancia.salesforce.com"
+}
+```
+
+✅ **Listo!** Pega el Access Token en el campo "Token / API Key"
+                            """
+                            }
+                            
+                            guide = guides.get(app_type, f"""
+### 🔑 Guía para {app_type}
+
+**Pasos generales:**
+1. Ve a la configuración de la app
+2. Busca "API", "Tokens", "Integrations" o "Developer settings"
+3. Crea un token/API key con permisos de lectura
+4. Copia el token y pégalo abajo
+
+**💡 Tip:** Si no encuentras cómo obtener el token, busca en Google: "{app_type} API token how to get"
+                            """)
+                            
+                            return guide
+                        
+                        def toggle_connection_method(app_type, method):
+                            """Muestra/oculta grupos según método de conexión y tipo de app."""
+                            # Apps que soportan OAuth Playground
+                            oauth_playground_apps = ["google_drive", "gmail"]
+                            
+                            if method == "oauth_playground" and app_type in oauth_playground_apps:
+                                # Mostrar OAuth Playground, ocultar token directo
+                                return gr.update(visible=False), gr.update(visible=True)
+                            else:
+                                # Mostrar token directo, ocultar OAuth Playground
+                                return gr.update(visible=True), gr.update(visible=False)
+                        
+                        app_type_select.change(
+                            fn=update_app_guide,
+                            inputs=[app_type_select],
+                            outputs=[app_guide_output]
+                        )
+                        
+                        gr.Markdown("### 📝 Paso 2: Configura tu Conexión")
+                        
+                        app_name_input = gr.Textbox(
+                            label="🏷️ Nombre de la Conexión",
+                            placeholder="Ej: Slack Oficina Principal, Mi Google Drive, HubSpot Producción",
+                            info="💡 Un nombre descriptivo para identificar esta conexión (puedes tener múltiples conexiones de la misma app)",
+                            value=""
+                        )
+                        
+                        # Método de conexión: Token directo o OAuth Playground (solo para apps que lo soportan)
+                        connection_method = gr.Radio(
+                            label="🔐 Método de Conexión",
+                            choices=[
+                                ("🔑 Token / API Key Directo", "token")
+                            ],
+                            value="token",
+                            info="💡 OAuth Playground solo está disponible para apps de Google (Drive, Gmail)"
+                        )
+                        
+                        # Actualizar visibilidad de métodos según app seleccionada
+                        def update_connection_method_visibility(app_type):
+                            """Actualiza las opciones de método según la app."""
+                            oauth_playground_apps = ["google_drive", "gmail"]
+                            
+                            if app_type in oauth_playground_apps:
+                                # Mostrar ambas opciones
+                                return gr.update(
+                                    choices=[
+                                        ("🔑 Token / API Key Directo", "token"),
+                                        ("🎮 OAuth Playground (Solo Google)", "oauth_playground")
+                                    ],
+                                    visible=True,
+                                    value="token"  # Resetear a token por defecto
+                                )
+                            else:
+                                # Solo mostrar token directo
+                                return gr.update(
+                                    choices=[("🔑 Token / API Key Directo", "token")],
+                                    visible=True,
+                                    value="token"
+                                )
+                        
+                        # Grupo para Token directo (siempre visible) - DEFINIR PRIMERO
+                        with gr.Group(visible=True) as token_method_group:
+                            token_input = gr.Textbox(
+                                label="🔑 Token / API Key",
+                                type="password",
+                                placeholder="Pega aquí tu token o API key...",
+                                info="💡 El token que obtuviste siguiendo la guía arriba. Se guarda de forma segura y encriptada.",
+                                value=""
+                            )
+                        
+                        # Grupo para OAuth Playground (solo visible para apps de Google)
+                        with gr.Group(visible=False) as oauth_playground_group:
+                            gr.Markdown("""
+### 🎮 Conexión vía OAuth Playground (Solo Google)
+
+**Pasos para obtener el Access Token:**
+
+**Paso 1:** Click en el botón azul de abajo → Se abre OAuth Playground
+
+**Paso 2:**
+1. Marca el scope necesario:
+   - Para **Google Drive**: `https://www.googleapis.com/auth/drive.readonly`
+   - Para **Gmail**: `https://www.googleapis.com/auth/gmail.readonly`
+2. Click en **"Authorize APIs"**
+3. Inicia sesión con Google
+4. Click en **"Exchange authorization code for tokens"**
+
+**Paso 3:** Copia el **"Access token"** y pégalo abajo → Click en **"Conectar"**
+
+💡 **Tip:** El token empieza con `ya29.` y es largo (más de 100 caracteres)
+
+⏰ **Importante:** El token dura ~1 hora. Después necesitarás generar uno nuevo.
+                            """)
+                            
+                            oauth_playground_link = gr.Markdown(
+                                value='<a href="https://developers.google.com/oauthplayground/" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #4285F4; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">🔗 Abrir OAuth Playground (Click Aquí)</a>',
+                                visible=True
+                            )
+                            
+                            oauth_token_input = gr.Textbox(
+                                label="🔑 Pega aquí el Access Token",
+                                type="password",
+                                placeholder="ya29.a0AfH6SMC...",
+                                info="💡 Copia el token desde OAuth Playground (empieza con ya29.)",
+                                value=""
+                            )
+                        
+                        # Event handlers - DESPUÉS de definir los grupos
+                        app_type_select.change(
+                            fn=update_connection_method_visibility,
+                            inputs=[app_type_select],
+                            outputs=[connection_method]
+                        )
+                        
+                        # Toggle entre métodos de conexión
+                        connection_method.change(
+                            fn=toggle_connection_method,
+                            inputs=[app_type_select, connection_method],
+                            outputs=[token_method_group, oauth_playground_group]
+                        )
+                        
+                        # Botón para mostrar/ocultar token (simplificado)
+                        with gr.Row():
+                            show_token_btn = gr.Button("👁️ Mostrar/Ocultar Token", variant="secondary", size="sm")
+                        
+                        extra_credentials_input = gr.Textbox(
+                            label="⚙️ Credenciales Extra (Opcional - Solo si la app lo requiere)",
+                            placeholder='Ejemplo para Jira: {"base_url": "https://tuempresa.atlassian.net"}\nEjemplo para Google Drive: {"folder_id": "1a2b3c4d5e6f7g8h9i0j"}\nEjemplo para Salesforce: {"instance_url": "https://tuinstancia.salesforce.com"}',
+                            lines=4,
+                            info="💡 Solo necesitas esto para algunas apps. La guía arriba te dirá si lo necesitas. Formato: JSON válido."
+                        )
+                        
+                        # Test de conexión antes de guardar
+                        test_connection_btn = gr.Button("🧪 Probar Conexión", variant="secondary")
+                        test_result = gr.Markdown(visible=False)
+                        
+                        # Función para probar conexión
+                        def test_connection(app_type, connection_method, token, oauth_token, extra_credentials):
+                            # Determinar qué token usar según el método
+                            if connection_method == "oauth_playground":
+                                actual_token = oauth_token.strip()
+                                if not actual_token:
+                                    return gr.Markdown("⚠️ **Ingresa el Access Token de OAuth Playground primero.**", visible=True)
+                            else:
+                                actual_token = token.strip()
+                                if not actual_token:
+                                    return gr.Markdown("⚠️ **Ingresa un token primero para probar la conexión.**", visible=True)
+                            
+                            extra = {}
+                            if extra_credentials.strip():
+                                try:
+                                    extra = json.loads(extra_credentials.strip())
+                                except json.JSONDecodeError:
+                                    return gr.Markdown("❌ **Error:** Las credenciales extra deben estar en formato JSON válido.", visible=True)
+                            
+                            try:
+                                from docchat.company_knowledge_integrations import IntegrationType, CompanyKnowledgeIntegrations
+                                from docchat.config import AppConfig
+                                
+                                # Crear instancia temporal para probar
+                                temp_config = AppConfig()
+                                temp_integrations = CompanyKnowledgeIntegrations(temp_config)
+                                
+                                integration_type = IntegrationType(app_type)
+                                # Usar el token correcto según el método
+                                token_to_use = oauth_token.strip() if connection_method == "oauth_playground" else token.strip()
+                                credentials = {"token": token_to_use, **extra}
+                                
+                                # Validar credenciales
+                                is_valid = temp_integrations._validate_credentials(integration_type, credentials)
+                                
+                                if is_valid:
+                                    return gr.Markdown("""
+## ✅ ¡Conexión Exitosa!
+
+**Tu token es válido y funciona correctamente.**
+
+🎉 Ahora puedes hacer clic en "🔌 Conectar App" para guardar esta conexión.
+
+**💡 Próximos pasos:**
+1. Haz clic en "🔌 Conectar App" para guardar
+2. Ve a "Chat con Apps" para hacer preguntas
+3. El sistema buscará automáticamente en esta app
+                                    """, visible=True)
+                                else:
+                                    return gr.Markdown("""
+## ⚠️ Token Inválido
+
+**El token no pudo validarse correctamente.**
+
+**Posibles causas:**
+- El token está expirado o fue revocado
+- El token no tiene los permisos necesarios
+- Las credenciales extra son incorrectas (si aplica)
+
+**💡 Soluciones:**
+1. Verifica que el token sea correcto (copia y pega de nuevo)
+2. Asegúrate de que el token tenga los scopes/permisos necesarios
+3. Si usas credenciales extra, verifica el formato JSON
+4. Revisa la guía arriba para obtener un token nuevo si es necesario
+                                    """, visible=True)
+                            except Exception as e:
+                                error_msg = str(e)
+                                return gr.Markdown(f"""
+## ❌ Error al Probar Conexión
+
+**Error:** {error_msg}
+
+**💡 Verifica:**
+- Que el token sea correcto
+- Que tengas conexión a internet
+- Que la app esté disponible
+                                """, visible=True)
+                        
+                        test_connection_btn.click(
+                            fn=test_connection,
+                            inputs=[app_type_select, connection_method, token_input, oauth_token_input, extra_credentials_input],
+                            outputs=[test_result]
+                        )
+                        
+                        gr.Markdown("### 📝 Paso 3: Conecta y Guarda")
+                        
+                        with gr.Row():
+                            connect_app_btn = gr.Button("🔌 Conectar y Guardar App", variant="primary", scale=2)
+                            clear_form_btn = gr.Button("🗑️ Limpiar Formulario", variant="secondary", scale=1)
+                        
+                        app_connection_output = gr.Markdown(label="📊 Estado de Conexión")
+                        
+                        def clear_connection_form():
+                            return "", "token", "", "", "", "**✅ Formulario limpiado. Puedes conectar una nueva app.**"
+                        
+                        clear_form_btn.click(
+                            fn=clear_connection_form,
+                            inputs=[],
+                            outputs=[app_name_input, connection_method, token_input, oauth_token_input, extra_credentials_input, app_connection_output]
+                        )
+                        
+                        def connect_app(app_type, app_name, connection_method, token, oauth_token, extra_credentials):
+                            if not app_name.strip():
+                                return "⚠️ Por favor, ingresa un nombre para la conexión."
+                            
+                            # Determinar qué token usar según el método
+                            if connection_method == "oauth_playground":
+                                actual_token = oauth_token.strip()
+                                if not actual_token:
+                                    return "⚠️ Por favor, ingresa el Access Token de OAuth Playground."
+                                if not actual_token.startswith("ya29."):
+                                    return "⚠️ El Access Token de OAuth Playground debe empezar con 'ya29.'. Verifica que copiaste el token correcto."
+                            else:
+                                actual_token = token.strip()
+                                if not actual_token:
+                                    return "⚠️ Por favor, ingresa un token o API key."
+                            
+                            # Parsear credenciales extra si se proporcionan
+                            extra = {}
+                            if extra_credentials.strip():
+                                try:
+                                    extra = json.loads(extra_credentials.strip())
+                                except json.JSONDecodeError:
+                                    return "❌ Error: Las credenciales extra deben estar en formato JSON válido."
+                            
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not accountability.app_integrations:
+                                    return "❌ Sistema de integraciones no disponible."
+                                
+                                from docchat.company_knowledge_integrations import IntegrationType
+                                integration_type = IntegrationType(app_type)
+                                
+                                # Preparar credenciales (usar el token correcto según método)
+                                token_to_use = oauth_token.strip() if connection_method == "oauth_playground" else token.strip()
+                                credentials = {
+                                    "token": token_to_use,
+                                    **extra
+                                }
+                                
+                                # Conectar app con validación
+                                connection = accountability.app_integrations.connect_app(
+                                    app_type=integration_type,
+                                    app_name=app_name.strip(),
+                                    credentials=credentials,
+                                    permissions={}
+                                )
+                                
+                                if connection.status == "connected":
+                                    # Actualizar estado global
+                                    connected_count = len(accountability.app_integrations.get_connected_apps())
+                                    
+                                    return f"""
+## ✅ ¡App Conectada Exitosamente!
+
+**🎉 {app_name} está ahora conectada y lista para usar.**
+
+**📋 Detalles de la Conexión:**
+- **ID:** `{connection.connection_id}`
+- **Tipo:** {app_type}
+- **Estado:** ✅ Conectada
+- **Conectado:** {connection.connected_at}
+- **Total de apps conectadas:** {connected_count}
+
+**🚀 Próximos Pasos:**
+
+1. **Haz una pregunta:** Ve al tab "💬 Chat con Apps"
+2. **Escribe tu pregunta:** Por ejemplo:
+   - "¿Qué hay en el canal #general de Slack?"
+   - "Busca documentos sobre Q4 en Google Drive"
+   - "Muéstrame los contactos de HubSpot de este mes"
+3. **El sistema buscará automáticamente** en esta app y te dará respuestas con citas
+
+**💡 Tip:** Puedes conectar múltiples apps del mismo tipo (ej: varios workspaces de Slack)
+
+**🔍 Prueba ahora:** Ve a "Chat con Apps" y haz tu primera pregunta!
+"""
+                                else:
+                                    return f"""
+## ⚠️ Conexión con Problemas
+
+**ID de Conexión:** `{connection.connection_id}`
+**App:** {app_name} ({app_type})
+**Estado:** {connection.status}
+
+**💡 Verifica tus credenciales y vuelve a intentar.**
+"""
+                            except ValueError as e:
+                                # Error de validación con mensaje claro
+                                error_msg = str(e)
+                                return f"""
+## ❌ Error al Conectar App
+
+**{error_msg}**
+
+**💡 Pasos para Solucionar:**
+
+1. **Verifica el token:**
+   - Asegúrate de copiar el token completo (sin espacios al inicio/final)
+   - Si el token es muy largo, cópialo de nuevo desde la fuente original
+
+2. **Verifica los permisos:**
+   - Revisa que el token tenga los scopes/permisos necesarios
+   - Consulta la guía arriba para ver qué permisos necesita esta app
+
+3. **Verifica credenciales extra (si aplica):**
+   - Asegúrate de que el JSON sea válido
+   - Verifica que los valores (base_url, instance_url, etc.) sean correctos
+
+4. **Prueba la conexión primero:**
+   - Usa el botón "🧪 Probar Conexión" antes de conectar
+   - Esto te dirá exactamente qué está mal
+
+5. **Obtén un token nuevo:**
+   - Si el token está expirado, genera uno nuevo
+   - Sigue la guía paso a paso arriba
+
+**🔍 Si el problema persiste:**
+- Verifica que tengas conexión a internet
+- Asegúrate de que la app esté disponible
+- Revisa los logs de la aplicación para más detalles
+                                """
+                            except Exception as e:
+                                error_msg = str(e)
+                                return f"""
+## ❌ Error Inesperado
+
+**Error:** {error_msg}
+
+**💡 Esto no debería pasar. Por favor:**
+1. Verifica que todos los campos estén completos
+2. Intenta de nuevo
+3. Si el problema persiste, contacta al soporte
+
+**Detalles técnicos:** {type(e).__name__}
+                                """
+                        
+                        connect_app_btn.click(
+                            fn=connect_app,
+                            inputs=[app_type_select, app_name_input, connection_method, token_input, oauth_token_input, extra_credentials_input],
+                            outputs=[app_connection_output]
+                        )
+                        
+                        # Listar apps conectadas
+                        list_apps_btn = gr.Button("📋 Listar Apps Conectadas", variant="secondary")
+                        apps_list_output = gr.Markdown(label="📊 Apps Conectadas")
+                        
+                        def list_connected_apps():
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not accountability.app_integrations:
+                                    return "❌ Sistema de integraciones no disponible."
+                                
+                                apps = accountability.app_integrations.get_connected_apps()
+                                
+                                if not apps:
+                                    return "## 📋 No hay apps conectadas\n\nConecta apps en el tab 'Conectar Apps'."
+                                
+                                output = f"## 📋 Apps Conectadas: {len(apps)}\n\n"
+                                for app in apps:
+                                    output += f"### 📱 {app.app_name}\n\n"
+                                    output += f"- **Tipo:** {app.app_type.value}\n"
+                                    output += f"- **Estado:** {app.status}\n"
+                                    output += f"- **Conectado:** {app.connected_at}\n"
+                                    output += f"- **Última sincronización:** {app.last_sync or 'N/A'}\n"
+                                    output += f"- **ID:** `{app.connection_id}`\n\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        list_apps_btn.click(
+                            fn=list_connected_apps,
+                            inputs=[],
+                            outputs=[apps_list_output]
+                        )
+                    
+                    # Sub-tab: Chat con Apps
+                    with gr.Tab("💬 Chat con Apps"):
+                        gr.Markdown("### Haz preguntas que buscan en tus apps conectadas")
+                        gr.Markdown("""
+                        **Pregunta sobre información que está en tus apps conectadas:**
+                        - "Resume los comentarios de clientes de Slack y HubSpot"
+                        - "¿Qué hay en el documento X de Google Drive?"
+                        - "Analiza los issues abiertos en GitHub"
+                        """)
+                        
+                        # Generar session_id único
+                        accountability_session_id = gr.State(value=str(uuid.uuid4()))
+                        
+                        with gr.Row():
+                            accountability_files = gr.Files(
+                                label="📂 Documentos (Opcional - PDF, DOCX, TXT, MD)",
+                                file_count="multiple",
+                                file_types=[".pdf", ".docx", ".txt", ".md"],
+                            )
+                        
+                        with gr.Row():
+                            process_from_apps_btn = gr.Button(
+                                "🚀 Procesar PDFs desde SharePoint/Google Drive",
+                                variant="primary"
+                            )
+                            accountability_max_pdfs_from_apps = gr.Dropdown(
+                                label="📄 Máximo PDFs a procesar",
+                                choices=[
+                                    ("5 PDFs", 5),
+                                    ("10 PDFs", 10),
+                                    ("25 PDFs", 25),
+                                    ("50 PDFs", 50),
+                                    ("100 PDFs", 100),
+                                    ("250 PDFs", 250),
+                                    ("500 PDFs", 500)
+                                ],
+                                value=100,
+                                info="Máximo número de PDFs a procesar desde SharePoint/Google Drive"
+                            )
+                        
+                        with gr.Row():
+                            accountability_speed_mode = gr.Radio(
+                                label="⚡ Modo de Velocidad",
+                                choices=[
+                                    ("🚀 Rápido", "fast"),
+                                    ("⚖️ Balanceado (recomendado)", "balanced"),
+                                    ("🎯 Máxima Calidad", "quality")
+                                ],
+                                value="balanced",
+                            )
+                            accountability_provider_toggle = gr.Radio(
+                                label="🤖 Motor de IA",
+                                choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                                value="openai",
+                                info="Cambia el motor de IA utilizado"
+                            )
+                        
+                        with gr.Row():
+                            accountability_task_type = gr.Dropdown(
+                                label="⚙️ Tipo de Tarea",
+                                choices=[
+                                    ("💬 Normal (chat)", "normal"),
+                                    ("📝 Pre-Brief", "prebrief"),
+                                    ("📊 Análisis de Datos / KPIs", "data_analysis"),
+                                    ("📧 Responder Emails (Gmail)", "email_response")
+                                ],
+                                value="normal",
+                                info="Selecciona el tipo de tarea para Accountability"
+                            )
+                            accountability_days = gr.Radio(
+                                label="Rango de búsqueda (días)",
+                                choices=[("Últimos 7 días", 7), ("Últimos 30 días", 30), ("Últimos 90 días", 90), ("Todo", None)],
+                                value=30,
+                                interactive=True,
+                                info="Limita la búsqueda a los últimos N días (si la app lo soporta)"
+                            )
+                            accountability_urls_toggle = gr.Checkbox(
+                                label="URLs en bullets",
+                                value=False,
+                                info="Incluir URLs de las fuentes directamente en los puntos del resumen (si aplica)"
+                            )
+                        
+                        # Sidebar en tiempo real (mostrar apps siendo buscadas)
+                        with gr.Row():
+                            with gr.Column(scale=3):
+                                # Chatbot component
+                                accountability_bot = gr.Chatbot(
+                                    label="💬 Conversación de Conocimiento",
+                                    height=500,
+                                    show_copy_button=True,
+                                )
+                            with gr.Column(scale=1):
+                                search_status_sidebar = gr.Markdown(
+                                    label="🔍 Búsqueda en Tiempo Real",
+                                    value="**Apps conectadas:**\n\n*Esperando consulta...*",
+                                    visible=True
+                                )
+                        
+                        with gr.Row():
+                            accountability_input = gr.Textbox(
+                                label="Escribe tu pregunta",
+                                placeholder="Ejemplo: ¿Cuál es nuestra política de trabajo remoto según Slack y Google Drive?",
+                                lines=2,
+                                scale=4,
+                            )
+                            accountability_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                        
+                        with gr.Row():
+                            clear_accountability_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                            clear_accountability_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+                            accountability_stats_btn = gr.Button("📊 Ver Estadísticas", variant="secondary")
+                            copy_sources_btn = gr.Button("🔗 Copiar fuentes", variant="secondary")
+                        
+                        accountability_status = gr.Markdown(label="ℹ️ Estado del Chat")
+                        accountability_stats_output = gr.Markdown(label="📊 Estadísticas Avanzadas", visible=False)
+                        copy_sources_output = gr.Textbox(
+                            label="Fuentes (URLs)",
+                            lines=4,
+                            interactive=False
+                        )
+                        
+                        gr.Markdown("### ⚠️ Checklist de Gobernanza Esencial:")
+                        gr.Markdown("- **Revisar permisos Drive/SharePoint antes de activar:** Asegúrate de que los permisos de acceso en Google Drive y SharePoint estén configurados correctamente para evitar la exposición de datos sensibles.")
+                        gr.Markdown("- **Aviso de reconexión:** Recuerda que los tokens no se persisten. Si reinicias la aplicación, deberás reconectar tus apps.")
+                        
+                        # Event handlers
+                        def accountability_submit(message, history, files, session_id, speed_mode, provider):
+                            if not message.strip():
+                                return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                            
+                            new_history, error = run_accountability(
+                                message=message,
+                                history=history,
+                                files=files or [],
+                                session_id=session_id,
+                                speed_mode=speed_mode,
+                                provider=provider,
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            status = f"✅ {len(new_history)} mensajes en la conversación"
+                            if error:
+                                status = error
+                            return new_history, new_history, status, gr.Markdown(visible=False)
+                        
+                        def format_executive_summary(executive_summary, result):
+                            """Formatea el resumen ejecutivo para mostrar en la UI."""
+                            if not executive_summary:
+                                return "No se generó resumen ejecutivo."
+                            
+                            summary_text = f"""# 📊 Resumen Ejecutivo Automático
+
+## 📄 Resumen General
+
+- **Total de documentos procesados:** {executive_summary.get('total_documents', 0)}
+- **Facturas:** {executive_summary.get('invoices_count', 0)}
+- **Contratos:** {executive_summary.get('contracts_count', 0)}
+- **Reportes financieros:** {executive_summary.get('financial_reports_count', 0)}
+
+## 💰 Totales Financieros
+
+"""
+                            
+                            if executive_summary.get('total_amount'):
+                                summary_text += f"- **Monto total:** {executive_summary.get('total_amount', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            if executive_summary.get('total_invoices_amount'):
+                                summary_text += f"- **Total facturas:** {executive_summary.get('total_invoices_amount', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            if executive_summary.get('total_contracts_amount'):
+                                summary_text += f"- **Total contratos:** {executive_summary.get('total_contracts_amount', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            
+                            reconciliation = executive_summary.get('reconciliation_summary', {})
+                            if reconciliation:
+                                summary_text += f"\n## 🔗 Conciliación\n\n"
+                                summary_text += f"- **Facturas pagadas:** {reconciliation.get('paid_invoices', 0)}\n"
+                                summary_text += f"- **Facturas pendientes:** {reconciliation.get('pending_invoices', 0)}\n"
+                                summary_text += f"- **Facturas vencidas:** {reconciliation.get('overdue_invoices', 0)}\n"
+                                summary_text += f"- **Contratos activos:** {reconciliation.get('active_contracts', 0)}\n"
+                                summary_text += f"- **Contratos próximos a vencer:** {reconciliation.get('expiring_soon', 0)}\n"
+                            
+                            # Top proveedores
+                            top_suppliers = executive_summary.get('top_suppliers', [])
+                            if top_suppliers:
+                                summary_text += f"\n## 🏢 Top Proveedores\n\n"
+                                for i, supplier in enumerate(top_suppliers[:5], 1):
+                                    summary_text += f"{i}. **{supplier.get('name', 'N/A')}**: {supplier.get('total', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            
+                            # Top clientes
+                            top_clients = executive_summary.get('top_clients', [])
+                            if top_clients:
+                                summary_text += f"\n## 👥 Top Clientes\n\n"
+                                for i, client in enumerate(top_clients[:5], 1):
+                                    summary_text += f"{i}. **{client.get('name', 'N/A')}**: {client.get('total', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            
+                            # Alertas
+                            alerts = executive_summary.get('alerts', [])
+                            if alerts:
+                                summary_text += f"\n## ⚠️ Alertas ({len(alerts)})\n\n"
+                                for alert in alerts[:10]:
+                                    summary_text += f"- {alert}\n"
+                            
+                            # Errores
+                            errors = executive_summary.get('errors_detected', [])
+                            if errors:
+                                summary_text += f"\n## ❌ Errores Detectados ({len(errors)})\n\n"
+                                for error in errors[:10]:
+                                    summary_text += f"- {error}\n"
+                            
+                            # Recomendaciones
+                            recommendations = executive_summary.get('recommendations', [])
+                            if recommendations:
+                                summary_text += f"\n## 💡 Recomendaciones\n\n"
+                                for rec in recommendations:
+                                    summary_text += f"- {rec}\n"
+                            
+                            # Vencimientos próximos
+                            vencimientos = executive_summary.get('vencimientos_proximos', [])
+                            if vencimientos:
+                                summary_text += f"\n## 📅 Vencimientos Próximos\n\n"
+                                for venc in vencimientos[:10]:
+                                    summary_text += f"- **{venc.get('document_type', 'N/A')}**: {venc.get('entity', 'N/A')} - Vence: {venc.get('due_date', 'N/A')} - Monto: {venc.get('amount', 'N/A')}\n"
+                            
+                            return summary_text
+                        
+                        def accountability_submit_v2(message, history, files, session_id, speed_mode, provider, days, urls_in_bullets, task_type):
+                            # NUEVO: Si hay archivos, procesar automáticamente primero
+                            if files:
+                                try:
+                                    accountability = get_accountability(
+                                        config=config,
+                                        processor=processor,
+                                        retriever_builder=retriever_builder,
+                                        context_manager=context_manager
+                                    )
+                                    
+                                    print(f"📊 [Accountability] Procesando {len(files)} documentos automáticamente...")
+                                    
+                                    # Procesar documentos contables automáticamente
+                                    result = accountability.process_accounting_documents_automatically(
+                                        session_id=session_id,
+                                        files=files,
+                                        generate_summary=True
+                                    )
+                                    
+                                    if result.get("status") == "success":
+                                        # Generar resumen ejecutivo automático
+                                        executive_summary = result.get("executive_summary")
+                                        if executive_summary:
+                                            summary_text = format_executive_summary(executive_summary, result)
+                                            
+                                            # Agregar al historial automáticamente
+                                            auto_message = "📊 **Procesamiento Automático Completado**\n\nSe procesaron los documentos automáticamente. Aquí está el resumen ejecutivo:"
+                                            history = history + [(auto_message, summary_text)]
+                                            
+                                            # Si no hay mensaje del usuario, solo mostrar el resumen
+                                            if not message.strip():
+                                                return history, history, f"✅ {result.get('total_documents', 0)} documentos procesados automáticamente. Resumen ejecutivo generado.", gr.Markdown(visible=False)
+                                    
+                                    # Si hay mensaje del usuario, continuar con el procesamiento normal
+                                except Exception as e:
+                                    print(f"⚠️ [Accountability] Error en procesamiento automático: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                            
+                            if not message.strip():
+                                return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                            
+                            # Preparar filtros
+                            filters = {}
+                            if days:
+                                filters["days"] = days
+                            
+                            # Si es una tarea autónoma (prebrief, data_analysis, o email_response), usar execute_autonomous_task_v2
+                            if task_type in ["prebrief", "data_analysis", "email_response"]:
+                                try:
+                                    accountability = get_accountability(
+                                        config=config,
+                                        processor=processor,
+                                        retriever_builder=retriever_builder,
+                                        context_manager=context_manager
+                                    )
+                                    
+                                    if not hasattr(accountability, 'app_integrations') or not accountability.app_integrations:
+                                        error_msg = "⚠️ No hay apps conectadas. Ve a la pestaña 'Conectar Apps' para conectar tus aplicaciones."
+                                        new_history = history + [(message, error_msg)]
+                                        return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                                    
+                                    # Ejecutar tarea autónoma
+                                    import asyncio
+                                    
+                                    # Mostrar estado de búsqueda inicial
+                                    search_status_text = "**🔍 Buscando en apps conectadas...**\n\n"
+                                    
+                                    result = asyncio.run(
+                                        accountability.execute_autonomous_task_v2(
+                                            task_description=message,
+                                            task_type=task_type,
+                                            filters=filters,
+                                            urls_in_bullets=urls_in_bullets
+                                        )
+                                    )
+                                    
+                                    if result.get("success"):
+                                        if task_type == "prebrief":
+                                            response_text = result.get("prebrief_summary", "No se generó resumen.")
+                                        elif task_type == "email_response":
+                                            # Formatear respuestas de email
+                                            responses = result.get("responses", [])
+                                            response_text = f"✅ **{result.get('responses_generated', 0)} respuestas generadas**\n\n"
+                                            for i, resp in enumerate(responses, 1):
+                                                response_text += f"### 📧 Respuesta {i}: {resp.get('original_subject', 'Sin asunto')}\n\n"
+                                                response_text += f"**Para:** {resp.get('to', 'N/A')}\n"
+                                                response_text += f"**Asunto:** {resp.get('subject', 'N/A')}\n\n"
+                                                response_text += f"**Respuesta generada:**\n{resp.get('body', 'N/A')}\n\n"
+                                                if resp.get('gmail_url'):
+                                                    response_text += f"🔗 [Ver email original]({resp.get('gmail_url')})\n\n"
+                                                response_text += "---\n\n"
+                                            if result.get("errors"):
+                                                response_text += f"\n⚠️ **Errores:**\n" + "\n".join(f"- {e}" for e in result.get("errors", []))
+                                        else:
+                                            response_text = result.get("summary", "No se generó análisis.")
+                                        
+                                        # Agregar información de conflictos si existen
+                                        if result.get("conflicts_detected"):
+                                            response_text = f"⚠️ **Nota:** Se detectaron discrepancias entre fuentes. Se presentan perspectivas balanceadas.\n\n{response_text}"
+                                        
+                                        # Agregar fuentes mejoradas con citations
+                                        sources = result.get("sources", [])
+                                        total_sources = result.get("total_sources", len(sources))
+                                        search_status = result.get("search_status", [])
+                                        
+                                        # Construir sidebar de búsqueda
+                                        if search_status:
+                                            search_status_text = "**🔍 Apps consultadas:**\n\n"
+                                            apps_searched = {}
+                                            for status_item in search_status:
+                                                app = status_item.get("app", "Unknown")
+                                                source = status_item.get("source", "Unknown")
+                                                if app not in apps_searched:
+                                                    apps_searched[app] = []
+                                                apps_searched[app].append(source)
+                                            
+                                            for app, sources_list in apps_searched.items():
+                                                search_status_text += f"**{app}**\n"
+                                                for src in sources_list[:3]:  # Mostrar top 3 por app
+                                                    search_status_text += f"  • {src}\n"
+                                                if len(sources_list) > 3:
+                                                    search_status_text += f"  • ... y {len(sources_list) - 3} más\n"
+                                                search_status_text += "\n"
+                                            
+                                            search_status_text += f"\n**Total:** {total_sources} fuentes encontradas"
+                                        else:
+                                            search_status_text = f"**✅ Búsqueda completada**\n\n{total_sources} fuentes consultadas"
+                                        
+                                        # Agregar sección de fuentes con links clickeables
+                                        if sources:
+                                            response_text += "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
+                                            for i, src in enumerate(sources[:15], 1):  # Top 15 fuentes
+                                                app_name = src.get("app", "Unknown")
+                                                source_name = src.get("source", "Unknown")
+                                                url = src.get("url", "")
+                                                if url:
+                                                    response_text += f"{i}. **[{app_name}]** {source_name}\n   🔗 [Abrir fuente]({url})\n\n"
+                                                else:
+                                                    response_text += f"{i}. **[{app_name}]** {source_name}\n\n"
+                                            
+                                            if len(sources) > 15:
+                                                response_text += f"\n*... y {len(sources) - 15} fuentes adicionales*\n"
+                                        
+                                        new_history = history + [(message, response_text)]
+                                        status = f"✅ Tarea {task_type} completada. {total_sources} fuentes consultadas."
+                                        if result.get("conflicts_detected"):
+                                            status += " ⚠️ Conflictos detectados y resueltos."
+                                    else:
+                                        error_msg = result.get("error", "Error desconocido al ejecutar la tarea.")
+                                        # Verificar si es un error de scopes/tokens
+                                        if "token" in error_msg.lower() or "scope" in error_msg.lower() or "permiso" in error_msg.lower():
+                                            error_msg += "\n\n💡 **Sugerencia:** Verifica que las apps estén conectadas correctamente y tengan los permisos necesarios. Ve a 'Conectar Apps' para reconectar."
+                                        new_history = history + [(message, f"❌ {error_msg}")]
+                                        status = error_msg
+                                        search_status_text = "**❌ Error en búsqueda**\n\nNo se pudieron consultar las apps."
+                                    
+                                    return new_history, new_history, status, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                    
+                                except Exception as e:
+                                    error_msg = f"❌ Error al ejecutar tarea autónoma: {str(e)}"
+                                    new_history = history + [(message, error_msg)]
+                                    return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                            else:
+                                # Tarea normal (chat) - CON STREAMING EN TIEMPO REAL
+                                try:
+                                    accountability = get_accountability(
+                                        config=config,
+                                        processor=processor,
+                                        retriever_builder=retriever_builder,
+                                        context_manager=context_manager
+                                    )
+                                    
+                                    # Función generadora para streaming (Gradio detecta automáticamente)
+                                    def stream_response():
+                                        import asyncio
+                                        full_response = ""
+                                        
+                                        # Inicializar con mensaje vacío
+                                        yield history + [(message, "")], history + [(message, "")], "⏳ Generando respuesta...", gr.Markdown(visible=False), gr.Markdown("**🔍 Buscando información...**", visible=True)
+                                        
+                                        try:
+                                            # Ejecutar query con streaming del LLM
+                                            loop = asyncio.new_event_loop()
+                                            asyncio.set_event_loop(loop)
+                                            
+                                            async def get_streaming_response():
+                                                # Obtener instancia y preparar contexto
+                                                session = accountability.initialize_session(session_id)
+                                                
+                                                # Buscar en apps si están conectadas
+                                                app_results = []
+                                                if accountability.app_integrations:
+                                                    connected_apps = accountability.app_integrations.get_connected_apps()
+                                                    if connected_apps:
+                                                        app_results = await accountability.app_integrations.search_across_apps(
+                                                            query=message,
+                                                            filters=filters
+                                                        )
+                                                
+                                                # Si hay resultados de apps, generar respuesta con streaming
+                                                if app_results:
+                                                    ranked_results = accountability._rank_results_by_relevance_and_recency(
+                                                        query=message,
+                                                        results=app_results,
+                                                        filters=filters
+                                                    )
+                                                    
+                                                    # Construir contexto
+                                                    ctx_lines = []
+                                                    sources_list = []
+                                                    for r in ranked_results[:10]:
+                                                        snippet = (r.snippet or r.content or "")[:5000]
+                                                        ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
+                                                        if r.url:
+                                                            sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                                                    
+                                                    context_block = "\n".join(ctx_lines)
+                                                    prompt = f"""Eres un asistente experto. Responde la pregunta del usuario usando SOLO la información proporcionada.
+
+INFORMACIÓN DISPONIBLE:
+{context_block}
+
+PREGUNTA: {message}
+
+Responde de forma clara, profesional y detallada:"""
+                                                    
+                                                    # Stream tokens del LLM
+                                                    from langchain_core.messages import HumanMessage
+                                                    async for chunk in accountability.llm.astream([HumanMessage(content=prompt)]):
+                                                        if hasattr(chunk, 'content'):
+                                                            token = chunk.content
+                                                        else:
+                                                            token = str(chunk)
+                                                        full_response += token
+                                                        # Yield actualización incremental
+                                                        yield history + [(message, full_response)]
+                                                    
+                                                    # Agregar fuentes
+                                                    if sources_list:
+                                                        sources_text = "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
+                                                        for i, src in enumerate(sources_list[:10], 1):
+                                                            app_name = src.get("app", "Unknown")
+                                                            source_name = src.get("source", "Unknown")
+                                                            url = src.get("url", "")
+                                                            if url:
+                                                                sources_text += f"{i}. **[{app_name}]** {source_name} - [🔗 Abrir]({url})\n"
+                                                            else:
+                                                                sources_text += f"{i}. **[{app_name}]** {source_name}\n"
+                                                        full_response += sources_text
+                                                        yield history + [(message, full_response)]
+                                                else:
+                                                    # Sin resultados de apps, usar método normal
+                                                    new_hist, err, meta = await accountability.process_query_async(
+                                                        session_id=session_id,
+                                                        message=message,
+                                                        history=history,
+                                                        speed_mode=speed_mode,
+                                                        provider=provider,
+                                                        filters=filters,
+                                                        urls_in_bullets=urls_in_bullets
+                                                    )
+                                                    yield new_hist
+                                            
+                                            # Ejecutar streaming usando el loop
+                                            async_gen = get_streaming_response()
+                                            try:
+                                                while True:
+                                                    try:
+                                                        # Usar run_until_complete para obtener el siguiente valor del async generator
+                                                        result = loop.run_until_complete(async_gen.__anext__())
+                                                        # Yield actualización del chatbot
+                                                        status = f"✅ {len(result)} mensajes"
+                                                        yield result, result, status, gr.Markdown(visible=False), gr.Markdown("**✅ Búsqueda completada**", visible=True)
+                                                    except StopAsyncIteration:
+                                                        break
+                                            finally:
+                                                loop.close()
+                                        except Exception as e:
+                                            import traceback
+                                            traceback.print_exc()
+                                            error_msg = f"❌ Error: {str(e)}"
+                                            error_history = history + [(message, error_msg)]
+                                            yield error_history, error_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
+                                    
+                                    # Devolver generador para streaming (Gradio lo detecta automáticamente)
+                                    return stream_response()
+                                    
+                                except Exception as e:
+                                    import traceback
+                                    traceback.print_exc()
+                                    error_msg = f"❌ Error al procesar consulta: {str(e)}"
+                                    new_history = history + [(message, error_msg)]
+                                    return new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error en búsqueda**\n\nNo se pudo procesar la consulta.", visible=True)
+                        
+                        def copy_sources(history):
+                            """Extrae URLs de la última respuesta del bot"""
+                            if not history or len(history) == 0:
+                                return ""
+                            
+                            last_bot_message = history[-1][1] if len(history[-1]) > 1 else ""
+                            if not last_bot_message:
+                                return ""
+                            
+                            # Buscar URLs en el mensaje
+                            import re
+                            urls = re.findall(r'https?://[^\s\)]+', last_bot_message)
+                            if not urls:
+                                # Buscar en formato markdown [texto](url)
+                                urls = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', last_bot_message)
+                                if urls:
+                                    urls = [url for _, url in urls]
+                            
+                            if urls:
+                                return "\n".join(set(urls))  # Eliminar duplicados
+                            return "No se encontraron URLs en la última respuesta."
+                        
+                        def clear_accountability(history, session_id):
+                            accountability = get_accountability(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            if hasattr(accountability, 'sessions') and session_id in accountability.sessions:
+                                accountability.sessions[session_id]["history"] = []
+                                accountability.sessions[session_id]["docs"] = []
+                                accountability.sessions[session_id]["retriever"] = None
+                                accountability.sessions[session_id]["processed_files"].clear()
+                            return [], "✅ Chat limpiado. Puedes cargar nuevos documentos.", gr.Markdown(visible=False)
+                        
+                        def clear_accountability_files(files, session_id):
+                            accountability = get_accountability(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            if hasattr(accountability, 'sessions') and session_id in accountability.sessions:
+                                accountability.sessions[session_id]["processed_files"].clear()
+                                accountability.sessions[session_id]["docs"] = []
+                                accountability.sessions[session_id]["retriever"] = None
+                            return None, "✅ Documentos limpiados. Puedes cargar nuevos.", gr.Markdown(visible=False)
+                        
+                        def process_pdfs_from_connected_apps(session_id, max_pdfs, history):
+                            """Procesa PDFs automáticamente desde SharePoint y Google Drive conectados."""
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not hasattr(accountability, 'app_integrations') or not accountability.app_integrations:
+                                    error_msg = "⚠️ No hay apps conectadas. Conecta SharePoint o Google Drive primero en 'Conectar Apps'."
+                                    return history, error_msg, gr.Markdown(visible=False)
+                                
+                                # Verificar que haya SharePoint o Google Drive conectados
+                                connected_apps = accountability.app_integrations.get_connected_apps()
+                                from docchat.company_knowledge_integrations import IntegrationType
+                                target_apps = [
+                                    app for app in connected_apps
+                                    if app.app_type in [IntegrationType.SHAREPOINT, IntegrationType.GOOGLE_DRIVE]
+                                ]
+                                
+                                if not target_apps:
+                                    error_msg = "⚠️ No hay SharePoint o Google Drive conectados. Conecta estas apps primero en 'Conectar Apps'."
+                                    return history, error_msg, gr.Markdown(visible=False)
+                                
+                                # Procesar PDFs desde apps
+                                import asyncio
+                                
+                                result = asyncio.run(
+                                    accountability.process_pdfs_from_connected_apps(
+                                        session_id=session_id,
+                                        max_pdfs=max_pdfs,
+                                        generate_summary=True
+                                    )
+                                )
+                                
+                                if result.get("status") == "success":
+                                    # Generar resumen ejecutivo automático
+                                    executive_summary = result.get("executive_summary")
+                                    if executive_summary:
+                                        summary_text = format_executive_summary(executive_summary, result)
+                                        
+                                        # Agregar al historial
+                                        auto_message = f"🚀 **Procesamiento Automático desde Apps Conectadas**\n\nSe procesaron {result.get('total_documents', 0)} PDFs automáticamente desde SharePoint/Google Drive. Aquí está el resumen ejecutivo:"
+                                        new_history = history + [(auto_message, summary_text)]
+                                        
+                                        status_msg = f"✅ {result.get('total_documents', 0)} PDFs procesados automáticamente desde apps conectadas. Resumen ejecutivo generado."
+                                        return new_history, status_msg, gr.Markdown(visible=False)
+                                    else:
+                                        error_msg = "⚠️ Se procesaron PDFs pero no se generó resumen ejecutivo."
+                                        return history, error_msg, gr.Markdown(visible=False)
+                                else:
+                                    error_msg = result.get("error", "Error desconocido al procesar PDFs desde apps.")
+                                    return history, f"❌ {error_msg}", gr.Markdown(visible=False)
+                                    
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                error_msg = f"❌ Error procesando PDFs desde apps: {str(e)}"
+                                return history, error_msg, gr.Markdown(visible=False)
+                        
+                        def show_accountability_stats(session_id):
+                            accountability = get_accountability(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            stats = accountability.get_statistics(session_id=session_id)
+                            
+                            output = "## 📊 Estadísticas Avanzadas - Accountability\n\n"
+                            output += f"### 📦 Context Folding\n"
+                            output += f"- Ramas activas: {stats['context_folding']['active_branches']}\n"
+                            output += f"- Ramas plegadas: {stats['context_folding']['folded_branches']}\n"
+                            output += f"- Tokens ahorrados: {stats['context_folding']['total_tokens_saved']:,}\n"
+                            output += f"- Ratio de compresión: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                            
+                            output += f"### 🔍 Data Provenance\n"
+                            output += f"- Registros totales: {stats['data_provenance']['total_records']}\n"
+                            output += f"- Fuentes únicas: {stats['data_provenance']['unique_sources']}\n"
+                            output += f"- Promedio fuentes/registro: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                            
+                            output += f"### 📱 Apps Conectadas\n"
+                            app_stats = stats.get('app_integrations', {})
+                            output += f"- Total conexiones: {app_stats.get('total_connections', 0)}\n"
+                            output += f"- Apps conectadas: {app_stats.get('connected_apps', 0)}\n"
+                            output += f"- Apps por tipo: {app_stats.get('apps_by_type', {})}\n\n"
+                            
+                            output += f"### 🧠 Chain of Thought\n"
+                            output += f"- Cadenas activas: {stats['chain_of_thought']['active_chains']}\n"
+                            output += f"- Cadenas completadas: {stats['chain_of_thought']['completed_chains']}\n"
+                            output += f"- Pasos totales: {stats['chain_of_thought']['total_steps']}\n\n"
+                            
+                            output += f"### 🛤️ Path-dependent Reasoning\n"
+                            output += f"- Caminos probados: {stats['path_reasoning']['total_paths_tested']}\n"
+                            output += f"- Tasa de éxito: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                            output += f"- Enfoques aprendidos: {stats['path_reasoning']['learned_approaches']}\n\n"
+                            
+                            output += f"### 📈 Test Time Training\n"
+                            output += f"- Episodios totales: {stats['test_time_training']['total_episodes']}\n"
+                            output += f"- Tasa de éxito: {stats['test_time_training']['success_rate']:.1f}%\n"
+                            output += f"- Patrones aprendidos: {stats['test_time_training']['learned_patterns']}\n\n"
+                            
+                            output += f"### 👤 Person in the Loop\n"
+                            output += f"- Aprobaciones pendientes: {stats['person_in_loop']['pending_approvals']}\n"
+                            output += f"- Tasa de aprobación: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                            output += f"- Reglas activas: {stats['person_in_loop']['active_rules']}\n\n"
+                            
+                            output += f"### 🧠 Reinforcement Learning y Planning\n"
+                            output += f"- Árboles totales: {stats['reinforcement_planning']['total_trees']}\n"
+                            output += f"- Tasa de éxito: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                            output += f"- Exploraciones totales: {stats['reinforcement_planning']['total_explorations']}\n"
+                            output += f"- Memoria de aprendizaje: {stats['reinforcement_planning']['learning_memory_size']} patrones\n\n"
+                            
+                            output += f"### 🔌 MCP Potenciado (Model Context Protocol)\n"
+                            output += f"- Conexiones totales: {stats['mcp_integration']['connections']}\n"
+                            output += f"- Conexiones activas: {stats['mcp_integration']['enabled_connections']}\n"
+                            
+                            if 'session' in stats:
+                                output += f"\n### 📋 Sesión\n"
+                                output += f"- Documentos: {stats['session']['docs_count']}\n"
+                                output += f"- Mensajes: {stats['session']['history_count']}\n"
+                                output += f"- Archivos procesados: {stats['session']['processed_files']}\n"
+                            
+                            return gr.Markdown(output, visible=True)
+                        
+                        accountability_submit_btn.click(
+                            fn=accountability_submit_v2,
+                            inputs=[accountability_input, accountability_bot, accountability_files, accountability_session_id, accountability_speed_mode, accountability_provider_toggle, accountability_days, accountability_urls_toggle, accountability_task_type],
+                            outputs=[accountability_bot, accountability_bot, accountability_status, accountability_stats_output, search_status_sidebar],
+                        ).then(
+                            fn=lambda: gr.Markdown(visible=False),
+                            outputs=[accountability_stats_output]
+                        )
+                        
+                        accountability_input.submit(
+                            fn=accountability_submit_v2,
+                            inputs=[accountability_input, accountability_bot, accountability_files, accountability_session_id, accountability_speed_mode, accountability_provider_toggle, accountability_days, accountability_urls_toggle, accountability_task_type],
+                            outputs=[accountability_bot, accountability_bot, accountability_status, accountability_stats_output, search_status_sidebar],
+                        ).then(
+                            fn=lambda: gr.Markdown(visible=False),
+                            outputs=[accountability_stats_output]
+                        )
+                        
+                        copy_sources_btn.click(
+                            fn=copy_sources,
+                            inputs=[accountability_bot],
+                            outputs=[copy_sources_output]
+                        )
+
+                        clear_accountability_btn.click(
+                            fn=clear_accountability,
+                            inputs=[accountability_bot, accountability_session_id],
+                            outputs=[accountability_bot, accountability_status, accountability_stats_output]
+                        )
+                        
+                        clear_accountability_files_btn.click(
+                            fn=clear_accountability_files,
+                            inputs=[accountability_files, accountability_session_id],
+                            outputs=[accountability_files, accountability_status]
+                        )
+                        
+                        process_from_apps_btn.click(
+                            fn=process_pdfs_from_connected_apps,
+                            inputs=[accountability_session_id, accountability_max_pdfs_from_apps, accountability_bot],
+                            outputs=[accountability_bot, accountability_status, accountability_stats_output]
+                        )
+                        
+                        accountability_stats_btn.click(
+                            fn=show_accountability_stats,
+                            inputs=[accountability_session_id],
+                            outputs=[accountability_stats_output]
+                        )
+                    
+                    # Sub-tab: Tareas Autónomas
+                    with gr.Tab("🤖 Tareas Autónomas"):
+                        gr.Markdown("### Ejecuta tareas autónomas usando tus apps conectadas")
+                        gr.Markdown("""
+                        **Tipos de tareas disponibles:**
+                        - **Resumir**: Resumir información de múltiples fuentes
+                        - **Analizar**: Analizar datos y generar insights
+                        - **Crear Informe**: Crear un informe basado en datos
+                        - **Planificar**: Crear un plan basado en información disponible
+                        - **Comparar**: Comparar información de diferentes fuentes
+                        """)
+                        
+                        task_type_select = gr.Dropdown(
+                            label="⚙️ Tipo de Tarea",
+                            choices=[
+                                ("📝 Resumir información", "summarize"),
+                                ("📊 Analizar datos", "analyze"),
+                                ("📄 Crear informe", "create_report"),
+                                ("📋 Planificar", "plan"),
+                                ("⚖️ Comparar información", "compare")
+                            ],
+                            value="summarize"
+                        )
+                        
+                        task_description_input = gr.Textbox(
+                            label="Descripción de la Tarea",
+                            placeholder="Ej: Resume los comentarios de clientes de Slack y HubSpot del último trimestre",
+                            lines=5
+                        )
+                        
+                        execute_task_btn = gr.Button("🚀 Ejecutar Tarea Autónoma", variant="primary", size="lg")
+                        task_output = gr.Markdown(label="📊 Resultado de la Tarea")
+                        
+                        def execute_autonomous_task(task_type, task_description):
+                            if not task_description.strip():
+                                return "⚠️ Por favor, describe la tarea que quieres ejecutar."
+                            
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                result = loop.run_until_complete(
+                                    accountability.execute_autonomous_task(
+                                        task_description=task_description,
+                                        task_type=task_type,
+                                        context=None
+                                    )
+                                )
+                                loop.close()
+                                
+                                if result.get("success"):
+                                    output = f"""
+## ✅ Tarea Completada: {task_type}
+
+### 📋 Resultado:
+
+{result.get('summary', result.get('analysis', result.get('report', result.get('plan', result.get('comparison', 'N/A')))))}
+
+### 📚 Fuentes Consultadas:
+{', '.join(result.get('sources', []))}
+
+### 📊 Información:
+- **Tipo:** {result.get('task_type')}
+- **Fuentes:** {result.get('sources_count', len(result.get('sources', [])))}
+"""
+                                    return output
+                                else:
+                                    return f"❌ Error: {result.get('error', 'Error desconocido')}"
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                return f"❌ Error ejecutando tarea: {str(e)}"
+                        
+                        execute_task_btn.click(
+                            fn=execute_autonomous_task,
+                            inputs=[task_type_select, task_description_input],
+                            outputs=[task_output]
+                        )
+        
+        # Tab 4.5.7.5: Invoice Mode (NUEVO - Sistema autónomo de procesamiento de facturas)
+        with gr.Tab("🧾 Invoice"):
+            gr.Markdown("### 🧾 Invoice Mode - Sistema Autónomo de Procesamiento de Facturas")
+            gr.Markdown("""
+            **🌟 Sistema completamente autónomo para procesamiento de facturas**
+            
+            **✨ Funcionalidades Autónomas:**
+            - 📄 **Procesamiento automático**: Procesa 500+ facturas simultáneamente sin intervención
+            - 🔍 **Extracción automática**: Extrae datos estructurados (proveedor, número, fecha, monto, items)
+            - ✅ **Validación automática**: Valida contra órdenes de compra (POs) automáticamente
+            - ⚠️ **Detección automática**: Detecta discrepancias y errores automáticamente
+            - 📊 **Reportes automáticos**: Genera reportes ejecutivos automáticamente
+            - 🎯 **Aprobación automática**: Aprueba o marca facturas para revisión automáticamente
+            - 🔌 **Integración con apps**: Busca POs en Google Drive, SharePoint y más
+            
+            **💼 Perfecto para:**
+            - Accounts Payable/Receivable automation
+            - Invoice processing masivo
+            - Validación contra POs
+            - Detección de discrepancias
+            - Reportes ejecutivos de facturas
+            
+            **💡 Cómo funciona:**
+            1. Sube facturas (PDFs) - puede ser 1 o 500+
+            2. El sistema procesa automáticamente todas las facturas
+            3. Extrae datos estructurados de cada factura
+            4. Valida contra POs (si están conectadas apps)
+            5. Detecta discrepancias automáticamente
+            6. Genera resumen ejecutivo completo
+            7. Aprueba facturas que coinciden o marca las que tienen problemas
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Procesar Facturas
+                with gr.Tab("📄 Procesar Facturas"):
+                    gr.Markdown("## 🚀 Procesamiento Automático de Facturas")
+                    gr.Markdown("""
+                    ### ✨ Sube tus facturas y el sistema las procesará automáticamente:
+                    
+                    - **Extracción automática** de datos estructurados
+                    - **Validación automática** contra POs (si hay apps conectadas)
+                    - **Detección automática** de discrepancias
+                    - **Generación automática** de reportes ejecutivos
+                    - **Aprobación/marcado automático** de facturas
+                    """)
+                    
+                    invoice_files = gr.File(
+                        label="📄 Subir Facturas (PDFs)",
+                        file_count="multiple",
+                        file_types=[".pdf"],
+                        type="filepath"
+                    )
+                    
+                    invoice_session_id = gr.State(value=str(uuid.uuid4()))
+                    
+                    with gr.Row():
+                        validate_against_pos = gr.Checkbox(
+                            label="✅ Validar contra POs automáticamente",
+                            value=True,
+                            info="Busca órdenes de compra en apps conectadas para validar facturas"
+                        )
+                        generate_summary = gr.Checkbox(
+                            label="📊 Generar resumen ejecutivo",
+                            value=True,
+                            info="Genera un resumen ejecutivo completo del procesamiento"
+                        )
+                    
+                    invoice_submit_btn = gr.Button("🚀 Procesar Facturas Automáticamente", variant="primary")
+                    
+                    invoice_bot = gr.Chatbot(
+                        label="📊 Resultados del Procesamiento",
+                        height=600,
+                        show_label=True
+                    )
+                    
+                    invoice_status = gr.Markdown("**Status:** Esperando facturas...")
+                    
+                    def invoice_submit(files, session_id, validate_pos, gen_summary):
+                        if not files:
+                            return [], "⚠️ Por favor, sube al menos una factura (PDF)"
+                        
+                        try:
+                            invoice_mode = get_invoice_mode(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            # Procesar facturas automáticamente (async)
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                result = loop.run_until_complete(
+                                    invoice_mode.process_invoices_automatically(
+                                        session_id=session_id,
+                                        files=files,
+                                        validate_against_pos=validate_pos,
+                                        generate_summary=gen_summary
+                                    )
+                                )
+                            finally:
+                                loop.close()
+                            
+                            if result.get("status") == "error":
+                                error_msg = result.get("error", "Error desconocido")
+                                return [(f"❌ Error: {error_msg}", "")], f"❌ {error_msg}"
+                            
+                            # Formatear respuesta
+                            summary = result.get("executive_summary", "")
+                            invoices_processed = result.get("invoices_processed", 0)
+                            approved = result.get("approved_invoices", [])
+                            flagged = result.get("flagged_invoices", [])
+                            discrepancies = result.get("discrepancies", [])
+                            
+                            response = f"""# ✅ Procesamiento Completado
+
+## 📊 Resumen
+- **Facturas procesadas:** {invoices_processed}
+- **Facturas aprobadas:** {len(approved)}
+- **Facturas marcadas para revisión:** {len(flagged)}
+- **Discrepancias detectadas:** {len(discrepancies)}
+
+{summary}
+
+## ✅ Facturas Aprobadas ({len(approved)})
+"""
+                            for inv_num in approved[:10]:
+                                response += f"- {inv_num}\n"
+                            if len(approved) > 10:
+                                response += f"- ... y {len(approved) - 10} más\n"
+                            
+                            if flagged:
+                                response += f"\n## ⚠️ Facturas Marcadas para Revisión ({len(flagged)})\n"
+                                for inv_num in flagged[:10]:
+                                    response += f"- {inv_num}\n"
+                                if len(flagged) > 10:
+                                    response += f"- ... y {len(flagged) - 10} más\n"
+                            
+                            if discrepancies:
+                                response += f"\n## ⚠️ Discrepancias Detectadas ({len(discrepancies)})\n"
+                                for disc in discrepancies[:5]:
+                                    response += f"- **{disc.get('invoice_number')}**: {disc.get('description')}\n"
+                            
+                            return [(response, "")], f"✅ {invoices_processed} facturas procesadas exitosamente"
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return [(f"❌ Error: {str(e)}", "")], f"❌ Error: {str(e)}"
+                    
+                    invoice_submit_btn.click(
+                        fn=invoice_submit,
+                        inputs=[invoice_files, invoice_session_id, validate_against_pos, generate_summary],
+                        outputs=[invoice_bot, invoice_status]
+                    )
+        
+        # Tab 4.5.8: Gmail Company Knowledge (NUEVO - Sistema de consulta y respuestas masivas de emails)
+        with gr.Tab("📧 Gmail Company Knowledge"):
+            if not GMAIL_COMPANY_KNOWLEDGE_AVAILABLE:
+                gr.Markdown("### ⚠️ Gmail Company Knowledge no disponible")
+                gr.Markdown("""
+                **Error cargando Gmail Company Knowledge.**
+                
+                Por favor, verifica que todas las dependencias estén instaladas.
+                """)
+            else:
+                gr.Markdown("### 📧 Gmail Company Knowledge - Sistema de Consulta y Respuestas Masivas de Emails")
+                gr.Markdown("""
+                **🌟 Sistema especializado para trabajar con emails de Gmail**
+                
+                **✨ Funcionalidades:**
+                - 📥 **Cargar emails de Gmail**: Convierte emails en documentos consultables
+                - 💬 **Hacer preguntas sobre emails**: Consulta información de tus emails cargados
+                - 📧 **Responder automáticamente**: Responde a múltiples emails con respuestas personalizadas
+                - 📝 **Plantillas de respuestas masivas**: Crea y usa plantillas para respuestas automáticas
+                - 🔍 **Búsqueda avanzada**: Usa queries de Gmail para filtrar emails (ej: "is:unread", "from:juan@example.com")
+                
+                **💡 Perfecto para:**
+                - Gestión masiva de emails
+                - Respuestas automáticas personalizadas
+                - Análisis de conversaciones por email
+                - Consultas sobre información en emails históricos
+                """)
+                
+                # Inicializar Gmail Company Knowledge
+                try:
+                    # Obtener instancias necesarias
+                    company_knowledge = get_company_knowledge(
+                        config=config,
+                        processor=processor,
+                        retriever_builder=retriever_builder,
+                        context_manager=context_manager
+                    )
+                    
+                    if not company_knowledge.app_integrations:
+                        gr.Markdown("### ⚠️ Sistema de integraciones no disponible")
+                        gr.Markdown("**Error:** No se pudo inicializar el sistema de integraciones.")
+                    else:
+                        gmail_knowledge = GmailCompanyKnowledge(
+                            company_knowledge=company_knowledge,
+                            integrations=company_knowledge.app_integrations,
+                            config=config
+                        )
+                        
+                        with gr.Tabs():
+                            # Sub-tab: Cargar Emails de Gmail
+                            with gr.Tab("📥 Cargar Emails de Gmail"):
+                                gr.Markdown("### 📥 Cargar Emails de Gmail como Documentos")
+                                gr.Markdown("""
+                                **Carga emails de Gmail y conviértelos en documentos consultables:**
+                                - Los emails se indexan en Company Knowledge
+                                - Puedes hacer preguntas sobre ellos después
+                                - Soporta queries de Gmail (ej: "is:unread", "from:juan@example.com")
+                                """)
+                                
+                                gmail_session_id = gr.State(value=str(uuid.uuid4()))
+                                
+                                gmail_query = gr.Textbox(
+                                    label="🔍 Query de Búsqueda de Gmail",
+                                    placeholder='Ej: "in:inbox", "is:unread", "from:juan@example.com", "subject:reunión"',
+                                    value="in:inbox",
+                                    info="Usa la sintaxis de búsqueda de Gmail. Ejemplos: 'is:unread', 'from:juan@example.com', 'subject:reunión', 'has:attachment'"
+                                )
+                                
+                                gmail_max_results = gr.Slider(
+                                    label="📊 Máximo de Emails",
+                                    minimum=1,
+                                    maximum=200,
+                                    value=50,
+                                    step=1,
+                                    info="Cantidad máxima de emails a cargar"
+                                )
+                                
+                                gmail_mark_as_read = gr.Checkbox(
+                                    label="✅ Marcar como leído",
+                                    value=False,
+                                    info="Si está marcado, los emails se marcarán como leídos después de cargarlos"
+                                )
+                                
+                                load_emails_btn = gr.Button("📥 Cargar Emails de Gmail", variant="primary")
+                                load_emails_output = gr.Markdown(label="📊 Resultado de Carga")
+                                
+                                def load_gmail_emails(query, max_results, mark_as_read, session_id):
+                                    try:
+                                        result = gmail_knowledge.load_emails_from_gmail(
+                                            session_id=session_id,
+                                            query=query,
+                                            max_results=int(max_results),
+                                            mark_as_read=mark_as_read
+                                        )
+                                        
+                                        if result.get("status") == "success":
+                                            loaded = result.get("loaded", 0)
+                                            total_found = result.get("total_found", 0)
+                                            emails = result.get("emails", [])
+                                            
+                                            output = f"""
+## ✅ Emails Cargados Exitosamente
+
+**📊 Estadísticas:**
+- **Emails encontrados:** {total_found}
+- **Emails cargados:** {loaded}
+- **Marcados como leídos:** {"Sí" if mark_as_read else "No"}
+
+### 📧 Emails Cargados:
+"""
+                                            for i, email in enumerate(emails[:20], 1):  # Mostrar primeros 20
+                                                output += f"{i}. **{email.get('subject', 'Sin asunto')}**\n"
+                                                output += f"   - De: {email.get('from', 'Desconocido')}\n"
+                                                output += f"   - Fecha: {email.get('date', 'N/A')}\n\n"
+                                            
+                                            if len(emails) > 20:
+                                                output += f"\n*... y {len(emails) - 20} emails más*\n"
+                                            
+                                            output += f"""
+### 🚀 Próximos Pasos:
+
+1. Ve al tab **"💬 Hacer Preguntas sobre Emails"** para consultar información
+2. O ve al tab **"📧 Responder Emails Masivamente"** para crear respuestas automáticas
+
+**💡 Tip:** Los emails están ahora indexados y puedes hacer preguntas sobre ellos.
+"""
+                                            return output
+                                        else:
+                                            error = result.get("error", "Error desconocido")
+                                            return f"❌ **Error:** {error}"
+                                    except Exception as e:
+                                        import traceback
+                                        traceback.print_exc()
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                load_emails_btn.click(
+                                    fn=load_gmail_emails,
+                                    inputs=[gmail_query, gmail_max_results, gmail_mark_as_read, gmail_session_id],
+                                    outputs=[load_emails_output]
+                                )
+                            
+                            # Sub-tab: Hacer Preguntas sobre Emails
+                            with gr.Tab("💬 Hacer Preguntas sobre Emails"):
+                                gr.Markdown("### 💬 Consulta Información de tus Emails Cargados")
+                                gr.Markdown("""
+                                **Haz preguntas sobre los emails que cargaste:**
+                                - "¿Qué emails mencionan X?"
+                                - "Resume los emails de esta semana"
+                                - "¿Quién me escribió sobre Y?"
+                                """)
+                                
+                                gmail_question_input = gr.Textbox(
+                                    label="Escribe tu pregunta",
+                                    placeholder="Ej: ¿Qué emails mencionan la reunión de mañana?",
+                                    lines=3
+                                )
+                                
+                                gmail_question_btn = gr.Button("💬 Consultar Emails", variant="primary")
+                                gmail_question_output = gr.Markdown(label="📊 Respuesta")
+                                
+                                def query_gmail_emails(question, session_id):
+                                    if not question.strip():
+                                        return "⚠️ Escribe una pregunta sobre tus emails."
+                                    
+                                    try:
+                                        import asyncio
+                                        
+                                        # Verificar que hay emails cargados
+                                        indexed_count = gmail_knowledge.get_indexed_emails_count(session_id)
+                                        if indexed_count == 0:
+                                            return "⚠️ **No hay emails cargados.**\n\nVe al tab '📥 Cargar Emails de Gmail' para cargar emails primero."
+                                        
+                                        # Obtener historial de la sesión
+                                        session = company_knowledge.initialize_session(session_id)
+                                        history = session.get("history", [])
+                                        
+                                        # Convertir historial a formato tuple
+                                        tuple_history = []
+                                        for item in history:
+                                            if isinstance(item, dict):
+                                                user_msg = item.get("question", "")
+                                                bot_msg = item.get("answer", "")
+                                                if user_msg and bot_msg:
+                                                    tuple_history.append((user_msg, bot_msg))
+                                        
+                                        # Hacer pregunta
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        answer, metadata = loop.run_until_complete(
+                                            gmail_knowledge.query_emails(
+                                                session_id=session_id,
+                                                question=question,
+                                                history=tuple_history
+                                            )
+                                        )
+                                        loop.close()
+                                        
+                                        return answer
+                                    except Exception as e:
+                                        import traceback
+                                        traceback.print_exc()
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                gmail_question_btn.click(
+                                    fn=query_gmail_emails,
+                                    inputs=[gmail_question_input, gmail_session_id],
+                                    outputs=[gmail_question_output]
+                                )
+                                
+                                gmail_question_input.submit(
+                                    fn=query_gmail_emails,
+                                    inputs=[gmail_question_input, gmail_session_id],
+                                    outputs=[gmail_question_output]
+                                )
+                            
+                            # Sub-tab: Responder Emails Masivamente
+                            with gr.Tab("📧 Responder Emails Masivamente"):
+                                gr.Markdown("### 📧 Respuestas Masivas con Plantillas")
+                                gr.Markdown("""
+                                **Crea plantillas y responde automáticamente a múltiples emails:**
+                                - Crea plantillas personalizadas con variables ({subject}, {sender}, {body})
+                                - Responde a múltiples emails de una vez
+                                - Modo dry-run para probar antes de enviar
+                                """)
+                                
+                                with gr.Tabs():
+                                    # Sub-sub-tab: Crear Plantilla
+                                    with gr.Tab("📝 Crear Plantilla"):
+                                        template_name_input = gr.Textbox(
+                                            label="📝 Nombre de la Plantilla",
+                                            placeholder="Ej: Respuesta de Soporte, Confirmación de Reunión",
+                                            info="Un nombre descriptivo para identificar esta plantilla"
+                                        )
+                                        
+                                        template_subject = gr.Textbox(
+                                            label="📧 Asunto (Plantilla)",
+                                            placeholder='Ej: Re: {subject}',
+                                            info="Puedes usar variables: {subject}, {sender}, {sender_email}, {date}"
+                                        )
+                                        
+                                        template_body = gr.Textbox(
+                                            label="📄 Cuerpo del Email (Plantilla)",
+                                            placeholder='''Hola,
+
+Gracias por tu email sobre {subject}.
+
+{body}
+
+Saludos,
+Tu Equipo''',
+                                            lines=10,
+                                            info="Puedes usar variables: {subject}, {sender}, {sender_email}, {date}, {body}"
+                                        )
+                                        
+                                        create_template_btn = gr.Button("💾 Crear Plantilla", variant="primary")
+                                        create_template_output = gr.Markdown(label="📊 Estado")
+                                        
+                                        def create_template(name, subject, body):
+                                            if not name.strip():
+                                                return "⚠️ Ingresa un nombre para la plantilla."
+                                            if not subject.strip():
+                                                return "⚠️ Ingresa un asunto para la plantilla."
+                                            if not body.strip():
+                                                return "⚠️ Ingresa un cuerpo para la plantilla."
+                                            
+                                            try:
+                                                result = gmail_knowledge.create_mass_response_template(
+                                                    template_name=name.strip(),
+                                                    subject_template=subject.strip(),
+                                                    body_template=body.strip()
+                                                )
+                                                
+                                                if result.get("status") == "success":
+                                                    return f"✅ **Plantilla '{name}' creada exitosamente**\n\nAhora puedes usarla en el tab 'Enviar Respuestas'."
+                                                else:
+                                                    return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                                            except Exception as e:
+                                                return f"❌ **Error:** {str(e)}"
+                                        
+                                        create_template_btn.click(
+                                            fn=create_template,
+                                            inputs=[template_name_input, template_subject, template_body],
+                                            outputs=[create_template_output]
+                                        )
+                                    
+                                    # Sub-sub-tab: Enviar Respuestas
+                                    with gr.Tab("📤 Enviar Respuestas"):
+                                        templates_list = gmail_knowledge.get_templates()
+                                        template_names = [t.get("name", "Unknown") for t in templates_list] if templates_list else []
+                                        
+                                        if not template_names:
+                                            gr.Markdown("### ⚠️ No hay plantillas creadas")
+                                            gr.Markdown("**Crea una plantilla primero en el tab '📝 Crear Plantilla'**")
+                                        else:
+                                            selected_template = gr.Dropdown(
+                                                label="📝 Seleccionar Plantilla",
+                                                choices=template_names,
+                                                value=template_names[0] if template_names else None,
+                                                info="Selecciona la plantilla a usar para las respuestas"
+                                            )
+                                            
+                                            mass_query = gr.Textbox(
+                                                label="🔍 Query de Búsqueda de Gmail",
+                                                placeholder='Ej: "in:inbox is:unread", "from:cliente@example.com"',
+                                                value="in:inbox is:unread",
+                                                info="Query de Gmail para buscar emails a responder"
+                                            )
+                                            
+                                            mass_max_emails = gr.Slider(
+                                                label="📊 Máximo de Emails",
+                                                minimum=1,
+                                                maximum=100,
+                                                value=20,
+                                                step=1
+                                            )
+                                            
+                                            mass_dry_run = gr.Checkbox(
+                                                label="🧪 Modo Dry-Run (Solo Simular)",
+                                                value=True,
+                                                info="Si está marcado, solo muestra qué se enviaría sin enviar realmente"
+                                            )
+                                            
+                                            send_mass_btn = gr.Button("📤 Enviar Respuestas Masivas", variant="primary")
+                                            mass_response_output = gr.Markdown(label="📊 Resultado")
+                                            
+                                            def send_mass_responses(template_name, query, max_emails, dry_run, session_id):
+                                                if not template_name:
+                                                    return "⚠️ Selecciona una plantilla."
+                                                
+                                                try:
+                                                    result = gmail_knowledge.send_mass_responses(
+                                                        session_id=session_id,
+                                                        template_name=template_name,
+                                                        query=query,
+                                                        max_emails=int(max_emails),
+                                                        dry_run=dry_run
+                                                    )
+                                                    
+                                                    if result.get("status") == "success":
+                                                        sent = result.get("sent", 0)
+                                                        simulated = result.get("simulated", 0)
+                                                        errors = result.get("errors", 0)
+                                                        total = result.get("total_processed", 0)
+                                                        results_list = result.get("results", [])
+                                                        
+                                                        action = "simuladas" if dry_run else "enviadas"
+                                                        output = f"""
+## ✅ Respuestas {action.capitalize()} Exitosamente
+
+**📊 Estadísticas:**
+- **Total procesados:** {total}
+- **{'Simuladas' if dry_run else 'Enviadas'}:** {simulated if dry_run else sent}
+- **Errores:** {errors}
+
+### 📧 Detalles:
+"""
+                                                        for i, res in enumerate(results_list[:10], 1):  # Primeros 10
+                                                            status_emoji = "✅" if res.get("status") == "sent" or res.get("status") == "dry_run" else "❌"
+                                                            output += f"{i}. {status_emoji} **{res.get('to', 'N/A')}**\n"
+                                                            output += f"   - Asunto: {res.get('subject', 'N/A')[:50]}...\n"
+                                                            if res.get("status") == "error":
+                                                                output += f"   - Error: {res.get('reason', 'Desconocido')}\n"
+                                                            output += "\n"
+                                                        
+                                                        if len(results_list) > 10:
+                                                            output += f"\n*... y {len(results_list) - 10} resultados más*\n"
+                                                        
+                                                        if dry_run:
+                                                            output += f"\n**💡 Tip:** Esto fue una simulación. Desmarca 'Modo Dry-Run' para enviar realmente."
+                                                        
+                                                        return output
+                                                    else:
+                                                        return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                                                except Exception as e:
+                                                    import traceback
+                                                    traceback.print_exc()
+                                                    return f"❌ **Error:** {str(e)}"
+                                            
+                                            send_mass_btn.click(
+                                                fn=send_mass_responses,
+                                                inputs=[selected_template, mass_query, mass_max_emails, mass_dry_run, gmail_session_id],
+                                                outputs=[mass_response_output]
+                                            )
+                                    
+                                    # Sub-sub-tab: Ver Plantillas
+                                    with gr.Tab("📋 Ver Plantillas"):
+                                        list_templates_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                                        templates_output = gr.Markdown(label="📋 Plantillas Disponibles")
+                                        
+                                        def list_templates():
+                                            templates = gmail_knowledge.get_templates()
+                                            
+                                            if not templates:
+                                                return "📋 **No hay plantillas creadas**\n\nCrea una plantilla en el tab '📝 Crear Plantilla'."
+                                            
+                                            output = f"## 📋 Plantillas Disponibles ({len(templates)})\n\n"
+                                            for template in templates:
+                                                name = template.get("name", "Unknown")
+                                                created_at = template.get("created_at", "N/A")
+                                                used_count = template.get("used_count", 0)
+                                                subject = template.get("subject_template", "")
+                                                body_preview = template.get("body_template", "")[:100]
+                                                
+                                                output += f"### 📝 {name}\n\n"
+                                                output += f"- **Creada:** {created_at}\n"
+                                                output += f"- **Usada:** {used_count} veces\n"
+                                                output += f"- **Asunto:** `{subject}`\n"
+                                                output += f"- **Cuerpo (preview):** {body_preview}...\n\n"
+                                            
+                                            return output
+                                        
+                                        list_templates_btn.click(
+                                            fn=list_templates,
+                                            inputs=[],
+                                            outputs=[templates_output]
+                                        )
+                                        
+                                        # Cargar lista inicial
+                                        templates_output.value = list_templates()
+                
+                except Exception as e:
+                    gr.Markdown(f"### ❌ Error al inicializar Gmail Company Knowledge")
+                    gr.Markdown(f"**Error:** {str(e)}\n\nPor favor, verifica la configuración y las dependencias.")
+        
+        # Tab 4.5.9: Expert Guide NextGen (NUEVO - Consejero Empresarial con Capacidades Avanzadas)
+        with gr.Tab("🎯 Expert Guide NextGen"):
+            gr.Markdown("### 🧠 Expert Guide NextGen - Consejero Empresarial con Capacidades de Eric Schmidt")
+            gr.Markdown("""
+            **🚀 Guía Experto NextGen con TODAS las capacidades avanzadas:**
+            
+            **✨ Capacidades Integradas:**
+            - 📚 **Context Windows Masivos**: Hasta 1 millón de tokens (500k en prompts)
+            - 🤖 **Agentes Autónomos**: Descubren patrones y principios de tus documentos
+            - 🎯 **Text-to-Action**: Convierte texto en acciones ejecutables
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso con pasos visibles
+            - 🛡️ **Adversarial Testing**: Valida respuestas antes de enviarlas
+            
+            **💡 Personalidad del Sistema:**
+            - Sin filtros corporativos: Respuestas directas y honestas
+            - Transparente: Identifica problemas ocultos que otros no ven
+            - Específico: Recomendaciones accionables con datos concretos
+            - Crítico: Detecta riesgos e ineficiencias que otros pasan por alto
+            
+            **🎯 Tipos de Negocio Especializados:**
+            - 💰 **Finanzas**: Análisis financiero, detección de fraudes, recomendaciones de inversión
+            - 🛒 **E-commerce**: Identifica productos que no venden, empleados ineficientes, procesos rotos
+            - 🏢 **Otros**: Análisis empresarial general con enfoque crítico
+            
+            **Ejemplos:**
+            - 💰 **Finanzas**: "Invierte en X, diversifica en Y, NO inviertas en Z"
+            - 🛒 **Ecommerce**: "Elimina a este empleado, vende este producto, haz esto"
+            - 🏢 **Cualquier empresa**: Recomendaciones específicas basadas en tus datos
+            """)
+            
+            # Generar session_id único para el guía experto
+            expert_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                expert_files = gr.Files(
+                    label="📂 Sube tus Documentos Empresariales (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                expert_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+                expert_provider = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Motor Alternativo = Claude (mayor precisión)"
+                )
+            
+            # Chatbot para el guía experto
+            expert_chatbot = gr.Chatbot(
+                label="💬 Conversación con tu Guía Experto",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                expert_input = gr.Textbox(
+                    label="Escribe tu pregunta o situación",
+                    placeholder="Ejemplo: Analiza mis documentos y dime qué debo hacer para mejorar mi negocio",
+                    lines=3,
+                    scale=4,
+                )
+                expert_submit_btn = gr.Button("📤 Consultar Guía", variant="primary", scale=1)
+            
+            with gr.Row():
+                expert_clear_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                expert_clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+            
+            expert_status = gr.Markdown(label="ℹ️ Estado")
+            
+            # Event handlers
+            def expert_chat_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta o solicita análisis."
+                if not files:
+                    return history, history, "⚠️ Primero sube documentos empresariales para que el guía experto los analice."
+                
+                new_history, error = run_expert_guide(
+                    message, history, files, session_id, speed_mode, provider
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+            
+            def expert_clear_chat(history, session_id):
+                if session_id in expert_sessions:
+                    del expert_sessions[session_id]
+                return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+            
+            def expert_clear_files(files, session_id):
+                if session_id in expert_sessions:
+                    expert_sessions[session_id]["processed_files"].clear()
+                    expert_sessions[session_id]["docs"] = []
+                    expert_sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+            
+            expert_submit_btn.click(
+                fn=expert_chat_submit,
+                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+                outputs=[expert_chatbot, expert_chatbot, expert_status],
+            ).then(
+                lambda: "", None, expert_input
+            )
+            
+            expert_input.submit(
+                fn=expert_chat_submit,
+                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+                outputs=[expert_chatbot, expert_chatbot, expert_status],
+            ).then(
+                lambda: "", None, expert_input
+            )
+            
+            expert_clear_btn.click(
+                fn=expert_clear_chat,
+                inputs=[expert_chatbot, expert_session_id],
+                outputs=[expert_chatbot, expert_status],
+            )
+            
+            expert_clear_files_btn.click(
+                fn=expert_clear_files,
+                inputs=[expert_files, expert_session_id],
+                outputs=[expert_files, expert_status],
+            )
         
         # Tab 4.6: Chat Multi-Formato (NUEVO - Soporta todos los formatos)
         with gr.Tab("📚 Chat Multi-Formato"):

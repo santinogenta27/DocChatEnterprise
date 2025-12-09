@@ -453,6 +453,38 @@ class CompanyKnowledgeIntegrations:
             return True
         return False
     
+    def remove_app(self, connection_id: str) -> Dict[str, Any]:
+        """
+        Elimina completamente una app conectada.
+        
+        Args:
+            connection_id: ID de la conexión a eliminar
+            
+        Returns:
+            Dict con success y message
+        """
+        if connection_id not in self.connections:
+            return {"success": False, "error": f"Conexión '{connection_id}' no encontrada"}
+        
+        app_name = self.connections[connection_id].app_name
+        app_type = self.connections[connection_id].app_type.value
+        
+        # Eliminar de conexiones
+        del self.connections[connection_id]
+        
+        # Eliminar del cache de tokens
+        if connection_id in self._token_cache:
+            del self._token_cache[connection_id]
+        
+        # Guardar cambios
+        self._save_connections()
+        
+        print(f"✅ [Company Knowledge] App eliminada: {app_name} ({app_type}) - ID: {connection_id}")
+        return {
+            "success": True,
+            "message": f"App '{app_name}' ({app_type}) eliminada exitosamente"
+        }
+    
     def get_connected_apps(self) -> List[AppConnection]:
         """Obtiene lista de apps conectadas y habilitadas."""
         return [
@@ -464,15 +496,19 @@ class CompanyKnowledgeIntegrations:
         self,
         query: str,
         app_types: Optional[List[IntegrationType]] = None,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[callable] = None
     ) -> List[AppSearchResult]:
         """
         Busca información en todas las apps conectadas.
+        
+        OPTIMIZADO: Ahora soporta callbacks de progreso para sidebar en tiempo real.
         
         Args:
             query: Consulta de búsqueda
             app_types: Tipos de apps específicos a buscar (None = todas)
             filters: Filtros adicionales (fechas, tipos de contenido, etc.)
+            progress_callback: Función callback(opcional) que se llama con (app_name, status, results_count)
         
         Returns:
             Lista de resultados de búsqueda
@@ -487,23 +523,91 @@ class CompanyKnowledgeIntegrations:
                 if app.app_type in app_types
             ]
         
-        # Buscar en cada app
-        for app in apps_to_search:
+        # Buscar en cada app con callbacks de progreso
+        for i, app in enumerate(apps_to_search):
             try:
+                # Callback: empezando búsqueda en esta app
+                if progress_callback:
+                    progress_callback(app.app_name, "searching", 0)
+                
                 app_results = await self._search_in_app(
                     app=app,
                     query=query,
                     filters=filters
                 )
                 results.extend(app_results)
+                
+                # Callback: búsqueda completada en esta app
+                if progress_callback:
+                    progress_callback(app.app_name, "completed", len(app_results))
+                
             except Exception as e:
                 print(f"⚠️ [Company Knowledge] Error buscando en {app.app_name}: {e}")
+                # Callback: error en esta app
+                if progress_callback:
+                    progress_callback(app.app_name, "error", 0)
                 continue
         
         # Ordenar por relevancia
         results.sort(key=lambda x: x.relevance_score, reverse=True)
         
         return results
+    
+    async def search_across_apps_streaming(
+        self,
+        query: str,
+        app_types: Optional[List[IntegrationType]] = None,
+        filters: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Generador async que busca en apps y yield resultados intermedios.
+        
+        OPTIMIZACIÓN CRÍTICA: Permite actualizar sidebar en tiempo real.
+        
+        Yields:
+            Tuplas (app_name, status, results_count, results) donde:
+            - app_name: Nombre de la app
+            - status: "searching", "completed", "error"
+            - results_count: Número de resultados encontrados
+            - results: Lista de resultados de esta app (solo en "completed")
+        """
+        # Obtener apps a buscar
+        apps_to_search = self.get_connected_apps()
+        if app_types:
+            apps_to_search = [
+                app for app in apps_to_search
+                if app.app_type in app_types
+            ]
+        
+        all_results = []
+        
+        # Buscar en cada app y yield progreso
+        for i, app in enumerate(apps_to_search):
+            try:
+                # Yield: empezando búsqueda
+                yield (app.app_name, "searching", 0, [])
+                
+                app_results = await self._search_in_app(
+                    app=app,
+                    query=query,
+                    filters=filters
+                )
+                all_results.extend(app_results)
+                
+                # Yield: búsqueda completada
+                yield (app.app_name, "completed", len(app_results), app_results)
+                
+            except Exception as e:
+                print(f"⚠️ [Company Knowledge] Error buscando en {app.app_name}: {e}")
+                # Yield: error
+                yield (app.app_name, "error", 0, [])
+                continue
+        
+        # Ordenar todos los resultados por relevancia
+        all_results.sort(key=lambda x: x.relevance_score, reverse=True)
+        
+        # Yield final con todos los resultados
+        yield ("all", "completed", len(all_results), all_results)
     
     async def _search_in_app(
         self,
@@ -514,6 +618,7 @@ class CompanyKnowledgeIntegrations:
         """
         Busca en una app específica usando las APIs reales.
         """
+        results = []
         # Obtener credenciales
         token = app.credentials.get("token", "")
         if not token:
@@ -527,7 +632,7 @@ class CompanyKnowledgeIntegrations:
             if app.app_type == IntegrationType.SLACK:
                 results = await self._slack_search(token, query, days)
             elif app.app_type == IntegrationType.GOOGLE_DRIVE:
-                results = await self._google_drive_search(token, query, app.credentials, days)
+                results = await self._google_drive_search(token, query, app.credentials, days, filters)
             elif app.app_type == IntegrationType.SHAREPOINT:
                 results = await self._sharepoint_search(token, query, app.credentials, days)
             elif app.app_type == IntegrationType.GITHUB:
@@ -567,7 +672,6 @@ class CompanyKnowledgeIntegrations:
             
         except Exception as e:
             print(f"⚠️ [Company Knowledge] Error buscando en {app.app_name}: {e}")
->>>>>>> 7cc331624b8b5de58ee8f2365424f0acfbda7432
         
         return results
 
@@ -1686,47 +1790,10 @@ class CompanyKnowledgeIntegrations:
         
         return results
     
-    def _extract_pdf_with_docling_fallback(self, pdf_bytes: bytes, file_name: str) -> tuple[str, str]:
-        """Extrae texto de PDF usando Docling como fallback (igual que DocumentProcessor)."""
-        try:
-            try:
-                from docling.document_converter import DocumentConverter
-                DOCLING_AVAILABLE = True
-            except ImportError:
-                DOCLING_AVAILABLE = False
-                return "", f"PDF encontrado: {file_name} (Docling no disponible. Instala: pip install docling)"
-            
-            if not DOCLING_AVAILABLE:
-                return "", f"PDF encontrado: {file_name} (Docling no disponible)"
-            
-            import tempfile
-            from pathlib import Path
-            
-            # Guardar PDF temporalmente
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
-                tmp.flush()
-                tmp_path = tmp.name
-            
-            try:
-                print(f"   🔄 [Google Drive] Procesando con Docling (puede tardar)...")
-                converter = DocumentConverter()
-                result = converter.convert(tmp_path)
-                
-                # Extraer markdown
-                markdown = result.document.export_to_markdown()
-                if markdown and markdown.strip():
-                    content = markdown
-                    snippet = markdown[:1000]
-                    print(f"✅ [Google Drive] Docling extrajo texto de {file_name}")
-                    return content, snippet
-                else:
-                    return "", f"PDF encontrado: {file_name} (Docling no generó contenido)"
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
-        except Exception as e:
-            print(f"⚠️ [Google Drive] Error con Docling: {e}")
-            return "", f"PDF encontrado: {file_name} (error con Docling: {str(e)[:50]})"
+    def _extract_pdf_with_fallback(self, pdf_bytes: bytes, file_name: str) -> tuple[str, str]:
+        """Extrae texto de PDF usando PyPDF2. Si falla, retorna mensaje de error."""
+        # Esta función ya no usa Docling ni RapidOCR
+        return "", f"PDF encontrado: {file_name} (no se pudo extraer texto - PDF puede estar encriptado o corrupto)"
     
     def _extract_keywords_from_query(self, query: str) -> List[str]:
         """Extrae palabras clave relevantes de una query, removiendo palabras comunes."""
@@ -1760,7 +1827,7 @@ class CompanyKnowledgeIntegrations:
         ]
         return keywords[:10]  # Limitar a 10 palabras clave
     
-    async def _google_drive_search(self, token: str, query: str, credentials: Dict[str, Any], days: Optional[int] = None) -> List[AppSearchResult]:
+    async def _google_drive_search(self, token: str, query: str, credentials: Dict[str, Any], days: Optional[int] = None, filters: Optional[Dict[str, Any]] = None) -> List[AppSearchResult]:
         """Busca en Google Drive usando la API real."""
         import requests
         results = []
@@ -1819,10 +1886,13 @@ class CompanyKnowledgeIntegrations:
             print(f"🔍 [Google Drive] Buscando con query: {query_string[:150]}...")
             print(f"🔍 [Google Drive] Palabras clave extraídas: {keywords[:5]}")
             
+            # Obtener límite de PDFs de filters
+            max_pdfs = filters.get("max_pdfs", 100) if filters is not None else 100
+            
             # Buscar archivos - ordenar por fecha de modificación (más recientes primero)
             params = {
                 "q": query_string,
-                "pageSize": 100,  # Aumentado para obtener más resultados
+                "pageSize": min(max_pdfs, 1000),  # Google Drive API máximo es 1000
                 "fields": "files(id,name,mimeType,webViewLink,modifiedTime,owners,size)",
                 "orderBy": "modifiedTime desc"
             }
@@ -1836,17 +1906,66 @@ class CompanyKnowledgeIntegrations:
             
             print(f"🔍 [Google Drive] Status code: {response.status_code}")
             
+            # Manejar error 401 ANTES de procesar cualquier cosa
+            if response.status_code == 401:
+                print(f"❌ [Google Drive] Error 401: Token inválido o expirado")
+                # Retornar resultado especial indicando que el token expiró
+                error_result = AppSearchResult(
+                    app_type=IntegrationType.GOOGLE_DRIVE,
+                    app_name="Google Drive",
+                    source_id="error_401",
+                    source_name="Token expirado - Reconecta Google Drive",
+                    content="",
+                    snippet="⚠️ **Token de Google Drive expirado**\n\nPor favor, ve a la pestaña 'Conectar Apps' y reconecta Google Drive para continuar.",
+                    url="",
+                    metadata={
+                        "error": "token_expired",
+                        "error_code": 401,
+                        "error_message": "Token inválido o expirado. Reconecta Google Drive en 'Conectar Apps'."
+                    },
+                    relevance_score=0.0
+                )
+                results.append(error_result)
+                print(f"📊 [Google Drive] Retornando resultado de error (token expirado)")
+                return results  # Retornar inmediatamente sin procesar más
+            
             if response.status_code == 200:
                 data = response.json()
                 files = data.get("files", [])
                 print(f"✅ [Google Drive] Encontrados {len(files)} archivos")
                 
-                # Procesar TODOS los archivos encontrados (sin límite)
+                # Si hay PDFs seleccionados específicamente, filtrar solo esos
+                selected_pdf_ids = filters.get("selected_pdf_ids", []) if filters else []
+                if selected_pdf_ids:
+                    print(f"📋 [Google Drive] Filtrando por {len(selected_pdf_ids)} PDFs seleccionados específicamente")
+                    # Filtrar archivos para incluir solo los seleccionados
+                    files = [f for f in files if f.get("id") in selected_pdf_ids]
+                    print(f"✅ [Google Drive] {len(files)} archivos coinciden con la selección")
+                
+                # Limitar cantidad de PDFs a procesar según max_pdfs
+                pdf_count = 0
+                max_pdfs_to_process = filters.get("max_pdfs", 100) if filters is not None else 100
+                if selected_pdf_ids:
+                    # Si hay selección específica, no aplicar límite max_pdfs (procesar todos los seleccionados)
+                    max_pdfs_to_process = len(selected_pdf_ids)
+                    print(f"📊 [Google Drive] Procesando todos los {max_pdfs_to_process} PDFs seleccionados")
+                else:
+                    print(f"📊 [Google Drive] Límite de PDFs configurado: {max_pdfs_to_process}")
+                
+                # Procesar archivos hasta alcanzar el límite de PDFs
                 for file in files:
                     file_id = file.get("id")
                     name = file.get("name", "Sin nombre")
                     mime_type = file.get("mimeType", "")
                     url = file.get("webViewLink", f"https://drive.google.com/file/d/{file_id}")
+                    
+                    # Si es PDF, verificar límite ANTES de procesar
+                    if mime_type == "application/pdf":
+                        if pdf_count >= max_pdfs_to_process:
+                            print(f"⏸️ [Google Drive] Límite de {max_pdfs_to_process} PDFs alcanzado. Saltando {name}")
+                            continue  # Saltar PDFs adicionales
+                        pdf_count += 1
+                        print(f"📄 [Google Drive] Procesando PDF {pdf_count}/{max_pdfs_to_process}: {name}")
                     
                     # Intentar obtener contenido para Google Docs/Sheets/PDFs
                     content = ""
@@ -1928,21 +2047,21 @@ class CompanyKnowledgeIntegrations:
                                             snippet = full_text[:2000]  # Primeros 2000 caracteres para snippet
                                             print(f"✅ [Google Drive] Extraído texto COMPLETO de {name} ({total_pages} páginas, {len(content):,} caracteres)")
                                         else:
-                                            # Si PyPDF2 no extrajo texto, intentar con Docling como fallback
-                                            print(f"⚠️ [Google Drive] PyPDF2 no extrajo texto, intentando con Docling...")
-                                            content, snippet = self._extract_pdf_with_docling_fallback(pdf_bytes, name)
+                                            # Si PyPDF2 no extrajo texto, usar fallback
+                                            print(f"⚠️ [Google Drive] PyPDF2 no extrajo texto de {name}")
+                                            content, snippet = self._extract_pdf_with_fallback(pdf_bytes, name)
                                     else:
-                                        print(f"⚠️ [Google Drive] PyPDF2 no disponible, intentando con Docling...")
-                                        content, snippet = self._extract_pdf_with_docling_fallback(pdf_bytes, name)
+                                        print(f"⚠️ [Google Drive] PyPDF2 no disponible para {name}")
+                                        content, snippet = self._extract_pdf_with_fallback(pdf_bytes, name)
                                         
                                 except Exception as e:
                                     error_msg = str(e).lower()
                                     if "pycryptodome" in error_msg or "aes" in error_msg or "encrypted" in error_msg:
-                                        print(f"⚠️ [Google Drive] PDF encriptado detectado, intentando con Docling...")
-                                        content, snippet = self._extract_pdf_with_docling_fallback(pdf_bytes, name)
+                                        print(f"⚠️ [Google Drive] PDF encriptado detectado: {name}")
+                                        content, snippet = self._extract_pdf_with_fallback(pdf_bytes, name)
                                     else:
-                                        print(f"⚠️ [Google Drive] Error extrayendo con PyPDF2: {e}, intentando con Docling...")
-                                        content, snippet = self._extract_pdf_with_docling_fallback(pdf_bytes, name)
+                                        print(f"⚠️ [Google Drive] Error extrayendo con PyPDF2: {e}")
+                                        content, snippet = self._extract_pdf_with_fallback(pdf_bytes, name)
                             else:
                                 print(f"❌ [Google Drive] Error descargando PDF {name}: Status {pdf_resp.status_code}")
                                 snippet = f"PDF encontrado: {name} (error descargando: {pdf_resp.status_code})"
@@ -1965,6 +2084,11 @@ class CompanyKnowledgeIntegrations:
                     final_snippet = snippet if snippet else (content[:200] if content else f"Archivo encontrado: {name}")
                     final_content = content if content else f"Archivo: {name}"
                     
+                    # Solo agregar a resultados si no es PDF o si aún no hemos alcanzado el límite
+                    # (para PDFs, ya verificamos el límite antes de procesar, pero por seguridad verificamos de nuevo)
+                    if mime_type == "application/pdf" and pdf_count > max_pdfs_to_process:
+                        continue  # No agregar este PDF a resultados
+                    
                     results.append(AppSearchResult(
                         app_type=IntegrationType.GOOGLE_DRIVE,
                         app_name="Google Drive",
@@ -1973,11 +2097,20 @@ class CompanyKnowledgeIntegrations:
                         content=final_content,
                         snippet=final_snippet,
                         url=url,
-                        metadata={"mime_type": mime_type, "modified": file.get("modifiedTime")},
+                        metadata={
+                            "mime_type": mime_type,
+                            "modified": file.get("modifiedTime"),
+                            "file_id": file_id,  # Guardar file_id para filtrado por selección
+                            "id": file_id  # También como "id" para compatibilidad
+                        },
                         relevance_score=min(relevance, 1.0)  # Cap a 1.0
                     ))
-            elif response.status_code == 401:
-                print(f"❌ [Google Drive] Error 401: Token inválido o expirado")
+                
+                # Mensaje final con resumen
+                pdf_results = [r for r in results if r.metadata.get("mime_type") == "application/pdf"]
+                print(f"✅ [Google Drive] Procesados {len(pdf_results)} PDFs de {max_pdfs_to_process} permitidos. Total resultados: {len(results)}")
+                if len(pdf_results) >= max_pdfs_to_process:
+                    print(f"⚠️ [Google Drive] Se alcanzó el límite de {max_pdfs_to_process} PDFs. Se omitieron PDFs adicionales.")
             elif response.status_code == 403:
                 print(f"❌ [Google Drive] Error 403: Token sin permisos suficientes. Verifica los scopes.")
                 print(f"   Response: {response.text[:200]}")
@@ -2246,8 +2379,215 @@ class CompanyKnowledgeIntegrations:
     
     # Métodos stub para apps que aún no tienen implementación completa
     async def _sharepoint_search(self, token: str, query: str, credentials: Dict[str, Any], days: Optional[int] = None) -> List[AppSearchResult]:
-        """Busca en SharePoint (stub - implementar con Microsoft Graph API)."""
-        return []
+        """Busca en SharePoint usando Microsoft Graph API (OPTIMIZADO para PDFs contables)."""
+        # Usar la implementación síncrona (que ya está optimizada)
+        # Ejecutar en thread para no bloquear
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self._sharepoint_search_sync(token, query, credentials, days)
+        )
+    
+    def _sharepoint_search_sync(self, token: str, query: str, credentials: Dict[str, Any], days: Optional[int] = None) -> List[AppSearchResult]:
+        """Versión síncrona de búsqueda en SharePoint (OPTIMIZADA para PDFs contables)."""
+        results: List[AppSearchResult] = []
+        
+        if not token:
+            return results
+        
+        headers = {"Authorization": f"Bearer {token}"}
+        site_url = credentials.get("site_url")  # Opcional: URL específica del sitio
+        
+        # OPTIMIZACIÓN: Si la query busca PDFs, agregar filtro de tipo
+        is_pdf_search = "pdf" in query.lower() or "filetype:pdf" in query.lower() or "mimetype" in query.lower()
+        
+        try:
+            # Buscar en OneDrive personal primero (más rápido)
+            drive_resp = requests.get(
+                "https://graph.microsoft.com/v1.0/me/drive/root/search",
+                headers=headers,
+                params={"q": query},
+                timeout=15
+            )
+            
+            if drive_resp.status_code == 200:
+                files = drive_resp.json().get("value", [])
+                # Filtrar solo PDFs si es búsqueda de PDFs
+                if is_pdf_search:
+                    files = [f for f in files if f.get("file", {}).get("mimeType") == "application/pdf"]
+                
+                for file in files[:50]:  # Aumentado para más resultados
+                    file_info = file.get("file", {})
+                    file_name = file.get("name", "Unknown")
+                    mime_type = file_info.get("mimeType", "")
+                    
+                    # Solo PDFs si es búsqueda de PDFs
+                    if is_pdf_search and mime_type != "application/pdf":
+                        continue
+                    
+                    web_url = file.get("webUrl", "")
+                    modified = file.get("lastModifiedDateTime", "")
+                    file_id = file.get("id", "")
+                    
+                    results.append(AppSearchResult(
+                        app_type=IntegrationType.SHAREPOINT,
+                        app_name="SharePoint (OneDrive)",
+                        source_id=file_id,
+                        source_name=file_name,
+                        content=f"Documento encontrado en SharePoint: {file_name}",
+                        snippet=f"Archivo: {file_name} | Modificado: {modified}",
+                        url=web_url,
+                        metadata={"mime_type": mime_type, "modified": modified, "file_id": file_id},
+                        relevance_score=0.7
+                    ))
+            
+            # Buscar en sitios de SharePoint si hay site_url o si no hay resultados suficientes
+            if site_url or len(results) < 10:
+                if site_url:
+                    # Buscar en sitio específico
+                    from urllib.parse import urlparse
+                    parsed = urlparse(site_url)
+                    hostname = parsed.netloc
+                    path = parsed.path.strip('/')
+                    
+                    sites_resp = requests.get(
+                        f"https://graph.microsoft.com/v1.0/sites/{hostname}:/{path}",
+                        headers=headers,
+                        timeout=10
+                    )
+                    
+                    if sites_resp.status_code == 200:
+                        site_data = sites_resp.json()
+                        site_id = site_data.get("id", "")
+                        
+                        drive_resp = requests.get(
+                            f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive",
+                            headers=headers,
+                            timeout=10
+                        )
+                        
+                        if drive_resp.status_code == 200:
+                            drive_data = drive_resp.json()
+                            drive_id = drive_data.get("id", "")
+                            
+                            # Buscar archivos (escapar query para URL)
+                            import urllib.parse
+                            query_escaped = urllib.parse.quote(query)
+                            search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{query_escaped}')"
+                            search_resp = requests.get(search_url, headers=headers, timeout=15)
+                            
+                            if search_resp.status_code == 200:
+                                files = search_resp.json().get("value", [])
+                                # Filtrar solo PDFs si es búsqueda de PDFs
+                                if is_pdf_search:
+                                    files = [f for f in files if f.get("file", {}).get("mimeType") == "application/pdf"]
+                                
+                                for file in files[:50]:
+                                    file_info = file.get("file", {})
+                                    file_name = file.get("name", "Unknown")
+                                    mime_type = file_info.get("mimeType", "")
+                                    
+                                    if is_pdf_search and mime_type != "application/pdf":
+                                        continue
+                                    
+                                    web_url = file.get("webUrl", "")
+                                    modified = file.get("lastModifiedDateTime", "")
+                                    file_id = file.get("id", "")
+                                    
+                                    results.append(AppSearchResult(
+                                        app_type=IntegrationType.SHAREPOINT,
+                                        app_name="SharePoint",
+                                        source_id=file_id,
+                                        source_name=file_name,
+                                        content=f"Documento encontrado en SharePoint: {file_name}",
+                                        snippet=f"Archivo: {file_name} | Modificado: {modified}",
+                                        url=web_url,
+                                        metadata={"mime_type": mime_type, "modified": modified, "file_id": file_id},
+                                        relevance_score=0.75
+                                    ))
+                else:
+                    # Buscar en todos los sitios disponibles
+                    sites_resp = requests.get(
+                        "https://graph.microsoft.com/v1.0/sites",
+                        headers=headers,
+                        params={"$top": 10},  # Aumentado para más sitios
+                        timeout=15
+                    )
+                    
+                    if sites_resp.status_code == 200:
+                        sites = sites_resp.json().get("value", [])
+                        for site in sites[:5]:  # Probar primeros 5 sitios
+                            site_id = site.get("id", "")
+                            try:
+                                drive_resp = requests.get(
+                                    f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive",
+                                    headers=headers,
+                                    timeout=10
+                                )
+                                
+                                if drive_resp.status_code == 200:
+                                    drive_data = drive_resp.json()
+                                    drive_id = drive_data.get("id", "")
+                                    
+                                    import urllib.parse
+                                    query_escaped = urllib.parse.quote(query)
+                                    search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{query_escaped}')"
+                                    search_resp = requests.get(search_url, headers=headers, timeout=10)
+                                    
+                                    if search_resp.status_code == 200:
+                                        files = search_resp.json().get("value", [])
+                                        if is_pdf_search:
+                                            files = [f for f in files if f.get("file", {}).get("mimeType") == "application/pdf"]
+                                        
+                                        for file in files[:20]:  # Limitar por sitio
+                                            file_info = file.get("file", {})
+                                            file_name = file.get("name", "Unknown")
+                                            mime_type = file_info.get("mimeType", "")
+                                            
+                                            if is_pdf_search and mime_type != "application/pdf":
+                                                continue
+                                            
+                                            web_url = file.get("webUrl", "")
+                                            modified = file.get("lastModifiedDateTime", "")
+                                            file_id = file.get("id", "")
+                                            
+                                            results.append(AppSearchResult(
+                                                app_type=IntegrationType.SHAREPOINT,
+                                                app_name=f"SharePoint ({site.get('displayName', 'Site')})",
+                                                source_id=file_id,
+                                                source_name=file_name,
+                                                content=f"Documento encontrado en SharePoint: {file_name}",
+                                                snippet=f"Archivo: {file_name} | Modificado: {modified}",
+                                                url=web_url,
+                                                metadata={"mime_type": mime_type, "modified": modified, "file_id": file_id},
+                                                relevance_score=0.7
+                                            ))
+                                            
+                                            if len(results) >= 100:  # Limitar total
+                                                break
+                            except Exception as e:
+                                print(f"⚠️ [SharePoint] Error buscando en sitio {site.get('displayName', 'Unknown')}: {e}")
+                                continue
+                            
+                            if len(results) >= 100:
+                                break
+        
+        except Exception as e:
+            print(f"⚠️ [SharePoint] Error buscando: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Eliminar duplicados por source_id
+        seen_ids = set()
+        unique_results = []
+        for r in results:
+            if r.source_id not in seen_ids:
+                seen_ids.add(r.source_id)
+                unique_results.append(r)
+        
+        print(f"✅ [SharePoint] Encontrados {len(unique_results)} documentos únicos")
+        return unique_results
     
     async def _gmail_search(self, token: str, query: str, days: Optional[int] = None) -> List[AppSearchResult]:
         """Busca y lee emails de Gmail usando Gmail API."""
@@ -2551,7 +2891,6 @@ class CompanyKnowledgeIntegrations:
             "sources": [result.source_name for result in app_results]
         }
     
-<<<<<<< HEAD
     def _teams_search(self, token: str, query: str, filters: Optional[Dict[str, Any]] = None) -> List[AppSearchResult]:
         """Busca mensajes en Microsoft Teams usando Microsoft Graph API."""
         results: List[AppSearchResult] = []
@@ -2974,8 +3313,7 @@ Responde SOLO con el texto del email (sin "Asunto:", "Para:", etc.):
             return {
                 "success": False,
                 "error": f"Error enviando email: {str(e)}"
-        }
->>>>>>> 7cc331624b8b5de58ee8f2365424f0acfbda7432
+            }
     
     def get_statistics(self) -> Dict[str, Any]:
         """Obtiene estadísticas de las integraciones."""
