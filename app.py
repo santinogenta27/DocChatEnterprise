@@ -126,6 +126,7 @@ from docchat.email_autonomous_agent import EmailAutonomousAgent
 from docchat.multi_format_processor import MultiFormatProcessor
 from docchat.iterative_learning_agent import IterativeLearningAgent
 from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
+from docchat.company_knowledge import get_company_knowledge, run_company_knowledge
 from docchat.fullstack_text_to_action import FullStackTextToAction
 from docchat.web_recency_agent import WebRecencyAgent
 from docchat.deep_chain_of_thought import DeepChainOfThoughtAgent
@@ -497,7 +498,7 @@ def run_pipeline(files, question: str, use_memory: bool = True, speed_mode: str 
     if not files:
         raise gr.Error("Primero sube al menos un documento.")
     if not question or not question.strip():
-        raise gr.Error("Escribe una pregunta.")
+        raise gr.Error("Write a question.")
     
     # Validar límite de documentos
     if len(files) > config.max_documents_per_batch:
@@ -743,7 +744,7 @@ def run_massive_processing(files, enable_comparison: bool = True):
 def run_complete_workflow(files, task_description: str, output_format: str = "all"):
     """Ejecutar workflow completo: analizar + generar informes automáticamente."""
     if not task_description or not task_description.strip():
-        raise gr.Error("Describe la tarea completa que quieres ejecutar.")
+        raise gr.Error("Describe the complete task you want to execute.")
     
     if not advanced_agent:
         raise gr.Error("Agente avanzado no está habilitado.")
@@ -859,7 +860,7 @@ def run_idp_processing(files):
 def run_enterprise_agentic_task(task_description: str, task_type: str, context_data: str = ""):
     """Ejecuta tarea autónoma usando Enterprise Agentic AI con datos IDP."""
     if not task_description or not task_description.strip():
-        raise gr.Error("Describe la tarea que quieres que el Agentic AI ejecute.")
+        raise gr.Error("Describe the task you want the Agentic AI to execute.")
     
     if not enterprise_agentic_ai:
         raise gr.Error("Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true")
@@ -888,7 +889,7 @@ def run_enterprise_agentic_task(task_description: str, task_type: str, context_d
                 context = {"context": context_data}
         
         # Usar datos IDP solo si están disponibles
-        result = enterprise_agentic_ai.execute_autonomous_task(
+        result = enterprise_agentic_ai.execute_autonomous_task_v2(
             task_description=task_description,
             task_type=task_type,
             context=context,
@@ -976,7 +977,7 @@ def run_idp_processing(files):
 def run_enterprise_agentic_task(task_description: str, task_type: str, context_data: str = ""):
     """Ejecuta tarea autónoma usando Enterprise Agentic AI con datos IDP."""
     if not task_description or not task_description.strip():
-        raise gr.Error("Describe la tarea que quieres que el Agentic AI ejecute.")
+        raise gr.Error("Describe the task you want the Agentic AI to execute.")
     
     if not enterprise_agentic_ai:
         raise gr.Error("Enterprise Agentic AI no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true")
@@ -1040,10 +1041,10 @@ def run_enterprise_agentic_task(task_description: str, task_type: str, context_d
 def register_chatbot(chatbot_name: str, company_name: str):
     """Registra un nuevo chatbot."""
     if not chatbot_name or not chatbot_name.strip():
-        raise gr.Error("Ingresa el nombre del chatbot.")
+        raise gr.Error("Enter the chatbot name.")
     
     if not company_name or not company_name.strip():
-        raise gr.Error("Ingresa el nombre de la empresa.")
+        raise gr.Error("Enter the company name.")
     
     try:
         if chatbot_mode is None:
@@ -1092,7 +1093,7 @@ def register_chatbot(chatbot_name: str, company_name: str):
 def upload_chatbot_data(chatbot_id: str, files):
     """Sube y procesa data para un chatbot."""
     if not chatbot_id or not chatbot_id.strip():
-        raise gr.Error("Ingresa el Chatbot ID.")
+        raise gr.Error("Enter the Chatbot ID.")
     
     if not files:
         raise gr.Error("Sube al menos un documento.")
@@ -1155,10 +1156,10 @@ def upload_chatbot_data(chatbot_id: str, files):
 def test_chatbot_query(chatbot_id: str, question: str):
     """Prueba una consulta al chatbot."""
     if not chatbot_id or not chatbot_id.strip():
-        raise gr.Error("Ingresa el Chatbot ID.")
+        raise gr.Error("Enter the Chatbot ID.")
     
     if not question or not question.strip():
-        raise gr.Error("Ingresa una pregunta.")
+        raise gr.Error("Enter a question.")
     
     chatbot_id = chatbot_id.strip()
     question = question.strip()
@@ -1324,7 +1325,7 @@ def refresh_analytics_dashboard(days: int):
 def connect_integration_with_token(integration_type: str, access_token: str):
     """Conecta una integración usando token directo (método fácil)."""
     if not integration_type:
-        raise gr.Error("Selecciona una app para conectar")
+        raise gr.Error("Select an app to connect")
     
     if not access_token or not access_token.strip():
         raise gr.Error("Pega el Access Token que obtuviste de OAuth Playground")
@@ -1428,7 +1429,7 @@ def connect_integration_with_token(integration_type: str, access_token: str):
 def connect_integration(integration_type: str):
     """Conecta una integración con OAuth."""
     if not integration_type:
-        raise gr.Error("Selecciona una app para conectar")
+        raise gr.Error("Select an app to connect")
     
     try:
         from docchat.integrations.integration_manager import IntegrationType
@@ -1657,7 +1658,7 @@ def list_integrations():
 def search_all_integrations(query: str):
     """Busca en todas las integraciones conectadas."""
     if not query or not query.strip():
-        raise gr.Error("Escribe una pregunta")
+        raise gr.Error("Write a question")
     
     try:
         # Buscar en todas las integraciones
@@ -1810,7 +1811,7 @@ def reply_to_email(message_id: str, to_email: str, subject: str, reply_body: str
 def run_autonomous_task(task_description: str, context_data: str = ""):
     """Ejecutar tarea con agente autónomo (modo legacy - mantener compatibilidad)."""
     if not task_description or not task_description.strip():
-        raise gr.Error("Describe la tarea que quieres que el agente ejecute.")
+        raise gr.Error("Describe the task you want the agent to execute.")
     
     if not autonomous_agent:
         raise gr.Error("Agentes autónomos no están habilitados. Configura DOCCHAT_ENABLE_AGENTS=true")
@@ -3553,7 +3554,7 @@ def connect_google_drive_with_token(
     SOLO LISTA los archivos, NO los descarga automáticamente.
     """
     if not access_token or not access_token.strip():
-        raise gr.Error("Por favor ingresa el Access Token de Google Drive.")
+        raise gr.Error("Please enter the Google Drive Access Token.")
     
     try:
         # Usar el nuevo método que solo lista archivos
@@ -8824,29 +8825,29 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[email_response_history]
             )
         
-        # Tab 4.5: Enterprise API Mode (NUEVO)
+        # Tab 4.5: Enterprise API Mode (NEW)
         with gr.Tab("🏢 Enterprise API"):
-            gr.Markdown("### Modo Enterprise API - Procesamiento Automático con Agentic AI")
+            gr.Markdown("### Enterprise API Mode - Automatic Processing with Agentic AI")
             gr.Markdown("""
-            **🚀 Funcionalidades:**
-            - Procesa documentos automáticamente (igual que Consulta RAG)
-            - Detecta problemas, oportunidades y patrones sin que se lo pidas
-            - Genera resúmenes automáticos de cada documento
-            - Ejecuta acciones según reglas personalizadas
-            - Aprende y mejora continuamente
+            **🚀 Capabilities:**
+            - Automatically processes documents (similar to RAG Query)
+            - Detects problems, opportunities, and patterns proactively
+            - Generates automatic summaries per document
+            - Executes actions based on custom rules
+            - Learns and improves continuously
             
-            **💼 Perfecto para empresas que necesitan:**
-            - Procesar contratos, emails, documentos masivamente
-            - Detección automática de riesgos y oportunidades
-            - Automatización de workflows empresariales
+            **💼 Perfect for companies that need:**
+            - Mass processing of contracts, emails, documents
+            - Automatic risk and opportunity detection
+            - Automation of enterprise workflows
             """)
             
             # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
             gr.Markdown("""
             ---
-            ### 📥 Usar PDFs Sincronizados
+            ### 📥 Use Synced PDFs
             
-            **¿Ya sincronizaste PDFs desde Gmail, Drive u Outlook?** Úsalos directamente aquí con un clic.
+            **Already synced PDFs from Gmail, Drive or Outlook?** Use them directly here with one click.
             """)
             
             with gr.Row():
@@ -8859,16 +8860,16 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             ("💼 OneDrive", "onedrive"),
                             ("📄 Todos", "all")
                         ],
-                        label="Seleccionar fuente",
+                        label="Select source",
                         value="all"
                     )
-                    load_synced_btn = gr.Button("📥 Cargar PDFs Sincronizados", variant="primary")
+                    load_synced_btn = gr.Button("📥 Load Synced PDFs", variant="primary")
                 
                 with gr.Column(scale=2):
-                    synced_pdfs_info = gr.Markdown("*Haz clic en 'Cargar PDFs Sincronizados' para ver los archivos disponibles.*")
+                    synced_pdfs_info = gr.Markdown("*Click 'Load Synced PDFs' to see available files.*")
             
             synced_files_checkboxes = gr.CheckboxGroup(
-                label="📋 Selecciona los PDFs a procesar",
+                label="📋 Select PDFs to process",
                 choices=[],
                 value=[],
                 interactive=True,
@@ -8876,18 +8877,18 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             )
             
             with gr.Row():
-                select_all_synced_btn = gr.Button("✅ Seleccionar Todos", variant="secondary", visible=False)
-                process_synced_btn = gr.Button("🚀 PROCESAR PDFs SELECCIONADOS", variant="primary", visible=False, size="lg")
+                select_all_synced_btn = gr.Button("✅ Select All", variant="secondary", visible=False)
+                process_synced_btn = gr.Button("🚀 PROCESS SELECTED PDFs", variant="primary", visible=False, size="lg")
             
             synced_files_paths = gr.State(value={})  # Guarda {nombre: path}
             
             def load_synced_pdfs(source):
-                """Carga la lista de PDFs sincronizados."""
+                """Load list of synced PDFs."""
                 sync_dir = Path(config.memory_dir) / "synced_documents"
                 
                 if not sync_dir.exists():
                     return (
-                        "❌ No hay PDFs sincronizados. Ve a '🔗 Conexiones' para sincronizar primero.",
+                        "❌ No synced PDFs. Go to '🔗 Connections' to sync first.",
                         gr.update(choices=[], visible=False),
                         gr.update(visible=False),
                         gr.update(visible=False),
@@ -8914,7 +8915,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 
                 if not pdf_files:
                     return (
-                        f"📭 No hay PDFs sincronizados de **{source}**.\n\nVe a '🔗 Conexiones' → '🔄 Sincronizar' para descargar PDFs.",
+                        f"📭 No synced PDFs from **{source}**.\n\nGo to '🔗 Connections' → '🔄 Sync' to download PDFs.",
                         gr.update(choices=[], visible=False),
                         gr.update(visible=False),
                         gr.update(visible=False),
@@ -8922,7 +8923,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     )
                 
                 # Organizar información
-                info = f"""### ✅ {len(pdf_files)} PDFs encontrados
+                info = f"""### ✅ {len(pdf_files)} PDFs found
 
 | Fuente | Cantidad |
 |--------|----------|
@@ -8936,7 +8937,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
                             info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
                 
-                info += "\n**Selecciona los PDFs que quieres procesar abajo:**"
+                info += "\n**Select the PDFs you want to process below:**"
                 
                 return (
                     info,
@@ -8947,13 +8948,13 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 )
             
             def select_all_synced(current_choices):
-                """Selecciona todos los PDFs."""
+                """Select all PDFs."""
                 return current_choices
             
             def process_synced_pdfs(selected_files, file_paths_dict, rules_json):
-                """Procesa los PDFs seleccionados con Enterprise API."""
+                """Process selected PDFs with Enterprise API."""
                 if not selected_files:
-                    raise gr.Error("Por favor selecciona al menos un PDF para procesar.")
+                    raise gr.Error("Please select at least one PDF to process.")
                 
                 # Obtener las rutas de los archivos seleccionados
                 files_to_process = []
@@ -8962,7 +8963,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                         files_to_process.append(file_paths_dict[name])
                 
                 if not files_to_process:
-                    raise gr.Error("No se encontraron los archivos seleccionados.")
+                    raise gr.Error("Selected files not found.")
                 
                 # Procesar con Enterprise API
                 try:
@@ -8975,12 +8976,12 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             pass
                     
                     # Generar resultado con streaming
-                    output = f"## 🚀 Procesando {len(files_to_process)} PDFs Sincronizados\n\n"
-                    output += "**Archivos:**\n"
+                    output = f"## 🚀 Processing {len(files_to_process)} Synced PDFs\n\n"
+                    output += "**Files:**\n"
                     for f in files_to_process[:10]:
                         output += f"- {Path(f).name}\n"
                     if len(files_to_process) > 10:
-                        output += f"- ... y {len(files_to_process) - 10} más\n"
+                        output += f"- ... and {len(files_to_process) - 10} more\n"
                     output += "\n---\n\n"
                     
                     # Usar el procesador de Enterprise API
@@ -9012,26 +9013,26 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             
             gr.Markdown("""
             ---
-            ### 📂 O sube archivos manualmente
+            ### 📂 Or upload files manually
             """)
             
             with gr.Row():
                 enterprise_files = gr.Files(
-                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD, Emails)",
+                    label="📂 Enterprise Documents (PDF, DOCX, TXT, MD, Emails)",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
                 rules_input = gr.Textbox(
-                    label="⚙️ Reglas y Automatizaciones (JSON opcional)",
+                    label="⚙️ Rules & Automations (optional JSON)",
                     placeholder='''[
   {
-    "name": "Alerta de Contrato Vencido",
+    "name": "Expired Contract Alert",
     "type": "condition",
     "condition": {
       "type": "keyword",
-      "keyword": "vencimiento"
+      "keyword": "expiration"
     },
     "action": {
       "type": "notify",
@@ -9045,36 +9046,36 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             with gr.Row():
                 with gr.Column():
                     drive_session_id = gr.Textbox(
-                        label="📁 Usar archivos de Google Drive (Session ID)",
-                        placeholder="Pega el Session ID que obtuviste al conectar Google Drive",
-                        info="Obtén el Session ID desde el tab '☁️ Cloud Storage' → '📁 Google Drive'",
+                        label="📁 Use Google Drive files (Session ID)",
+                        placeholder="Paste the Session ID you obtained when connecting Google Drive",
+                        info="Get the Session ID from the tab '☁️ Cloud Storage' → '📁 Google Drive'",
                     )
-                    list_drive_files_btn = gr.Button("📋 Listar Archivos Disponibles", variant="secondary")
+                    list_drive_files_btn = gr.Button("📋 List Available Files", variant="secondary")
                     
                     drive_files_info = gr.Markdown(
-                        label="ℹ️ Información",
-                        value="**💡 Instrucciones:**\n\n1. Ingresa el Session ID arriba\n2. Click en 'Listar Archivos Disponibles'\n3. Selecciona los archivos que quieres procesar (aparecerán checkboxes)\n4. Los IDs se llenarán automáticamente\n5. Click en 'Procesar Archivos Seleccionados'"
+                        label="ℹ️ Info",
+                        value="**💡 Instructions:**\n\n1. Enter the Session ID above\n2. Click 'List Available Files'\n3. Select the files you want to process (checkboxes will appear)\n4. IDs will auto-fill\n5. Click 'Process Selected Files'"
                     )
                     
                     drive_files_checkboxes = gr.CheckboxGroup(
-                        label="📋 Selecciona Archivos para Procesar",
+                        label="📋 Select Files to Process",
                         choices=[],
                         value=[],
                         interactive=True,
                         visible=False,
-                        info="Marca los archivos que quieres procesar. Los IDs se actualizarán automáticamente.",
+                        info="Select the files you want to process. IDs will update automatically.",
                     )
                     
                     selected_file_ids = gr.Textbox(
-                        label="📝 IDs de Archivos Seleccionados (se llena automáticamente)",
-                        placeholder="Los IDs aparecerán aquí cuando selecciones archivos arriba",
-                        info="Este campo se llena automáticamente cuando seleccionas archivos. También puedes editarlo manualmente.",
+                        label="📝 Selected File IDs (auto-filled)",
+                        placeholder="IDs will appear here when you select files above",
+                        info="This field auto-fills when you select files. You can also edit manually.",
                         lines=2,
                         interactive=True,
                     )
                     
                     use_drive_btn = gr.Button(
-                        "📂 Procesar Archivos Seleccionados de Google Drive", 
+                        "📂 Process Selected Google Drive Files", 
                         variant="primary", 
                         size="lg",
                         elem_id="drive_process_btn"
@@ -9287,7 +9288,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             def ln_process_synced_pdfs(selected_files, file_paths_dict, rules_json):
                 """Procesa los PDFs seleccionados con Lightning."""
                 if not selected_files:
-                    raise gr.Error("Por favor selecciona al menos un PDF para procesar.")
+                    raise gr.Error("Please select at least one PDF to process.")
                 
                 files_to_process = []
                 for name in selected_files:
@@ -9295,7 +9296,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                         files_to_process.append(file_paths_dict[name])
                 
                 if not files_to_process:
-                    raise gr.Error("No se encontraron los archivos seleccionados.")
+                    raise gr.Error("Selected files not found.")
                 
                 try:
                     rules = None
@@ -9900,33 +9901,33 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 show_progress="full"
             )
 
-        # Tab 4.7: Data Sight - Análisis de Datos e Insights
-        # Tab 4.8: BANKS Mode - Compliance KYC/AML (NUEVO)
+        # Tab 4.7: Data Sight - Data Analysis & Insights
+        # Tab 4.8: BANKS Mode - Compliance KYC/AML (NEW)
         with gr.Tab("🏦 BANKS - Compliance KYC/AML"):
             if not BANKS_MODE_AVAILABLE:
-                gr.Markdown("### ⚠️ Modo BANKS no disponible")
+                gr.Markdown("### ⚠️ BANKS mode not available")
                 gr.Markdown("""
-                **Error al cargar el modo BANKS.**
+                **Error loading BANKS mode.**
                 
-                Por favor, verifica que todas las dependencias estén instaladas:
+                Please verify all dependencies are installed:
                 - `pip install langgraph langchain-anthropic langchain-openai rapidfuzz`
                 - `pip install unstructured weasyprint jinja2`
                 """)
             else:
-                gr.Markdown("### 🏦 Modo BANKS - Compliance Agent para KYC/AML")
+                gr.Markdown("### 🏦 BANKS Mode - Compliance Agent for KYC/AML")
                 gr.Markdown("""
-                **🚀 Sistema multi-agente especializado en compliance regulatorio para bancos**
+                **🚀 Multi-agent system specialized in regulatory compliance for banks**
                 
-                **Características principales:**
-                - 📄 **Procesamiento masivo**: Soporta carpetas con 1000+ documentos (PDFs, scans, fotos, Word, Excel)
-                - 🔍 **Screening automático**: Validación contra listas de sanciones (OFAC, EU, UN, World-Check)
-                - ⚠️ **Risk Scoring**: Score 1-100 con explicación completa y evidencia clicable
-                - 📋 **Generación de SARs**: Reportes en formato FinCEN XML listos para subir al regulador
-                - 👤 **Human-in-the-Loop**: Steering en tiempo real con comandos en lenguaje natural
-                - 📊 **Audit Trail**: Registro completo de todas las decisiones (todo.md estilo EDR)
-                - 🔗 **Integraciones**: Salesforce, Jira, Slack, Core Banking
+                **Key features:**
+                - 📄 **Mass processing**: Supports folders with 1000+ documents (PDFs, scans, photos, Word, Excel)
+                - 🔍 **Automatic screening**: Validation against sanctions lists (OFAC, EU, UN, World-Check)
+                - ⚠️ **Risk Scoring**: Score 1-100 with full explanation and clickable evidence
+                - 📋 **SAR generation**: FinCEN XML reports ready to upload to regulators
+                - 👤 **Human-in-the-Loop**: Real-time steering with natural-language commands
+                - 📊 **Audit Trail**: Full log of decisions (todo.md / EDR style)
+                - 🔗 **Integrations**: Salesforce, Jira, Slack, Core Banking
                 
-                **💡 Perfecto para bancos medianos que necesitan automatizar KYC/AML con explainability total**
+                **💡 Ideal for mid-sized banks needing KYC/AML automation with full explainability**
                 """)
                 
                 # Inicializar modo BANKS
@@ -9935,31 +9936,31 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     
                     with gr.Tabs():
                         # Sub-tab: Procesamiento de Compliance
-                        with gr.Tab("🔍 Procesar Compliance Check"):
-                            gr.Markdown("### Procesa documentos de cliente para check de compliance KYC/AML")
+                        with gr.Tab("🔍 Run Compliance Check"):
+                            gr.Markdown("### Process customer documents for KYC/AML compliance check")
                             gr.Markdown("""
-                            **Flujo automático:**
-                            1. Ingesta y procesamiento de documentos
-                            2. Extracción de entidades (nombre, DNI, UBO, PEP, transacciones)
-                            3. Screening contra listas de sanciones y PEP
-                            4. Cálculo de risk score con explicación
-                            5. Generación de SARs y reportes
+                            **Automatic flow:**
+                            1. Ingest and process documents
+                            2. Extract entities (name, ID, UBO, PEP, transactions)
+                            3. Screen against sanctions and PEP lists
+                            4. Compute risk score with explanation
+                            5. Generate SARs and reports
                             """)
                             
                             banks_input_path = gr.Textbox(
-                                label="📂 Ruta de Documentos",
-                                placeholder="Ruta a carpeta, ZIP, o archivo individual",
-                                info="Puede ser una carpeta con múltiples documentos, un ZIP, o un archivo individual"
+                                label="📂 Documents Path",
+                                placeholder="Folder path, ZIP, or single file",
+                                info="Can be a folder with multiple documents, a ZIP, or a single file"
                             )
                             
                             banks_files = gr.File(
-                                label="📄 O Sube Documentos Directamente",
+                                label="📄 Or Upload Documents Directly",
                                 file_count="multiple",
                                 file_types=[".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".zip"]
                             )
                             
                             banks_jurisdiction = gr.Dropdown(
-                                label="🌍 Jurisdicción",
+                                label="🌍 Jurisdiction",
                                 choices=[
                                     ("Estados Unidos (FinCEN)", "US"),
                                     ("Unión Europea", "EU"),
@@ -9972,28 +9973,28 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                     ("Polonia", "PL")
                                 ],
                                 value="US",
-                                info="Selecciona la jurisdicción para generar reportes en el formato correcto"
+                                info="Select the jurisdiction to generate reports in the correct format"
                             )
                             
                             banks_steering = gr.Textbox(
-                                label="👤 Comandos de Steering (Opcional)",
-                                placeholder='Ej: "Ignora PEP level 1 para clientes España" o "Solo flaggea si beneficiario final en Panamá"',
+                                label="👤 Steering Commands (Optional)",
+                                placeholder='Eg: "Ignore PEP level 1 for Spain customers" or "Only flag if UBO in Panama"',
                                 lines=3,
-                                info="Comandos en lenguaje natural para ajustar el procesamiento en tiempo real"
+                                info="Natural-language commands to adjust processing in real time"
                             )
                             
                             # Configuración de Acciones
-                            with gr.Accordion("🔗 Integraciones y Acciones Automáticas", open=False):
+                            with gr.Accordion("🔗 Integrations & Automatic Actions", open=False):
                                 gr.Markdown("""
-                                **Configura acciones automáticas basadas en los resultados:**
-                                - Actualizar Salesforce Financial Services Cloud
-                                - Crear tickets en Jira/ClickUp
-                                - Enviar notificaciones a Slack/Teams
-                                - Bloquear onboarding en core banking (si score muy alto)
+                                **Configure automatic actions based on results:**
+                                - Update Salesforce Financial Services Cloud
+                                - Create tickets in Jira/ClickUp
+                                - Send notifications to Slack/Teams
+                                - Block onboarding in core banking (if score is very high)
                                 """)
                                 
                                 action_config_json = gr.Textbox(
-                                    label="⚙️ Configuración de Acciones (JSON)",
+                                    label="⚙️ Actions Configuration (JSON)",
                                     placeholder='''{
   "update_salesforce": true,
   "salesforce_opportunity_id": "006XX000004ABCD",
@@ -10011,8 +10012,8 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                     value='{"update_salesforce": false, "create_jira_ticket": false, "send_notifications": true, "block_core_banking": false}'
                                 )
                             
-                            process_banks_btn = gr.Button("🚀 Ejecutar Compliance Check", variant="primary")
-                            banks_output = gr.Markdown(label="📊 Resultados del Compliance Check")
+                            process_banks_btn = gr.Button("🚀 Run Compliance Check", variant="primary")
+                            banks_output = gr.Markdown(label="📊 Compliance Check Results")
                             
                             def process_banks_compliance(input_path: str, files, jurisdiction: str, steering: str, action_config_json: str) -> str:
                                 try:
@@ -10031,7 +10032,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                         input_path = str(temp_dir)
                                     
                                     if not input_path:
-                                        return "❌ Error: Debes proporcionar una ruta o subir archivos"
+                                        return "❌ Error: You must provide a path or upload files"
                                     
                                     # Parsear comandos de steering
                                     steering_commands = []
@@ -10044,7 +10045,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                         try:
                                             action_config = json.loads(action_config_json)
                                         except Exception as e:
-                                            return f"❌ Error parseando action_config JSON: {e}"
+                                            return f"❌ Error parsing action_config JSON: {e}"
                                     
                                     # Ejecutar compliance check
                                     result = banks_mode.process_compliance_check(
@@ -10059,14 +10060,14 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                         summary = banks_mode.get_reports_summary(workflow_result)
                                         
                                         output = f"""
-## ✅ Compliance Check Completado
+## ✅ Compliance Check Completed
 
-### 📊 Resumen
-- **Entidades procesadas:** {result['entities_count']}
-- **Risk scores calculados:** {result['risk_scores_count']}
-- **Reportes generados:** {result['reports_generated']}
+### 📊 Summary
+- **Entities processed:** {result['entities_count']}
+- **Risk scores calculated:** {result['risk_scores_count']}
+- **Reports generated:** {result['reports_generated']}
 
-### ⚠️ Entidades de Alto Riesgo
+### ⚠️ High-Risk Entities
 """
                                         if summary["high_risk_entities"]:
                                             for entity in summary["high_risk_entities"]:
@@ -10088,23 +10089,23 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                                 action_type = action.get("action", "unknown")
                                                 status = action.get("status", "unknown")
                                                 status_emoji = "✅" if status == "success" else "❌"
-                                                output += f"- {status_emoji} **{action_type}**: {status}\n"
-                                                if action.get("ticket_id"):
-                                                    output += f"  - Ticket: {action.get('ticket_id')}\n"
-                                                if action.get("opportunity_id"):
-                                                    output += f"  - Salesforce Opportunity: {action.get('opportunity_id')}\n"
+                                            output += f"- {status_emoji} **{action_type}**: {status}\n"
+                                            if action.get("ticket_id"):
+                                                output += f"  - Ticket: {action.get('ticket_id')}\n"
+                                            if action.get("opportunity_id"):
+                                                output += f"  - Salesforce Opportunity: {action.get('opportunity_id')}\n"
                                         
                                         if workflow_result.get("errors"):
-                                            output += f"\n### ⚠️ Errores\n"
+                                            output += f"\n### ⚠️ Errors\n"
                                             for error in workflow_result["errors"]:
                                                 output += f"- {error}\n"
                                         
                                         return output
                                     else:
-                                        return f"❌ Error: {result.get('error', 'Error desconocido')}"
+                                        return f"❌ Error: {result.get('error', 'Unknown error')}"
                                 
                                 except Exception as e:
-                                    return f"❌ Error procesando compliance check: {str(e)}"
+                                    return f"❌ Error processing compliance check: {str(e)}"
                             
                             process_banks_btn.click(
                                 fn=process_banks_compliance,
@@ -10112,27 +10113,27 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                 outputs=[banks_output]
                             )
                         
-                        # Sub-tab: Ver Reportes
-                        with gr.Tab("📋 Ver Reportes Generados"):
-                            gr.Markdown("### Reportes y SARs generados")
+                        # Sub-tab: View Reports
+                        with gr.Tab("📋 View Generated Reports"):
+                            gr.Markdown("### Generated Reports and SARs")
                             gr.Markdown("""
-                            Los reportes se guardan en: `.docchat_cache/banks/reports/`
+                            Reports are saved at: `.docchat_cache/banks/reports/`
                             """)
                             
-                            list_reports_btn = gr.Button("📋 Listar Reportes", variant="secondary")
-                            reports_list_output = gr.Markdown(label="📊 Lista de Reportes")
+                            list_reports_btn = gr.Button("📋 List Reports", variant="secondary")
+                            reports_list_output = gr.Markdown(label="📊 Reports List")
                             
                             def list_banks_reports():
                                 try:
                                     reports_dir = Path(config.cache_dir) / "banks" / "reports"
                                     if not reports_dir.exists():
-                                        return "📁 No hay reportes generados aún"
+                                        return "📁 No reports generated yet"
                                     
                                     reports = list(reports_dir.glob("*"))
                                     if not reports:
-                                        return "📁 No hay reportes generados aún"
+                                        return "📁 No reports generated yet"
                                     
-                                    output = "### 📋 Reportes Generados\n\n"
+                                    output = "### 📋 Generated Reports\n\n"
                                     for report in sorted(reports, key=lambda x: x.stat().st_mtime, reverse=True):
                                         size_kb = report.stat().st_size / 1024
                                         mod_time = datetime.fromtimestamp(report.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
@@ -10477,127 +10478,127 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     gr.Markdown(f"**Error:** {str(e)}\n\nPor favor, verifica la configuración y las dependencias.")
 
         with gr.Tab("🔍 Data Sight"):
-            gr.Markdown("### 🔍 Data Sight - Análisis de Datos e Insights")
+            gr.Markdown("### 🔍 Data Sight - Data Analysis & Insights")
             gr.Markdown("""
-            **🚀 Qué hace Data Sight (clon de Enterprise API):**
-            - Procesa documentos masivamente con el mismo motor que `🏢 Enterprise API`
-            - Transforma documentos en datos estructurados y métricas cuantificables
-            - Genera insights accionables y visualizaciones de información
-            - Ideal para análisis de datos, reportes analíticos y business intelligence
+            **🚀 What Data Sight does (Enterprise API clone):**
+            - Mass-process documents with the same engine as `🏢 Enterprise API`
+            - Transform documents into structured data and quantifiable metrics
+            - Generate actionable insights and information visualizations
+            - Ideal for data analysis, analytical reports, and business intelligence
             
-            **💼 Casos de uso:**
-            - Análisis de datos estructurados desde documentos
-            - Generación de métricas y KPIs desde documentos
-            - Visualización de tendencias y patrones
-            - Transformación de información no estructurada en datos accionables
+            **💼 Use cases:**
+            - Structured data analysis from documents
+            - Generating metrics and KPIs from documents
+            - Visualizing trends and patterns
+            - Turning unstructured info into actionable data
             """)
             
             with gr.Row():
                 data_sight_files = gr.Files(
-                    label="📂 Documentos para Data Sight (PDF, DOCX, TXT, MD) - Hasta 500+ documentos",
+                    label="📂 Data Sight Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
                 data_sight_rules_input = gr.Textbox(
-                    label="⚙️ Reglas y Automatizaciones (JSON opcional, igual que Enterprise API)",
+                    label="⚙️ Rules & Automations (optional JSON, same as Enterprise API)",
                     placeholder="[]",
                     lines=4,
                 )
                 data_sight_auto_detect = gr.Checkbox(
-                    label="🔍 Detección Automática",
+                    label="🔍 Automatic Detection",
                     value=True,
                 )
                 data_sight_provider = gr.Radio(
-                    label="🤖 Motor de IA",
-                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
                     value="openai",
                 )
             
             # Sección de Integraciones Empresariales
-            with gr.Accordion("🔗 Integraciones Empresariales - Conecta tus sistemas automáticamente", open=False):
+            with gr.Accordion("🔗 Enterprise Integrations - Connect your systems automatically", open=False):
                 gr.Markdown("""
-                **Conecta tus sistemas empresariales para recibir documentos automáticamente:**
+                **Connect your enterprise systems to ingest documents automatically:**
                 - 📁 SharePoint/OneDrive (Microsoft Graph API)
                 - 📁 Google Drive/Workspace (Google Drive API)
                 - 💼 Salesforce, SAP, Odoo
                 - 📧 Gmail, Outlook
-                - 🖥️ Servidores internos (SMB/NFS) - Requiere acceso a red interna
+                - 🖥️ Internal servers (SMB/NFS) - requires internal network access
                 - 📦 DMS/ECM (Box, Alfresco, DocuWare, OpenText)
                 
-                **Nota:** Para recibir documentos automáticamente, tu servidor debe ser accesible desde internet (usa ngrok, cloudflare tunnel, o despliega on-premise).
+                **Note:** To receive documents automatically, your server must be reachable from the internet (use ngrok, cloudflare tunnel, or deploy on-premise).
                 """)
                 
                 with gr.Tabs():
                     # Tab: SharePoint/OneDrive
                     with gr.Tab("📁 SharePoint/OneDrive"):
-                        sharepoint_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi SharePoint")
+                        sharepoint_name = gr.Textbox(label="Connection name", placeholder="My SharePoint")
                         sharepoint_client_id = gr.Textbox(label="Client ID (Azure App Registration)", type="password")
                         sharepoint_client_secret = gr.Textbox(label="Client Secret", type="password")
                         sharepoint_tenant_id = gr.Textbox(label="Tenant ID")
-                        sharepoint_site_url = gr.Textbox(label="Site URL (opcional)", placeholder="https://tuempresa.sharepoint.com/sites/misitio")
-                        sharepoint_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
-                        sharepoint_connect_btn = gr.Button("🔗 Conectar SharePoint", variant="secondary")
+                        sharepoint_site_url = gr.Textbox(label="Site URL (optional)", placeholder="https://yourcompany.sharepoint.com/sites/mysite")
+                        sharepoint_auto_sync = gr.Checkbox(label="Automatic sync", value=True)
+                        sharepoint_connect_btn = gr.Button("🔗 Connect SharePoint", variant="secondary")
                         sharepoint_status = gr.Markdown()
                     
                     # Tab: Google Drive
                     with gr.Tab("📁 Google Drive"):
-                        gdrive_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi Google Drive")
+                        gdrive_name = gr.Textbox(label="Connection name", placeholder="My Google Drive")
                         gdrive_access_token = gr.Textbox(label="Access Token (OAuth)", type="password", lines=2)
-                        gdrive_refresh_token = gr.Textbox(label="Refresh Token (opcional)", type="password")
-                        gdrive_folder_id = gr.Textbox(label="Folder ID (opcional)", placeholder="Dejar vacío para sincronizar todo")
-                        gdrive_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
-                        gdrive_connect_btn = gr.Button("🔗 Conectar Google Drive", variant="secondary")
+                        gdrive_refresh_token = gr.Textbox(label="Refresh Token (optional)", type="password")
+                        gdrive_folder_id = gr.Textbox(label="Folder ID (optional)", placeholder="Leave empty to sync all")
+                        gdrive_auto_sync = gr.Checkbox(label="Automatic sync", value=True)
+                        gdrive_connect_btn = gr.Button("🔗 Connect Google Drive", variant="secondary")
                         gdrive_status = gr.Markdown()
                     
                     # Tab: Salesforce
                     with gr.Tab("💼 Salesforce"):
-                        salesforce_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi Salesforce")
-                        salesforce_instance_url = gr.Textbox(label="Instance URL", placeholder="https://tuempresa.salesforce.com")
+                        salesforce_name = gr.Textbox(label="Connection name", placeholder="My Salesforce")
+                        salesforce_instance_url = gr.Textbox(label="Instance URL", placeholder="https://yourcompany.salesforce.com")
                         salesforce_access_token = gr.Textbox(label="Access Token", type="password")
-                        salesforce_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
-                        salesforce_connect_btn = gr.Button("🔗 Conectar Salesforce", variant="secondary")
+                        salesforce_auto_sync = gr.Checkbox(label="Automatic sync", value=True)
+                        salesforce_connect_btn = gr.Button("🔗 Connect Salesforce", variant="secondary")
                         salesforce_status = gr.Markdown()
                     
                     # Tab: Email (Gmail/Outlook)
                     with gr.Tab("📧 Email"):
-                        email_name = gr.Textbox(label="Nombre de la conexión", placeholder="Mi Gmail")
-                        email_type = gr.Radio(label="Tipo de email", choices=[("Gmail", "gmail"), ("Outlook", "outlook")], value="gmail")
+                        email_name = gr.Textbox(label="Connection name", placeholder="My Gmail")
+                        email_type = gr.Radio(label="Email type", choices=[("Gmail", "gmail"), ("Outlook", "outlook")], value="gmail")
                         email_access_token = gr.Textbox(label="Access Token (OAuth)", type="password", lines=2)
-                        email_refresh_token = gr.Textbox(label="Refresh Token (opcional)", type="password")
-                        email_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
-                        email_connect_btn = gr.Button("🔗 Conectar Email", variant="secondary")
+                        email_refresh_token = gr.Textbox(label="Refresh Token (optional)", type="password")
+                        email_auto_sync = gr.Checkbox(label="Automatic sync", value=True)
+                        email_connect_btn = gr.Button("🔗 Connect Email", variant="secondary")
                         email_status = gr.Markdown()
                     
                     # Tab: SMB (Servidores internos)
                     with gr.Tab("🖥️ Servidor SMB (Red Interna)"):
-                        smb_name = gr.Textbox(label="Nombre de la conexión", placeholder="Servidor Compartido")
-                        smb_server = gr.Textbox(label="Servidor", placeholder="192.168.1.100 o servidor.local")
-                        smb_share = gr.Textbox(label="Recurso compartido", placeholder="Documentos")
-                        smb_username = gr.Textbox(label="Usuario")
-                        smb_password = gr.Textbox(label="Contraseña", type="password")
-                        smb_domain = gr.Textbox(label="Dominio (opcional)")
-                        smb_auto_sync = gr.Checkbox(label="Sincronización automática", value=True)
-                        smb_connect_btn = gr.Button("🔗 Conectar SMB", variant="secondary")
+                        smb_name = gr.Textbox(label="Connection name", placeholder="Shared Server")
+                        smb_server = gr.Textbox(label="Server", placeholder="192.168.1.100 or server.local")
+                        smb_share = gr.Textbox(label="Shared resource", placeholder="Documents")
+                        smb_username = gr.Textbox(label="Username")
+                        smb_password = gr.Textbox(label="Password", type="password")
+                        smb_domain = gr.Textbox(label="Domain (optional)")
+                        smb_auto_sync = gr.Checkbox(label="Automatic sync", value=True)
+                        smb_connect_btn = gr.Button("🔗 Connect SMB", variant="secondary")
                         smb_status = gr.Markdown()
                 
                 # Lista de conexiones activas
                 with gr.Row():
                     connections_list = gr.Markdown(
-                        label="📋 Conexiones Activas",
-                        value="📋 **Conexiones** - Haz clic en 'Actualizar Lista' para ver las conexiones activas."
+                        label="📋 Active Connections",
+                        value="📋 **Connections** - Click 'Refresh List' to see active connections."
                     )
-                    refresh_connections_btn = gr.Button("🔄 Actualizar Lista", variant="secondary", scale=0.3)
+                    refresh_connections_btn = gr.Button("🔄 Refresh List", variant="secondary", scale=0.3)
                 
                 # Sincronización manual
                 with gr.Row():
-                    sync_connection_id = gr.Textbox(label="ID de Conexión a Sincronizar", placeholder="sharepoint_1234567890")
-                    sync_btn = gr.Button("🔄 Sincronizar Ahora", variant="secondary")
+                    sync_connection_id = gr.Textbox(label="Connection ID to Sync", placeholder="sharepoint_1234567890")
+                    sync_btn = gr.Button("🔄 Sync Now", variant="secondary")
                     sync_status = gr.Markdown()
             
-            data_sight_button = gr.Button("🚀 Procesar con Data Sight", variant="primary", size="lg")
-            data_sight_output = gr.Markdown(label="📊 Resultados Data Sight")
+            data_sight_button = gr.Button("🚀 Process with Data Sight", variant="primary", size="lg")
+            data_sight_output = gr.Markdown(label="📊 Data Sight Results")
 
             # Eventos de conexión
             sharepoint_connect_btn.click(
@@ -10642,59 +10643,59 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[sync_status]
             )
             
-            # Sección de Automatización Inteligente
-            with gr.Accordion("🤖 Automatización Inteligente - ENTENDER → DECIDIR → ACTUAR", open=False):
+            # Intelligent Automation section
+            with gr.Accordion("🤖 Intelligent Automation - UNDERSTAND → DECIDE → ACT", open=False):
                 gr.Markdown("""
-                **Sistema de automatización que hace 3 cosas mejor que nadie:**
+                **Automation system that does 3 things exceptionally well:**
                 
-                ✅ **1. ENTENDER**: Lee y comprende automáticamente PDFs, emails, contratos, facturas, etc.
-                ✅ **2. DECIDIR**: Toma decisiones lógicas como un empleado (clasificar, alertar, enrutar)
-                ✅ **3. ACTUAR**: Hace cosas automáticamente (emails, tickets, BD, mover archivos, etc.)
+                ✅ **1. UNDERSTAND**: Automatically reads PDFs, emails, contracts, invoices, etc.
+                ✅ **2. DECIDE**: Makes logical decisions like an employee (classify, alert, route)
+                ✅ **3. ACT**: Executes actions automatically (emails, tickets, DB, move files, etc.)
                 
-                **TOP 20 Tareas Automáticas Implementadas:**
-                1. ✅ Descargar PDFs automáticamente
-                2. ✅ Clasificar documentos (factura, contrato, recibo, etc.)
-                3. ✅ Renombrar archivos automáticamente
-                4. ✅ Mover archivos a carpetas correctas
-                5. ✅ Crear resúmenes automáticos
-                6. ✅ Extraer campos clave (fechas, montos, proveedores)
-                7. ✅ Guardar extracción en Excel/JSON
-                8. ✅ Enviar email automático
-                9. ✅ Crear tickets automáticos (Zendesk, Jira)
-                10. ✅ Detectar documentos duplicados
-                11. 🔄 Comparar versiones de documentos
-                12. ✅ Alertas automáticas por condiciones
-                13. ✅ Convertir documentos a PDF
-                14. ✅ Generar PDF con resumen
-                15. ✅ Crear carpetas automáticamente
-                16. ✅ Guardar metadata en BD
-                17. ✅ Leer inbox y descargar adjuntos
-                18. 🔄 Responder automáticamente pidiendo info faltante
-                19. ✅ Enviar datos a webhook/API
-                20. ✅ Generar dashboard de documentos procesados
+                **TOP 20 Implemented Automatic Tasks:**
+                1. ✅ Auto-download PDFs
+                2. ✅ Classify documents (invoice, contract, receipt, etc.)
+                3. ✅ Auto-rename files
+                4. ✅ Move files to correct folders
+                5. ✅ Create automatic summaries
+                6. ✅ Extract key fields (dates, amounts, vendors)
+                7. ✅ Save extraction to Excel/JSON
+                8. ✅ Send automatic email
+                9. ✅ Create automatic tickets (Zendesk, Jira)
+                10. ✅ Detect duplicate documents
+                11. 🔄 Compare document versions
+                12. ✅ Automatic alerts by conditions
+                13. ✅ Convert documents to PDF
+                14. ✅ Generate PDF with summary
+                15. ✅ Create folders automatically
+                16. ✅ Save metadata to DB
+                17. ✅ Read inbox and download attachments
+                18. 🔄 Auto-reply requesting missing info
+                19. ✅ Send data to webhook/API
+                20. ✅ Generate processed-docs dashboard
                 """)
                 
                 with gr.Tabs():
                     # Tab: Reglas de Automatización
-                    with gr.Tab("⚙️ Reglas de Automatización"):
-                        gr.Markdown("### Crear Nueva Regla de Automatización")
+                    with gr.Tab("⚙️ Automation Rules"):
+                        gr.Markdown("### Create New Automation Rule")
                         
-                        rule_name = gr.Textbox(label="Nombre de la Regla", placeholder="Facturas > $10,000 → Alerta")
+                        rule_name = gr.Textbox(label="Rule Name", placeholder="Invoices > $10,000 → Alert")
                         rule_condition_type = gr.Dropdown(
-                            label="Tipo de Condición",
+                            label="Condition Type",
                             choices=[
-                                ("Tipo de Documento", "document_type"),
-                                ("Campo igual a", "field_equals"),
-                                ("Campo mayor que", "field_greater_than"),
-                                ("Nombre de archivo contiene", "filename_contains"),
+                                ("Document Type", "document_type"),
+                                ("Field equals", "field_equals"),
+                                ("Field greater than", "field_greater_than"),
+                                ("Filename contains", "filename_contains"),
                             ],
                             value="document_type"
                         )
-                        rule_condition_value = gr.Textbox(label="Valor de Condición", placeholder="factura o 10000")
-                        rule_condition_field = gr.Textbox(label="Campo (si aplica)", placeholder="monto", visible=False)
+                        rule_condition_value = gr.Textbox(label="Condition Value", placeholder="invoice or 10000")
+                        rule_condition_field = gr.Textbox(label="Field (if applies)", placeholder="amount", visible=False)
                         
                         rule_actions = gr.Textbox(
-                            label="Acciones (JSON)",
+                            label="Actions (JSON)",
                             placeholder='''[
   {
     "type": "rename_file",
@@ -10737,31 +10738,31 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
   }
 ]''',
                             lines=10,
-                            info="Tipos de acciones disponibles: rename_file, move_file, save_to_excel, send_email, create_ticket, send_webhook, alert, convert_to_pdf, generate_summary_pdf, create_folder"
+                            info="Available actions: rename_file, move_file, save_to_excel, send_email, create_ticket, send_webhook, alert, convert_to_pdf, generate_summary_pdf, create_folder"
                         )
-                        rule_priority = gr.Slider(label="Prioridad (mayor = más importante)", minimum=0, maximum=10, value=5)
-                        rule_enabled = gr.Checkbox(label="Regla activa", value=True)
+                        rule_priority = gr.Slider(label="Priority (higher = more important)", minimum=0, maximum=10, value=5)
+                        rule_enabled = gr.Checkbox(label="Rule enabled", value=True)
                         
-                        create_rule_btn = gr.Button("➕ Crear Regla", variant="primary")
+                        create_rule_btn = gr.Button("➕ Create Rule", variant="primary")
                         create_rule_status = gr.Markdown()
                     
                     # Tab: Reglas Existentes
-                    with gr.Tab("📋 Reglas Existentes"):
-                        rules_list = gr.Markdown(label="Lista de Reglas")
-                        refresh_rules_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                    with gr.Tab("📋 Existing Rules"):
+                        rules_list = gr.Markdown(label="Rules List")
+                        refresh_rules_btn = gr.Button("🔄 Refresh List", variant="secondary")
                         
-                        delete_rule_id = gr.Textbox(label="ID de Regla a Eliminar", placeholder="rule_1234567890")
-                        delete_rule_btn = gr.Button("🗑️ Eliminar Regla", variant="stop")
+                        delete_rule_id = gr.Textbox(label="Rule ID to Delete", placeholder="rule_1234567890")
+                        delete_rule_btn = gr.Button("🗑️ Delete Rule", variant="stop")
                         delete_rule_status = gr.Markdown()
                     
                     # Tab: Dashboard
                     with gr.Tab("📊 Dashboard"):
-                        dashboard_output = gr.Markdown(label="Dashboard de Documentos Procesados")
-                        refresh_dashboard_btn = gr.Button("🔄 Actualizar Dashboard", variant="secondary")
+                        dashboard_output = gr.Markdown(label="Processed Documents Dashboard")
+                        refresh_dashboard_btn = gr.Button("🔄 Refresh Dashboard", variant="secondary")
                 
                 # Funciones para automatización
                 def create_automation_rule(name, condition_type, condition_value, condition_field, actions_json, priority, enabled):
-                    """Crea una nueva regla de automatización."""
+                    """Create a new automation rule."""
                     try:
                         import uuid
                         rule_id = f"rule_{uuid.uuid4().hex[:12]}"
@@ -10786,55 +10787,55 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                         
                         data_sight_automation.add_rule(rule)
                         
-                        return f"✅ Regla '{name}' creada exitosamente.\n\n**Rule ID:** `{rule_id}`"
+                        return f"✅ Rule '{name}' created successfully.\n\n**Rule ID:** `{rule_id}`"
                     except Exception as e:
-                        return f"❌ Error creando regla: {str(e)}"
+                        return f"❌ Error creating rule: {str(e)}"
                 
                 def list_automation_rules():
-                    """Lista todas las reglas de automatización."""
+                    """List all automation rules."""
                     try:
                         rules = data_sight_automation.list_rules()
                         if not rules:
-                            return "📋 **No hay reglas configuradas.**\n\nCrea una regla desde la pestaña 'Reglas de Automatización'."
+                            return "📋 **No rules configured.**\n\nCreate a rule from the 'Automation Rules' tab."
                         
-                        lines = ["## 📋 Reglas de Automatización\n\n"]
-                        lines.append("| Nombre | Condición | Acciones | Prioridad | Estado |\n")
+                        lines = ["## 📋 Automation Rules\n\n"]
+                        lines.append("| Name | Condition | Actions | Priority | Status |\n")
                         lines.append("|--------|-----------|----------|-----------|--------|\n")
                         
                         for rule in rules:
                             condition_str = f"{rule['condition'].get('type', 'N/A')}: {rule['condition'].get('value', 'N/A')}"
                             actions_str = ", ".join([a.get('type', 'N/A') for a in rule['actions']])
-                            status = "✅ Activa" if rule['enabled'] else "❌ Inactiva"
+                            status = "✅ Active" if rule['enabled'] else "❌ Inactive"
                             
                             lines.append(f"| {rule['name']} | {condition_str} | {actions_str} | {rule['priority']} | {status} |\n")
                             lines.append(f"| `{rule['rule_id']}` | | | | |\n")
                         
                         return "".join(lines)
                     except Exception as e:
-                        return f"❌ Error listando reglas: {str(e)}"
+                        return f"❌ Error listing rules: {str(e)}"
                 
                 def delete_automation_rule(rule_id):
-                    """Elimina una regla de automatización."""
+                    """Delete an automation rule."""
                     try:
                         if not rule_id or not rule_id.strip():
-                            return "❌ Por favor, ingresa un Rule ID válido."
+                            return "❌ Please enter a valid Rule ID."
                         
                         data_sight_automation.remove_rule(rule_id.strip())
-                        return f"✅ Regla `{rule_id}` eliminada exitosamente."
+                        return f"✅ Rule `{rule_id}` deleted successfully."
                     except Exception as e:
-                        return f"❌ Error eliminando regla: {str(e)}"
+                        return f"❌ Error deleting rule: {str(e)}"
                 
                 def generate_automation_dashboard():
-                    """Genera dashboard de documentos procesados."""
+                    """Generate dashboard of processed documents."""
                     try:
                         dashboard = data_sight_automation.generate_dashboard()
                         
-                        lines = ["## 📊 Dashboard de Documentos Procesados\n\n"]
-                        lines.append(f"**Total procesados:** {dashboard.get('total_processed', 0)}\n\n")
+                        lines = ["## 📊 Processed Documents Dashboard\n\n"]
+                        lines.append(f"**Total processed:** {dashboard.get('total_processed', 0)}\n\n")
                         
                         if dashboard.get('by_type'):
-                            lines.append("### Por Tipo de Documento\n\n")
-                            lines.append("| Tipo | Cantidad |\n")
+                            lines.append("### By Document Type\n\n")
+                            lines.append("| Type | Count |\n")
                             lines.append("|------|----------|\n")
                             for doc_type, count in dashboard['by_type'].items():
                                 lines.append(f"| {doc_type} | {count} |\n")
@@ -10879,45 +10880,45 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 show_progress="full"
             )
 
-        # Tab 4.8: ChatDoc - Sistema de Inteligencia Documental Avanzado (Eric Schmidt Style)
+        # Tab 4.8: ChatDoc - Advanced Document Intelligence (Eric Schmidt Style)
         with gr.Tab("💬 ChatDoc"):
-            gr.Markdown("### 💬 ChatDoc - Sistema de Inteligencia Documental Avanzado\n")
+            gr.Markdown("### 💬 ChatDoc - Advanced Document Intelligence\n")
             gr.Markdown(
                 """
-                **🚀 Sistema Super Mega Inteligente - Optimizado según Eric Schmidt**
+                **🚀 Super-intelligent system - Optimized per Eric Schmidt**
                 
-                **PIPELINE MDP COMPLETO:**
-                - 🧠 **Gist Memories Persistentes**: Resúmenes ligeros por documento para filtrado ultra-rápido
-                - 🔍 **Filtrado Agresivo**: Filtra 70-90% de documentos irrelevantes con LLM rápido antes de procesar
-                - 🏗️ **Extracción Estructurada (Semantic ETL)**: Convierte PDFs en datos estructurados (contratos, facturas, clientes, fechas, montos)
-                - 🎯 **NL2Query**: Consultas precisas sobre datos estructurados (ej: "Contratos que vencen en febrero", "Clientes con deuda > $10k")
-                - 📊 **Análisis Comparativo Automático**: Detecta patrones, outliers y contradicciones entre documentos
-                - 🧩 **Síntesis Map-Reduce**: Contexto compacto LLM-ready para razonamiento eficiente
-                - ✅ **AI-to-AI Verification**: Verificación de consistencia y precisión automática
-                - 📄 **Respuestas por Documento**: Una pregunta → múltiples respuestas (una por cada PDF relevante)
-                - 📚 **Citas Precisas**: Página y párrafo exactos para verificación completa
+                **FULL MDP PIPELINE:**
+                - 🧠 **Persistent Gist Memories**: Lightweight per-doc summaries for ultra-fast filtering
+                - 🔍 **Aggressive Filtering**: Filters 70-90% irrelevant docs with fast LLM before heavy processing
+                - 🏗️ **Structured Extraction (Semantic ETL)**: Converts PDFs into structured data (contracts, invoices, clients, dates, amounts)
+                - 🎯 **NL2Query**: Precise queries on structured data (e.g., "Contracts expiring in February", "Clients with debt > $10k")
+                - 📊 **Automatic Comparative Analysis**: Detects patterns, outliers, contradictions across documents
+                - 🧩 **Map-Reduce Synthesis**: Compact, LLM-ready context for efficient reasoning
+                - ✅ **AI-to-AI Verification**: Automatic consistency and accuracy check
+                - 📄 **Per-Document Answers**: One question → multiple answers (one per relevant PDF)
+                - 📚 **Precise Citations**: Exact page and paragraph for full verification
                 
-                **CAPACIDADES AVANZADAS:**
-                - 💬 Conversación natural con 500+ PDFs simultáneamente
-                - 🧠 Context Folding para conversaciones largas
-                - 🔍 Data Provenance para trazabilidad completa
-                - 🎯 Chain of Thought Reasoning paso a paso
-                - 🛤️ Path-dependent Reasoning (múltiples enfoques)
-                - 📈 Test Time Training (mejora continua)
-                - 👤 Person in the Loop (control humano)
-                - 🎲 Reinforcement Planning (estrategias adaptativas)
+                **ADVANCED CAPABILITIES:**
+                - 💬 Natural conversation with 500+ PDFs simultaneously
+                - 🧠 Context Folding for long conversations
+                - 🔍 Data Provenance for full traceability
+                - 🎯 Chain of Thought reasoning step-by-step
+                - 🛤️ Path-dependent Reasoning (multiple approaches)
+                - 📈 Test Time Training (continuous improvement)
+                - 👤 Person in the Loop (human control)
+                - 🎲 Reinforcement Planning (adaptive strategies)
                 
-                **💡 Ejemplos de Preguntas:**
-                - "¿Cuáles son los contratos que vencen en febrero?"
-                - "Listame todos los clientes con deuda mayor a USD 10,000"
-                - "¿Qué documentos tienen cláusulas de riesgo?"
-                - "Compara los términos de pago entre todos los contratos"
+                **💡 Example Questions:**
+                - "Which contracts expire in February?"
+                - "List all clients with debt greater than USD 10,000"
+                - "Which documents have risk clauses?"
+                - "Compare payment terms across all contracts"
                 
-                **⚡ Optimizaciones Eric Schmidt:**
-                - Procesamiento masivo paralelo (500+ PDFs)
-                - Separación: LLM rápido (filtrado) vs LLM fuerte (razonamiento)
-                - Datos estructurados como base, LLM como cerebro (no como base de datos)
-                - Vista global ejecutiva + respuestas detalladas por documento
+                **⚡ Eric Schmidt Optimizations:**
+                - Massive parallel processing (500+ PDFs)
+                - Separation: fast LLM (filter) vs strong LLM (reasoning)
+                - Structured data as base, LLM as brain (not as database)
+                - Executive global view + per-document detailed answers
                 """
             )
 
@@ -10926,76 +10927,76 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
 
             with gr.Row():
                 chatdoc_files = gr.Files(
-                    label="📂 Documentos para ChatDoc (PDF, DOCX, TXT, MD) - Hasta 500+ documentos",
+                    label="📂 ChatDoc Documents (PDF, DOCX, TXT, MD) - Up to 500+ docs",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
                 chatdoc_convert_pdf_btn = gr.Button(
-                    "🧾 Convertir a PDF",
+                    "🧾 Convert to PDF",
                     variant="secondary",
                     scale=0,
                 )
 
             with gr.Row():
                 chatdoc_speed_mode = gr.Radio(
-                    label="⚡ Modo de Velocidad",
+                    label="⚡ Speed Mode",
                     choices=[
-                        ("🚀 Rápido", "fast"),
-                        ("⚖️ Balanceado (recomendado)", "balanced"),
-                        ("🎯 Máxima Calidad", "quality")
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
                     ],
                     value="balanced",
                 )
                 provider_toggle_chatdoc = gr.Radio(
-                    label="🤖 Motor de IA",
-                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
                     value="openai",
-                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
                 )
 
             # Chatbot component
             chatdoc_chatbot = gr.Chatbot(
-                label="💬 Conversación ChatDoc",
+                label="💬 ChatDoc Conversation",
                 height=500,
                 show_copy_button=True,
             )
 
             with gr.Row():
                 chatdoc_input = gr.Textbox(
-                    label="Escribe tu pregunta",
-                    placeholder="Ejemplo: ¿Qué información importante hay en estos documentos?",
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
                     lines=2,
                     scale=4,
                 )
-                chatdoc_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                chatdoc_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
 
             with gr.Row():
-                clear_chatdoc_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
-                clear_chatdoc_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
-
-            chatdoc_status = gr.Markdown(label="ℹ️ Estado del ChatDoc")
+                clear_chatdoc_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_chatdoc_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+            
+            chatdoc_status = gr.Markdown(label="ℹ️ ChatDoc Status")
 
             # Event handlers
             def chatdoc_submit(message, history, files, session_id, speed_mode, provider):
                 if not message.strip():
-                    return history, history, "⚠️ Escribe una pregunta."
+                    return history, history, "⚠️ Write a question."
                 if not files:
-                    return history, history, "⚠️ Primero carga documentos."
+                    return history, history, "⚠️ Upload documents first."
                 
                 new_history, error = run_chatdoc_conversational(
                     message, history, files, session_id, speed_mode, provider
                 )
-                status = f"✅ {len(new_history)} mensajes en la conversación"
+                status = f"✅ {len(new_history)} messages in the conversation"
                 if error:
                     status = error
                 return new_history, new_history, status
 
             def clear_chatdoc(history, session_id):
-                # Limpiar historial de ChatDoc
+                # Clear ChatDoc history
                 global chatdoc_instance
                 if chatdoc_instance and session_id in chatdoc_instance.sessions:
                     chatdoc_instance.sessions[session_id]["history"] = []
-                return [], "✅ Chat limpiado. Puedes continuar la conversación."
+                return [], "✅ Chat cleared. You can continue the conversation."
 
             def clear_chatdoc_files(files, session_id):
                 global chatdoc_instance
@@ -11003,12 +11004,12 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     chatdoc_instance.sessions[session_id]["processed_files"].clear()
                     chatdoc_instance.sessions[session_id]["docs"] = []
                     chatdoc_instance.sessions[session_id]["retriever"] = None
-                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+                return None, "✅ Documents cleared. You can upload new ones."
 
             def convert_chatdoc_files_to_pdf(files):
-                """Convierte cualquier archivo soportado a PDF antes de usarlo en ChatDoc."""
+                """Convert any supported file to PDF before using it in ChatDoc."""
                 if not files:
-                    return None, "⚠️ Primero carga documentos para convertir."
+                    return None, "⚠️ Upload documents first to convert."
 
                 converted_files = []
                 # Usar un subdirectorio dentro del memory_dir para PDFs temporales de ChatDoc
@@ -11029,10 +11030,10 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             # Gradio acepta rutas como strings en Files
                             converted_files.append(str(pdf_path))
                     except Exception:
-                        # Si algo falla, mantener el archivo original
+                        # If something fails, keep the original file
                         converted_files.append(f)
 
-                return converted_files, "✅ Documentos convertidos a PDF. Ahora puedes usarlos en la conversación."
+                return converted_files, "✅ Documents converted to PDF. You can use them in the conversation now."
 
             chatdoc_submit_btn.click(
                 fn=chatdoc_submit,
@@ -11060,68 +11061,68 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[chatdoc_files, chatdoc_status],
             )
 
-        # Tab 4.7: Enterprise API Supreme - Optimizado según principios de Eric Schmidt
+        # Tab 4.7: Enterprise API Supreme - Optimized (Eric Schmidt Principles)
         with gr.Tab("👑 Enterprise API Supreme"):
-            gr.Markdown("### 👑 Enterprise API Supreme - Optimizado (Eric Schmidt Style)")
+            gr.Markdown("### 👑 Enterprise API Supreme - Optimized (Eric Schmidt Style)")
             gr.Markdown("""
-            **🚀 Pipeline Optimizado para 100-500+ PDFs:**
+            **🚀 Optimized pipeline for 100-500+ PDFs:**
             
-            **Fase 1: Procesamiento Masivo Paralelo** (Scale Computing)
-            - Procesa cientos de documentos simultáneamente
+            **Phase 1: Massive Parallel Processing** (Scale Computing)
+            - Processes hundreds of documents simultaneously
             
-            **Fase 2: Gist Memories Persistentes**
-            - Resúmenes ligeros por documento guardados permanentemente
-            - Permite filtrado rápido sin re-procesar
+            **Phase 2: Persistent Gist Memories**
+            - Lightweight per-document summaries stored permanently
+            - Enables fast filtering without reprocessing
             
-            **Fase 3: Filtrado Agresivo (Memory-Guided)**
-            - Filtra 70-90% de documentos irrelevantes usando LLM rápido
-            - Solo procesa documentos realmente relevantes
+            **Phase 3: Aggressive Filtering (Memory-Guided)**
+            - Filters 70-90% irrelevant docs using fast LLM
+            - Only processes truly relevant documents
             
-            **Fase 4: Extracción Estructurada en Paralelo (Semantic ETL)**
-            - Extrae campos específicos: contratos (fechas, montos, partes), facturas (deudas, clientes)
-            - Convierte PDFs en "base de datos" estructurada
+            **Phase 4: Structured Extraction in Parallel (Semantic ETL)**
+            - Extracts specific fields: contracts (dates, amounts, parties), invoices (debts, customers)
+            - Turns PDFs into structured “database”
             
-            **Fase 5: Análisis Comparativo Automático**
-            - Detecta patrones comunes, outliers, contradicciones
-            - Compara entre todos los documentos automáticamente
+            **Phase 5: Automatic Comparative Analysis**
+            - Detects common patterns, outliers, contradictions
+            - Compares across all documents automatically
             
-            **Fase 6: Síntesis Map-Reduce**
-            - Contexto compacto LLM-ready
-            - Reduce cientos de documentos a conocimiento estructurado
+            **Phase 6: Map-Reduce Synthesis**
+            - Compact, LLM-ready context
+            - Reduces hundreds of documents to structured knowledge
             
-            **Fase 7: Detección Automática**
-            - Problemas, oportunidades y patrones detectados automáticamente
+            **Phase 7: Automatic Detection**
+            - Problems, opportunities, and patterns detected automatically
             
-            **Fase 8: Verificación de IA por IA**
-            - Segundo modelo verifica consistencia y reglas de negocio
+            **Phase 8: AI-on-AI Verification**
+            - Second model checks consistency and business rules
             
-            **Fase 9: Resumen Ejecutivo C-Level**
-            - Reporte tipo consultor para toma de decisiones
+            **Phase 9: C-Level Executive Summary**
+            - Consultant-style report for decision making
             
-            **💼 Perfecto para:**
-            - Procesar 100-500+ PDFs de golpe (datarooms, carpetas de contratos)
-            - Consultas precisas tipo "¿Qué contratos vencen en febrero?"
-            - "Listame clientes con deuda > USD 10.000" (NL2Query sobre datos estructurados)
-            - Análisis comparativo masivo (M&A, due diligence, compliance)
+            **💼 Perfect for:**
+            - Processing 100-500+ PDFs at once (datarooms, contract folders)
+            - Precise queries like "Which contracts expire in February?"
+            - "List clients with debt > USD 10,000" (NL2Query on structured data)
+            - Massive comparative analysis (M&A, due diligence, compliance)
             """)
             
             with gr.Row():
                 enterprise_supreme_files = gr.Files(
-                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD) - Recomendado: 50-500 PDFs",
+                    label="📂 Enterprise Documents (PDF, DOCX, TXT, MD) - Recommended: 50-500 PDFs",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
                 rules_input_supreme = gr.Textbox(
-                    label="⚙️ Reglas y Automatizaciones (JSON opcional)",
+                    label="⚙️ Rules & Automations (optional JSON)",
                     placeholder='''[
   {
-    "name": "Alerta de Contrato Vencido",
+    "name": "Expired Contract Alert",
     "type": "condition",
     "condition": {
       "type": "keyword",
-      "keyword": "vencimiento"
+      "keyword": "expiration"
     },
     "action": {
       "type": "notify",
@@ -11135,7 +11136,7 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             with gr.Row():
                 with gr.Column():
                     auto_detect_check_supreme = gr.Checkbox(
-                        label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                        label="🔍 Automatic Detection (Problems, Opportunities, Patterns)",
                         value=True,
                     )
                     enable_comparative_supreme = gr.Checkbox(
@@ -11402,11 +11403,11 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[scenario_output],
             )
             
-            # Historial de consultas
+            # Query history
             gr.Markdown("---\n\n")
-            gr.Markdown("### 🏛️ Historial de Consultas Empresariales\n\n")
+            gr.Markdown("### 🏛️ Enterprise Query History\n\n")
             query_history_output = gr.Markdown(
-                value="**💡 Las consultas ejecutadas se guardarán automáticamente en el historial.**"
+                value="**💡 Executed queries will be saved automatically to history.**"
             )
             
             def load_query_history(provider):
@@ -11414,100 +11415,100 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                     temp_supreme = EnterpriseAPISupremeMode(config, provider=provider)
                     history_summary = temp_supreme.get_query_history_summary(limit=10)
                     
-                    output = f"**Total de consultas:** {history_summary['total_queries']}\n\n"
+                    output = f"**Total queries:** {history_summary['total_queries']}\n\n"
                     
                     if history_summary['recent_queries']:
-                        output += "### 📋 Consultas Recientes\n\n"
+                        output += "### 📋 Recent Queries\n\n"
                         for query in history_summary['recent_queries'][-5:]:
                             output += f"- **{query.get('query', 'N/A')[:100]}** ({query.get('category', 'custom')})\n"
-                            output += f"  - Fecha: {query.get('timestamp', 'N/A')[:10]}\n"
-                            output += f"  - Resultados: {query.get('total_matches', 0)}\n\n"
+                            output += f"  - Date: {query.get('timestamp', 'N/A')[:10]}\n"
+                            output += f"  - Results: {query.get('total_matches', 0)}\n\n"
                     
                     return output
                 except Exception as e:
-                    return f"⚠️ Error al cargar historial: {str(e)}"
+                    return f"⚠️ Error loading history: {str(e)}"
             
-            refresh_history_button = gr.Button("🔄 Actualizar Historial", variant="secondary")
+            refresh_history_button = gr.Button("🔄 Refresh History", variant="secondary")
             refresh_history_button.click(
                 fn=load_query_history,
                 inputs=[provider_toggle_supreme],
                 outputs=[query_history_output],
             )
         
-        # Tab 4.8: Enterprise API Gold - Sistema de Inteligencia Estratégica Empresarial
+        # Tab 4.8: Enterprise API Gold - Strategic Intelligence System
         with gr.Tab("🏆 Enterprise API Gold"):
-            gr.Markdown("### 🏆 Enterprise API Gold - Sistema de Inteligencia Estratégica Empresarial")
+            gr.Markdown("### 🏆 Enterprise API Gold - Strategic Intelligence System")
             gr.Markdown("""
-            **🚀 NO ES SOLO ANÁLISIS → ES UN PARTNER ESTRATÉGICO AUTOMATIZADO**
+            **🚀 NOT JUST ANALYSIS → AN AUTOMATED STRATEGIC PARTNER**
             
-            **SISTEMA DE 5 CAPAS DE INTELIGENCIA ESTRATÉGICA:**
+            **6-LAYER STRATEGIC INTELLIGENCE SYSTEM:**
             
-            **⏱️ CAPA 1: DASHBOARD CEO (30 SEGUNDOS)**
-            - Riesgos críticos con acción inmediata
-            - Atenciones estratégicas para esta semana
-            - Tendencias positivas
-            - Impacto financiero agregado
+            **⏱️ LAYER 1: CEO DASHBOARD (30 SECONDS)**
+            - Critical risks with immediate action
+            - Strategic priorities for this week
+            - Positive trends
+            - Aggregated financial impact
             
-            **🔍 CAPA 2: VISTA EJECUTIVA POR DOCUMENTO (PRIORITIZADA)**
-            - 🔴 ROJO (crítico) → 🟡 AMARILLO (atención) → 🔵 AZUL (normal)
-            - Decisiones específicas por documento
-            - Responsables asignados
-            - Timeline concreto
+            **🔍 LAYER 2: EXECUTIVE VIEW PER DOCUMENT (PRIORITIZED)**
+            - 🔴 RED (critical) → 🟡 YELLOW (attention) → 🔵 BLUE (normal)
+            - Specific decisions per document
+            - Assigned owners
+            - Concrete timeline
             
-            **🧠 CAPA 3: DIAGNÓSTICO ESTRATÉGICO EMPRESARIAL**
-            - Score de salud financiera (0-10)
-            - Fortalezas y debilidades críticas
-            - Recomendaciones priorizadas
-            - Métricas objetivo cuantificadas
+            **🧠 LAYER 3: ENTERPRISE STRATEGIC DIAGNOSTIC**
+            - Financial health score (0-10)
+            - Critical strengths and weaknesses
+            - Prioritized recommendations
+            - Quantified target metrics
             
-            **🗺️ CAPA 4: MAPA ESTRATÉGICO VISUAL (90 DÍAS)**
-            - URGENTE (0-30 días): ROI 100% inmediato
-            - ESTRATÉGICO (30-60 días): Ventaja competitiva
-            - TRANSFORMACIONAL (60-90 días): Eficiencia sostenible
+            **🗺️ LAYER 4: VISUAL STRATEGIC ROADMAP (90 DAYS)**
+            - URGENT (0-30 days): Immediate 100% ROI
+            - STRATEGIC (30-60 days): Competitive advantage
+            - TRANSFORMATIONAL (60-90 days): Sustainable efficiency
             
-            **🎮 CAPA 5: SIMULACIÓN DE DECISIONES**
-            - Escenario actual (sin acción) → Costo 12 meses
-            - Escenario optimizado (acciones recomendadas) → Valor generado
-            - ROI calculado automáticamente
-            - Recomendación de Financial Advisor
+            **🎮 LAYER 5: DECISION SIMULATION**
+            - Current scenario (no action) → 12-month cost
+            - Optimized scenario (recommended actions) → Value generated
+            - ROI calculated automatically
+            - Financial Advisor recommendation
             
-            **🏛️ CAPA 6: MEMORIA CORPORATIVA & ALERTAS**
-            - Patrones históricos detectados
-            - Evolución recomendada (mes 1-12)
-            - Alertas proactivas futuras
+            **🏛️ LAYER 6: CORPORATE MEMORY & ALERTS**
+            - Historical patterns detected
+            - Recommended evolution (months 1-12)
+            - Proactive future alerts
             
-            **💼 VALOR DIFERENCIADOR:**
-            - De "aquí están tus documentos analizados" → "aquí está el futuro de tu empresa optimizado"
-            - De información pasada → Inteligencia futura
-            - De usuario decide qué hacer → Sistema recomienda camino óptimo
-            - De análisis estático → Simulación dinámica de escenarios
-            - De herramienta técnica → Partner estratégico automatizado
+            **💼 DIFFERENTIATOR:**
+            - From “here are your analyzed documents” → “here’s your company’s future optimized”
+            - From past information → future intelligence
+            - From user decides → system recommends optimal path
+            - From static analysis → dynamic scenario simulation
+            - From technical tool → automated strategic partner
             
-            **🎯 Perfecto para:**
-            - CEOs y ejecutivos que necesitan decisiones rápidas (30 segundos)
-            - Consultoría estratégica automatizada (como McKinsey interno)
-            - Simulación de decisiones antes de ejecutarlas
-            - Memoria corporativa y alertas proactivas
-            - Procesar 100-500+ PDFs con inteligencia estratégica
+            **🎯 Perfect for:**
+            - CEOs and executives needing fast decisions (30 seconds)
+            - Automated strategic consulting (your internal McKinsey)
+            - Simulating decisions before execution
+            - Corporate memory and proactive alerts
+            - Processing 100-500+ PDFs with strategic intelligence
             """)
             
             with gr.Row():
                 enterprise_gold_files = gr.Files(
-                    label="📂 Documentos Empresariales (PDF, DOCX, TXT, MD) - Recomendado: 50-500 PDFs",
+                    label="📂 Enterprise Documents (PDF, DOCX, TXT, MD) - Recommended: 50-500 PDFs",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
                 rules_input_gold = gr.Textbox(
-                    label="⚙️ Reglas y Automatizaciones (JSON opcional)",
+                    label="⚙️ Rules & Automations (optional JSON)",
                     placeholder='''[
   {
-    "name": "Alerta de Contrato Vencido",
+    "name": "Expired Contract Alert",
     "type": "condition",
     "condition": {
       "type": "keyword",
-      "keyword": "vencimiento"
+      "keyword": "expiration"
     },
     "action": {
       "type": "notify",
@@ -11521,31 +11522,31 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
             with gr.Row():
                 with gr.Column():
                     auto_detect_check_gold = gr.Checkbox(
-                        label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                        label="🔍 Automatic Detection (Problems, Opportunities, Patterns)",
                         value=True,
                     )
                     enable_comparative_gold = gr.Checkbox(
-                        label="📊 Análisis Comparativo Automático",
+                        label="📊 Automatic Comparative Analysis",
                         value=True,
-                        info="Compara todos los documentos para encontrar patrones, outliers y contradicciones"
+                        info="Compares all documents to find patterns, outliers, and contradictions"
                     )
                     enable_structured_extraction_gold = gr.Checkbox(
-                        label="🏗️ Extracción Estructurada (Semantic ETL)",
+                        label="🏗️ Structured Extraction (Semantic ETL)",
                         value=True,
-                        info="Extrae campos específicos: contratos (fechas, montos), facturas (deudas, clientes). Habilita NL2Query."
+                        info="Extracts specific fields: contracts (dates, amounts), invoices (debts, customers). Enables NL2Query."
                     )
                 
                 with gr.Column():
                     provider_toggle_gold = gr.Radio(
-                        label="🤖 Motor de IA",
-                        choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                        label="🤖 AI Engine",
+                        choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
                         value="openai",
-                        info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                        info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
                     )
             
-            enterprise_gold_button = gr.Button("🚀 Procesar con Enterprise API Gold", variant="primary", size="lg")
+            enterprise_gold_button = gr.Button("🚀 Process with Enterprise API Gold", variant="primary", size="lg")
             
-            enterprise_gold_output = gr.Markdown(label="📊 Resultados Enterprise API Gold")
+            enterprise_gold_output = gr.Markdown(label="📊 Enterprise API Gold Results")
             
             enterprise_gold_button.click(
                 fn=run_enterprise_api_gold_mode_streaming,
@@ -15107,21 +15108,21 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                 outputs=[support_composio_output]
                             )
         
-        # Tab 4.5: Chat Conversacional (NUEVO)
-        with gr.Tab("💬 Chat Conversacional"):
-            gr.Markdown("### Chat Prolongado con Documentos")
+        # Tab 4.5: Conversational Chat (NEW)
+        with gr.Tab("💬 Conversational Chat"):
+            gr.Markdown("### Long-Form Chat with Documents")
             gr.Markdown("""
-            **🚀 Conversación Natural con tus Documentos**
+            **🚀 Natural Conversation with Your Documents**
             
-            - 💬 Haz preguntas de seguimiento sin repetir contexto
-            - 📚 Carga documentos una vez, chatea todo lo que quieras
-            - 🧠 El sistema recuerda la conversación anterior
-            - 🔄 Ideal para explorar documentos en profundidad
+            - 💬 Ask follow-ups without repeating context
+            - 📚 Upload documents once, chat as much as you want
+            - 🧠 The system remembers prior conversation turns
+            - 🔄 Ideal for deep exploration of documents
             
-            **💡 Ejemplo:** 
-            - "¿Qué dice sobre X?"
-            - "Y sobre Y, qué menciona?"
-            - "Compara X con Y"
+            **💡 Example:** 
+            - "What does it say about X?"
+            - "And about Y, what does it mention?"
+            - "Compare X with Y"
             """)
             
             # Generar session_id único
@@ -15129,61 +15130,61 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
             
             with gr.Row():
                 chat_files = gr.Files(
-                    label="📂 Documentos para Chat (PDF, DOCX, TXT, MD) - Hasta 1000 documentos",
+                    label="📂 Chat Documents (PDF, DOCX, TXT, MD) - Up to 1000 documents",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
                 chat_speed_mode = gr.Radio(
-                    label="⚡ Modo de Velocidad",
+                    label="⚡ Speed Mode",
                     choices=[
-                        ("🚀 Rápido", "fast"),
-                        ("⚖️ Balanceado (recomendado)", "balanced"),
-                        ("🎯 Máxima Calidad", "quality")
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
                     ],
                     value="balanced",
                 )
                 provider_toggle_chat = gr.Radio(
-                    label="🤖 Motor de IA",
-                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
                     value="openai",
-                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
                 )
             
             # Chatbot component
             chatbot = gr.Chatbot(
-                label="💬 Conversación",
+                label="💬 Conversation",
                 height=500,
                 show_copy_button=True,
             )
             
             with gr.Row():
                 chat_input = gr.Textbox(
-                    label="Escribe tu pregunta",
-                    placeholder="Ejemplo: ¿Qué información importante hay en estos documentos?",
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
                     lines=2,
                     scale=4,
                 )
-                chat_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                chat_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
             
             with gr.Row():
-                clear_chat_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
-                clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+                clear_chat_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
             
-            chat_status = gr.Markdown(label="ℹ️ Estado del Chat")
+            chat_status = gr.Markdown(label="ℹ️ Chat Status")
             
             # Event handlers
             def chat_submit(message, history, files, session_id, speed_mode, provider):
                 if not message.strip():
-                    return history, history, "⚠️ Escribe una pregunta."
+                    return history, history, "⚠️ Write a question."
                 if not files:
-                    return history, history, "⚠️ Primero carga documentos."
+                    return history, history, "⚠️ Upload documents first."
                 
                 new_history, error = run_chat_conversational(
                     message, history, files, session_id, speed_mode, provider
                 )
-                status = f"✅ {len(new_history)} mensajes en la conversación"
+                status = f"✅ {len(new_history)} messages in the conversation"
                 if error:
                     status = error
                 return new_history, new_history, status
@@ -15197,7 +15198,7 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     chat_sessions[session_id]["processed_files"].clear()
                     chat_sessions[session_id]["docs"] = []
                     chat_sessions[session_id]["retriever"] = None
-                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+                return None, "✅ Documents cleared. You can upload new ones."
             
             chat_submit_btn.click(
                 fn=chat_submit,
@@ -15227,37 +15228,37 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 outputs=[chat_files, chat_status],
             )
         
-        # Tab 4.5.5: Chat Conversacional 2 (NUEVO - Versión Avanzada para Empresas)
-        with gr.Tab("💬 Chat Conversacional 2 (Enterprise)"):
-            gr.Markdown("### 🚀 Chat Conversacional 2 - Versión Avanzada para Empresas")
+        # Tab 4.5.5: Conversational Chat 2 (NEW - Advanced Enterprise Version)
+        with gr.Tab("💬 Conversational Chat 2 (Enterprise)"):
+            gr.Markdown("### 🚀 Conversational Chat 2 - Advanced Enterprise Version")
             gr.Markdown("""
-            **🌟 Diseñado para empresas que manejan 500+ PDFs por consulta**
+            **🌟 Designed for enterprises handling 500+ PDFs per query**
             
-            **✨ Capacidades Avanzadas:**
-            - 📦 **Context Folding**: Gestiona eficientemente contextos masivos (500+ PDFs)
-            - 🔍 **Data Provenance**: Rastrea el origen de cada información para compliance
-            - 🧠 **Chain of Thought**: Razona paso a paso en conversaciones complejas
-            - 🛤️ **Path-dependent Reasoning**: Prueba diferentes enfoques y aprende qué funciona mejor
-            - 📈 **Test Time Training**: Mejora continuamente con cada conversación
-            - 👤 **Person in the Loop**: Control humano para decisiones críticas
-            - 🌳 **Reinforcement Learning y Planning**: Prueba estrategias, retrocede si falla, aprende qué funciona (IMPRESCINDIBLE)
-            - 🔌 **MCP Potenciado**: Conecta con sistemas externos, bases de datos, APIs, navega datos crudos sin conectores (MUY PODEROSO)
+            **✨ Advanced Capabilities:**
+            - 📦 **Context Folding**: Efficiently handles massive contexts (500+ PDFs)
+            - 🔍 **Data Provenance**: Tracks the source of every piece of information for compliance
+            - 🧠 **Chain of Thought**: Step-by-step reasoning for complex conversations
+            - 🛤️ **Path-dependent Reasoning**: Tests multiple approaches and learns what works best
+            - 📈 **Test Time Training**: Continuously improves with every conversation
+            - 👤 **Person in the Loop**: Human control for critical decisions
+            - 🌳 **Reinforcement Learning & Planning**: Tests strategies, backtracks if needed, learns what works (CRITICAL)
+            - 🔌 **MCP Powered**: Connects to external systems, databases, APIs; navigates raw data without connectors (VERY POWERFUL)
             
-            **💼 Perfecto para:**
-            - Empresas que suben 500+ PDFs por consulta
-            - Conversaciones multi-turno complejas
-            - Requisitos de compliance y auditoría
-            - Necesidad de rastrear fuentes de información
-            - Decisiones que requieren aprobación humana
+            **💼 Perfect for:**
+            - Companies that upload 500+ PDFs per query
+            - Complex multi-turn conversations
+            - Compliance and audit requirements
+            - Need to track information sources
+            - Decisions requiring human approval
             
-            **💡 Ejemplo de uso:**
-            1. Sube 500 PDFs de documentos legales
-            2. Pregunta: "¿Cumplimos con GDPR según nuestros documentos y sistemas actuales?"
-            3. **RL** prueba diferentes estrategias de búsqueda (por palabras clave, secciones, fechas)
-            4. **MCP** se conecta a la base de datos para verificar datos actuales
-            5. El sistema combina información histórica (PDFs) con datos en tiempo real (BD)
-            6. Aprende qué estrategia funciona mejor para futuras consultas similares
-            7. Rastrea cada fuente para compliance y auditoría
+            **💡 Example:**
+            1. Upload 500 PDFs of legal documents
+            2. Ask: "Are we GDPR compliant according to our documents and current systems?"
+            3. **RL** tests different search strategies (keywords, sections, dates)
+            4. **MCP** connects to the database to verify current data
+            5. The system combines historical info (PDFs) with real-time data (DB)
+            6. It learns which strategy works best for future similar queries
+            7. It tracks every source for compliance and audit
             """)
             
             # Generar session_id único
@@ -15265,58 +15266,58 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
             
             with gr.Row():
                 chat2_files = gr.Files(
-                    label="📂 Documentos para Chat 2 (PDF, DOCX, TXT, MD) - Hasta 500+ documentos",
+                    label="📂 Chat 2 Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md"],
                 )
             
             with gr.Row():
                 chat2_speed_mode = gr.Radio(
-                    label="⚡ Modo de Velocidad",
+                    label="⚡ Speed Mode",
                     choices=[
-                        ("🚀 Rápido", "fast"),
-                        ("⚖️ Balanceado (recomendado)", "balanced"),
-                        ("🎯 Máxima Calidad", "quality")
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
                     ],
                     value="balanced",
                 )
                 chat2_provider_toggle = gr.Radio(
-                    label="🤖 Motor de IA",
-                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
                     value="openai",
-                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
                 )
             
             # Chatbot component
             chat2_bot = gr.Chatbot(
-                label="💬 Conversación Avanzada",
+                label="💬 Advanced Conversation",
                 height=500,
                 show_copy_button=True,
             )
             
             with gr.Row():
                 chat2_input = gr.Textbox(
-                    label="Escribe tu pregunta",
-                    placeholder="Ejemplo: ¿Qué información importante hay en estos 500 documentos?",
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
                     lines=2,
                     scale=4,
                 )
-                chat2_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                chat2_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
             
             with gr.Row():
-                clear_chat2_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
-                clear_chat2_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
-                chat2_stats_btn = gr.Button("📊 Ver Estadísticas", variant="secondary")
+                clear_chat2_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_chat2_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                chat2_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
             
-            chat2_status = gr.Markdown(label="ℹ️ Estado del Chat")
-            chat2_stats_output = gr.Markdown(label="📊 Estadísticas Avanzadas", visible=False)
+            chat2_status = gr.Markdown(label="ℹ️ Chat Status")
+            chat2_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
             
             # Event handlers
             def chat2_submit(message, history, files, session_id, speed_mode, provider):
                 if not message.strip():
-                    return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
                 if not files:
-                    return history, history, "⚠️ Primero carga documentos.", gr.Markdown(visible=False)
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
                 
                 new_history, error = run_chat_conversational_2(
                     message=message,
@@ -15330,13 +15331,13 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     retriever_builder=retriever_builder,
                     context_manager=context_manager
                 )
-                status = f"✅ {len(new_history)} mensajes en la conversación"
+                status = f"✅ {len(new_history)} messages in the conversation"
                 if error:
                     status = error
                 return new_history, new_history, status, gr.Markdown(visible=False)
             
             def clear_chat2(history, session_id):
-                # Limpiar sesión del modo 2
+                # Clear session for mode 2
                 chat_2 = get_chat_conversational_2(
                     config=config,
                     processor=processor,
@@ -15348,7 +15349,7 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     chat_2.sessions[session_id]["docs"] = []
                     chat_2.sessions[session_id]["retriever"] = None
                     chat_2.sessions[session_id]["processed_files"].clear()
-                return [], "✅ Chat limpiado. Puedes cargar nuevos documentos.", gr.Markdown(visible=False)
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
             
             def clear_chat2_files(files, session_id):
                 chat_2 = get_chat_conversational_2(
@@ -15361,7 +15362,7 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     chat_2.sessions[session_id]["processed_files"].clear()
                     chat_2.sessions[session_id]["docs"] = []
                     chat_2.sessions[session_id]["retriever"] = None
-                return None, "✅ Documentos limpiados. Puedes cargar nuevos.", gr.Markdown(visible=False)
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
             
             def show_chat2_stats(session_id):
                 chat_2 = get_chat_conversational_2(
@@ -15372,53 +15373,53 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 )
                 stats = chat_2.get_statistics(session_id=session_id)
                 
-                output = "## 📊 Estadísticas Avanzadas - Chat Conversacional 2\n\n"
+                output = "## 📊 Advanced Statistics - Conversational Chat 2\n\n"
                 output += f"### 📦 Context Folding\n"
-                output += f"- Ramas activas: {stats['context_folding']['active_branches']}\n"
-                output += f"- Ramas plegadas: {stats['context_folding']['folded_branches']}\n"
-                output += f"- Tokens ahorrados: {stats['context_folding']['total_tokens_saved']:,}\n"
-                output += f"- Ratio de compresión: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
                 
                 output += f"### 🔍 Data Provenance\n"
-                output += f"- Registros totales: {stats['data_provenance']['total_records']}\n"
-                output += f"- Fuentes únicas: {stats['data_provenance']['unique_sources']}\n"
-                output += f"- Promedio fuentes/registro: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
                 
                 output += f"### 🧠 Chain of Thought\n"
-                output += f"- Cadenas activas: {stats['chain_of_thought']['active_chains']}\n"
-                output += f"- Cadenas completadas: {stats['chain_of_thought']['completed_chains']}\n"
-                output += f"- Pasos totales: {stats['chain_of_thought']['total_steps']}\n\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
                 
                 output += f"### 🛤️ Path-dependent Reasoning\n"
-                output += f"- Caminos probados: {stats['path_reasoning']['total_paths_tested']}\n"
-                output += f"- Tasa de éxito: {stats['path_reasoning']['success_rate']:.1f}%\n"
-                output += f"- Enfoques aprendidos: {stats['path_reasoning']['learned_approaches']}\n\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
                 
                 output += f"### 📈 Test Time Training\n"
-                output += f"- Episodios totales: {stats['test_time_training']['total_episodes']}\n"
-                output += f"- Tasa de éxito: {stats['test_time_training']['success_rate']:.1f}%\n"
-                output += f"- Patrones aprendidos: {stats['test_time_training']['learned_patterns']}\n\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
                 
                 output += f"### 👤 Person in the Loop\n"
-                output += f"- Aprobaciones pendientes: {stats['person_in_loop']['pending_approvals']}\n"
-                output += f"- Tasa de aprobación: {stats['person_in_loop']['approval_rate']:.1f}%\n"
-                output += f"- Reglas activas: {stats['person_in_loop']['active_rules']}\n\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
                 
-                output += f"### 🧠 Reinforcement Learning y Planning\n"
-                output += f"- Árboles totales: {stats['reinforcement_planning']['total_trees']}\n"
-                output += f"- Tasa de éxito: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
-                output += f"- Exploraciones totales: {stats['reinforcement_planning']['total_explorations']}\n"
-                output += f"- Memoria de aprendizaje: {stats['reinforcement_planning']['learning_memory_size']} patrones\n\n"
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
                 
-                output += f"### 🔌 MCP Potenciado (Model Context Protocol)\n"
-                output += f"- Conexiones totales: {stats['mcp_integration']['connections']}\n"
-                output += f"- Conexiones activas: {stats['mcp_integration']['enabled_connections']}\n"
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
                 
                 if 'session' in stats:
-                    output += f"\n### 📋 Sesión\n"
-                    output += f"- Documentos: {stats['session']['docs_count']}\n"
-                    output += f"- Mensajes: {stats['session']['history_count']}\n"
-                    output += f"- Archivos procesados: {stats['session']['processed_files']}\n"
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
                 
                 return gr.Markdown(output, visible=True)
             
@@ -15460,83 +15461,547 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
         with gr.Tab("📚 Company Knowledge"):
             gr.Markdown("### 📚 Company Knowledge - Sistema de Conocimiento Empresarial con Apps Conectadas")
             gr.Markdown("""
-            **🌟 Sistema avanzado de conocimiento corporativo - Similar a ChatGPT Company Knowledge**
+            **🌟 Advanced corporate knowledge system - Similar to ChatGPT Company Knowledge**
             
-            **✨ Capacidades Avanzadas:**
-            - 📦 **Context Folding**: Gestiona eficientemente contextos masivos (500+ PDFs)
-            - 🔍 **Data Provenance**: Rastrea el origen de cada información para compliance
-            - 🧠 **Chain of Thought**: Razona paso a paso en conversaciones complejas
-            - 🛤️ **Path-dependent Reasoning**: Prueba diferentes enfoques y aprende qué funciona mejor
-            - 📈 **Test Time Training**: Mejora continuamente con cada conversación
-            - 👤 **Person in the Loop**: Control humano para decisiones críticas
-            - 🌳 **Reinforcement Learning y Planning**: Prueba estrategias, retrocede si falla, aprende qué funciona
-            - 🔌 **MCP Potenciado**: Conecta con sistemas externos, bases de datos, APIs
-            - 📱 **Apps Conectadas**: Slack, Google Drive, SharePoint, GitHub, Gmail, Outlook, HubSpot, Salesforce, Linear, Asana, GitLab, ClickUp, Intercom, Jira, Confluence y más
+            **✨ Advanced Capabilities:**
+            - 📦 **Context Folding**: Efficiently handles massive contexts (500+ PDFs)
+            - 🔍 **Data Provenance**: Tracks the origin of every piece of information for compliance
+            - 🧠 **Chain of Thought**: Step-by-step reasoning for complex conversations
+            - 🛤️ **Path-dependent Reasoning**: Tests multiple approaches and learns what works best
+            - 📈 **Test Time Training**: Continuously improves with every conversation
+            - 👤 **Person in the Loop**: Human control for critical decisions
+            - 🌳 **Reinforcement Learning & Planning**: Tries strategies, backtracks if needed, learns what works
+            - 🔌 **MCP Powered**: Connects to external systems, databases, APIs
+            - 📱 **Connected Apps**: Slack, Google Drive, SharePoint, GitHub, Gmail, Outlook, HubSpot, Salesforce, Linear, Asana, GitLab, ClickUp, Intercom, Jira, Confluence and more
             
-            **💼 Perfecto para:**
-            - Gestión de conocimiento corporativo
-            - Bases de conocimiento empresariales
-            - Documentación técnica y procedimientos
-            - Onboarding de empleados
-            - Consultas sobre políticas y procesos
-            - Análisis de datos de múltiples fuentes conectadas
+            **💼 Perfect for:**
+            - Corporate knowledge management
+            - Enterprise knowledge bases
+            - Technical documentation and procedures
+            - Employee onboarding
+            - Policy and process Q&A
+            - Analysis across multiple connected sources
             
-            **💡 Ejemplo de uso:**
-            1. Conecta tus apps (Slack, Google Drive, SharePoint)
-            2. Sube 500 PDFs de documentación corporativa
-            3. Pregunta: "¿Cuál es nuestra política de trabajo remoto según Slack y Google Drive?"
-            4. El sistema busca en todos los documentos Y apps conectadas
-            5. Combina información histórica con datos actuales de tus apps
-            6. Aprende qué estrategias funcionan mejor para futuras consultas
+            **💡 Example:**
+            1. Connect your apps (Slack, Google Drive, SharePoint)
+            2. Upload 500 PDFs of corporate documentation
+            3. Ask: "What is our remote work policy according to Slack and Google Drive?"
+            4. The system searches all documents AND connected apps
+            5. It combines historical info with current app data
+            6. It learns which strategies work best for future queries
             """)
             
             with gr.Tabs():
                 # Sub-tab: Conectar Apps
-                with gr.Tab("🔌 Conectar Apps"):
-                    gr.Markdown("### Conecta tus aplicaciones empresariales")
+                with gr.Tab("🔌 Connect Apps"):
+                    gr.Markdown("## 🚀 Connect Your Enterprise Apps")
                     gr.Markdown("""
-                    **Conecta tus apps para que Company Knowledge pueda buscar en ellas:**
-                    - Slack, Google Drive, SharePoint, GitHub, Gmail, Outlook
-                    - HubSpot, Salesforce, Linear, Asana, GitLab, ClickUp
-                    - Intercom, Jira, Confluence, Dropbox, Box, Teams
+                    ### ✨ Connect your apps in 3 simple steps:
+                    
+                    1. **Select** the type of app you want to connect
+                    2. **Paste** your token/API key (we guide you step by step)
+                    3. **Connect** and you're ready — ask questions across your apps!
+                    
+                    **📱 Available Apps:**
+                    - 💬 **Communication:** Slack, Teams, Gmail, Outlook
+                    - 📁 **Documents:** Google Drive, SharePoint, Dropbox, Box
+                    - 💻 **Development:** GitHub, GitLab, Linear, Asana, ClickUp
+                    - 📊 **Business:** HubSpot, Salesforce, Intercom
+                    - 🎯 **Projects:** Jira, Confluence
+                    
+                    **🔐 Security:**
+                    - ✅ Credentials stored locally (on your machine)
+                    - ✅ Automatic token validation before saving
+                    - ✅ Accesses only what you already have permission to view
+                    - ✅ We never share your data with third parties
                     """)
                     
-                    app_type_select = gr.Dropdown(
-                        label="📱 Tipo de App",
-                        choices=[
-                            ("💬 Slack", "slack"),
-                            ("📁 Google Drive", "google_drive"),
-                            ("📂 SharePoint", "sharepoint"),
-                            ("💻 GitHub", "github"),
-                            ("📧 Gmail", "gmail"),
-                            ("📧 Outlook", "outlook"),
-                            ("📦 Dropbox", "dropbox"),
-                            ("📦 Box", "box"),
-                            ("💬 Teams", "teams"),
-                            ("📊 HubSpot", "hubspot"),
-                            ("☁️ Salesforce", "salesforce"),
-                            ("📋 Linear", "linear"),
-                            ("✅ Asana", "asana"),
-                            ("🔧 GitLab", "gitlab"),
-                            ("📝 ClickUp", "clickup"),
-                            ("💬 Intercom", "intercom"),
-                            ("🎯 Jira", "jira"),
-                            ("📚 Confluence", "confluence")
-                        ],
-                        value="slack"
+                    # Global status indicator
+                    with gr.Row():
+                        global_status = gr.Markdown(
+                            value="**Status:** Waiting for connection...",
+                            visible=True
+                        )
+                    
+                    gr.Markdown("### 📝 Step 1: Select your App")
+                    with gr.Row():
+                        app_type_select = gr.Dropdown(
+                            label="📱 Which app do you want to connect?",
+                            choices=[
+                                ("💬 Slack - Messages and channels", "slack"),
+                                ("📁 Google Drive - Documents and files", "google_drive"),
+                                ("📂 SharePoint - Enterprise documents", "sharepoint"),
+                                ("💻 GitHub - Code and repositories", "github"),
+                                ("📧 Gmail - Email and calendar", "gmail"),
+                                ("📧 Outlook - Microsoft email", "outlook"),
+                                ("📦 Dropbox - Cloud storage", "dropbox"),
+                                ("📦 Box - Enterprise storage", "box"),
+                                ("💬 Teams - Microsoft collaboration", "teams"),
+                                ("📊 HubSpot - CRM and marketing", "hubspot"),
+                                ("☁️ Salesforce - Enterprise CRM", "salesforce"),
+                                ("📋 Linear - Project management", "linear"),
+                                ("✅ Asana - Tasks and projects", "asana"),
+                                ("🔧 GitLab - DevOps and code", "gitlab"),
+                                ("📝 ClickUp - Productivity", "clickup"),
+                                ("💬 Intercom - Customer support", "intercom"),
+                                ("🎯 Jira - Tickets and issues", "jira"),
+                                ("📚 Confluence - Wiki and docs", "confluence")
+                            ],
+                            value="slack",
+                            info="💡 Select the app you use most in your daily work"
+                        )
+                    
+                    # Dynamic guide that changes based on selected app
+                    app_guide_output = gr.Markdown(
+                        value="**💡 Select an app above to see the step-by-step guide**",
+                        visible=True
                     )
+                    
+                    def update_app_guide(app_type):
+                        guides = {
+                            "slack": """
+### 🔑 How to get your Slack token (2 minutes):
+
+**Step 1:** Go to https://api.slack.com/apps and click "Create New App"
+
+**Step 2:** Select "From scratch"
+- **App Name:** "Company Knowledge" (or any name you prefer)
+- **Workspace:** Select your workspace
+
+**Step 3:** In the sidebar, go to "OAuth & Permissions"
+
+**Step 4:** In "Scopes" → "Bot Token Scopes", add:
+- `channels:read` - Read channels
+- `channels:history` - View message history
+- `search:read` - Search messages
+
+**Step 5:** Go to the top and click "Install to Workspace"
+- Authorize the app in your workspace
+
+**Step 6:** Copy the "Bot User OAuth Token" (starts with `xoxb-`)
+- This is the token you need to paste below
+
+✅ **Done!** Paste the token in the "Token / API Key" field
+                            """,
+                            "google_drive": """
+### 🔑 How to get Google Drive access (3 minutes):
+
+**Option A: Service Account (Recommended for businesses)**
+
+**Step 1:** Go to https://console.cloud.google.com/
+- Create a new project or select an existing one
+
+**Step 2:** Go to "APIs & Services" → "Credentials" → "Create Credentials" → "Service Account"
+- Name: "Company Knowledge"
+- Create and continue
+
+**Step 3:** In "Grant this service account access to project", select "Editor"
+- Click "Done"
+
+**Step 4:** Click on the created service account → "Keys" → "Add Key" → "Create new key"
+- Select "JSON" and download the file
+
+**Step 5:** Open the downloaded JSON file
+- Copy the entire content of the `private_key` field (without quotes)
+- This is your token
+
+**Step 6 (Optional):** If you want to limit to a specific folder:
+- Share the folder with the service account email (found in JSON as `client_email`)
+- In "Extra Credentials", add: `{"folder_id": "FOLDER_ID"}`
+
+✅ **Done!** Paste the private_key in the "Token / API Key" field
+
+**Option B: OAuth 2.0 (For personal use)**
+- More complex, requires OAuth setup
+- We recommend Service Account for businesses
+                            """,
+                            "hubspot": """
+### 🔑 How to get your HubSpot token (2 minutes):
+
+**Step 1:** Log in to HubSpot and go to Settings (⚙️)
+
+**Step 2:** In the sidebar, go to "Integrations" → "Private Apps"
+
+**Step 3:** Click "Create a private app"
+- **Name:** "Company Knowledge"
+- **Description:** "For data search and analysis"
+
+**Step 4:** In "Scopes", select the permissions you need:
+- `content` - Read content
+- `contacts` - Read contacts
+- `deals` - Read deals
+- `engagements` - Read emails and calls
+
+**Step 5:** Click "Create app" at the top
+
+**Step 6:** Copy the "Private app access token" (starts with `pat-`)
+- This is the token you need to paste below
+
+✅ **Done!** Paste the token in the "Token / API Key" field
+                            """,
+                            "github": """
+### 🔑 How to get your GitHub token (1 minute):
+
+**Step 1:** Go to GitHub.com and click your profile picture (top right)
+
+**Step 2:** Select "Settings"
+
+**Step 3:** In the sidebar, go to "Developer settings" (at the bottom)
+
+**Step 4:** Select "Personal access tokens" → "Tokens (classic)"
+
+**Step 5:** Click "Generate new token" → "Generate new token (classic)"
+
+**Step 6:** Configure the token:
+- **Note:** "Company Knowledge"
+- **Expiration:** Choose how long you want it to last
+- **Scopes:** Select:
+  - `repo` - Full access to repositories
+  - `read:org` - Read organization data
+
+**Step 7:** Click "Generate token" at the bottom
+- ⚠️ **IMPORTANT:** Copy the token immediately (starts with `ghp_`)
+- You won't be able to see it again
+
+✅ **Done!** Paste the token in the "Token / API Key" field
+                            """,
+                            "jira": """
+### 🔑 How to get Jira access (2 minutes):
+
+**Step 1:** Log in to your Jira instance (e.g., yourcompany.atlassian.net)
+
+**Step 2:** Click your profile picture (top right) → "Account settings"
+
+**Step 3:** In the sidebar, go to "Security" → "API tokens"
+
+**Step 4:** Click "Create API token"
+- **Label:** "Company Knowledge"
+- Copy the generated token
+
+**Step 5:** In "Extra Credentials", add:
+```json
+{
+  "base_url": "https://yourcompany.atlassian.net"
+}
+```
+- Replace `yourcompany` with your instance name
+
+**Step 6:** For the token, use the format: `email@yourdomain.com:GENERATED_TOKEN`
+- Example: `john@company.com:ATATT3xFfGF0...`
+
+✅ **Done!** Paste the email:token in the "Token / API Key" field
+                            """,
+                            "salesforce": """
+### 🔑 How to get Salesforce access (3 minutes):
+
+**Step 1:** Log in to Salesforce as administrator
+
+**Step 2:** Go to Setup (⚙️) → "App Manager" → "New Connected App"
+
+**Step 3:** Complete the form:
+- **Connected App Name:** "Company Knowledge"
+- **API Name:** Generated automatically
+- **Contact Email:** Your email
+
+**Step 4:** In "API (Enable OAuth Settings)":
+- ✅ Check "Enable OAuth Settings"
+- **Callback URL:** `https://localhost` (can be any URL)
+- **Selected OAuth Scopes:** 
+  - `Full access (full)`
+  - `Perform requests on your behalf at any time (refresh_token, offline_access)`
+
+**Step 5:** Save and continue
+- Copy the "Consumer Key" and "Consumer Secret"
+
+**Step 6:** To get the Access Token:
+- Use OAuth flow or Username/Password flow
+- The token you need is the "Access Token"
+
+**Step 7:** In "Extra Credentials", add:
+```json
+{
+  "instance_url": "https://yourinstance.salesforce.com"
+}
+```
+
+✅ **Done!** Paste the Access Token in the "Token / API Key" field
+                            """
+                        }
+                        
+                        guide = guides.get(app_type, f"""
+### 🔑 Guide for {app_type}
+
+**General steps:**
+1. Go to the app settings
+2. Look for "API", "Tokens", "Integrations" or "Developer settings"
+3. Create a token/API key with read permissions
+4. Copy the token and paste it below
+
+**💡 Tip:** If you can't find how to get the token, search Google: "{app_type} API token how to get"
+                        """)
+                        
+                        return guide
+                    
+                    def toggle_connection_method(app_type, method):
+                        """Shows/hides groups based on connection method and app type."""
+                        # Apps that support OAuth Playground
+                        oauth_playground_apps = ["google_drive", "gmail"]
+                        
+                        if method == "oauth_playground" and app_type in oauth_playground_apps:
+                            # Show OAuth Playground, hide direct token
+                            return gr.update(visible=False), gr.update(visible=True)
+                        else:
+                            # Show direct token, hide OAuth Playground
+                            return gr.update(visible=True), gr.update(visible=False)
+                    
+                    app_type_select.change(
+                        fn=update_app_guide,
+                        inputs=[app_type_select],
+                        outputs=[app_guide_output]
+                    )
+                    
+                    gr.Markdown("### 📝 Step 2: Configure Your Connection")
                     
                     app_name_input = gr.Textbox(
-                        label="Nombre de la Conexión",
-                        placeholder="Ej: Slack Oficina Principal"
+                        label="🏷️ Connection Name",
+                        placeholder="E.g., Main Office Slack, My Google Drive, Production HubSpot",
+                        info="💡 A descriptive name to identify this connection (you can have multiple connections of the same app)",
+                        value=""
                     )
                     
-                    connect_app_btn = gr.Button("🔌 Conectar App", variant="primary")
-                    app_connection_output = gr.Markdown(label="📊 Estado de Conexión")
+                    # Connection method: Direct token or OAuth Playground (only for apps that support it)
+                    connection_method = gr.Radio(
+                        label="🔐 Connection Method",
+                        choices=[
+                            ("🔑 Direct Token / API Key", "token")
+                        ],
+                        value="token",
+                        info="💡 OAuth Playground is only available for Google apps (Drive, Gmail)"
+                    )
                     
-                    def connect_app(app_type, app_name):
+                    # Update method visibility based on selected app
+                    def update_connection_method_visibility(app_type):
+                        """Updates method options based on the app."""
+                        oauth_playground_apps = ["google_drive", "gmail"]
+                        
+                        if app_type in oauth_playground_apps:
+                            # Show both options
+                            return gr.update(
+                                choices=[
+                                    ("🔑 Direct Token / API Key", "token"),
+                                    ("🎮 OAuth Playground (Google Only)", "oauth_playground")
+                                ],
+                                visible=True,
+                                value="token"  # Reset to token by default
+                            )
+                        else:
+                            # Only show direct token
+                            return gr.update(
+                                choices=[("🔑 Direct Token / API Key", "token")],
+                                visible=True,
+                                value="token"
+                            )
+                    
+                    # Group for Direct token (always visible) - DEFINE FIRST
+                    with gr.Group(visible=True) as token_method_group:
+                        token_input = gr.Textbox(
+                            label="🔑 Token / API Key",
+                            type="password",
+                            placeholder="Paste your token or API key here...",
+                            info="💡 The token you obtained following the guide above. It's stored securely and encrypted.",
+                            value=""
+                        )
+                    
+                    # Group for OAuth Playground (only visible for Google apps)
+                    with gr.Group(visible=False) as oauth_playground_group:
+                        gr.Markdown("""
+### 🎮 Connection via OAuth Playground (Google Only)
+
+**Steps to get the Access Token:**
+
+**Step 1:** Click the blue button below → OAuth Playground opens
+
+**Step 2:**
+1. Check the required scope:
+   - For **Google Drive**: `https://www.googleapis.com/auth/drive.readonly`
+   - For **Gmail**: `https://www.googleapis.com/auth/gmail.readonly`
+2. Click **"Authorize APIs"**
+3. Sign in with Google
+4. Click **"Exchange authorization code for tokens"**
+
+**Step 3:** Copy the **"Access token"** and paste it below → Click **"Connect"**
+
+💡 **Tip:** The token starts with `ya29.` and is long (more than 100 characters)
+
+⏰ **Important:** The token lasts ~1 hour. After that you'll need to generate a new one.
+                        """)
+                        
+                        oauth_playground_link = gr.Markdown(
+                            value='<a href="https://developers.google.com/oauthplayground/" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #4285F4; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">🔗 Open OAuth Playground (Click Here)</a>',
+                            visible=True
+                        )
+                        
+                        oauth_token_input = gr.Textbox(
+                            label="🔑 Paste Access Token Here",
+                            type="password",
+                            placeholder="ya29.a0AfH6SMC...",
+                            info="💡 Copy the token from OAuth Playground (starts with ya29.)",
+                            value=""
+                        )
+                    
+                    # Event handlers - DESPUÉS de definir los grupos
+                    app_type_select.change(
+                        fn=update_connection_method_visibility,
+                        inputs=[app_type_select],
+                        outputs=[connection_method]
+                    )
+                    
+                    # Toggle entre métodos de conexión
+                    connection_method.change(
+                        fn=toggle_connection_method,
+                        inputs=[app_type_select, connection_method],
+                        outputs=[token_method_group, oauth_playground_group]
+                    )
+                    
+                    # Button to show/hide token (simplified)
+                    with gr.Row():
+                        show_token_btn = gr.Button("👁️ Show/Hide Token", variant="secondary", size="sm")
+                    
+                    extra_credentials_input = gr.Textbox(
+                        label="⚙️ Extra Credentials (Optional - Only if the app requires it)",
+                        placeholder='Example for Jira: {"base_url": "https://yourcompany.atlassian.net"}\nExample for Google Drive: {"folder_id": "1a2b3c4d5e6f7g8h9i0j"}\nExample for Salesforce: {"instance_url": "https://yourinstance.salesforce.com"}',
+                        lines=4,
+                        info="💡 You only need this for some apps. The guide above will tell you if you need it. Format: Valid JSON."
+                    )
+                    
+                    # Test connection before saving
+                    test_connection_btn = gr.Button("🧪 Test Connection", variant="secondary")
+                    test_result = gr.Markdown(visible=False)
+                    
+                    # Function to test connection
+                    def test_connection(app_type, connection_method, token, oauth_token, extra_credentials):
+                        # Determine which token to use based on method
+                        if connection_method == "oauth_playground":
+                            actual_token = oauth_token.strip()
+                            if not actual_token:
+                                return gr.Markdown("⚠️ **Enter the OAuth Playground Access Token first.**", visible=True)
+                        else:
+                            actual_token = token.strip()
+                            if not actual_token:
+                                return gr.Markdown("⚠️ **Enter a token first to test the connection.**", visible=True)
+                        
+                        extra = {}
+                        if extra_credentials.strip():
+                            try:
+                                extra = json.loads(extra_credentials.strip())
+                            except json.JSONDecodeError:
+                                return gr.Markdown("❌ **Error:** Extra credentials must be in valid JSON format.", visible=True)
+                        
+                        try:
+                            from docchat.company_knowledge_integrations import IntegrationType, CompanyKnowledgeIntegrations
+                            from docchat.config import AppConfig
+                            
+                            # Create temporary instance to test
+                            temp_config = AppConfig()
+                            temp_integrations = CompanyKnowledgeIntegrations(temp_config)
+                            
+                            integration_type = IntegrationType(app_type)
+                            # Use the correct token based on method
+                            token_to_use = oauth_token.strip() if connection_method == "oauth_playground" else token.strip()
+                            credentials = {"token": token_to_use, **extra}
+                            
+                            # Validate credentials
+                            is_valid = temp_integrations._validate_credentials(integration_type, credentials)
+                            
+                            if is_valid:
+                                return gr.Markdown("""
+## ✅ Connection Successful!
+
+**Your token is valid and working correctly.**
+
+🎉 You can now click "🔌 Connect App" to save this connection.
+
+**💡 Next steps:**
+1. Click "🔌 Connect App" to save
+2. Go to "Chat with Apps" to ask questions
+3. The system will automatically search in this app
+                                """, visible=True)
+                            else:
+                                return gr.Markdown("""
+## ⚠️ Invalid Token
+
+**The token could not be validated correctly.**
+
+**Possible causes:**
+- The token is expired or revoked
+- The token doesn't have the necessary permissions
+- Extra credentials are incorrect (if applicable)
+
+**💡 Solutions:**
+1. Verify the token is correct (copy and paste again)
+2. Make sure the token has the required scopes/permissions
+3. If using extra credentials, verify the JSON format
+4. Review the guide above to get a new token if necessary
+                                """, visible=True)
+                        except Exception as e:
+                            error_msg = str(e)
+                            return gr.Markdown(f"""
+## ❌ Error Testing Connection
+
+**Error:** {error_msg}
+
+**💡 Verify:**
+- That the token is correct
+- That you have internet connection
+- That the app is available
+                            """, visible=True)
+                    
+                    test_connection_btn.click(
+                        fn=test_connection,
+                        inputs=[app_type_select, connection_method, token_input, oauth_token_input, extra_credentials_input],
+                        outputs=[test_result]
+                    )
+                    
+                    gr.Markdown("### 📝 Step 3: Connect and Save")
+                    
+                    with gr.Row():
+                        connect_app_btn = gr.Button("🔌 Connect and Save App", variant="primary", scale=2)
+                        clear_form_btn = gr.Button("🗑️ Clear Form", variant="secondary", scale=1)
+                    
+                    app_connection_output = gr.Markdown(label="📊 Connection Status")
+                    
+                    def clear_connection_form():
+                        return "", "token", "", "", "", "**✅ Form cleared. You can connect a new app.**"
+                    
+                    clear_form_btn.click(
+                        fn=clear_connection_form,
+                        inputs=[],
+                        outputs=[app_name_input, connection_method, token_input, oauth_token_input, extra_credentials_input, app_connection_output]
+                    )
+                    
+                    def connect_app(app_type, app_name, connection_method, token, oauth_token, extra_credentials):
                         if not app_name.strip():
-                            return "⚠️ Por favor, ingresa un nombre para la conexión."
+                            return "⚠️ Please enter a name for the connection."
+                        
+                        # Determine which token to use based on method
+                        if connection_method == "oauth_playground":
+                            actual_token = oauth_token.strip()
+                            if not actual_token:
+                                return "⚠️ Please enter the OAuth Playground Access Token."
+                            if not actual_token.startswith("ya29."):
+                                return "⚠️ The OAuth Playground Access Token must start with 'ya29.'. Verify you copied the correct token."
+                        else:
+                            actual_token = token.strip()
+                            if not actual_token:
+                                return "⚠️ Please enter a token or API key."
+                        
+                        # Parse extra credentials if provided
+                        extra = {}
+                        if extra_credentials.strip():
+                            try:
+                                extra = json.loads(extra_credentials.strip())
+                            except json.JSONDecodeError:
+                                return "❌ Error: Extra credentials must be in valid JSON format."
                         
                         try:
                             company_knowledge = get_company_knowledge(
@@ -15547,40 +16012,124 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             )
                             
                             if not company_knowledge.app_integrations:
-                                return "❌ Sistema de integraciones no disponible."
+                                return "❌ Integration system not available."
                             
                             from docchat.company_knowledge_integrations import IntegrationType
                             integration_type = IntegrationType(app_type)
                             
+                            # Prepare credentials (use correct token based on method)
+                            token_to_use = oauth_token.strip() if connection_method == "oauth_playground" else token.strip()
+                            credentials = {
+                                "token": token_to_use,
+                                **extra
+                            }
+                            
+                            # Connect app with validation
                             connection = company_knowledge.app_integrations.connect_app(
                                 app_type=integration_type,
                                 app_name=app_name.strip(),
-                                credentials={},  # En producción, aquí irían las credenciales OAuth
+                                credentials=credentials,
                                 permissions={}
                             )
                             
-                            return f"""
-## ✅ App Conectada Exitosamente
+                            if connection.status == "connected":
+                                # Update global status
+                                connected_count = len(company_knowledge.app_integrations.get_connected_apps())
+                                
+                                return f"""
+## ✅ App Connected Successfully!
 
-**ID de Conexión:** `{connection.connection_id}`
-**App:** {app_name} ({app_type})
-**Estado:** {connection.status}
-**Conectado:** {connection.connected_at}
+**🎉 {app_name} is now connected and ready to use.**
 
-**💡 Ahora Company Knowledge puede buscar en esta app cuando hagas preguntas.**
+**📋 Connection Details:**
+- **ID:** `{connection.connection_id}`
+- **Type:** {app_type}
+- **Status:** ✅ Connected
+- **Connected:** {connection.connected_at}
+- **Total connected apps:** {connected_count}
+
+**🚀 Next Steps:**
+
+1. **Ask a question:** Go to the "💬 Chat with Apps" tab
+2. **Write your question:** For example:
+   - "What's in the #general channel on Slack?"
+   - "Search for documents about Q4 in Google Drive"
+   - "Show me HubSpot contacts from this month"
+3. **The system will automatically search** in this app and give you answers with citations
+
+**💡 Tip:** You can connect multiple apps of the same type (e.g., multiple Slack workspaces)
+
+**🔍 Try it now:** Go to "Chat with Apps" and ask your first question!
 """
+                            else:
+                                return f"""
+## ⚠️ Connection with Issues
+
+**Connection ID:** `{connection.connection_id}`
+**App:** {app_name} ({app_type})
+**Status:** {connection.status}
+
+**💡 Verify your credentials and try again.**
+"""
+                        except ValueError as e:
+                            # Validation error with clear message
+                            error_msg = str(e)
+                            return f"""
+## ❌ Error Connecting App
+
+**{error_msg}**
+
+**💡 Steps to Fix:**
+
+1. **Verify the token:**
+   - Make sure you copy the complete token (no spaces at start/end)
+   - If the token is very long, copy it again from the original source
+
+2. **Verify permissions:**
+   - Check that the token has the required scopes/permissions
+   - Consult the guide above to see what permissions this app needs
+
+3. **Verify extra credentials (if applicable):**
+   - Make sure the JSON is valid
+   - Verify that values (base_url, instance_url, etc.) are correct
+
+4. **Test the connection first:**
+   - Use the "🧪 Test Connection" button before connecting
+   - This will tell you exactly what's wrong
+
+5. **Get a new token:**
+   - If the token is expired, generate a new one
+   - Follow the step-by-step guide above
+
+**🔍 If the problem persists:**
+- Verify you have internet connection
+- Make sure the app is available
+- Check the application logs for more details
+                            """
                         except Exception as e:
-                            return f"❌ Error conectando app: {str(e)}"
+                            error_msg = str(e)
+                            return f"""
+## ❌ Unexpected Error
+
+**Error:** {error_msg}
+
+**💡 This shouldn't happen. Please:**
+1. Verify all fields are complete
+2. Try again
+3. If the problem persists, contact support
+
+**Technical details:** {type(e).__name__}
+                            """
                     
                     connect_app_btn.click(
                         fn=connect_app,
-                        inputs=[app_type_select, app_name_input],
+                        inputs=[app_type_select, app_name_input, connection_method, token_input, oauth_token_input, extra_credentials_input],
                         outputs=[app_connection_output]
                     )
                     
-                    # Listar apps conectadas
-                    list_apps_btn = gr.Button("📋 Listar Apps Conectadas", variant="secondary")
-                    apps_list_output = gr.Markdown(label="📊 Apps Conectadas")
+                    # List connected apps
+                    list_apps_btn = gr.Button("📋 List Connected Apps", variant="secondary")
+                    apps_list_output = gr.Markdown(label="📊 Connected Apps")
                     
                     def list_connected_apps():
                         try:
@@ -15592,20 +16141,20 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             )
                             
                             if not company_knowledge.app_integrations:
-                                return "❌ Sistema de integraciones no disponible."
+                                return "❌ Integration system not available."
                             
                             apps = company_knowledge.app_integrations.get_connected_apps()
                             
                             if not apps:
-                                return "## 📋 No hay apps conectadas\n\nConecta apps en el tab 'Conectar Apps'."
+                                return "## 📋 No apps connected\n\nConnect apps in the 'Connect Apps' tab."
                             
-                            output = f"## 📋 Apps Conectadas: {len(apps)}\n\n"
+                            output = f"## 📋 Connected Apps: {len(apps)}\n\n"
                             for app in apps:
                                 output += f"### 📱 {app.app_name}\n\n"
-                                output += f"- **Tipo:** {app.app_type.value}\n"
-                                output += f"- **Estado:** {app.status}\n"
-                                output += f"- **Conectado:** {app.connected_at}\n"
-                                output += f"- **Última sincronización:** {app.last_sync or 'N/A'}\n"
+                                output += f"- **Type:** {app.app_type.value}\n"
+                                output += f"- **Status:** {app.status}\n"
+                                output += f"- **Connected:** {app.connected_at}\n"
+                                output += f"- **Last sync:** {app.last_sync or 'N/A'}\n"
                                 output += f"- **ID:** `{app.connection_id}`\n\n"
                             
                             return output
@@ -15618,71 +16167,115 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                         outputs=[apps_list_output]
                     )
                 
-                # Sub-tab: Chat con Apps
-                with gr.Tab("💬 Chat con Apps"):
-                    gr.Markdown("### Haz preguntas que buscan en tus apps conectadas")
+                # Sub-tab: Chat with Apps
+                with gr.Tab("💬 Chat with Apps"):
+                    gr.Markdown("### Ask questions that search across your connected apps")
                     gr.Markdown("""
-                    **Pregunta sobre información que está en tus apps conectadas:**
-                    - "Resume los comentarios de clientes de Slack y HubSpot"
-                    - "¿Qué hay en el documento X de Google Drive?"
-                    - "Analiza los issues abiertos en GitHub"
+                    **Ask about information in your connected apps:**
+                    - "Summarize customer comments from Slack and HubSpot"
+                    - "What's in document X from Google Drive?"
+                    - "Analyze open issues on GitHub"
                     """)
                     
-                    # Generar session_id único
+                    # Generate unique session_id
                     company_knowledge_session_id = gr.State(value=str(uuid.uuid4()))
                     
                     with gr.Row():
                         company_knowledge_files = gr.Files(
-                            label="📂 Documentos (Opcional - PDF, DOCX, TXT, MD)",
+                            label="📂 Documents (Optional - PDF, DOCX, TXT, MD)",
                             file_count="multiple",
                             file_types=[".pdf", ".docx", ".txt", ".md"],
                         )
                     
                     with gr.Row():
                         company_knowledge_speed_mode = gr.Radio(
-                            label="⚡ Modo de Velocidad",
+                            label="⚡ Speed Mode",
                             choices=[
-                                ("🚀 Rápido", "fast"),
-                                ("⚖️ Balanceado (recomendado)", "balanced"),
-                                ("🎯 Máxima Calidad", "quality")
+                                ("🚀 Fast", "fast"),
+                                ("⚖️ Balanced (recommended)", "balanced"),
+                                ("🎯 Maximum Quality", "quality")
                             ],
                             value="balanced",
                         )
                         company_knowledge_provider_toggle = gr.Radio(
-                            label="🤖 Motor de IA",
-                            choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                            label="🤖 AI Engine",
+                            choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
                             value="openai",
-                            info="Cambia el motor de IA utilizado"
+                            info="Change the AI engine used"
                         )
                     
-                    # Chatbot component
-                    company_knowledge_bot = gr.Chatbot(
-                        label="💬 Conversación de Conocimiento",
-                        height=500,
-                        show_copy_button=True,
-                    )
+                    with gr.Row():
+                        company_knowledge_task_type = gr.Dropdown(
+                            label="⚙️ Task Type",
+                            choices=[
+                                ("💬 Normal (chat)", "normal"),
+                                ("📝 Pre-Brief", "prebrief"),
+                                ("📊 Data Analysis / KPIs", "data_analysis"),
+                                ("📧 Respond Emails (Gmail)", "email_response")
+                            ],
+                            value="normal",
+                            info="Select the task type for Company Knowledge"
+                        )
+                        company_knowledge_days = gr.Radio(
+                            label="Search range (days)",
+                            choices=[("Last 7 days", 7), ("Last 30 days", 30), ("Last 90 days", 90), ("All", None)],
+                            value=30,
+                            interactive=True,
+                            info="Limit search to the last N days (if the app supports it)"
+                        )
+                        company_knowledge_urls_toggle = gr.Checkbox(
+                            label="URLs in bullets",
+                            value=False,
+                            info="Include source URLs directly in summary bullet points (if applicable)"
+                        )
+                    
+                    # Real-time sidebar (show apps being searched)
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            # Chatbot component
+                            company_knowledge_bot = gr.Chatbot(
+                                label="💬 Knowledge Conversation",
+                                height=500,
+                                show_copy_button=True,
+                            )
+                        with gr.Column(scale=1):
+                            search_status_sidebar = gr.Markdown(
+                                label="🔍 Real-Time Search",
+                                value="**Connected apps:**\n\n*Waiting for query...*",
+                                visible=True
+                            )
                     
                     with gr.Row():
                         company_knowledge_input = gr.Textbox(
-                            label="Escribe tu pregunta",
-                            placeholder="Ejemplo: ¿Cuál es nuestra política de trabajo remoto según Slack y Google Drive?",
+                            label="Write your question",
+                            placeholder="Example: What is our remote work policy according to Slack and Google Drive?",
                             lines=2,
                             scale=4,
                         )
-                        company_knowledge_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                        company_knowledge_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
                     
                     with gr.Row():
-                        clear_company_knowledge_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
-                        clear_company_knowledge_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
-                        company_knowledge_stats_btn = gr.Button("📊 Ver Estadísticas", variant="secondary")
+                        clear_company_knowledge_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                        clear_company_knowledge_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                        company_knowledge_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+                        copy_sources_btn = gr.Button("🔗 Copy sources", variant="secondary")
                     
-                    company_knowledge_status = gr.Markdown(label="ℹ️ Estado del Chat")
-                    company_knowledge_stats_output = gr.Markdown(label="📊 Estadísticas Avanzadas", visible=False)
+                    company_knowledge_status = gr.Markdown(label="ℹ️ Chat Status")
+                    company_knowledge_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+                    copy_sources_output = gr.Textbox(
+                        label="Sources (URLs)",
+                        lines=4,
+                        interactive=False
+                    )
+                    
+                    gr.Markdown("### ⚠️ Essential Governance Checklist:")
+                    gr.Markdown("- **Review Drive/SharePoint permissions before activating:** Make sure access permissions in Google Drive and SharePoint are configured correctly to avoid exposing sensitive data.")
+                    gr.Markdown("- **Reconnection notice:** Remember that tokens are not persisted. If you restart the application, you'll need to reconnect your apps.")
                     
                     # Event handlers
                     def company_knowledge_submit(message, history, files, session_id, speed_mode, provider):
                         if not message.strip():
-                            return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                            return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
                         
                         new_history, error = run_company_knowledge(
                             message=message,
@@ -15696,10 +16289,289 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             retriever_builder=retriever_builder,
                             context_manager=context_manager
                         )
-                        status = f"✅ {len(new_history)} mensajes en la conversación"
+                        status = f"✅ {len(new_history)} messages in conversation"
                         if error:
                             status = error
                         return new_history, new_history, status, gr.Markdown(visible=False)
+                    
+                    def company_knowledge_submit_v2(message, history, files, session_id, speed_mode, provider, days, urls_in_bullets, task_type):
+                        if not message.strip():
+                            return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                        
+                        # Prepare filters
+                        filters = {}
+                        if days:
+                            filters["days"] = days
+                        
+                        # If it's an autonomous task (prebrief, data_analysis, or email_response), use execute_autonomous_task_v2
+                        if task_type in ["prebrief", "data_analysis", "email_response"]:
+                            try:
+                                company_knowledge = get_company_knowledge(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not hasattr(company_knowledge, 'app_integrations') or not company_knowledge.app_integrations:
+                                    error_msg = "⚠️ No apps connected. Go to the 'Connect Apps' tab to connect your applications."
+                                    new_history = history + [(message, error_msg)]
+                                    return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                                
+                                # Execute autonomous task
+                                import asyncio
+                                
+                                # Show initial search status
+                                search_status_text = "**🔍 Searching in connected apps...**\n\n"
+                                
+                                result = asyncio.run(
+                                    company_knowledge.execute_autonomous_task_v2(
+                                        task_description=message,
+                                        task_type=task_type,
+                                        filters=filters,
+                                        urls_in_bullets=urls_in_bullets
+                                    )
+                                )
+                                
+                                if result.get("success"):
+                                    if task_type == "prebrief":
+                                        response_text = result.get("prebrief_summary", "No summary generated.")
+                                    elif task_type == "email_response":
+                                        # Format email responses
+                                        responses = result.get("responses", [])
+                                        response_text = f"✅ **{result.get('responses_generated', 0)} responses generated**\n\n"
+                                        for i, resp in enumerate(responses, 1):
+                                            response_text += f"### 📧 Response {i}: {resp.get('original_subject', 'No subject')}\n\n"
+                                            response_text += f"**To:** {resp.get('to', 'N/A')}\n"
+                                            response_text += f"**Subject:** {resp.get('subject', 'N/A')}\n\n"
+                                            response_text += f"**Generated response:**\n{resp.get('body', 'N/A')}\n\n"
+                                            if resp.get('gmail_url'):
+                                                response_text += f"🔗 [View original email]({resp.get('gmail_url')})\n\n"
+                                            response_text += "---\n\n"
+                                        if result.get("errors"):
+                                            response_text += f"\n⚠️ **Errors:**\n" + "\n".join(f"- {e}" for e in result.get("errors", []))
+                                    else:
+                                        response_text = result.get("summary", "No analysis generated.")
+                                    
+                                    # Add conflict information if exists
+                                    if result.get("conflicts_detected"):
+                                        response_text = f"⚠️ **Note:** Discrepancies detected between sources. Balanced perspectives are presented.\n\n{response_text}"
+                                    
+                                    # Add improved sources with citations
+                                    sources = result.get("sources", [])
+                                    total_sources = result.get("total_sources", len(sources))
+                                    search_status = result.get("search_status", [])
+                                    
+                                    # Build search sidebar
+                                    if search_status:
+                                        search_status_text = "**🔍 Apps queried:**\n\n"
+                                        apps_searched = {}
+                                        for status_item in search_status:
+                                            app = status_item.get("app", "Unknown")
+                                            source = status_item.get("source", "Unknown")
+                                            if app not in apps_searched:
+                                                apps_searched[app] = []
+                                            apps_searched[app].append(source)
+                                        
+                                        for app, sources_list in apps_searched.items():
+                                            search_status_text += f"**{app}**\n"
+                                            for src in sources_list[:3]:  # Show top 3 per app
+                                                search_status_text += f"  • {src}\n"
+                                            if len(sources_list) > 3:
+                                                search_status_text += f"  • ... and {len(sources_list) - 3} more\n"
+                                            search_status_text += "\n"
+                                        
+                                        search_status_text += f"\n**Total:** {total_sources} sources found"
+                                    else:
+                                        search_status_text = f"**✅ Search completed**\n\n{total_sources} sources queried"
+                                    
+                                    # Add sources section with clickable links
+                                    if sources:
+                                        response_text += "\n\n---\n\n### 📚 Sources Consulted\n\n"
+                                        for i, src in enumerate(sources[:15], 1):  # Top 15 sources
+                                            app_name = src.get("app", "Unknown")
+                                            source_name = src.get("source", "Unknown")
+                                            url = src.get("url", "")
+                                            if url:
+                                                response_text += f"{i}. **[{app_name}]** {source_name}\n   🔗 [Open source]({url})\n\n"
+                                            else:
+                                                response_text += f"{i}. **[{app_name}]** {source_name}\n\n"
+                                        
+                                        if len(sources) > 15:
+                                            response_text += f"\n*... and {len(sources) - 15} additional sources*\n"
+                                    
+                                    new_history = history + [(message, response_text)]
+                                    status = f"✅ Task {task_type} completed. {total_sources} sources queried."
+                                    if result.get("conflicts_detected"):
+                                        status += " ⚠️ Conflicts detected and resolved."
+                                else:
+                                    error_msg = result.get("error", "Unknown error executing task.")
+                                    # Check if it's a scopes/tokens error
+                                    if "token" in error_msg.lower() or "scope" in error_msg.lower() or "permission" in error_msg.lower() or "permiso" in error_msg.lower():
+                                        error_msg += "\n\n💡 **Suggestion:** Verify that apps are connected correctly and have the necessary permissions. Go to 'Connect Apps' to reconnect."
+                                    new_history = history + [(message, f"❌ {error_msg}")]
+                                    status = error_msg
+                                    search_status_text = "**❌ Search error**\n\nCould not query apps."
+                                
+                                return new_history, new_history, status, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                
+                            except Exception as e:
+                                error_msg = f"❌ Error executing autonomous task: {str(e)}"
+                                new_history = history + [(message, error_msg)]
+                                return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                        else:
+                            # Tarea normal (chat) - CON STREAMING EN TIEMPO REAL
+                            try:
+                                company_knowledge = get_company_knowledge(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                # Función generadora para streaming (Gradio detecta automáticamente)
+                                def stream_response():
+                                    import asyncio
+                                    full_response = ""
+                                    
+                                    # Inicializar con mensaje vacío
+                                    yield history + [(message, "")], history + [(message, "")], "⏳ Generando respuesta...", gr.Markdown(visible=False), gr.Markdown("**🔍 Buscando información...**", visible=True)
+                                    
+                                    try:
+                                        # Ejecutar query con streaming del LLM
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        
+                                        async def get_streaming_response():
+                                            # Obtener instancia y preparar contexto
+                                            session = company_knowledge.initialize_session(session_id)
+                                            
+                                            # Buscar en apps si están conectadas
+                                            app_results = []
+                                            if company_knowledge.app_integrations:
+                                                connected_apps = company_knowledge.app_integrations.get_connected_apps()
+                                                if connected_apps:
+                                                    app_results = await company_knowledge.app_integrations.search_across_apps(
+                                                        query=message,
+                                                        filters=filters
+                                                    )
+                                            
+                                            # Si hay resultados de apps, generar respuesta con streaming
+                                            if app_results:
+                                                ranked_results = company_knowledge._rank_results_by_relevance_and_recency(
+                                                    query=message,
+                                                    results=app_results,
+                                                    filters=filters
+                                                )
+                                                
+                                                # Construir contexto
+                                                ctx_lines = []
+                                                sources_list = []
+                                                for r in ranked_results[:10]:
+                                                    snippet = (r.snippet or r.content or "")[:5000]
+                                                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
+                                                    if r.url:
+                                                        sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                                                
+                                                context_block = "\n".join(ctx_lines)
+                                                prompt = f"""Eres un asistente experto. Responde la pregunta del usuario usando SOLO la información proporcionada.
+
+INFORMACIÓN DISPONIBLE:
+{context_block}
+
+PREGUNTA: {message}
+
+Responde de forma clara, profesional y detallada:"""
+                                                
+                                                # Stream tokens del LLM
+                                                from langchain_core.messages import HumanMessage
+                                                async for chunk in company_knowledge.llm.astream([HumanMessage(content=prompt)]):
+                                                    if hasattr(chunk, 'content'):
+                                                        token = chunk.content
+                                                    else:
+                                                        token = str(chunk)
+                                                    full_response += token
+                                                    # Yield actualización incremental
+                                                    yield history + [(message, full_response)]
+                                                
+                                                # Agregar fuentes
+                                                if sources_list:
+                                                    sources_text = "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
+                                                    for i, src in enumerate(sources_list[:10], 1):
+                                                        app_name = src.get("app", "Unknown")
+                                                        source_name = src.get("source", "Unknown")
+                                                        url = src.get("url", "")
+                                                        if url:
+                                                            sources_text += f"{i}. **[{app_name}]** {source_name} - [🔗 Abrir]({url})\n"
+                                                        else:
+                                                            sources_text += f"{i}. **[{app_name}]** {source_name}\n"
+                                                    full_response += sources_text
+                                                    yield history + [(message, full_response)]
+                                            else:
+                                                # Sin resultados de apps, usar método normal
+                                                new_hist, err, meta = await company_knowledge.process_query_async(
+                                                    session_id=session_id,
+                                                    message=message,
+                                                    history=history,
+                                                    speed_mode=speed_mode,
+                                                    provider=provider,
+                                                    filters=filters,
+                                                    urls_in_bullets=urls_in_bullets
+                                                )
+                                                yield new_hist
+                                        
+                                        # Ejecutar streaming usando el loop
+                                        async_gen = get_streaming_response()
+                                        try:
+                                            while True:
+                                                try:
+                                                    # Usar run_until_complete para obtener el siguiente valor del async generator
+                                                    result = loop.run_until_complete(async_gen.__anext__())
+                                                    # Yield actualización del chatbot
+                                                    status = f"✅ {len(result)} mensajes"
+                                                    yield result, result, status, gr.Markdown(visible=False), gr.Markdown("**✅ Búsqueda completada**", visible=True)
+                                                except StopAsyncIteration:
+                                                    break
+                                        finally:
+                                            loop.close()
+                                    except Exception as e:
+                                        import traceback
+                                        traceback.print_exc()
+                                        error_msg = f"❌ Error: {str(e)}"
+                                        error_history = history + [(message, error_msg)]
+                                        yield error_history, error_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
+                                
+                                # Devolver generador para streaming (Gradio lo detecta automáticamente)
+                                return stream_response()
+                                
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                error_msg = f"❌ Error al procesar consulta: {str(e)}"
+                                new_history = history + [(message, error_msg)]
+                                return new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error en búsqueda**\n\nNo se pudo procesar la consulta.", visible=True)
+                    
+                    def copy_sources(history):
+                        """Extrae URLs de la última respuesta del bot"""
+                        if not history or len(history) == 0:
+                            return ""
+                        
+                        last_bot_message = history[-1][1] if len(history[-1]) > 1 else ""
+                        if not last_bot_message:
+                            return ""
+                        
+                        # Buscar URLs en el mensaje
+                        import re
+                        urls = re.findall(r'https?://[^\s\)]+', last_bot_message)
+                        if not urls:
+                            # Buscar en formato markdown [texto](url)
+                            urls = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', last_bot_message)
+                            if urls:
+                                urls = [url for _, url in urls]
+                        
+                        if urls:
+                            return "\n".join(set(urls))  # Eliminar duplicados
+                        return "No se encontraron URLs en la última respuesta."
                     
                     def clear_company_knowledge(history, session_id):
                         company_knowledge = get_company_knowledge(
@@ -15794,23 +16666,29 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                         return gr.Markdown(output, visible=True)
                     
                     company_knowledge_submit_btn.click(
-                        fn=company_knowledge_submit,
-                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle],
-                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output],
+                        fn=company_knowledge_submit_v2,
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type],
+                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output, search_status_sidebar],
                     ).then(
                         fn=lambda: gr.Markdown(visible=False),
                         outputs=[company_knowledge_stats_output]
                     )
                     
                     company_knowledge_input.submit(
-                        fn=company_knowledge_submit,
-                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle],
-                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output],
+                        fn=company_knowledge_submit_v2,
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type],
+                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output, search_status_sidebar],
                     ).then(
                         fn=lambda: gr.Markdown(visible=False),
                         outputs=[company_knowledge_stats_output]
                     )
                     
+                    copy_sources_btn.click(
+                        fn=copy_sources,
+                        inputs=[company_knowledge_bot],
+                        outputs=[copy_sources_output]
+                    )
+
                     clear_company_knowledge_btn.click(
                         fn=clear_company_knowledge,
                         inputs=[company_knowledge_bot, company_knowledge_session_id],

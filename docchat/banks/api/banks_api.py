@@ -18,7 +18,7 @@ except ImportError:
     FASTAPI_AVAILABLE = False
     logging.warning("FastAPI no disponible. Instala con: pip install fastapi uvicorn")
 
-from ...config import AppConfig
+from docchat.config import AppConfig
 from ..banks_mode import BanksMode
 
 logger = logging.getLogger(__name__)

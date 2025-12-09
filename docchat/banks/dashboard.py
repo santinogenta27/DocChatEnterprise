@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
 
-from ...config import AppConfig
+from docchat.config import AppConfig
 from .banks_mode import BanksMode
 
 logger = logging.getLogger(__name__)

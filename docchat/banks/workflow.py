@@ -16,7 +16,7 @@ except ImportError:
     LANGRAPH_AVAILABLE = False
     logging.warning("langgraph no disponible")
 
-from ...config import AppConfig
+from docchat.config import AppConfig
 from .agents import (
     IngestorAgent,
     ExtractorAgent,

@@ -18,7 +18,7 @@ except ImportError:
 
 from .base_agent import BaseBanksAgent
 from ..schemas import SanctionHit, PEPHit, AdverseMediaHit
-from ....config import AppConfig
+from docchat.config import AppConfig
 
 try:
     from ..integrations.worldcheck_integration import WorldCheckIntegration
@@ -36,9 +36,10 @@ class ScreenerAgent(BaseBanksAgent):
         super().__init__(config, "screener")
         
         # API Keys (opcionales, con fallbacks gratuitos)
-        self.worldcheck_api_key = config.__dict__.get("worldcheck_api_key", "")
-        self.dowjones_api_key = config.__dict__.get("dowjones_api_key", "")
-        self.google_news_api_key = config.__dict__.get("google_news_api_key", "")
+        # Usar getattr en lugar de __dict__ para evitar problemas
+        self.worldcheck_api_key = getattr(config, "worldcheck_api_key", "")
+        self.dowjones_api_key = getattr(config, "dowjones_api_key", "")
+        self.google_news_api_key = getattr(config, "google_news_api_key", "")
         
         # Inicializar integración World-Check si hay API key
         if WORLDCHECK_INTEGRATION_AVAILABLE and self.worldcheck_api_key:

@@ -19,7 +19,7 @@ except ImportError:
 
 from .base_agent import BaseBanksAgent
 from ..schemas import EntityExtraction
-from ....config import AppConfig
+from docchat.config import AppConfig
 
 logger = logging.getLogger(__name__)
 

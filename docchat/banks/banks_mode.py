@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 from datetime import datetime
 
-from ...config import AppConfig
+from docchat.config import AppConfig
 from .workflow import BanksWorkflow
 
 logger = logging.getLogger(__name__)

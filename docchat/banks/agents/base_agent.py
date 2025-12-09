@@ -10,7 +10,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 
-from ....config import AppConfig
+from docchat.config import AppConfig
 from ..schemas import AuditLog
 
 

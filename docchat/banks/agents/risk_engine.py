@@ -17,7 +17,7 @@ except ImportError:
 
 from .base_agent import BaseBanksAgent
 from ..schemas import RiskScore
-from ....config import AppConfig
+from docchat.config import AppConfig
 
 try:
     from ..config_manager import BanksConfigManager

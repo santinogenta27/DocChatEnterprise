@@ -2,7 +2,10 @@
 
 from .config import AppConfig, load_config  # noqa: F401
 from .document_processor import DocumentProcessor  # noqa: F401
-from docling.document_converter import DocumentConverter  # noqa: F401
+try:
+    from docling.document_converter import DocumentConverter  # noqa: F401
+except ImportError:
+    DocumentConverter = None  # noqa: F401
 from .retriever_builder import RetrieverBuilder  # noqa: F401
 from .workflow import AgentWorkflow  # noqa: F401
 from .mass_processor import MassDocumentProcessor  # noqa: F401
