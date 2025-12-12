@@ -71,6 +71,39 @@ from .path_dependent_reasoning import PathDependentReasoner, ReasoningPath  # no
 from .goal_decomposition import GoalDecomposer, Goal, Subtask  # noqa: F401
 # Chat Conversacional 2 - Modo avanzado para empresas
 from .chat_conversational_2 import ChatConversational2, run_chat_conversational_2, get_chat_conversational_2  # noqa: F401
+# Alien Mode - Clonado de Chat Conversational 2 Enterprise
+from .alien_mode import AlienMode, run_alien_mode, get_alien_mode  # noqa: F401
+# Judge Agent Mode - Clonado de Alien Mode
+from .judge_agent_mode import JudgeAgentMode, run_judge_agent_mode, get_judge_agent_mode  # noqa: F401
+# Memory LLM Mode - Clonado de Alien Mode
+from .memory_llm_mode import MemoryLLMMode, run_memory_llm_mode, get_memory_llm_mode  # noqa: F401
+# Advanced Retrieval Pipeline - Basado en paper de evaluación de embeddings
+from .advanced_retrieval_pipeline import AdvancedRetrievalPipeline, EmbeddingModel, ChunkingStrategy, RerankerModel  # noqa: F401
+# Banking Mode - Clonado de Alien Mode
+from .banking_mode import BankingMode, run_banking_mode, get_banking_mode  # noqa: F401
+# Event-driven modes
+from .event_bus_mode import EventBusMode, run_event_bus_mode, get_event_bus_mode, SimpleEventBus  # noqa: F401
+from .event_horizon_mode import EventHorizonMode, run_event_horizon_mode, get_event_horizon_mode  # noqa: F401
+from .event_storage_mode import EventStorageMode, run_event_storage_mode, get_event_storage_mode  # noqa: F401
+from .extasis_mode import ExtasisMode, run_extasis_mode, get_extasis_mode  # noqa: F401
+from .extraction_x_mode import ExtractionXMode, run_extraction_x_mode, get_extraction_x_mode  # noqa: F401
+from .data_point_mode import DataPointMode, run_data_point_mode, get_data_point_mode  # noqa: F401
+from .neusym_rag import NeuSymRAG, ActionType, Action, Observation  # noqa: F401
+from .multiview_chunking import MultiviewChunker, MultiviewChunks, ChunkingView  # noqa: F401
+from .multi_strategy_parsing import MultiStrategyParser, ParsingStrategy, DocumentFormat, Node  # noqa: F401
+from .event_bus_webhooks import create_webhook_handler  # noqa: F401
+# Enterprise Connectors - Conexión automática a apps enterprise
+from .enterprise_connectors import (  # noqa: F401
+    EnterpriseConnectorManager,
+    ConnectorConfig,
+    ConnectorStatus,
+    SharePointConnector,
+    AWSS3Connector,
+    GoogleDriveConnector,
+    SalesforceConnector,
+    ServiceNowConnector,
+)
+from .invoice import InvoiceMode, run_invoice_mode, get_invoice_mode  # noqa: F401
 from .context_folding import ContextFolder, ContextBranch, FoldedContext, BranchStatus  # noqa: F401
 from .data_provenance import DataProvenanceTracker, DataProvenance, DataSourceType, ProvenanceRecord  # noqa: F401
 from .chain_of_thought import ChainOfThoughtReasoner, ThoughtChain, ReasoningStep, ReasoningStepType  # noqa: F401
@@ -161,6 +194,32 @@ from .sql_agents import (  # noqa: F401
     SQLExecutionResult,
 )
 from .deep_research import DeepResearch, DeepResearchResult  # noqa: F401
+# Ads Optimization Engine - Motor completo de optimización de anuncios (Production-Ready)
+from .ads_optimization_engine import (  # noqa: F401
+    AdsOptimizationEngine,
+    CreativeAsset,
+    AdVariation,
+    Campaign,
+    PerformanceMetrics,
+    CreativeType,
+    CampaignObjective,
+    Platform,
+    CreativeAssetManager,
+    GenerativeAdVariationsEngine,
+    CTRPredictionModel,
+    CreativeSelector,
+    CampaignManager,
+    RLAutoOptimizer,
+    AutoScalingSystem
+)
+from .ads_optimization_mode import AdsOptimizationMode, get_ads_optimization_mode, run_ads_optimization_mode  # noqa: F401
+# Production Engine (recomendado para producción)
+from .ads_optimization.engine_production import ProductionAdsOptimizationEngine  # noqa: F401
+from .ads_optimization.models import ModelManager  # noqa: F401
+from .ads_optimization.database import DatabaseManager  # noqa: F401
+from .ads_optimization.tenant_manager import TenantManager  # noqa: F401
+from .ads_optimization.billing import BillingManager  # noqa: F401
+from .ads_optimization.auth import AuthManager  # noqa: F401
 
 __version__ = "2.1.0"
 __all__ = [
@@ -312,6 +371,59 @@ __all__ = [
     "ChatConversational2",
     "run_chat_conversational_2",
     "get_chat_conversational_2",
+    # Alien Mode
+    "AlienMode",
+    "run_alien_mode",
+    "get_alien_mode",
+    # Judge Agent Mode
+    "JudgeAgentMode",
+    "run_judge_agent_mode",
+    "get_judge_agent_mode",
+    # Banking Mode
+    "BankingMode",
+    "run_banking_mode",
+    "get_banking_mode",
+    # Event-driven modes
+    "EventBusMode",
+    "run_event_bus_mode",
+    "get_event_bus_mode",
+    "SimpleEventBus",
+    "EventHorizonMode",
+    "run_event_horizon_mode",
+    "get_event_horizon_mode",
+    "EventStorageMode",
+    "run_event_storage_mode",
+    "get_event_storage_mode",
+    "ExtractionXMode",
+    "run_extraction_x_mode",
+    "get_extraction_x_mode",
+    "DataPointMode",
+    "run_data_point_mode",
+    "get_data_point_mode",
+    "NeuSymRAG",
+    "ActionType",
+    "Action",
+    "Observation",
+    "MultiviewChunker",
+    "MultiviewChunks",
+    "ChunkingView",
+    "MultiStrategyParser",
+    "ParsingStrategy",
+    "DocumentFormat",
+    "Node",
+    "create_webhook_handler",
+    # Enterprise Connectors
+    "EnterpriseConnectorManager",
+    "ConnectorConfig",
+    "ConnectorStatus",
+    "SharePointConnector",
+    "AWSS3Connector",
+    "GoogleDriveConnector",
+    "SalesforceConnector",
+    "ServiceNowConnector",
+    "InvoiceMode",
+    "run_invoice_mode",
+    "get_invoice_mode",
     "ContextFolder",
     "ContextBranch",
     "FoldedContext",

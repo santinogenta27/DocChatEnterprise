@@ -567,7 +567,6 @@ class CompanyKnowledgeIntegrations:
             
         except Exception as e:
             print(f"⚠️ [Company Knowledge] Error buscando en {app.app_name}: {e}")
->>>>>>> 7cc331624b8b5de58ee8f2365424f0acfbda7432
         
         return results
 
@@ -2551,7 +2550,6 @@ class CompanyKnowledgeIntegrations:
             "sources": [result.source_name for result in app_results]
         }
     
-<<<<<<< HEAD
     def _teams_search(self, token: str, query: str, filters: Optional[Dict[str, Any]] = None) -> List[AppSearchResult]:
         """Busca mensajes en Microsoft Teams usando Microsoft Graph API."""
         results: List[AppSearchResult] = []
@@ -2974,8 +2972,7 @@ Responde SOLO con el texto del email (sin "Asunto:", "Para:", etc.):
             return {
                 "success": False,
                 "error": f"Error enviando email: {str(e)}"
-        }
->>>>>>> 7cc331624b8b5de58ee8f2365424f0acfbda7432
+            }
     
     def get_statistics(self) -> Dict[str, Any]:
         """Obtiene estadísticas de las integraciones."""

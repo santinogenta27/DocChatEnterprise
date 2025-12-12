@@ -537,14 +537,14 @@ Responde basándote en el contenido de esos emails."""
                     reply_subject = template["subject_template"].format(
                         subject=subject,
                         from_email=from_email,
-                        from=sender_email,
+                        sender=sender_email,
                         date=date_header
                     )
                     
                     reply_body = template["body_template"].format(
                         subject=subject,
                         from_email=from_email,
-                        from=sender_email,
+                        sender=sender_email,
                         date=date_header,
                         body=body_text[:1000]  # Limitar para plantilla
                     )
@@ -558,18 +558,18 @@ Responde basándote en el contenido de esos emails."""
                             "body_preview": reply_body[:200]
                         })
                     else:
-                                    # Obtener threadId del mensaje original
-                                    thread_id = msg_data.get("threadId")
-                                    
-                                    # Enviar respuesta
-                                    success = self._send_gmail_reply(
-                                        access_token=access_token,
-                                        to=sender_email,
-                                        subject=reply_subject,
-                                        body=reply_body,
-                                        thread_id=thread_id,
-                                        reply_to_message_id=msg_id
-                                    )
+                        # Obtener threadId del mensaje original
+                        thread_id = msg_data.get("threadId")
+                        
+                        # Enviar respuesta
+                        success = self._send_gmail_reply(
+                            access_token=access_token,
+                            to=sender_email,
+                            subject=reply_subject,
+                            body=reply_body,
+                            thread_id=thread_id,
+                            reply_to_message_id=msg_id
+                        )
                         
                         if success:
                             sent_count += 1
