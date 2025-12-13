@@ -1,5 +1,5 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+Portal ADS - Sistema Multi-Agente RAG de Máxima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
@@ -25,11 +25,15 @@ from __future__ import annotations
 import json
 import time
 import asyncio
+import uuid
 from typing import List, Dict, Optional, Any, Tuple, Iterator
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+
+import numpy as np
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
@@ -47,11 +51,842 @@ from .test_time_training import TestTimeTrainer
 from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
+from .ads_agentic_ai import MindFuseAgenticAI, CampaignMetrics, ContentScore, PerformanceInsight
 
 
-class AlienMode:
+# ============================================
+# META AUTONOMOUS ADS SYSTEM (Meta Vision 2026)
+# ============================================
+
+@dataclass
+class AdCreative:
+    """Creativo de anuncio generado por AI."""
+    creative_id: str
+    ad_text: str
+    ad_headline: str
+    ad_description: str
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    cta: str = "Learn More"
+    variations: List[Dict[str, Any]] = field(default_factory=list)
+    generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass
+class CampaignConfig:
+    """Configuración de campaña para agente autónomo."""
+    campaign_id: str
+    business_goal: str  # "sell_product", "get_leads", "brand_awareness"
+    budget: float
+    product_image_url: Optional[str] = None
+    product_description: Optional[str] = None
+    target_roas: Optional[float] = None
+    target_cpa: Optional[float] = None
+    brand_guidelines: Optional[Dict[str, Any]] = None
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass
+class AutonomousCampaign:
+    """Campaña gestionada completamente por AI."""
+    campaign_id: str
+    config: CampaignConfig
+    status: str = "draft"  # draft, active, paused, completed
+    creatives: List[AdCreative] = field(default_factory=list)
+    active_creatives: List[str] = field(default_factory=list)
+    paused_creatives: List[str] = field(default_factory=list)
+    performance_metrics: Dict[str, Any] = field(default_factory=dict)
+    optimization_history: List[Dict[str, Any]] = field(default_factory=list)
+    budget_allocation: Dict[str, float] = field(default_factory=dict)
+    target_audiences: List[Dict[str, Any]] = field(default_factory=list)
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    last_optimized: Optional[str] = None
+
+
+class MetaAutonomousAdsSystem:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    Sistema de Agentes Autónomos de Meta para Publicidad (Meta Vision 2026).
+    
+    Implementa agentes completamente autónomos que:
+    - Generan creativos completos (texto, imágenes, video) desde una imagen de producto
+    - Segmentan audiencias dinámicamente sin input manual
+    - Gestionan presupuesto automáticamente entre plataformas
+    - Optimizan continuamente basándose en performance
+    - Aprenden y se auto-corrigen 24/7
+    - Responden a leads en tiempo real
+    - Testean creativos automáticamente (A/B)
+    
+    Basado en la visión de Meta: "Solo necesitas una imagen de producto y un presupuesto"
+    """
+    
+    def __init__(self, config: AppConfig, llm: BaseLanguageModel):
+        self.config = config
+        self.llm = llm
+        
+        # Campañas activas
+        self.campaigns: Dict[str, AutonomousCampaign] = {}
+        
+        # Historial de aprendizaje
+        self.learning_memory: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        
+        # Métricas agregadas para optimización
+        self.performance_database: Dict[str, Dict[str, Any]] = {}
+        
+        print("✅ Meta Autonomous Ads System inicializado")
+    
+    # ============================================
+    # AD CREATION AGENT
+    # ============================================
+    
+    async def create_complete_campaign(
+        self,
+        product_image_url: str,
+        budget: float,
+        business_goal: str = "sell_product",
+        product_description: Optional[str] = None,
+        brand_guidelines: Optional[Dict[str, Any]] = None
+    ) -> AutonomousCampaign:
+        """
+        Crea una campaña completa automáticamente.
+        
+        Meta Vision: "Solo necesitas una imagen de producto y un presupuesto"
+        El AI hace TODO: creativos, targeting, budget allocation, lanzamiento.
+        """
+        campaign_id = f"CAMP-{uuid.uuid4().hex[:8].upper()}"
+        
+        config = CampaignConfig(
+            campaign_id=campaign_id,
+            business_goal=business_goal,
+            budget=budget,
+            product_image_url=product_image_url,
+            product_description=product_description,
+            brand_guidelines=brand_guidelines
+        )
+        
+        # Step 1: Generar creativos automáticamente
+        print(f"🎨 [Meta Ads Agent] Generando creativos para campaña {campaign_id}...")
+        creatives = await self._generate_creatives_autonomous(
+            product_image_url=product_image_url,
+            product_description=product_description,
+            business_goal=business_goal,
+            brand_guidelines=brand_guidelines,
+            num_variations=10  # Meta genera 10-50 variaciones automáticamente
+        )
+        
+        # Step 2: Segmentar audiencias dinámicamente
+        print(f"🎯 [Meta Ads Agent] Identificando audiencias para campaña {campaign_id}...")
+        target_audiences = await self._identify_audiences_autonomous(
+            product_description=product_description,
+            business_goal=business_goal,
+            creatives=creatives
+        )
+        
+        # Step 3: Asignar presupuesto automáticamente
+        print(f"💰 [Meta Ads Agent] Asignando presupuesto para campaña {campaign_id}...")
+        budget_allocation = await self._allocate_budget_autonomous(
+            budget=budget,
+            creatives=creatives,
+            audiences=target_audiences,
+            business_goal=business_goal
+        )
+        
+        # Step 4: Crear campaña
+        campaign = AutonomousCampaign(
+            campaign_id=campaign_id,
+            config=config,
+            status="active",
+            creatives=creatives,
+            active_creatives=[c.creative_id for c in creatives[:5]],  # Activar top 5 inicialmente
+            budget_allocation=budget_allocation,
+            target_audiences=target_audiences
+        )
+        
+        self.campaigns[campaign_id] = campaign
+        
+        print(f"✅ [Meta Ads Agent] Campaña {campaign_id} creada y activada automáticamente")
+        print(f"   - {len(creatives)} creativos generados")
+        print(f"   - {len(target_audiences)} audiencias identificadas")
+        print(f"   - Presupuesto asignado: ${budget:.2f}")
+        
+        return campaign
+    
+    async def _generate_creatives_autonomous(
+        self,
+        product_image_url: str,
+        product_description: Optional[str],
+        business_goal: str,
+        brand_guidelines: Optional[Dict[str, Any]],
+        num_variations: int = 10
+    ) -> List[AdCreative]:
+        """
+        Genera creativos completos automáticamente.
+        
+        Meta Vision: AI genera texto, imágenes, video, CTAs automáticamente.
+        """
+        creatives = []
+        
+        # Analizar producto para generar creativos relevantes
+        product_analysis = await self._analyze_product_for_ads(
+            product_image_url=product_image_url,
+            product_description=product_description
+        )
+        
+        # Generar múltiples variaciones
+        for i in range(num_variations):
+            creative_id = f"CREATIVE-{uuid.uuid4().hex[:8].upper()}"
+            
+            # Generar texto del anuncio
+            ad_text = await self._generate_ad_text_autonomous(
+                product_analysis=product_analysis,
+                business_goal=business_goal,
+                variation_index=i,
+                brand_guidelines=brand_guidelines
+            )
+            
+            # Generar headline
+            headline = await self._generate_headline_autonomous(
+                ad_text=ad_text,
+                business_goal=business_goal
+            )
+            
+            # Generar descripción
+            description = await self._generate_description_autonomous(
+                ad_text=ad_text,
+                business_goal=business_goal
+            )
+            
+            # Generar imagen (simulado - en producción usaría DALL-E/Midjourney)
+            image_url = await self._generate_ad_image_autonomous(
+                product_image_url=product_image_url,
+                ad_text=ad_text,
+                variation_index=i
+            )
+            
+            # Generar video script (simulado - en producción usaría generación de video)
+            video_url = await self._generate_ad_video_autonomous(
+                product_image_url=product_image_url,
+                ad_text=ad_text,
+                variation_index=i
+            )
+            
+            # Determinar CTA óptimo
+            cta = await self._determine_optimal_cta(business_goal, ad_text)
+            
+            creative = AdCreative(
+                creative_id=creative_id,
+                ad_text=ad_text,
+                ad_headline=headline,
+                ad_description=description,
+                image_url=image_url,
+                video_url=video_url,
+                cta=cta,
+                variations=[{
+                    "text_variation": ad_text,
+                    "tone": "professional" if i % 2 == 0 else "casual",
+                    "urgency": "high" if i % 3 == 0 else "normal"
+                }]
+            )
+            
+            creatives.append(creative)
+        
+        return creatives
+    
+    async def _analyze_product_for_ads(self, product_image_url: str, product_description: Optional[str]) -> Dict[str, Any]:
+        """Analiza producto para generar creativos relevantes."""
+        prompt = f"""Analiza este producto para crear anuncios efectivos:
+
+Imagen: {product_image_url}
+Descripción: {product_description or "No proporcionada"}
+
+Extrae:
+1. Características clave del producto
+2. Beneficios principales
+3. Audiencia objetivo probable
+4. Mensajes emocionales que resuenan
+5. Estilo visual apropiado
+6. Palabras clave de marketing
+
+Responde en JSON:
+{{
+    "key_features": ["feature1", "feature2"],
+    "benefits": ["benefit1", "benefit2"],
+    "target_audience": "descripción",
+    "emotional_appeals": ["appeal1", "appeal2"],
+    "visual_style": "descripción",
+    "marketing_keywords": ["keyword1", "keyword2"]
+}}
+"""
+        try:
+            response = await self.llm.ainvoke(prompt)
+            content = response.content if hasattr(response, 'content') else str(response)
+            # Limpiar JSON
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except:
+            return {
+                "key_features": ["Calidad premium", "Diseño moderno"],
+                "benefits": ["Ahorro de tiempo", "Mayor eficiencia"],
+                "target_audience": "Profesionales y empresas",
+                "emotional_appeals": ["Confianza", "Innovación"],
+                "visual_style": "Profesional y moderno",
+                "marketing_keywords": ["premium", "eficiente", "innovador"]
+            }
+    
+    async def _generate_ad_text_autonomous(
+        self,
+        product_analysis: Dict[str, Any],
+        business_goal: str,
+        variation_index: int,
+        brand_guidelines: Optional[Dict[str, Any]]
+    ) -> str:
+        """Genera texto de anuncio optimizado automáticamente."""
+        tone_variations = ["professional", "casual", "urgent", "friendly", "authoritative"]
+        tone = tone_variations[variation_index % len(tone_variations)]
+        
+        prompt = f"""Genera un texto de anuncio optimizado para conversión.
+
+Producto:
+- Características: {product_analysis.get('key_features', [])}
+- Beneficios: {product_analysis.get('benefits', [])}
+- Audiencia: {product_analysis.get('target_audience', 'General')}
+
+Objetivo de negocio: {business_goal}
+Tono: {tone}
+Variación: {variation_index + 1}
+
+Genera un texto de anuncio persuasivo (2-3 oraciones) que:
+- Destaca beneficios clave
+- Incluye llamada a la acción clara
+- Está optimizado para {business_goal}
+- Usa el tono {tone}
+
+Solo el texto del anuncio, sin explicaciones."""
+        
+        try:
+            response = await self.llm.ainvoke(prompt)
+            return response.content.strip() if hasattr(response, 'content') else str(response).strip()
+        except:
+            return f"Descubre {product_analysis.get('benefits', ['beneficios'])[0]}. {product_analysis.get('key_features', ['Características'])[0]} que transforman tu negocio."
+    
+    async def _generate_headline_autonomous(self, ad_text: str, business_goal: str) -> str:
+        """Genera headline optimizado."""
+        prompt = f"""Genera un headline (título) de anuncio de máximo 30 caracteres basado en este texto:
+
+Texto: {ad_text}
+Objetivo: {business_goal}
+
+Headline optimizado (máximo 30 caracteres):"""
+        
+        try:
+            response = await self.llm.ainvoke(prompt)
+            headline = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+            return headline[:30]  # Limitar a 30 caracteres
+        except:
+            return "Transforma tu negocio hoy"
+    
+    async def _generate_description_autonomous(self, ad_text: str, business_goal: str) -> str:
+        """Genera descripción optimizada."""
+        prompt = f"""Genera una descripción de anuncio (máximo 125 caracteres) basada en este texto:
+
+Texto: {ad_text}
+Objetivo: {business_goal}
+
+Descripción optimizada (máximo 125 caracteres):"""
+        
+        try:
+            response = await self.llm.ainvoke(prompt)
+            description = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+            return description[:125]  # Limitar a 125 caracteres
+        except:
+            return "Solución innovadora que mejora tu productividad y resultados. Prueba gratis hoy."
+    
+    async def _generate_ad_image_autonomous(
+        self,
+        product_image_url: str,
+        ad_text: str,
+        variation_index: int
+    ) -> str:
+        """Genera imagen de anuncio (simulado - en producción usaría DALL-E/Midjourney)."""
+        # En producción, esto llamaría a DALL-E, Midjourney, o Meta's image generation API
+        image_id = f"IMG-{uuid.uuid4().hex[:8].upper()}"
+        return f"https://ads.enterprisedata.ai/generated/{image_id}.png"
+    
+    async def _generate_ad_video_autonomous(
+        self,
+        product_image_url: str,
+        ad_text: str,
+        variation_index: int
+    ) -> str:
+        """Genera video de anuncio (simulado - en producción usaría generación de video)."""
+        # En producción, esto generaría video usando Runway, Pika, o Meta's video generation
+        video_id = f"VID-{uuid.uuid4().hex[:8].upper()}"
+        return f"https://ads.enterprisedata.ai/generated/{video_id}.mp4"
+    
+    async def _determine_optimal_cta(self, business_goal: str, ad_text: str) -> str:
+        """Determina el CTA óptimo basado en objetivo y texto."""
+        cta_map = {
+            "sell_product": "Shop Now",
+            "get_leads": "Learn More",
+            "brand_awareness": "Discover More",
+            "app_install": "Download Now",
+            "video_views": "Watch Now"
+        }
+        return cta_map.get(business_goal, "Learn More")
+    
+    # ============================================
+    # TARGETING AGENT (Dynamic Audience Discovery)
+    # ============================================
+    
+    async def _identify_audiences_autonomous(
+        self,
+        product_description: Optional[str],
+        business_goal: str,
+        creatives: List[AdCreative]
+    ) -> List[Dict[str, Any]]:
+        """
+        Identifica audiencias dinámicamente sin segmentación manual.
+        
+        Meta Vision: AI identifica audiencias basándose en contenido del anuncio
+        y comportamiento real de usuarios, no en parámetros estáticos.
+        """
+        prompt = f"""Identifica audiencias objetivo para esta campaña usando targeting dinámico.
+
+Producto: {product_description or "No especificado"}
+Objetivo: {business_goal}
+Creativos generados: {len(creatives)} variaciones
+
+Meta Vision: El contenido del anuncio (mensaje, tono, estilo visual) actúa como señal
+para guiar al algoritmo hacia la audiencia correcta, no parámetros estáticos como edad/género.
+
+Identifica 3-5 audiencias distintas basándote en:
+1. Intereses implícitos en el contenido
+2. Comportamientos de usuarios similares
+3. Señales contextuales del producto
+4. Patrones de engagement con creativos similares
+
+Responde en JSON:
+{{
+    "audiences": [
+        {{
+            "audience_id": "AUD-1",
+            "name": "Nombre descriptivo",
+            "description": "Descripción de la audiencia",
+            "signals": ["señal1", "señal2"],
+            "estimated_size": "large/medium/small",
+            "expected_performance": "high/medium/low"
+        }}
+    ]
+}}
+"""
+        try:
+            response = await self.llm.ainvoke(prompt)
+            content = response.content if hasattr(response, 'content') else str(response)
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            result = json.loads(content)
+            return result.get("audiences", [])
+        except:
+            # Audiencias por defecto
+            return [
+                {
+                    "audience_id": "AUD-1",
+                    "name": "Early Adopters",
+                    "description": "Usuarios que adoptan nuevas tecnologías temprano",
+                    "signals": ["tech_interest", "innovation_seeker"],
+                    "estimated_size": "medium",
+                    "expected_performance": "high"
+                },
+                {
+                    "audience_id": "AUD-2",
+                    "name": "Value Seekers",
+                    "description": "Usuarios enfocados en valor y eficiencia",
+                    "signals": ["price_sensitive", "comparison_shopper"],
+                    "estimated_size": "large",
+                    "expected_performance": "medium"
+                }
+            ]
+    
+    # ============================================
+    # BUDGET MANAGEMENT AGENT
+    # ============================================
+    
+    async def _allocate_budget_autonomous(
+        self,
+        budget: float,
+        creatives: List[AdCreative],
+        audiences: List[Dict[str, Any]],
+        business_goal: str
+    ) -> Dict[str, float]:
+        """
+        Asigna presupuesto automáticamente entre creativos y audiencias.
+        
+        Meta Vision: AI distribuye presupuesto dinámicamente para maximizar ROAS.
+        """
+        # Estrategia inicial: distribuir equitativamente, luego optimizar
+        total_items = len(creatives) * len(audiences)
+        base_allocation = budget / max(total_items, 1)
+        
+        allocation = {}
+        
+        # Asignar más presupuesto a creativos y audiencias con mejor expected performance
+        for creative in creatives:
+            for audience in audiences:
+                key = f"{creative.creative_id}_{audience['audience_id']}"
+                # Ajustar según expected_performance
+                multiplier = 1.5 if audience.get("expected_performance") == "high" else 1.0
+                allocation[key] = base_allocation * multiplier
+        
+        # Normalizar para que sume exactamente el presupuesto
+        total = sum(allocation.values())
+        if total > 0:
+            allocation = {k: (v / total) * budget for k, v in allocation.items()}
+        
+        return allocation
+    
+    # ============================================
+    # OPTIMIZATION AGENT (24/7 Learning)
+    # ============================================
+    
+    async def optimize_campaign_autonomous(self, campaign_id: str) -> Dict[str, Any]:
+        """
+        Optimiza campaña automáticamente basándose en performance.
+        
+        Meta Vision: AI monitorea 24/7, reasigna presupuesto, pausa ads que no funcionan,
+        escala lo que funciona, y aprende continuamente.
+        """
+        if campaign_id not in self.campaigns:
+            return {"success": False, "error": "Campaña no encontrada"}
+        
+        campaign = self.campaigns[campaign_id]
+        
+        print(f"🔄 [Meta Ads Agent] Optimizando campaña {campaign_id}...")
+        
+        # Simular métricas de performance (en producción vendrían de Meta Ads API)
+        performance_data = await self._get_campaign_performance(campaign_id)
+        
+        # Analizar qué creativos funcionan mejor
+        top_performers = self._identify_top_performers(performance_data)
+        underperformers = self._identify_underperformers(performance_data)
+        
+        # Acciones de optimización
+        actions_taken = []
+        
+        # 1. Pausar creativos que no funcionan
+        for creative_id in underperformers:
+            if creative_id in campaign.active_creatives:
+                campaign.active_creatives.remove(creative_id)
+                campaign.paused_creatives.append(creative_id)
+                actions_taken.append(f"Pausado creativo {creative_id} (bajo rendimiento)")
+        
+        # 2. Activar/escalar creativos que funcionan bien
+        for creative_id in top_performers:
+            if creative_id not in campaign.active_creatives:
+                campaign.active_creatives.append(creative_id)
+                if creative_id in campaign.paused_creatives:
+                    campaign.paused_creatives.remove(creative_id)
+                actions_taken.append(f"Activado creativo {creative_id} (alto rendimiento)")
+        
+        # 3. Reasignar presupuesto hacia top performers
+        new_allocation = await self._reallocate_budget_optimized(
+            campaign=campaign,
+            top_performers=top_performers,
+            performance_data=performance_data
+        )
+        campaign.budget_allocation = new_allocation
+        actions_taken.append("Presupuesto reasignado hacia creativos de alto rendimiento")
+        
+        # 4. Aprender y guardar insights
+        learning_insight = {
+            "timestamp": datetime.now().isoformat(),
+            "top_performers": top_performers,
+            "underperformers": underperformers,
+            "actions_taken": actions_taken,
+            "performance_improvement": self._calculate_improvement(performance_data)
+        }
+        campaign.optimization_history.append(learning_insight)
+        self.learning_memory[campaign_id].append(learning_insight)
+        
+        campaign.last_optimized = datetime.now().isoformat()
+        campaign.performance_metrics = performance_data
+        
+        print(f"✅ [Meta Ads Agent] Optimización completada: {len(actions_taken)} acciones")
+        
+        return {
+            "success": True,
+            "campaign_id": campaign_id,
+            "actions_taken": actions_taken,
+            "performance_improvement": learning_insight["performance_improvement"],
+            "active_creatives": len(campaign.active_creatives),
+            "paused_creatives": len(campaign.paused_creatives)
+        }
+    
+    async def _get_campaign_performance(self, campaign_id: str) -> Dict[str, Any]:
+        """Obtiene métricas de performance (simulado - en producción vendría de Meta Ads API)."""
+        campaign = self.campaigns.get(campaign_id)
+        if not campaign:
+            return {}
+        
+        # Simular métricas reales
+        performance = {}
+        for creative_id in campaign.active_creatives:
+            performance[creative_id] = {
+                "impressions": np.random.randint(1000, 10000),
+                "clicks": np.random.randint(50, 500),
+                "ctr": np.random.uniform(0.01, 0.05),
+                "conversions": np.random.randint(5, 50),
+                "cpa": np.random.uniform(10, 50),
+                "roas": np.random.uniform(2.0, 5.0),
+                "spend": np.random.uniform(100, 1000)
+            }
+        
+        return performance
+    
+    def _identify_top_performers(self, performance_data: Dict[str, Any]) -> List[str]:
+        """Identifica creativos con mejor performance."""
+        if not performance_data:
+            return []
+        
+        # Ordenar por ROAS
+        sorted_creatives = sorted(
+            performance_data.items(),
+            key=lambda x: x[1].get("roas", 0),
+            reverse=True
+        )
+        
+        # Top 30%
+        top_count = max(1, len(sorted_creatives) // 3)
+        return [creative_id for creative_id, _ in sorted_creatives[:top_count]]
+    
+    def _identify_underperformers(self, performance_data: Dict[str, Any]) -> List[str]:
+        """Identifica creativos con bajo performance."""
+        if not performance_data:
+            return []
+        
+        # Creativos con ROAS < 2.0 o CTR < 1%
+        underperformers = []
+        for creative_id, metrics in performance_data.items():
+            roas = metrics.get("roas", 0)
+            ctr = metrics.get("ctr", 0)
+            if roas < 2.0 or ctr < 0.01:
+                underperformers.append(creative_id)
+        
+        return underperformers
+    
+    async def _reallocate_budget_optimized(
+        self,
+        campaign: AutonomousCampaign,
+        top_performers: List[str],
+        performance_data: Dict[str, Any]
+    ) -> Dict[str, float]:
+        """Reasigna presupuesto hacia top performers."""
+        total_budget = campaign.config.budget
+        
+        # Calcular pesos basados en ROAS
+        weights = {}
+        total_weight = 0
+        
+        for creative_id in campaign.active_creatives:
+            if creative_id in performance_data:
+                roas = performance_data[creative_id].get("roas", 1.0)
+                weight = roas ** 2  # Cuadrático para dar más peso a los mejores
+                weights[creative_id] = weight
+                total_weight += weight
+            else:
+                weights[creative_id] = 1.0
+                total_weight += 1.0
+        
+        # Asignar presupuesto proporcional
+        new_allocation = {}
+        for creative_id, weight in weights.items():
+            # Distribuir entre todas las audiencias
+            for audience in campaign.target_audiences:
+                key = f"{creative_id}_{audience['audience_id']}"
+                proportion = weight / total_weight if total_weight > 0 else 1.0 / len(weights)
+                new_allocation[key] = total_budget * proportion / len(campaign.target_audiences)
+        
+        return new_allocation
+    
+    def _calculate_improvement(self, performance_data: Dict[str, Any]) -> float:
+        """Calcula mejora de performance."""
+        if not performance_data:
+            return 0.0
+        
+        avg_roas = np.mean([m.get("roas", 0) for m in performance_data.values()])
+        return float(avg_roas)
+    
+    # ============================================
+    # SALES AGENT (Real-time Lead Response)
+    # ============================================
+    
+    async def respond_to_lead_autonomous(
+        self,
+        campaign_id: str,
+        lead_message: str,
+        lead_source: str = "messenger"
+    ) -> Dict[str, Any]:
+        """
+        Responde a leads en tiempo real automáticamente.
+        
+        Meta Vision: AI responde leads, maneja objeciones, califica prospects,
+        y cierra ventas dentro del chat.
+        """
+        campaign = self.campaigns.get(campaign_id)
+        if not campaign:
+            return {"success": False, "error": "Campaña no encontrada"}
+        
+        prompt = f"""Eres un agente de ventas AI autónomo que responde a leads en tiempo real.
+
+Campaña: {campaign_id}
+Objetivo: {campaign.config.business_goal}
+Producto: {campaign.config.product_description or "No especificado"}
+
+Mensaje del lead: {lead_message}
+Fuente: {lead_source}
+
+Tu objetivo:
+1. Responder de manera amigable y profesional
+2. Identificar la intención del lead
+3. Responder preguntas sobre el producto
+4. Manejar objeciones comunes
+5. Calificar el lead (hot/warm/cold)
+6. Guiar hacia el cierre si es apropiado
+
+Responde como un vendedor experto, natural y persuasivo.
+Mantén respuestas concisas (2-3 oraciones máximo)."""
+        
+        try:
+            response = await self.llm.ainvoke(prompt)
+            response_text = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+            
+            # Calificar lead
+            lead_score = await self._qualify_lead(lead_message, response_text)
+            
+            return {
+                "success": True,
+                "response": response_text,
+                "lead_score": lead_score,
+                "next_action": "follow_up" if lead_score > 0.7 else "nurture"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "response": "Gracias por tu interés. Un representante se pondrá en contacto contigo pronto."
+            }
+    
+    async def _qualify_lead(self, lead_message: str, response: str) -> float:
+        """Califica lead (0.0-1.0) basándose en intención."""
+        prompt = f"""Califica este lead en una escala de 0.0 a 1.0:
+
+Mensaje del lead: {lead_message}
+Respuesta del agente: {response}
+
+Considera:
+- Intención de compra (alta = 0.8-1.0, media = 0.5-0.7, baja = 0.0-0.4)
+- Urgencia
+- Presupuesto implícito
+- Autoridad para decidir
+
+Responde solo con un número entre 0.0 y 1.0."""
+        
+        try:
+            response_obj = await self.llm.ainvoke(prompt)
+            score_text = response_obj.content.strip() if hasattr(response_obj, 'content') else str(response_obj).strip()
+            score = float(score_text)
+            return max(0.0, min(1.0, score))
+        except:
+            return 0.5  # Default medio
+    
+    # ============================================
+    # CREATIVE TESTING AGENT (A/B Automático)
+    # ============================================
+    
+    async def test_creatives_autonomous(
+        self,
+        campaign_id: str,
+        test_duration_hours: int = 24
+    ) -> Dict[str, Any]:
+        """
+        Testea creativos automáticamente (A/B testing).
+        
+        Meta Vision: AI testea múltiples variaciones automáticamente y
+        identifica winners sin intervención humana.
+        """
+        campaign = self.campaigns.get(campaign_id)
+        if not campaign:
+            return {"success": False, "error": "Campaña no encontrada"}
+        
+        print(f"🧪 [Meta Ads Agent] Iniciando A/B test para campaña {campaign_id}...")
+        
+        # Activar todos los creativos para testing
+        test_creatives = campaign.creatives[:10]  # Testear top 10
+        test_ids = [c.creative_id for c in test_creatives]
+        
+        # Simular resultados de test (en producción vendrían de Meta Ads API)
+        test_results = {}
+        for creative_id in test_ids:
+            test_results[creative_id] = {
+                "impressions": np.random.randint(500, 5000),
+                "clicks": np.random.randint(25, 250),
+                "ctr": np.random.uniform(0.01, 0.06),
+                "conversions": np.random.randint(2, 25),
+                "cpa": np.random.uniform(15, 60),
+                "roas": np.random.uniform(1.5, 6.0)
+            }
+        
+        # Identificar winners
+        winners = sorted(
+            test_results.items(),
+            key=lambda x: x[1].get("roas", 0),
+            reverse=True
+        )[:3]  # Top 3
+        
+        winner_ids = [w[0] for w in winners]
+        
+        # Actualizar campaña
+        campaign.active_creatives = winner_ids
+        campaign.paused_creatives = [c for c in test_ids if c not in winner_ids]
+        
+        print(f"✅ [Meta Ads Agent] A/B test completado. Winners: {len(winner_ids)} creativos")
+        
+        return {
+            "success": True,
+            "test_duration_hours": test_duration_hours,
+            "tested_creatives": len(test_ids),
+            "winners": winner_ids,
+            "test_results": test_results,
+            "recommendation": f"Activar {len(winner_ids)} creativos ganadores, pausar {len(campaign.paused_creatives)}"
+        }
+    
+    # ============================================
+    # UTILITY METHODS
+    # ============================================
+    
+    def get_campaign(self, campaign_id: str) -> Optional[AutonomousCampaign]:
+        """Obtiene una campaña por ID."""
+        return self.campaigns.get(campaign_id)
+    
+    def list_campaigns(self) -> List[Dict[str, Any]]:
+        """Lista todas las campañas."""
+        return [
+            {
+                "campaign_id": c.campaign_id,
+                "status": c.status,
+                "budget": c.config.budget,
+                "business_goal": c.config.business_goal,
+                "active_creatives": len(c.active_creatives),
+                "total_creatives": len(c.creatives),
+                "created_at": c.created_at,
+                "last_optimized": c.last_optimized
+            }
+            for c in self.campaigns.values()
+        ]
+
+
+class PortalADSMode:
+    """
+    Portal ADS - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
@@ -87,7 +922,7 @@ class AlienMode:
         
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY requerida para Portal ADS")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -143,6 +978,12 @@ class AlienMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # MindFuse Agentic AI para Advertising
+        self.mindfuse_ai = MindFuseAgenticAI(config=config)
+        
+        # Meta Autonomous Ads Agents System (Meta Vision 2026)
+        self.meta_autonomous_agents = MetaAutonomousAdsSystem(config=config, llm=self.llm)
+        
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
     
@@ -191,7 +1032,7 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [Portal ADS] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -206,7 +1047,7 @@ class AlienMode:
             # Reconstruir retriever
             if session["docs"]:
                 session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                print(f"✅ [Portal ADS] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {
                 "status": "success",
@@ -216,7 +1057,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"❌ [Portal ADS] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -281,7 +1122,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [Portal ADS] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -317,7 +1158,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"⚠️ [Portal ADS] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -334,7 +1175,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"⚠️ [Portal ADS] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -347,7 +1188,7 @@ class AlienMode:
                 # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"⚠️ [Portal ADS] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -518,7 +1359,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "portal_ads_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -910,7 +1751,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [Portal ADS] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -929,7 +1770,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [Portal ADS] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1097,7 +1938,7 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
         # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        print(f"🔄 [Portal ADS] Procesando {len(docs_by_source)} documentos en paralelo...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1109,9 +1950,9 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    print(f"✅ [Portal ADS] Análisis completado para: {Path(doc_name).name}")
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
+                    print(f"❌ [Portal ADS] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
         # OPCIÓN A: Mostrar todos los análisis individuales
@@ -1266,33 +2107,161 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             }
         
         return stats
+    
+    def process_ads_corpus(self, ad_corpus: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Procesa un corpus de anuncios usando MindFuse Agentic AI.
+        
+        Args:
+            ad_corpus: Lista de anuncios con estructura {'text': ..., 'image_url': ..., etc.}
+        
+        Returns:
+            Diccionario con insights extraídos (personas, desafíos, pilares)
+        """
+        return self.mindfuse_ai.process_ad_corpus(ad_corpus)
+    
+    def generate_campaign_narratives(
+        self,
+        brand_context: Optional[Dict[str, Any]] = None,
+        max_narratives: int = 5
+    ) -> List[Any]:
+        """Genera narrativas estratégicas de campaña."""
+        return self.mindfuse_ai.generate_campaign_narratives(brand_context, max_narratives)
+    
+    def score_creative(self, creative_content: Dict[str, Any]) -> ContentScore:
+        """Evalúa un creativo y predice su performance."""
+        return self.mindfuse_ai.score_creative(creative_content)
+    
+    def analyze_campaign_performance(
+        self,
+        metrics_history: List[CampaignMetrics],
+        creative_samples: Optional[List[Dict[str, Any]]] = None
+    ) -> PerformanceInsight:
+        """Analiza performance de campaña y genera insights."""
+        return self.mindfuse_ai.analyze_performance(metrics_history, creative_samples)
+    
+    # ============================================
+    # META AUTONOMOUS ADS METHODS (Meta Vision 2026)
+    # ============================================
+    
+    async def create_autonomous_campaign(
+        self,
+        product_image_url: str,
+        budget: float,
+        business_goal: str = "sell_product",
+        product_description: Optional[str] = None,
+        brand_guidelines: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Crea una campaña completamente autónoma (Meta Vision 2026).
+        
+        Solo necesitas: imagen de producto + presupuesto.
+        El AI hace TODO: creativos, targeting, budget, lanzamiento.
+        """
+        campaign = await self.meta_autonomous_agents.create_complete_campaign(
+            product_image_url=product_image_url,
+            budget=budget,
+            business_goal=business_goal,
+            product_description=product_description,
+            brand_guidelines=brand_guidelines
+        )
+        
+        return {
+            "success": True,
+            "campaign_id": campaign.campaign_id,
+            "status": campaign.status,
+            "creatives_generated": len(campaign.creatives),
+            "audiences_identified": len(campaign.target_audiences),
+            "budget_allocated": sum(campaign.budget_allocation.values()),
+            "message": f"Campaña {campaign.campaign_id} creada y activada automáticamente"
+        }
+    
+    async def optimize_campaign_autonomous(self, campaign_id: str) -> Dict[str, Any]:
+        """Optimiza campaña automáticamente (24/7 learning)."""
+        return await self.meta_autonomous_agents.optimize_campaign_autonomous(campaign_id)
+    
+    async def respond_to_lead_autonomous(
+        self,
+        campaign_id: str,
+        lead_message: str,
+        lead_source: str = "messenger"
+    ) -> Dict[str, Any]:
+        """Responde a leads en tiempo real automáticamente."""
+        return await self.meta_autonomous_agents.respond_to_lead_autonomous(
+            campaign_id=campaign_id,
+            lead_message=lead_message,
+            lead_source=lead_source
+        )
+    
+    async def test_creatives_autonomous(
+        self,
+        campaign_id: str,
+        test_duration_hours: int = 24
+    ) -> Dict[str, Any]:
+        """Testea creativos automáticamente (A/B testing)."""
+        return await self.meta_autonomous_agents.test_creatives_autonomous(
+            campaign_id=campaign_id,
+            test_duration_hours=test_duration_hours
+        )
+    
+    def get_autonomous_campaign(self, campaign_id: str) -> Optional[Dict[str, Any]]:
+        """Obtiene información de una campaña autónoma."""
+        campaign = self.meta_autonomous_agents.get_campaign(campaign_id)
+        if not campaign:
+            return None
+        
+        return {
+            "campaign_id": campaign.campaign_id,
+            "status": campaign.status,
+            "business_goal": campaign.config.business_goal,
+            "budget": campaign.config.budget,
+            "creatives": [
+                {
+                    "creative_id": c.creative_id,
+                    "headline": c.ad_headline,
+                    "description": c.ad_description,
+                    "cta": c.cta,
+                    "is_active": c.creative_id in campaign.active_creatives
+                }
+                for c in campaign.creatives
+            ],
+            "active_creatives_count": len(campaign.active_creatives),
+            "target_audiences": campaign.target_audiences,
+            "performance_metrics": campaign.performance_metrics,
+            "last_optimized": campaign.last_optimized,
+            "optimization_count": len(campaign.optimization_history)
+        }
+    
+    def list_autonomous_campaigns(self) -> List[Dict[str, Any]]:
+        """Lista todas las campañas autónomas."""
+        return self.meta_autonomous_agents.list_campaigns()
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_portal_ads_mode_instance: Optional[PortalADSMode] = None
 
 
-def get_alien_mode(
+def get_portal_ads_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> PortalADSMode:
+    """Obtiene o crea la instancia global de Portal ADS."""
+    global _portal_ads_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _portal_ads_mode_instance is None:
+        _portal_ads_mode_instance = PortalADSMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _portal_ads_mode_instance
 
 
-def run_alien_mode(
+def run_portal_ads_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1305,14 +2274,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
+    Función principal para ejecutar Portal ADS.
     Compatible con Gradio (síncrona).
     """
     if not config or not processor or not retriever_builder:
         return history, "❌ Configuración incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    portal_ads_mode = get_portal_ads_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1321,7 +2290,7 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = portal_ads_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
     
@@ -1330,7 +2299,7 @@ def run_alien_mode(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            portal_ads_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,

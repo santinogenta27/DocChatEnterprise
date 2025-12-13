@@ -1,6 +1,6 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
-Integra el sistema completo de DocChat Multi-Agent RAG:
+Event Bus Mode - Sistema Event-Driven Multi-Agente RAG
+Integra el sistema completo de DocChat Multi-Agent RAG con arquitectura event-driven:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
 - 🔍 Relevance Checker: Verifica si la pregunta es relevante a los documentos
@@ -9,15 +9,11 @@ SISTEMA MULTI-AGENTE DOCCHAT:
 - 🔄 Self-Correction Mechanism: Re-ejecuta research si hay contradicciones o claims sin soporte
 - 🔀 Hybrid Retriever: Combina BM25 (búsqueda léxica) + Vector Search (búsqueda semántica)
 
-CAPACIDADES AVANZADAS ADICIONALES:
-- Context Folding: Gestión eficiente de contextos masivos (500+ PDFs)
-- Data Provenance: Trazabilidad completa de cada pieza de información
-- Chain of Thought Reasoning: Razonamiento paso a paso
-- Path-dependent Reasoning: Múltiples enfoques probados
-- Test Time Training: Mejora continua con cada conversación
-- Person in the Loop: Control humano para decisiones críticas
-- Reinforcement Learning & Planning: Estrategias adaptativas
-- MCP Powered: Conexión a sistemas externos, bases de datos, APIs
+ARQUITECTURA EVENT-DRIVEN:
+- 📡 Event Bus: Sistema de mensajería interna para comunicación entre componentes
+- ⚡ Real-time Processing: Procesamiento automático basado en eventos
+- 🔗 Event-driven Workflows: Flujos de trabajo que reaccionan a eventos
+- 📊 Event History: Trazabilidad completa de eventos para auditoría
 """
 
 from __future__ import annotations
@@ -25,7 +21,7 @@ from __future__ import annotations
 import json
 import time
 import asyncio
-from typing import List, Dict, Optional, Any, Tuple, Iterator
+from typing import List, Dict, Optional, Any, Tuple, AsyncIterator, Iterator
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
@@ -49,11 +45,110 @@ from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
 
 
-class AlienMode:
-    """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+class SimpleEventBus:
+    """Event Bus optimizado para real-time streaming y procesamiento asíncrono."""
     
-    Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
+    def __init__(self):
+        self.subscribers: Dict[str, List[callable]] = defaultdict(list)
+        self.async_subscribers: Dict[str, List[callable]] = defaultdict(list)
+        self.event_history: List[Dict[str, Any]] = []
+        self.max_history_size = 10000  # Limitar historial para performance
+        self._processing_queue = asyncio.Queue() if asyncio else None
+        self._background_task: Optional[asyncio.Task] = None
+    
+    def subscribe(self, event_type: str, callback: callable, async_callback: bool = False):
+        """Suscribe un callback a un tipo de evento."""
+        if async_callback:
+            self.async_subscribers[event_type].append(callback)
+        else:
+            self.subscribers[event_type].append(callback)
+    
+    def publish(self, event_type: str, data: Dict[str, Any], async_notify: bool = True):
+        """
+        Publica un evento y notifica a todos los suscriptores.
+        Optimizado para real-time streaming.
+        """
+        event = {
+            "type": event_type,
+            "data": data,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Agregar al historial (con límite para performance)
+        self.event_history.append(event)
+        if len(self.event_history) > self.max_history_size:
+            self.event_history = self.event_history[-self.max_history_size:]
+        
+        # Notificar suscriptores síncronos inmediatamente
+        for callback in self.subscribers[event_type]:
+            try:
+                callback(data)
+            except Exception as e:
+                print(f"⚠️ [Event Bus] Error en callback para {event_type}: {e}")
+        
+        # Notificar suscriptores asíncronos en background (non-blocking)
+        if async_notify and self.async_subscribers[event_type]:
+            asyncio.create_task(self._notify_async_subscribers(event_type, data))
+    
+    async def _notify_async_subscribers(self, event_type: str, data: Dict[str, Any]):
+        """Notifica suscriptores asíncronos sin bloquear."""
+        for callback in self.async_subscribers[event_type]:
+            try:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(data)
+                else:
+                    # Si no es async, ejecutar en thread pool
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, callback, data)
+            except Exception as e:
+                print(f"⚠️ [Event Bus] Error en async callback para {event_type}: {e}")
+    
+    def publish_stream(self, event_type: str, data_stream: Any):
+        """
+        Publica eventos desde un stream en tiempo real.
+        Para procesamiento de datos grandes sin bloquear.
+        """
+        async def stream_processor():
+            async for chunk in data_stream:
+                self.publish(event_type, chunk, async_notify=True)
+        
+        asyncio.create_task(stream_processor())
+    
+    def get_event_history(self, event_type: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Obtiene el historial de eventos."""
+        if event_type:
+            return [e for e in self.event_history if e["type"] == event_type][-limit:]
+        return self.event_history[-limit:]
+    
+    def get_realtime_events(self, event_type: Optional[str] = None) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Generator asíncrono para recibir eventos en tiempo real (streaming).
+        
+        Usage:
+            async for event in event_bus.get_realtime_events('document_uploaded'):
+                print(event)
+        """
+        last_index = len(self.event_history)
+        
+        async def event_stream():
+            nonlocal last_index
+            while True:
+                # Obtener nuevos eventos
+                new_events = self.event_history[last_index:]
+                for event in new_events:
+                    if event_type is None or event["type"] == event_type:
+                        yield event
+                last_index = len(self.event_history)
+                await asyncio.sleep(0.1)  # Poll cada 100ms para real-time
+        
+        return event_stream()
+
+
+class EventBusMode:
+    """
+    Event Bus Mode - Sistema Event-Driven Multi-Agente RAG de Máxima Calidad para Empresas.
+    
+    Integra el sistema completo de DocChat Multi-Agent RAG con arquitectura event-driven:
     
     SISTEMA MULTI-AGENTE DOCCHAT:
     - 🔍 Relevance Checker: Determina si la pregunta puede responderse con los documentos
@@ -62,15 +157,11 @@ class AlienMode:
     - 🔄 Self-Correction: Re-ejecuta research automáticamente si hay contradicciones
     - 🔀 Hybrid Retriever: BM25 + Vector Search para máxima precisión
     
-    CAPACIDADES AVANZADAS:
-    - Gestiona eficientemente 500+ PDFs con Context Folding
-    - Rastrea procedencia de datos para compliance
-    - Razona paso a paso con Chain of Thought
-    - Prueba diferentes enfoques con Path-dependent Reasoning
-    - Aprende continuamente con Test Time Training
-    - Control humano con Person in the Loop
-    - Reinforcement Learning & Planning para estrategias adaptativas
-    - MCP Powered para conexión a sistemas externos
+    ARQUITECTURA EVENT-DRIVEN:
+    - Event Bus interno para comunicación entre componentes
+    - Procesamiento automático basado en eventos
+    - Workflows que reaccionan a eventos en tiempo real
+    - Trazabilidad completa de eventos para auditoría
     """
     
     def __init__(
@@ -85,9 +176,13 @@ class AlienMode:
         self.retriever_builder = retriever_builder
         self.context_manager = context_manager
         
+        # Event Bus
+        self.event_bus = SimpleEventBus()
+        self._setup_event_listeners()
+        
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY requerida para Event Bus Mode")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -145,6 +240,170 @@ class AlienMode:
         
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
+        
+        # Thread pool para procesamiento paralelo
+        self.executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="event_bus")
+        
+        # Streaming de insights en tiempo real
+        self.insight_streams: Dict[str, List[Any]] = defaultdict(list)
+    
+    def _setup_event_listeners(self):
+        """Configura listeners para eventos comunes con procesamiento automático."""
+        # Cuando se sube un documento, procesarlo automáticamente
+        self.event_bus.subscribe('document_uploaded', self._on_document_uploaded)
+        
+        # Cuando se completa un query, notificar y procesar automáticamente
+        self.event_bus.subscribe('query_completed', self._on_query_completed)
+        
+        # Cuando hay un error, registrar
+        self.event_bus.subscribe('error_occurred', self._on_error_occurred)
+        
+        # Eventos de integración con otros modos
+        self.event_bus.subscribe('new_compliance_doc', self._on_new_compliance_doc)
+        self.event_bus.subscribe('document_updated', self._on_document_updated)
+        self.event_bus.subscribe('compliance_complete', self._on_compliance_complete)
+        self.event_bus.subscribe('high_risk_detected', self._on_high_risk_detected)
+        
+        # Eventos de colaboración
+        self.event_bus.subscribe('query_executed', self._on_query_executed)
+    
+    def _on_document_uploaded(self, data: Dict[str, Any]):
+        """Reacciona cuando se sube un documento - Procesamiento automático."""
+        file_name = data.get('file_name', 'unknown')
+        doc_id = data.get('doc_id')
+        session_id = data.get('session_id')
+        
+        print(f"📄 [Event Bus] Documento subido detectado: {file_name}")
+        
+        # Auto-procesamiento: Indexar automáticamente
+        try:
+            # Si hay session_id, el documento ya está siendo procesado
+            # Aquí podemos agregar lógica adicional de auto-indexación
+            if session_id and session_id in self.sessions:
+                session = self.sessions[session_id]
+                # El documento ya fue procesado en process_documents
+                # Aquí podemos agregar notificaciones o integraciones adicionales
+                pass
+        except Exception as e:
+            print(f"⚠️ [Event Bus] Error en auto-procesamiento de documento: {e}")
+    
+    def _on_query_completed(self, data: Dict[str, Any]):
+        """Reacciona cuando se completa un query - Notificaciones automáticas."""
+        query = data.get('query', '')[:50]
+        session_id = data.get('session_id')
+        
+        print(f"✅ [Event Bus] Query completado: {query}...")
+        
+        # Publicar evento para colaboración
+        self.event_bus.publish('query_executed', {
+            'query': data.get('query', ''),
+            'session_id': session_id,
+            'sources_count': data.get('sources_count', 0),
+            'execution_time': data.get('execution_time', 0)
+        })
+    
+    def _on_error_occurred(self, data: Dict[str, Any]):
+        """Reacciona cuando ocurre un error - Logging automático."""
+        error = data.get('error', 'unknown')
+        context = data.get('context', 'unknown')
+        
+        print(f"❌ [Event Bus] Error en {context}: {error}")
+    
+    def _on_new_compliance_doc(self, data: Dict[str, Any]):
+        """Reacciona cuando se detecta un nuevo documento de compliance - Auto-screening."""
+        file_path = data.get('path')
+        print(f"🔍 [Event Bus] Nuevo documento de compliance detectado: {file_path}")
+        
+        # Aquí se integraría con BANKS Mode para auto-compliance check
+        # Por ahora, solo publicamos evento
+        self.event_bus.publish('compliance_check_requested', {
+            'file_path': file_path,
+            'detected_at': data.get('detected_at')
+        })
+    
+    def _on_document_updated(self, data: Dict[str, Any]):
+        """Reacciona cuando se actualiza un documento - Auto-sync."""
+        doc_id = data.get('doc_id')
+        source = data.get('source', 'unknown')
+        change_type = data.get('change_type', 'unknown')
+        
+        print(f"🔄 [Event Bus] Documento actualizado: {doc_id} desde {source} ({change_type})")
+        
+        # Auto-sync: Re-indexar automáticamente
+        self.event_bus.publish('document_sync_requested', {
+            'doc_id': doc_id,
+            'source': source,
+            'change_type': change_type
+        })
+    
+    def _on_compliance_complete(self, data: Dict[str, Any]):
+        """Reacciona cuando se completa un compliance check - Workflow automático."""
+        risk_score = data.get('risk_score', 0)
+        entity_name = data.get('entity_name', 'unknown')
+        
+        print(f"✅ [Event Bus] Compliance check completado: {entity_name} (Risk: {risk_score})")
+        
+        # Workflow automático basado en risk score
+        if risk_score < 50:
+            # Auto-aprobar bajo riesgo
+            self.event_bus.publish('auto_approve', {
+                'entity_name': entity_name,
+                'risk_score': risk_score,
+                'reason': 'Low risk - auto-approved'
+            })
+        elif risk_score >= 50 and risk_score < 70:
+            # Enviar a review queue
+            self.event_bus.publish('review_queue', {
+                'entity_name': entity_name,
+                'risk_score': risk_score,
+                'reason': 'Medium risk - requires review'
+            })
+        else:
+            # Alto riesgo - escalar automáticamente
+            self.event_bus.publish('high_risk_detected', {
+                'entity_name': entity_name,
+                'risk_score': risk_score,
+                'reason': 'High risk - escalation required'
+            })
+    
+    def _on_high_risk_detected(self, data: Dict[str, Any]):
+        """Reacciona cuando se detecta alto riesgo - Auto-escalation."""
+        entity_name = data.get('entity_name', 'unknown')
+        risk_score = data.get('risk_score', 0)
+        
+        print(f"⚠️ [Event Bus] ALTO RIESGO detectado: {entity_name} (Risk: {risk_score})")
+        
+        # Auto-escalation workflow
+        # 1. Crear ticket (simulado)
+        self.event_bus.publish('create_ticket', {
+            'title': f"High Risk: {entity_name}",
+            'priority': 'High',
+            'risk_score': risk_score
+        })
+        
+        # 2. Enviar alerta (simulado)
+        self.event_bus.publish('send_alert', {
+            'to': 'compliance@company.com',
+            'subject': 'High Risk Alert',
+            'message': f"High risk detected: {entity_name} (Risk Score: {risk_score})"
+        })
+        
+        # 3. Generar reporte (simulado)
+        self.event_bus.publish('generate_report', {
+            'type': 'SAR',
+            'entity_name': entity_name,
+            'risk_score': risk_score
+        })
+    
+    def _on_query_executed(self, data: Dict[str, Any]):
+        """Reacciona cuando se ejecuta un query - Colaboración automática."""
+        query = data.get('query', '')
+        session_id = data.get('session_id')
+        
+        print(f"💬 [Event Bus] Query ejecutado: {query[:50]}...")
+        
+        # Aquí se podría notificar a otros usuarios o sistemas
+        # Por ahora, solo logging
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
         """Inicializa una nueva sesión."""
@@ -172,7 +431,7 @@ class AlienMode:
         session_id: str,
         files: List[Any]
     ) -> Dict[str, Any]:
-        """Procesa documentos para una sesión."""
+        """Procesa documentos para una sesión - Optimizado para real-time streaming."""
         session = self.initialize_session(session_id)
         
         # Procesar nuevos archivos
@@ -190,37 +449,226 @@ class AlienMode:
                 "total_chunks": sum(len(doc.page_content) for doc in session["docs"])
             }
         
+        # Iniciar procesamiento asíncrono en background (non-blocking)
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
-            new_docs = self.processor.process(new_files)
-            session["docs"].extend(new_docs)
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        if loop.is_running():
+            # Si el loop ya está corriendo, crear task
+            asyncio.create_task(self._process_documents_async(session_id, new_files))
+        else:
+            # Si no hay loop, ejecutar en thread separado
+            def run_async():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                new_loop.run_until_complete(self._process_documents_async(session_id, new_files))
+                new_loop.close()
             
-            # Rastrear procedencia de documentos
-            for doc in new_docs:
-                provenance = self.provenance_tracker.track_document_source(doc)
-                # Guardar en sesión para referencia rápida
-                if "provenances" not in session:
-                    session["provenances"] = []
-                session["provenances"].append(provenance)
+            self.executor.submit(run_async)
+        
+        return {
+            "status": "processing",
+            "message": f"Procesando {len(new_files)} documentos en tiempo real...",
+            "total_docs": len(session["docs"]),
+            "realtime_streaming": True
+        }
+    
+    async def _process_documents_async(
+        self,
+        session_id: str,
+        new_files: List[Any]
+    ):
+        """Procesa documentos de forma asíncrona con streaming de insights."""
+        try:
+            print(f"📄 [Event Bus Mode] Procesando {len(new_files)} nuevos documentos en tiempo real...")
             
-            # Reconstruir retriever
-            if session["docs"]:
-                session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+            # Publicar evento de inicio
+            self.event_bus.publish('document_processing_started', {
+                'session_id': session_id,
+                'file_count': len(new_files)
+            })
             
-            return {
-                "status": "success",
-                "new_docs": len(new_docs),
-                "total_docs": len(session["docs"]),
-                "total_chunks": len(session["docs"])
-            }
+            session = self.sessions[session_id]
+            
+            # Procesar documentos en paralelo (optimizado)
+            processed_count = 0
+            for file_obj in new_files:
+                try:
+                    # Procesar documento individual
+                    file_docs = self.processor.process([file_obj])
+                    session["docs"].extend(file_docs)
+                    processed_count += 1
+                    
+                    # Streaming de insights en tiempo real
+                    for doc in file_docs:
+                        provenance = self.provenance_tracker.track_document_source(doc)
+                        if "provenances" not in session:
+                            session["provenances"] = []
+                        session["provenances"].append(provenance)
+                        
+                        # Publicar evento inmediatamente (real-time)
+                        self.event_bus.publish('document_uploaded', {
+                            'session_id': session_id,
+                            'file_name': getattr(doc.metadata.get('source', ''), 'name', 'unknown'),
+                            'doc_id': str(doc.metadata.get('source', '')),
+                            'progress': f"{processed_count}/{len(new_files)}"
+                        })
+                        
+                        # Generar insights en tiempo real mientras procesa
+                        await self._generate_realtime_insights(session_id, doc)
+                    
+                    # Actualizar retriever incrementalmente (más eficiente)
+                    if session["docs"]:
+                        session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
+                    
+                except Exception as e:
+                    print(f"⚠️ [Event Bus Mode] Error procesando archivo: {e}")
+                    self.event_bus.publish('document_processing_error', {
+                        'session_id': session_id,
+                        'file_name': getattr(file_obj, "name", "unknown"),
+                        'error': str(e)
+                    })
+            
+            # Publicar evento de finalización
+            self.event_bus.publish('document_processing_completed', {
+                'session_id': session_id,
+                'new_docs': processed_count,
+                'total_docs': len(session["docs"])
+            })
+            
+            print(f"✅ [Event Bus Mode] Procesamiento completado: {processed_count} documentos")
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
+            print(f"❌ [Event Bus Mode] Error en procesamiento asíncrono: {e}")
+            self.event_bus.publish('error_occurred', {
+                'session_id': session_id,
+                'error': str(e),
+                'context': 'document_processing'
+            })
+    
+    async def _generate_realtime_insights(self, session_id: str, doc: Document):
+        """Genera insights en tiempo real mientras procesa documentos."""
+        try:
+            # Extraer insights básicos del documento
+            doc_content = doc.page_content[:500]  # Primeros 500 chars para análisis rápido
+            
+            # Publicar insight en tiempo real
+            insight = {
+                'session_id': session_id,
+                'doc_id': str(doc.metadata.get('source', '')),
+                'insight_type': 'document_analysis',
+                'summary': doc_content[:200] + "..." if len(doc_content) > 200 else doc_content,
+                'timestamp': datetime.now().isoformat()
             }
+            
+            self.event_bus.publish('realtime_insight', insight)
+            
+            # Guardar en stream de insights
+            self.insight_streams[session_id].append(insight)
+            
+        except Exception as e:
+            print(f"⚠️ [Event Bus Mode] Error generando insight: {e}")
+    
+    async def stream_realtime_insights(self, session_id: str) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Stream de insights en tiempo real mientras se procesan documentos.
+        
+        Usage:
+            async for insight in event_bus_mode.stream_realtime_insights(session_id):
+                print(insight)
+        """
+        last_index = 0
+        
+        while True:
+            # Obtener nuevos insights
+            current_insights = self.insight_streams.get(session_id, [])
+            new_insights = current_insights[last_index:]
+            
+            for insight in new_insights:
+                yield insight
+            
+            last_index = len(current_insights)
+            await asyncio.sleep(0.5)  # Poll cada 500ms para real-time
+    
+    async def _stream_query_insights(
+        self,
+        session_id: str,
+        query: str,
+        answer: str,
+        sources: List[Any]
+    ):
+        """Genera y publica insights en tiempo real durante el query."""
+        try:
+            # Insight 1: Análisis de relevancia
+            relevance_insight = {
+                'session_id': session_id,
+                'insight_type': 'relevance_analysis',
+                'query': query[:100],
+                'sources_count': len(sources),
+                'timestamp': datetime.now().isoformat()
+            }
+            self.event_bus.publish('realtime_insight', relevance_insight)
+            
+            # Insight 2: Resumen de respuesta
+            answer_insight = {
+                'session_id': session_id,
+                'insight_type': 'answer_summary',
+                'query': query[:100],
+                'answer_preview': answer[:200] + "..." if len(answer) > 200 else answer,
+                'timestamp': datetime.now().isoformat()
+            }
+            self.event_bus.publish('realtime_insight', answer_insight)
+            
+            # Guardar en stream
+            self.insight_streams[session_id].extend([relevance_insight, answer_insight])
+            
+        except Exception as e:
+            print(f"⚠️ [Event Bus Mode] Error en streaming de insights: {e}")
+    
+    def get_realtime_metrics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Obtiene métricas en tiempo real del procesamiento."""
+        metrics = {
+            "event_bus": {
+                "total_events": len(self.event_bus.event_history),
+                "events_per_second": self._calculate_events_per_second(),
+                "active_subscribers": sum(len(callbacks) for callbacks in self.event_bus.subscribers.values()),
+                "async_subscribers": sum(len(callbacks) for callbacks in self.event_bus.async_subscribers.values())
+            },
+            "processing": {
+                "active_sessions": len(self.sessions),
+                "total_insights_generated": sum(len(insights) for insights in self.insight_streams.values())
+            }
+        }
+        
+        if session_id:
+            metrics["session"] = {
+                "insights_count": len(self.insight_streams.get(session_id, [])),
+                "docs_count": len(self.sessions.get(session_id, {}).get("docs", [])),
+                "events_count": len([e for e in self.event_bus.event_history if e.get("data", {}).get("session_id") == session_id])
+            }
+        
+        return metrics
+    
+    def _calculate_events_per_second(self) -> float:
+        """Calcula eventos por segundo en los últimos 10 segundos."""
+        if len(self.event_bus.event_history) < 2:
+            return 0.0
+        
+        recent_events = self.event_bus.event_history[-100:]  # Últimos 100 eventos
+        if len(recent_events) < 2:
+            return 0.0
+        
+        first_time = datetime.fromisoformat(recent_events[0]["timestamp"])
+        last_time = datetime.fromisoformat(recent_events[-1]["timestamp"])
+        
+        time_diff = (last_time - first_time).total_seconds()
+        if time_diff == 0:
+            return 0.0
+        
+        return len(recent_events) / time_diff
     
     async def process_query_async(
         self,
@@ -259,6 +707,12 @@ class AlienMode:
         
         start_time = time.time()
         
+        # Publicar evento de inicio de query
+        self.event_bus.publish('query_started', {
+            'session_id': session_id,
+            'query': message
+        })
+        
         # Si usar procesamiento paralelo, procesar cada documento por separado
         if use_parallel_processing:
             return await self._process_query_parallel(
@@ -281,7 +735,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [Event Bus Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -300,11 +754,14 @@ class AlienMode:
                 context=conversation_context[:1000],
                 criticality=criticality
             )
-            # Por ahora, continuar pero marcar que requiere aprobación
-            # En producción, esperar aprobación antes de continuar
+            # Publicar evento de aprobación requerida
+            self.event_bus.publish('approval_required', {
+                'session_id': session_id,
+                'approval_id': approval_id,
+                'criticality': criticality.value
+            })
         
         # 6. Usar Reinforcement Learning y Planning para planificar estrategias
-        # RL prueba diferentes enfoques: buscar por palabras clave, por secciones, por fechas, etc.
         rl_result = None
         best_strategy = None
         try:
@@ -317,8 +774,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
-            # Continuar sin RL si falla
+            print(f"⚠️ [Event Bus Mode] Error en Reinforcement Planning: {e}")
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
         # 7. Usar Path-dependent Reasoning como complemento
@@ -334,8 +790,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
-            # Continuar sin path reasoning si falla
+            print(f"⚠️ [Event Bus Mode] Error en Path-dependent Reasoning: {e}")
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
         # 8. Usar MCP potenciado para buscar en sistemas externos si es necesario
@@ -344,30 +799,15 @@ class AlienMode:
             mcp_data = await self._query_mcp_systems(message, conversation_context)
             if mcp_data:
                 session["mcp_queries"].append(mcp_data)
-                # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
-            # Continuar sin datos MCP si falla
+            print(f"⚠️ [Event Bus Mode] Error consultando MCP: {e}")
         
         # Aplicar modo de velocidad
         original_speed_mode = self.config.speed_mode
         self.config.speed_mode = speed_mode
         
         try:
-            # TRUNCAMIENTO INTELIGENTE: Limitar contexto para evitar error 429 (tokens per minute)
-            # Límite real de OpenAI para gpt-4o: 30,000 TPM (tokens per minute)
-            # Usamos 20,000 como límite MUY conservador (dejando 10,000 para docs recuperados + respuesta)
-            # El workflow también agrega documentos recuperados, así que limitamos el contexto base
-            MAX_CONTEXT_TOKENS = 20000  # Límite MUY conservador: 20,000 tokens (dejando 10,000 para docs + respuesta)
-            
-            # Truncar contexto si es muy grande
-            conversation_context = self._truncate_context_intelligently(
-                conversation_context,
-                max_tokens=MAX_CONTEXT_TOKENS,
-                query=message
-            )
-            
             # Crear workflow
             temp_workflow = AgentWorkflow(self.config, provider=provider)
             
@@ -377,9 +817,6 @@ class AlienMode:
                 enriched_query += f"\n\n🎯 ESTRATEGIA DE RL: {best_strategy}"
             if best_approach:
                 enriched_query += f"\n\n🛤️ ENFOQUE RECOMENDADO: {best_approach}"
-            
-            # Verificar tamaño final del query y truncar si es necesario
-            enriched_query = self._truncate_query_if_needed(enriched_query, max_tokens=MAX_CONTEXT_TOKENS)
             
             result = temp_workflow.run(
                 enriched_query,
@@ -397,7 +834,6 @@ class AlienMode:
             source_provenances = []
             for source in sources:
                 if isinstance(source, dict):
-                    # Buscar documento correspondiente
                     source_name = source.get("source", source.get("file", ""))
                     doc = next((d for d in session["docs"] if source_name in str(d.metadata.get("source", ""))), None)
                     if doc:
@@ -475,7 +911,7 @@ class AlienMode:
             # Agregar fuentes con procedencia
             if source_provenances:
                 sources_list = []
-                for prov in source_provenances[:10]:  # Mostrar hasta 10 fuentes
+                for prov in source_provenances[:10]:
                     source_info = f"- {prov.source_name}"
                     if prov.page_number:
                         source_info += f" (página {prov.page_number})"
@@ -496,6 +932,7 @@ class AlienMode:
             formatted_answer += "- 📈 **Test Time Training:** Mejora continua con cada conversación\n"
             formatted_answer += "- 🌳 **Reinforcement Learning & Planning:** Estrategias adaptativas\n"
             formatted_answer += "- 🔌 **MCP Powered:** Conexión a sistemas externos\n"
+            formatted_answer += "- 📡 **Event Bus:** Arquitectura event-driven para procesamiento automático\n"
             
             # Agregar advertencia si requiere aprobación
             if requires_approval and approval_id:
@@ -518,7 +955,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "event_bus_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -541,6 +978,18 @@ class AlienMode:
             # Restaurar modo original
             self.config.speed_mode = original_speed_mode
             
+            # Publicar evento de query completado
+            self.event_bus.publish('query_completed', {
+                'session_id': session_id,
+                'query': message,
+                'answer_length': len(answer),
+                'sources_count': len(sources),
+                'execution_time': execution_time
+            })
+            
+            # Streaming de insights en tiempo real
+            await self._stream_query_insights(session_id, message, answer, sources)
+            
             metadata = {
                 "provenance_record_id": record_id,
                 "chain_id": chain_id,
@@ -553,6 +1002,13 @@ class AlienMode:
             
         except Exception as e:
             error_msg = f"❌ Error en chat: {str(e)}"
+            
+            # Publicar evento de error
+            self.event_bus.publish('error_occurred', {
+                'session_id': session_id,
+                'error': str(e),
+                'context': 'query_processing'
+            })
             
             # Registrar error en Test Time Training
             execution_time = time.time() - start_time
@@ -596,7 +1052,7 @@ class AlienMode:
         
         # Agregar historial al contexto principal
         if history:
-            for user_msg, bot_msg in history[-10:]:  # Últimas 10 interacciones
+            for user_msg, bot_msg in history[-10:]:
                 if isinstance(user_msg, (tuple, list)) and len(user_msg) == 2:
                     user_msg, bot_msg = user_msg
                 
@@ -609,142 +1065,6 @@ class AlienMode:
         # Obtener contexto plegado
         return context_folder.get_folded_context()
     
-    def _estimate_tokens(self, text: str) -> int:
-        """
-        Estima el número de tokens en un texto.
-        Aproximación: 1 token ≈ 4 caracteres (conservador para inglés/español).
-        """
-        # Aproximación conservadora: 1 token = 4 caracteres
-        # En realidad puede variar, pero esta es una buena estimación
-        return len(text) // 4
-    
-    def _truncate_context_intelligently(
-        self,
-        context: str,
-        max_tokens: int,
-        query: str = ""
-    ) -> str:
-        """
-        Trunca el contexto de forma inteligente, priorizando contenido relevante.
-        
-        Estrategia:
-        1. Si el contexto es menor que el límite, retornar completo
-        2. Si es mayor, priorizar:
-           - Contenido relacionado con la query
-           - Últimas partes del contexto (más reciente)
-           - Resúmenes y metadatos
-        """
-        estimated_tokens = self._estimate_tokens(context)
-        
-        if estimated_tokens <= max_tokens:
-            return context
-        
-        # Calcular cuántos caracteres podemos usar (dejando margen)
-        max_chars = max_tokens * 4  # 4 chars por token
-        max_chars = int(max_chars * 0.95)  # 95% para margen de seguridad
-        
-        # Si el contexto es muy grande, truncar inteligentemente
-        if len(context) <= max_chars:
-            return context
-        
-        # Estrategia 1: Priorizar contenido relacionado con la query
-        if query:
-            query_lower = query.lower()
-            context_lower = context.lower()
-            
-            # Buscar párrafos que contengan palabras de la query
-            paragraphs = context.split('\n\n')
-            relevant_paragraphs = []
-            other_paragraphs = []
-            
-            query_words = set(query_lower.split())
-            
-            for para in paragraphs:
-                para_lower = para.lower()
-                # Contar palabras de la query que aparecen en el párrafo
-                matches = sum(1 for word in query_words if word in para_lower)
-                if matches > 0:
-                    relevant_paragraphs.append((para, matches))
-                else:
-                    other_paragraphs.append(para)
-            
-            # Ordenar párrafos relevantes por número de coincidencias
-            relevant_paragraphs.sort(key=lambda x: x[1], reverse=True)
-            
-            # Construir contexto truncado: primero los relevantes, luego otros
-            truncated = []
-            current_length = 0
-            
-            # Agregar párrafos relevantes primero
-            for para, _ in relevant_paragraphs:
-                if current_length + len(para) <= max_chars:
-                    truncated.append(para)
-                    current_length += len(para) + 2  # +2 para '\n\n'
-                else:
-                    break
-            
-            # Agregar otros párrafos si hay espacio
-            remaining_chars = max_chars - current_length
-            if remaining_chars > 1000:  # Solo si hay espacio significativo
-                for para in other_paragraphs:
-                    if current_length + len(para) <= max_chars:
-                        truncated.append(para)
-                        current_length += len(para) + 2
-                    else:
-                        break
-            
-            result = '\n\n'.join(truncated)
-            
-            # Si aún es muy grande, truncar desde el final
-            if len(result) > max_chars:
-                result = result[:max_chars]
-                result += "\n\n[... contexto truncado para cumplir límite de tokens ...]"
-            
-            return result
-        
-        # Estrategia 2: Si no hay query, tomar las últimas partes (más recientes)
-        truncated = context[-max_chars:]
-        
-        # Agregar indicador de truncamiento al inicio
-        if len(context) > max_chars:
-            truncated = "[... contexto anterior truncado ...]\n\n" + truncated
-        
-        return truncated
-    
-    def _truncate_query_if_needed(self, query: str, max_tokens: int) -> str:
-        """Trunca el query completo si excede el límite de tokens."""
-        estimated_tokens = self._estimate_tokens(query)
-        
-        if estimated_tokens <= max_tokens:
-            return query
-        
-        # Calcular máximo de caracteres
-        max_chars = max_tokens * 4
-        max_chars = int(max_chars * 0.95)  # 95% para margen
-        
-        # Truncar desde el final, pero mantener la pregunta actual
-        if len(query) > max_chars:
-            # Intentar mantener la pregunta actual completa
-            if "PREGUNTA ACTUAL:" in query:
-                parts = query.split("PREGUNTA ACTUAL:")
-                context_part = parts[0]
-                question_part = "PREGUNTA ACTUAL:" + parts[1] if len(parts) > 1 else ""
-                
-                # Truncar solo la parte del contexto
-                context_max = max_chars - len(question_part) - 100  # Margen
-                if context_max > 0:
-                    truncated_context = context_part[:context_max]
-                    truncated_context += "\n\n[... contexto truncado para cumplir límite de tokens ...]"
-                    return truncated_context + "\n\n" + question_part
-                else:
-                    # Si la pregunta es muy larga, truncar todo
-                    return query[:max_chars] + "\n\n[... truncado ...]"
-            else:
-                # Si no hay pregunta marcada, truncar desde el final
-                return query[:max_chars] + "\n\n[... truncado ...]"
-        
-        return query
-    
     async def _execute_query_path(
         self,
         approach: str,
@@ -753,8 +1073,6 @@ class AlienMode:
         context: str
     ) -> Any:
         """Ejecuta un camino de razonamiento."""
-        # Simulación de ejecución de camino
-        # En producción, esto ejecutaría el query con el enfoque específico
         return f"Resultado usando enfoque: {approach}"
     
     async def _execute_rl_action(
@@ -764,21 +1082,10 @@ class AlienMode:
     ) -> Any:
         """
         Ejecuta una acción del Reinforcement Planner.
-        
-        Las acciones pueden ser:
-        - "Buscar por palabras clave: [términos]"
-        - "Buscar por secciones: [sección]"
-        - "Buscar por fechas: [rango]"
-        - "Buscar por tipo de documento: [tipo]"
-        - "Comparar documentos: [docs]"
-        - "Analizar estructura: [aspecto]"
         """
-        # Extraer tipo de acción
         action_lower = action.lower()
         
-        # Simular ejecución de diferentes estrategias
         if "palabras clave" in action_lower or "keywords" in action_lower:
-            # Estrategia: búsqueda por palabras clave
             return {
                 "strategy": "keyword_search",
                 "result": "Búsqueda por palabras clave ejecutada",
@@ -786,7 +1093,6 @@ class AlienMode:
                 "confidence": 0.8
             }
         elif "secciones" in action_lower or "sections" in action_lower:
-            # Estrategia: búsqueda por secciones
             return {
                 "strategy": "section_search",
                 "result": "Búsqueda por secciones ejecutada",
@@ -794,7 +1100,6 @@ class AlienMode:
                 "confidence": 0.75
             }
         elif "fechas" in action_lower or "dates" in action_lower:
-            # Estrategia: búsqueda por fechas
             return {
                 "strategy": "date_search",
                 "result": "Búsqueda por fechas ejecutada",
@@ -802,7 +1107,6 @@ class AlienMode:
                 "confidence": 0.7
             }
         elif "comparar" in action_lower or "compare" in action_lower:
-            # Estrategia: comparación de documentos
             return {
                 "strategy": "document_comparison",
                 "result": "Comparación de documentos ejecutada",
@@ -810,7 +1114,6 @@ class AlienMode:
                 "confidence": 0.85
             }
         elif "analizar" in action_lower or "analyze" in action_lower:
-            # Estrategia: análisis de estructura
             return {
                 "strategy": "structure_analysis",
                 "result": "Análisis de estructura ejecutado",
@@ -818,7 +1121,6 @@ class AlienMode:
                 "confidence": 0.8
             }
         else:
-            # Estrategia genérica
             return {
                 "strategy": "generic",
                 "result": f"Acción ejecutada: {action}",
@@ -833,24 +1135,16 @@ class AlienMode:
     ) -> Optional[Dict[str, Any]]:
         """
         Consulta sistemas externos usando MCP potenciado.
-        
-        Permite:
-        - Conectarse a bases de datos
-        - Consultar APIs externas
-        - Acceder a servicios en la nube
-        - Navegar datos crudos sin conectores específicos
         """
         if not self.mcp_manager or not self.mcp_manager.connections:
             return None
         
         try:
-            # Determinar si la consulta requiere datos externos
             requires_external = await self._needs_external_data(query, context)
             
             if not requires_external:
                 return None
             
-            # Consultar cada conexión MCP disponible
             mcp_results = []
             mcp_sources = []
             
@@ -859,9 +1153,7 @@ class AlienMode:
                     continue
                 
                 try:
-                    # Usar MCP para consultar el sistema externo
                     if connection.connection_type == "database":
-                        # Consultar base de datos
                         result = await self._query_mcp_database(connection, query)
                         if result:
                             mcp_results.append(result)
@@ -872,7 +1164,6 @@ class AlienMode:
                             })
                     
                     elif connection.connection_type == "api":
-                        # Consultar API externa
                         result = await self._query_mcp_api(connection, query)
                         if result:
                             mcp_results.append(result)
@@ -883,7 +1174,6 @@ class AlienMode:
                             })
                     
                     elif connection.connection_type == "salesforce":
-                        # Consultar Salesforce
                         result = await self._query_mcp_salesforce(connection, query)
                         if result:
                             mcp_results.append(result)
@@ -893,9 +1183,7 @@ class AlienMode:
                                 "data": result
                             })
                     
-                    # Navegar datos crudos usando LLM
                     if self.mcp_manager.llm:
-                        # Usar conn_id como data_source
                         raw_data_result = await self.mcp_manager.navigate_raw_data(
                             data_source=conn_id,
                             query=query,
@@ -910,13 +1198,12 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [Event Bus Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
                 return None
             
-            # Combinar resultados
             summary = "\n".join([
                 f"- {source['name']} ({source['type']}): {str(source['data'])[:200]}"
                 for source in mcp_sources[:5]
@@ -929,7 +1216,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [Event Bus Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -938,7 +1225,6 @@ class AlienMode:
         context: str
     ) -> bool:
         """Determina si la consulta requiere datos externos."""
-        # Palabras clave que indican necesidad de datos externos
         external_keywords = [
             "actual", "tiempo real", "realtime", "sistema", "base de datos",
             "database", "api", "actualizado", "estado actual", "proceso actual",
@@ -958,8 +1244,6 @@ class AlienMode:
         query: str
     ) -> Optional[Dict[str, Any]]:
         """Consulta una base de datos usando MCP."""
-        # En producción, esto usaría las herramientas MCP para consultar la BD
-        # Por ahora, simulación
         return {
             "type": "database",
             "query": query,
@@ -972,7 +1256,6 @@ class AlienMode:
         query: str
     ) -> Optional[Dict[str, Any]]:
         """Consulta una API externa usando MCP."""
-        # En producción, esto usaría las herramientas MCP para consultar la API
         return {
             "type": "api",
             "query": query,
@@ -985,13 +1268,152 @@ class AlienMode:
         query: str
     ) -> Optional[Dict[str, Any]]:
         """Consulta Salesforce usando MCP."""
-        # En producción, esto usaría las herramientas MCP para consultar Salesforce
         return {
             "type": "salesforce",
             "query": query,
             "result": "Datos de Salesforce obtenidos vía MCP"
         }
     
+    def handle_webhook_event(self, event_type: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Maneja eventos recibidos vía webhook desde sistemas externos.
+        
+        Args:
+            event_type: Tipo de evento (ej: 'new_document', 'data_change', 'document_updated')
+            event_data: Datos del evento
+            
+        Returns:
+            Dict con status y resultado
+        """
+        try:
+            print(f"📡 [Event Bus] Webhook recibido: {event_type}")
+            
+            # Publicar evento en el bus interno
+            self.event_bus.publish(event_type, event_data)
+            
+            return {
+                "status": "processed",
+                "event_type": event_type,
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            print(f"❌ [Event Bus] Error procesando webhook: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def sync_document_source(self, source: str, interval: int = 60) -> Dict[str, Any]:
+        """
+        Sincroniza documentos desde una fuente externa con polling mejorado.
+        
+        Args:
+            source: Nombre de la fuente (ej: 'google_drive', 'sharepoint')
+            interval: Intervalo de polling en segundos (default: 60 = 1 min)
+            
+        Returns:
+            Dict con status y resultados
+        """
+        try:
+            print(f"🔄 [Event Bus] Sincronizando desde {source} (intervalo: {interval}s)")
+            
+            # Simular detección de cambios
+            # En producción, esto haría polling real o usaría webhooks
+            changes_detected = []  # Simulado
+            
+            if changes_detected:
+                for change in changes_detected:
+                    self.event_bus.publish('document_updated', {
+                        'doc_id': change.get('doc_id'),
+                        'source': source,
+                        'change_type': change.get('type', 'modified')
+                    })
+            
+            return {
+                "status": "success",
+                "source": source,
+                "changes_detected": len(changes_detected),
+                "interval": interval
+            }
+        except Exception as e:
+            print(f"❌ [Event Bus] Error en sync: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def subscribe_to_external_webhook(self, source: str, callback_url: str) -> Dict[str, Any]:
+        """
+        Suscribe a webhooks de sistemas externos.
+        
+        Args:
+            source: Nombre de la fuente (ej: 'google_drive', 'sharepoint')
+            callback_url: URL donde recibir webhooks
+            
+        Returns:
+            Dict con status
+        """
+        try:
+            print(f"🔔 [Event Bus] Suscribiendo a webhooks de {source} -> {callback_url}")
+            
+            # En producción, esto registraría el webhook con el servicio externo
+            # Por ahora, solo logging
+            
+            return {
+                "status": "subscribed",
+                "source": source,
+                "callback_url": callback_url
+            }
+        except Exception as e:
+            print(f"❌ [Event Bus] Error suscribiendo webhook: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
+    def get_event_history(self, event_type: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Obtiene el historial de eventos."""
+        return self.event_bus.get_event_history(event_type, limit)
+    
+    def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Obtiene estadísticas del modo."""
+        stats = {
+            "context_folding": self.context_folder.get_statistics(),
+            "data_provenance": self.provenance_tracker.get_statistics(),
+            "chain_of_thought": self.chain_reasoner.get_statistics(),
+            "path_reasoning": self.path_reasoner.get_statistics(),
+            "test_time_training": self.test_time_trainer.get_statistics(),
+            "person_in_loop": self.person_in_loop.get_statistics(),
+            "reinforcement_planning": self.reinforcement_planner.get_statistics(),
+            "mcp_integration": {
+                "connections": len(self.mcp_manager.connections) if self.mcp_manager else 0,
+                "enabled_connections": len([c for c in self.mcp_manager.connections.values() if c.enabled]) if self.mcp_manager else 0
+            },
+            "event_bus": {
+                "total_events": len(self.event_bus.event_history),
+                "event_types": len(self.event_bus.subscribers),
+                "recent_events": len(self.event_bus.get_event_history(limit=10)),
+                "subscribers_count": sum(len(callbacks) for callbacks in self.event_bus.subscribers.values()),
+                "async_subscribers_count": sum(len(callbacks) for callbacks in self.event_bus.async_subscribers.values()),
+                "events_per_second": self._calculate_events_per_second()
+            },
+            "realtime_streaming": {
+                "active_streams": len(self.insight_streams),
+                "total_insights": sum(len(insights) for insights in self.insight_streams.values()),
+                "streaming_enabled": True
+            }
+        }
+        
+        if session_id and session_id in self.sessions:
+            session = self.sessions[session_id]
+            stats["session"] = {
+                "docs_count": len(session["docs"]),
+                "history_count": len(session["history"]),
+                "processed_files": len(session["processed_files"])
+            }
+        
+        return stats
+
     async def _process_query_parallel(
         self,
         session_id: str,
@@ -1005,11 +1427,20 @@ class AlienMode:
         Procesa consulta con procesamiento paralelo de documentos (como Enterprise API).
         Analiza cada documento por separado aplicando el prompt del usuario,
         luego combina todos los análisis en una respuesta final.
+        Mantiene toda la funcionalidad específica de Event Bus Mode (eventos, workflows, etc.).
         """
         session = self.sessions.get(session_id, {})
         start_time = time.time()
         
-        # Crear LLM sin límite de max_tokens para respuestas largas (como Enterprise API)
+        # Publicar evento de inicio de query paralelo
+        self.event_bus.publish('query_started', {
+            'session_id': session_id,
+            'query': message,
+            'mode': 'parallel',
+            'document_count': len(docs_by_source)
+        })
+        
+        # Crear LLM sin límite de max_tokens para respuestas largas
         from docchat.utils.llm_factory import create_llm
         api_key = self.config.openai_api_key if provider == "openai" else self.config.anthropic_api_key
         parallel_llm = create_llm(
@@ -1017,28 +1448,25 @@ class AlienMode:
             model=self.config.research_model or "gpt-4o",
             temperature=0.2,
             api_key=api_key,
-            # max_tokens REMOVIDO - dejar que la API decida la longitud (como Enterprise API)
-            request_timeout=300  # Timeout más largo para respuestas largas
+            request_timeout=300
         )
         
-        # Construir contexto de conversación (sin documentos, solo historial)
+        # Construir contexto de conversación
         conversation_context = self._build_folded_context(session, history)
         
         # Procesar cada documento en paralelo
         individual_analyses = {}
-        max_workers = min(5, len(docs_by_source))  # Máximo 5 documentos en paralelo
+        max_workers = min(5, len(docs_by_source))
         
         def analyze_single_document(source_name: str, file_docs: List[Document]) -> Tuple[str, str]:
-            """Analiza un solo documento con el prompt del usuario."""
+            """Analiza un solo documento con el prompt del usuario (Event Bus Mode)."""
             try:
-                # Construir contexto del documento (todos los chunks de este documento)
                 doc_content = "\n\n".join([doc.page_content for doc in file_docs])
-                # Limitar contenido a ~4000 caracteres por documento para evitar límites
                 if len(doc_content) > 4000:
                     doc_content = doc_content[:4000] + "..."
                 
-                # Prompt CENTRADO EN EL PROMPT DEL USUARIO - Cada PDF responde exactamente lo que el usuario pregunta
-                prompt = f"""Eres un analista estratégico de nivel C-Suite. Tu tarea es analizar ESTE documento específico para responder DIRECTAMENTE la pregunta del usuario.
+                # Prompt adaptado para Event Bus Mode (event-driven)
+                prompt = f"""Eres un analista estratégico de nivel C-Suite especializado en análisis event-driven. Tu tarea es analizar ESTE documento específico para responder DIRECTAMENTE la pregunta del usuario.
 
 PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
 {message}
@@ -1051,44 +1479,25 @@ INSTRUCCIONES CRÍTICAS:
 1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
    - Tu objetivo PRINCIPAL es responder: "{message}"
    - Analiza este documento ESPECÍFICAMENTE para encontrar información que responda esa pregunta
-   - Si el usuario pregunta "información más valiosa" → identifica la información MÁS VALIOSA de este documento
-   - Si el usuario pregunta "qué recomendarías hacer" → proporciona recomendaciones ESPECÍFICAS basadas en este documento
-   - Si el usuario pregunta "cuál es el mejor documento" → evalúa este documento en relación a la pregunta
    - ADÁPTATE al tipo de pregunta del usuario - no uses un formato genérico
 
 2. ANÁLISIS ESPECÍFICO PARA ESTE DOCUMENTO:
    - Extrae información del documento que responda DIRECTAMENTE a la pregunta del usuario
    - Cita datos concretos del documento (números, porcentajes, fechas, nombres, métricas)
    - Identifica entidades, metodologías, frameworks, o conceptos relevantes para la pregunta
-   - Si la pregunta requiere comparación o evaluación, evalúa este documento específicamente
 
 3. RESPUESTA ESTRUCTURADA (300-500 palabras):
    - **Respuesta Directa** (1-2 párrafos): Responde la pregunta del usuario usando información de este documento
    - **Información Específica** (1-2 párrafos): Detalles concretos del documento que apoyan tu respuesta
    - **Recomendaciones/Insights** (1 párrafo): Si la pregunta lo requiere, proporciona recomendaciones o insights específicos
 
-4. ADAPTACIÓN AL TIPO DE PREGUNTA:
-   - Si pregunta por "información valiosa" → identifica y explica la información MÁS VALIOSA
-   - Si pregunta por "recomendaciones" → proporciona recomendaciones ESPECÍFICAS y ACCIONABLES
-   - Si pregunta por "mejor documento" → evalúa este documento y explica por qué es o no es el mejor
-   - Si pregunta por "análisis" → proporciona análisis profundo relacionado con la pregunta
-   - ADÁPTATE - no uses un formato genérico, responde lo que el usuario realmente pregunta
-
-5. PROFESIONALISMO ENTERPRISE:
+4. PROFESIONALISMO ENTERPRISE:
    - Lenguaje claro y directo (nivel C-Suite)
    - Enfoque en responder la pregunta específica del usuario
    - Información accionable y específica del documento
-   - Estructura clara y escaneable
-
-IMPORTANTE:
-- NO uses un formato genérico - ADÁPTATE al tipo de pregunta del usuario
-- NO describas el documento en general - RESPONDE la pregunta específica
-- SÍ extrae información específica del documento que responda la pregunta
-- SÍ proporciona recomendaciones/insights si la pregunta lo requiere
 
 RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 
-                # Generar análisis con LLM (sin límite de max_tokens)
                 response = parallel_llm.invoke(prompt)
                 analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
                 
@@ -1097,7 +1506,7 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
         # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        print(f"🔄 [Event Bus Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1109,9 +1518,14 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    print(f"✅ [Event Bus Mode] Análisis completado para: {Path(doc_name).name}")
+                    # Publicar evento de documento procesado
+                    self.event_bus.publish('document_analysis_completed', {
+                        'session_id': session_id,
+                        'document': Path(doc_name).name
+                    })
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
+                    print(f"❌ [Event Bus Mode] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
         # OPCIÓN A: Mostrar todos los análisis individuales
@@ -1128,8 +1542,8 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
             for doc_name, analysis in individual_analyses.items()
         ])
         
-        # Generar respuesta combinada que RESPONDE DIRECTAMENTE al prompt del usuario
-        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario.
+        # Generar respuesta combinada
+        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite especializado en análisis event-driven. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario.
 
 TU TAREA PRINCIPAL: Combinar todos los análisis individuales para responder DIRECTAMENTE la pregunta del usuario de manera completa y estratégica.
 
@@ -1144,55 +1558,17 @@ INSTRUCCIONES PARA RESPUESTA FINAL COMBINADA (800-1200 palabras):
 1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
    - Tu objetivo es responder: "{message}"
    - Combina información de todos los análisis individuales para dar una respuesta COMPLETA
-   - Si el usuario pregunta "información más valiosa de cada PDF" → sintetiza la información más valiosa de TODOS los PDFs
-   - Si el usuario pregunta "qué me recomendarías hacer" → proporciona recomendaciones basadas en TODOS los documentos
-   - Si el usuario pregunta "cuál es el mejor documento" → compara y evalúa todos los documentos
    - ADÁPTATE al tipo de pregunta - no uses un formato genérico
 
 2. SÍNTESIS ESTRATÉGICA:
    - Combina los análisis individuales en una respuesta coherente
    - Identifica patrones comunes, contradicciones, o tensiones entre documentos
    - Proporciona una visión holística que responda completamente la pregunta
-   - Compara y contrasta información de diferentes documentos cuando sea relevante
 
-3. ESTRUCTURA ADAPTATIVA (según el tipo de pregunta):
-   
-   Si pregunta por "información valiosa" o "recomendaciones":
-   - **Respuesta Directa** (2-3 párrafos): Responde la pregunta combinando información de todos los documentos
-   - **Información Clave por Documento** (resumen de lo más valioso de cada uno)
-   - **Recomendaciones Finales** (basadas en toda la información combinada)
-   - **Documentos Más Relevantes** (cuáles aportan más valor y por qué)
-   
-   Si pregunta por "mejor documento" o "comparación":
-   - **Evaluación Comparativa** (compara todos los documentos en relación a la pregunta)
-   - **Documento(s) Recomendado(s)** (cuál es el mejor y por qué)
-   - **Análisis de Fortalezas y Debilidades** (de cada documento relevante)
-   - **Recomendación Final** (qué documento usar y por qué)
-   
-   Si pregunta por "análisis" o "insights":
-   - **Análisis Holístico** (insights que emergen de ver todos los documentos juntos)
-   - **Patrones y Tendencias** (qué patrones se repiten o contradicen)
-   - **Insights Estratégicos** (hallazgos que ningún documento individual puede dar)
-   - **Recomendaciones Basadas en el Análisis Completo**
-
-4. PROFESIONALISMO ENTERPRISE:
+3. PROFESIONALISMO ENTERPRISE:
    - Lenguaje claro y directo (nivel C-Suite)
    - Enfoque en responder la pregunta específica del usuario
    - Estructura clara y escaneable
-   - Información accionable y específica
-
-5. LONGITUD Y EFECTIVIDAD:
-   - 800-1200 palabras (completo pero no abrumador)
-   - Prioriza responder la pregunta sobre volumen de texto
-   - Cada sección debe aportar valor único para responder la pregunta
-   - Balance entre completitud y concisión
-
-IMPORTANTE:
-- RESPONDE DIRECTAMENTE la pregunta del usuario: "{message}"
-- NO uses un formato genérico - ADÁPTATE al tipo de pregunta
-- SÍ combina información de todos los análisis individuales
-- SÍ proporciona una conclusión o recomendación final que responda la pregunta
-- SÉ ESPECÍFICO: usa información concreta de los documentos, no generalidades
 
 RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 palabras):"""
         
@@ -1200,99 +1576,59 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             synthesis_response = parallel_llm.invoke(synthesis_prompt)
             combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
         except Exception as e:
-            combined_answer = f"❌ Error generando respuesta combinada: {str(e)[:200]}"
+            combined_answer = f"⚠️ Error generando síntesis: {str(e)[:200]}"
         
-        # Combinar ambas opciones en la respuesta final
-        formatted_answer = combined_answer
-        formatted_answer += "\n\n---\n\n"
-        formatted_answer += individual_analyses_text
-        
-        # Agregar información del proceso
-        formatted_answer += "\n\n---\n\n"
-        formatted_answer += "## 🔬 Proceso Multi-Agente DocChat (Modo Paralelo)\n\n"
-        formatted_answer += f"✅ **Documentos analizados:** {len(individual_analyses)}\n"
-        formatted_answer += "✅ **Procesamiento:** Paralelo (como Enterprise API)\n"
-        formatted_answer += "✅ **Análisis:** Individual por documento + Respuesta combinada\n"
-        formatted_answer += "✅ **Capacidad:** Respuestas largas sin límite de tokens por documento\n\n"
+        # Combinar ambas opciones
+        formatted_answer = f"{individual_analyses_text}\n\n## 🎯 Respuesta Final Combinada\n\n{combined_answer}"
         
         # Actualizar historial
-        session["history"].append({
-            "question": message,
-            "answer": formatted_answer,
-            "sources": list(individual_analyses.keys()),
-            "timestamp": datetime.now().isoformat(),
-            "processing_mode": "parallel"
+        new_history = history + [(message, formatted_answer)]
+        session["history"] = new_history
+        
+        # Publicar evento de query completada
+        elapsed_time = time.time() - start_time
+        self.event_bus.publish('query_completed', {
+            'session_id': session_id,
+            'query': message,
+            'elapsed_time': elapsed_time,
+            'documents_analyzed': len(individual_analyses)
         })
         
-        execution_time = time.time() - start_time
         metadata = {
-            "execution_time": execution_time,
+            "mode": "parallel",
             "documents_analyzed": len(individual_analyses),
-            "processing_mode": "parallel"
+            "elapsed_time": elapsed_time,
+            "event_bus_events": len(self.event_bus.event_history)
         }
         
-        # Convertir historial a formato tuples para Gradio
-        tuple_history = []
-        for entry in session["history"]:
-            if isinstance(entry, dict):
-                tuple_history.append((entry.get("question", ""), entry.get("answer", "")))
-            else:
-                tuple_history.append(entry)
-        
-        return tuple_history, None, metadata
-    
-    def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Obtiene estadísticas del modo."""
-        stats = {
-            "context_folding": self.context_folder.get_statistics(),
-            "data_provenance": self.provenance_tracker.get_statistics(),
-            "chain_of_thought": self.chain_reasoner.get_statistics(),
-            "path_reasoning": self.path_reasoner.get_statistics(),
-            "test_time_training": self.test_time_trainer.get_statistics(),
-            "person_in_loop": self.person_in_loop.get_statistics(),
-            "reinforcement_planning": self.reinforcement_planner.get_statistics(),
-            "mcp_integration": {
-                "connections": len(self.mcp_manager.connections) if self.mcp_manager else 0,
-                "enabled_connections": len([c for c in self.mcp_manager.connections.values() if c.enabled]) if self.mcp_manager else 0
-            }
-        }
-        
-        if session_id and session_id in self.sessions:
-            session = self.sessions[session_id]
-            stats["session"] = {
-                "docs_count": len(session["docs"]),
-                "history_count": len(session["history"]),
-                "processed_files": len(session["processed_files"])
-            }
-        
-        return stats
+        return new_history, None, metadata
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_event_bus_mode_instance: Optional[EventBusMode] = None
 
 
-def get_alien_mode(
+def get_event_bus_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> EventBusMode:
+    """Obtiene o crea la instancia global de Event Bus Mode."""
+    global _event_bus_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _event_bus_mode_instance is None:
+        _event_bus_mode_instance = EventBusMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _event_bus_mode_instance
 
 
-def run_alien_mode(
+def run_event_bus_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1305,14 +1641,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
+    Función principal para ejecutar Event Bus Mode.
     Compatible con Gradio (síncrona).
     """
     if not config or not processor or not retriever_builder:
         return history, "❌ Configuración incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    event_bus_mode = get_event_bus_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1321,7 +1657,7 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = event_bus_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
     
@@ -1330,7 +1666,7 @@ def run_alien_mode(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            event_bus_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,

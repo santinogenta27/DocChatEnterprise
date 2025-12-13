@@ -89,6 +89,21 @@ class AgentWorkflow:
         print("🔍 Verificando relevancia de la pregunta...")
         result = self.relevance_checker.check(state["question"], state["retriever"])
         context_docs = result.documents
+        
+        # TRUNCAR contenido de chunks recuperados para evitar 429
+        MAX_CHUNK_CHARS = 1500  # ~375 tokens por chunk
+        truncated_docs = []
+        for doc in context_docs[:30]:  # Máximo 30 chunks iniciales
+            if len(doc.page_content) > MAX_CHUNK_CHARS:
+                from langchain_core.documents import Document
+                truncated_docs.append(Document(
+                    page_content=doc.page_content[:MAX_CHUNK_CHARS] + "...",
+                    metadata=doc.metadata
+                ))
+            else:
+                truncated_docs.append(doc)
+        context_docs = truncated_docs
+        
         print(f"   Label de relevancia: {result.label}")
         print(f"   Documentos recuperados inicialmente: {len(context_docs)}")
         
@@ -116,51 +131,106 @@ class AgentWorkflow:
                 seen_content = set()
                 
                 # Agregar chunks de TODAS las fuentes, pero limitar el tamaño total
-                # Calcular límite basado en número de documentos (máximo ~20,000 tokens de contexto)
-                # Para muchos documentos (>50), reducir chunks por documento para evitar rate limits
-                if len(docs_by_source) > 50:
-                    # Para 100+ documentos, usar menos chunks por documento
-                    max_chunks_per_doc = max(2, min(5, 80 // len(docs_by_source)))
-                else:
-                    max_chunks_per_doc = max(3, min(8, 100 // len(docs_by_source)))
+                # ESTRATEGIA: Asegurar que TODOS los documentos tengan al menos 1 chunk representativo
+                # Luego distribuir el resto de chunks equitativamente
+                speed_mode = getattr(self.config, 'speed_mode', 'balanced')
                 
+                # Calcular límite basado en tokens estimados (1 token ≈ 4 caracteres)
+                # AUMENTADO: máximo 15,000 tokens para documentos (dejando 12,000 para prompt + respuesta)
+                # Total: 27,000 tokens (dentro del límite de 30,000 TPM)
+                MAX_DOCS_TOKENS = 15000
+                num_sources = len(docs_by_source)
+                
+                # ESTRATEGIA ADAPTATIVA: Ajustar tamaño de chunk según número de documentos
+                # Para muchos documentos, usar chunks más pequeños para incluir TODOS
+                if num_sources > 50:
+                    # Para 50+ documentos: chunks pequeños (~250 tokens) para incluir todos
+                    avg_chunk_chars = 1000  # ~250 tokens por chunk (aumentado para más contenido)
+                    max_chunks_by_tokens = MAX_DOCS_TOKENS * 4 // avg_chunk_chars  # ~60 chunks máximo
+                    MAX_CHUNK_CHARS = 1000  # Chunks más grandes para mejor análisis
+                elif num_sources > 30:
+                    # Para 30-50 documentos: chunks medianos (~300 tokens)
+                    avg_chunk_chars = 1200  # ~300 tokens por chunk (aumentado)
+                    max_chunks_by_tokens = MAX_DOCS_TOKENS * 4 // avg_chunk_chars  # ~50 chunks máximo
+                    MAX_CHUNK_CHARS = 1200
+                elif num_sources > 20:
+                    # Para 20-30 documentos: chunks grandes (~350 tokens)
+                    avg_chunk_chars = 1400  # ~350 tokens por chunk (aumentado)
+                    max_chunks_by_tokens = MAX_DOCS_TOKENS * 4 // avg_chunk_chars  # ~42 chunks máximo
+                    MAX_CHUNK_CHARS = 1400
+                else:
+                    # Para <20 documentos: chunks muy grandes (~400 tokens)
+                    avg_chunk_chars = 1600  # ~400 tokens por chunk (aumentado)
+                    max_chunks_by_tokens = MAX_DOCS_TOKENS * 4 // avg_chunk_chars  # ~37 chunks máximo
+                    MAX_CHUNK_CHARS = 1600
+                
+                if speed_mode == "fast":
+                    max_total_chunks = min(50, max_chunks_by_tokens)  # 50 chunks máximo (aumentado)
+                elif speed_mode == "balanced":
+                    max_total_chunks = min(60, max_chunks_by_tokens)  # 60 chunks máximo (aumentado)
+                else:  # quality mode
+                    max_total_chunks = min(75, max_chunks_by_tokens)  # 75 chunks máximo (aumentado)
+                
+                # ESTRATEGIA: Asegurar al menos 1 chunk de cada documento
+                # Si hay espacio, agregar más chunks de documentos más grandes
+                enhanced_docs = []
+                seen_content = set()
+                
+                # FASE 1: Asegurar 1 chunk representativo de cada documento (PRIORIDAD MÁXIMA)
                 for source, docs in docs_by_source.items():
-                    # Tomar chunks limitados de cada documento
-                    chunks_to_take = min(max_chunks_per_doc, len(docs))
-                    for doc in docs[:chunks_to_take]:
+                    if docs:
+                        # Tomar el primer chunk (generalmente el más representativo)
+                        doc = docs[0]
+                        # Truncar si es necesario
+                        if len(doc.page_content) > MAX_CHUNK_CHARS:
+                            from langchain_core.documents import Document
+                            doc = Document(
+                                page_content=doc.page_content[:MAX_CHUNK_CHARS] + "...",
+                                metadata=doc.metadata
+                            )
                         content_hash = hash(doc.page_content)
                         if content_hash not in seen_content:
                             seen_content.add(content_hash)
                             enhanced_docs.append(doc)
                 
-                # Limitar chunks según número de documentos y modo de velocidad
-                # Fast mode: menos chunks, más rápido
-                # Balanced: chunks moderados
-                # Quality: más chunks, mejor análisis
-                speed_mode = getattr(self.config, 'speed_mode', 'balanced')
-                if speed_mode == "fast":
-                    if len(docs_by_source) > 50:
-                        max_total_chunks = min(50, len(enhanced_docs))  # 50 chunks para modo rápido
-                    else:
-                        max_total_chunks = min(60, len(enhanced_docs))
-                elif speed_mode == "balanced":
-                    if len(docs_by_source) > 50:
-                        max_total_chunks = min(80, len(enhanced_docs))  # 80 chunks para modo balanceado
-                    else:
-                        max_total_chunks = min(100, len(enhanced_docs))
-                else:  # quality mode
-                    if len(docs_by_source) > 50:
-                        max_total_chunks = min(100, len(enhanced_docs))  # 100 chunks para máxima calidad
-                    else:
-                        max_total_chunks = min(120, len(enhanced_docs))
+                # FASE 2: Si hay espacio, agregar más chunks distribuyendo equitativamente
+                remaining_slots = max_total_chunks - len(enhanced_docs)
+                if remaining_slots > 0 and num_sources > 0:
+                    # Calcular cuántos chunks adicionales por documento
+                    additional_chunks_per_doc = max(1, remaining_slots // num_sources)
+                    
+                    for source, docs in docs_by_source.items():
+                        if len(enhanced_docs) >= max_total_chunks:
+                            break
+                        # Agregar chunks adicionales (empezando desde el índice 1)
+                        for i in range(1, min(additional_chunks_per_doc + 1, len(docs))):
+                            if len(enhanced_docs) >= max_total_chunks:
+                                break
+                            doc = docs[i]
+                            # Truncar si es necesario
+                            if len(doc.page_content) > MAX_CHUNK_CHARS:
+                                from langchain_core.documents import Document
+                                doc = Document(
+                                    page_content=doc.page_content[:MAX_CHUNK_CHARS] + "...",
+                                    metadata=doc.metadata
+                                )
+                            content_hash = hash(doc.page_content)
+                            if content_hash not in seen_content:
+                                seen_content.add(content_hash)
+                                enhanced_docs.append(doc)
                 
+                # Los chunks ya están truncados en las fases anteriores
+                # Solo asegurar que no excedamos el límite final
                 context_docs = enhanced_docs[:max_total_chunks]
                 print(f"\n📊 Modo 'Analizar Todos': Usando {len(context_docs)} chunks de {len(docs_by_source)} documentos")
                 print(f"   (Optimizado para evitar rate limits con {len(docs_by_source)} documentos)\n")
             else:
-                # Fallback: intentar obtener más del retriever
+                # Fallback: intentar obtener más del retriever (con límites estrictos)
                 try:
                     all_retrieved = state["retriever"].invoke(state["question"])
+                    # Limitar a máximo 50 chunks para evitar 429
+                    all_retrieved = all_retrieved[:50]
+                    
                     docs_by_source = {}
                     for doc in all_retrieved:
                         source = doc.metadata.get("source", "unknown")
@@ -170,26 +240,40 @@ class AgentWorkflow:
                     
                     enhanced_docs = []
                     seen_content = set()
+                    MAX_CHUNK_CHARS = 1500  # ~375 tokens por chunk
+                    
                     for doc in context_docs:
-                        content_hash = hash(doc.page_content)
+                        # Truncar contenido si es muy grande
+                        content = doc.page_content[:MAX_CHUNK_CHARS] if len(doc.page_content) > MAX_CHUNK_CHARS else doc.page_content
+                        content_hash = hash(content)
                         if content_hash not in seen_content:
                             seen_content.add(content_hash)
-                            enhanced_docs.append(doc)
+                            if len(doc.page_content) > MAX_CHUNK_CHARS:
+                                from langchain_core.documents import Document
+                                enhanced_docs.append(Document(page_content=content + "...", metadata=doc.metadata))
+                            else:
+                                enhanced_docs.append(doc)
                     
                     for source, docs in docs_by_source.items():
                         source_count = sum(1 for d in enhanced_docs if d.metadata.get("source") == source)
-                        if source_count < 5:
-                            needed = 5 - source_count
+                        if source_count < 2:  # Reducido a 2
+                            needed = 2 - source_count
                             for doc in docs:
-                                if needed <= 0:
+                                if needed <= 0 or len(enhanced_docs) >= 30:  # Límite total de 30
                                     break
-                                content_hash = hash(doc.page_content)
+                                # Truncar contenido
+                                content = doc.page_content[:MAX_CHUNK_CHARS] if len(doc.page_content) > MAX_CHUNK_CHARS else doc.page_content
+                                content_hash = hash(content)
                                 if content_hash not in seen_content:
                                     seen_content.add(content_hash)
-                                    enhanced_docs.append(doc)
+                                    if len(doc.page_content) > MAX_CHUNK_CHARS:
+                                        from langchain_core.documents import Document
+                                        enhanced_docs.append(Document(page_content=content + "...", metadata=doc.metadata))
+                                    else:
+                                        enhanced_docs.append(doc)
                                     needed -= 1
                     
-                    context_docs = enhanced_docs[:200]
+                    context_docs = enhanced_docs[:30]  # Máximo 30 chunks
                 except Exception:
                     pass
         
@@ -223,6 +307,22 @@ class AgentWorkflow:
 
     def _research_step(self, state: AgentState) -> AgentState:
         context_docs = state.get("context_docs", [])
+        
+        # TRUNCAR contenido de chunks antes de pasarlos al ResearchAgent
+        MAX_CHUNK_CHARS = 1500  # ~375 tokens por chunk
+        MAX_TOTAL_CHUNKS = 30  # Máximo 30 chunks para evitar 429
+        truncated_docs = []
+        for doc in context_docs[:MAX_TOTAL_CHUNKS]:
+            if len(doc.page_content) > MAX_CHUNK_CHARS:
+                from langchain_core.documents import Document
+                truncated_docs.append(Document(
+                    page_content=doc.page_content[:MAX_CHUNK_CHARS] + "...",
+                    metadata=doc.metadata
+                ))
+            else:
+                truncated_docs.append(doc)
+        context_docs = truncated_docs
+        
         # Log para debugging: mostrar cuántos documentos de cada fuente
         if context_docs:
             sources_count = {}

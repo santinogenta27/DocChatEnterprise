@@ -25,12 +25,68 @@ import json
 import uuid
 import asyncio
 import time
+import tempfile
+import shutil
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
 import gradio as gr
 from dotenv import load_dotenv
+
+# CONFIGURAR DIRECTORIO TEMPORAL ALTERNATIVO si el disco C: está lleno
+# Intentar usar otro disco si está disponible (D:, E:, etc.)
+try:
+    # Verificar espacio en C:
+    import shutil
+    _, _, free_c = shutil.disk_usage("C:\\")
+    free_c_gb = free_c / (1024**3)
+    
+    if free_c_gb < 1.0:  # Menos de 1 GB libre en C:
+        # Buscar otro disco con espacio disponible
+        alternative_drive = None
+        for drive_letter in ['D', 'E', 'F', 'G', 'H']:
+            try:
+                drive_path = f"{drive_letter}:\\"
+                _, _, free_alt = shutil.disk_usage(drive_path)
+                free_alt_gb = free_alt / (1024**3)
+                if free_alt_gb > 5.0:  # Al menos 5 GB libres
+                    alternative_drive = drive_path
+                    print(f"✅ Encontrado disco alternativo: {drive_letter}: con {free_alt_gb:.2f} GB libres")
+                    break
+            except:
+                continue
+        
+        if alternative_drive:
+            # Usar disco alternativo para archivos temporales
+            alt_temp_dir = Path(alternative_drive) / "gradio_temp"
+            alt_temp_dir.mkdir(exist_ok=True)
+            
+            # Configurar variables de entorno para Gradio y Python
+            os.environ["GRADIO_TEMP_DIR"] = str(alt_temp_dir)
+            os.environ["TMPDIR"] = str(alt_temp_dir)
+            os.environ["TEMP"] = str(alt_temp_dir)
+            os.environ["TMP"] = str(alt_temp_dir)
+            
+            # También configurar tempfile
+            tempfile.tempdir = str(alt_temp_dir)
+            
+            print(f"⚠️ Disco C: tiene poco espacio ({free_c_gb:.2f} GB).")
+            print(f"✅ Usando disco {alternative_drive} para archivos temporales: {alt_temp_dir}")
+        else:
+            # Fallback: usar directorio del proyecto
+            project_temp = Path(__file__).parent / ".gradio_temp"
+            project_temp.mkdir(exist_ok=True)
+            
+            os.environ["GRADIO_TEMP_DIR"] = str(project_temp)
+            os.environ["TMPDIR"] = str(project_temp)
+            os.environ["TEMP"] = str(project_temp)
+            os.environ["TMP"] = str(project_temp)
+            tempfile.tempdir = str(project_temp)
+            
+            print(f"⚠️ Disco C: tiene poco espacio ({free_c_gb:.2f} GB). Usando directorio del proyecto: {project_temp}")
+except Exception as e:
+    print(f"⚠️ No se pudo configurar directorio temporal alternativo: {e}")
 
 # MONKEY PATCH: Fix para bug de Gradio 4.40.0 con TypeError en api_info
 # Este bug ocurre cuando schema es un bool en lugar de un dict en la línea 863
@@ -106,6 +162,10 @@ from docchat.memory import MemoryStore, ContextManager
 from docchat.autonomous_agent import AutonomousAgent
 from docchat.advanced_agent import AdvancedAutonomousAgent
 from docchat.enterprise_api import EnterpriseAPIMode
+from docchat.advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode
+# from docchat.optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # ELIMINADO
+from docchat.marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier
+from docchat.optimus_prime_mode import OptimusPrimeMode, get_optimus_prime_mode, run_optimus_prime_mode
 from docchat.enterprise_api_stargate import StargatePDFMode
 from docchat.enterprise_api_data_sight import DataSightMode
 from docchat.data_sight_integrations import DataSightIntegrations
@@ -127,6 +187,28 @@ from docchat.multi_format_processor import MultiFormatProcessor
 from docchat.iterative_learning_agent import IterativeLearningAgent
 from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
 from docchat.alien_mode import run_alien_mode, get_alien_mode
+from docchat.snipe_shot_mode import run_snipe_shot_mode, get_snipe_shot_mode
+from docchat.portal_ads_mode import run_portal_ads_mode, get_portal_ads_mode
+from docchat.ad_llm_mode import run_ad_llm_mode, get_ad_llm_mode
+from docchat.agent_builder_studio import (
+    AgentBuilderStudio,
+    AgentTemplate,
+    DeploymentChannel,
+    LLMProvider,
+    get_agent_builder_studio,
+    run_agent_builder_studio
+)
+from docchat.prime_agents_mode import run_prime_agents_mode, get_prime_agents_mode
+from docchat.judge_agent_mode import run_judge_agent_mode, get_judge_agent_mode
+from docchat.banking_mode import run_banking_mode, get_banking_mode
+from docchat.event_bus_mode import run_event_bus_mode, get_event_bus_mode
+from docchat.event_horizon_mode import run_event_horizon_mode, get_event_horizon_mode
+from docchat.event_storage_mode import run_event_storage_mode, get_event_storage_mode
+from docchat.extasis_mode import run_extasis_mode, get_extasis_mode
+from docchat.extraction_x_mode import run_extraction_x_mode, get_extraction_x_mode
+from docchat.data_point_mode import run_data_point_mode, get_data_point_mode
+from docchat.enterprise_connectors import EnterpriseConnectorManager, ConnectorConfig, ConnectorStatus
+from docchat.event_bus_mode import run_event_bus_mode, get_event_bus_mode
 from docchat.company_knowledge import get_company_knowledge, run_company_knowledge
 from docchat.invoice import get_invoice_mode, run_invoice_mode
 from docchat.fullstack_text_to_action import FullStackTextToAction
@@ -267,6 +349,10 @@ context_manager = ContextManager(memory_store, config) if memory_store else None
 autonomous_agent = AutonomousAgent(agent_id="main_agent", config=config) if config.enable_autonomous_agents else None
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
 enterprise_api = EnterpriseAPIMode(config, provider="openai")  # Default: OpenAI
+advice_god = AdviceGodMode(config, provider="openai")  # Default: OpenAI
+# optimus = OptimusMode(config, provider="openai")  # ELIMINADO
+marketplace = MarketplaceMode(config, provider="openai")  # Default: OpenAI
+optimus_prime = OptimusPrimeMode(config, processor, retriever_builder, context_manager)
 # Stargate PDF - clon del Enterprise API original
 stargate_pdf = StargatePDFMode(config, provider="openai")
 # Data Sight - clon del Enterprise API para análisis de datos e insights
@@ -4253,10 +4339,252 @@ footer {
         font-size: 0.875rem !important;
     }
 }
+
+/* ==================== ESTILO CHATGPT PARA EVENT BUS MODE ==================== */
+/* Chatbot específico para Event Bus Mode - Estilo exacto de ChatGPT */
+
+/* Contenedor del chatbot Event Bus */
+#event_bus_bot {
+    background: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* Mensajes del usuario (izquierda) */
+#event_bus_bot .user {
+    background: #ffffff !important;
+    color: #353740 !important;
+    font-size: 14px !important;
+    line-height: 1.75 !important;
+    padding: 16px 20px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-weight: 400 !important;
+}
+
+/* Mensajes del asistente (respuestas - derecha) */
+#event_bus_bot .assistant,
+#event_bus_bot .bot {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    padding: 16px 20px !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-weight: 400 !important;
+}
+
+/* Contenedor de cada mensaje */
+#event_bus_bot .message {
+    background: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Texto dentro de los mensajes */
+#event_bus_bot .message p,
+#event_bus_bot .message div,
+#event_bus_bot .message span {
+    color: #000000 !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-weight: 400 !important;
+}
+
+/* Markdown dentro del chatbot */
+#event_bus_bot .markdown-text {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Headers dentro del chatbot */
+#event_bus_bot .markdown-text h1,
+#event_bus_bot .markdown-text h2,
+#event_bus_bot .markdown-text h3,
+#event_bus_bot .markdown-text h4 {
+    color: #000000 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    line-height: 1.5 !important;
+    margin: 12px 0 8px 0 !important;
+}
+
+/* Listas dentro del chatbot */
+#event_bus_bot .markdown-text ul,
+#event_bus_bot .markdown-text ol {
+    color: #000000 !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    margin: 8px 0 !important;
+    padding-left: 24px !important;
+}
+
+#event_bus_bot .markdown-text li {
+    color: #000000 !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    margin: 4px 0 !important;
+}
+
+/* Código dentro del chatbot */
+#event_bus_bot .markdown-text code {
+    background: #f7f7f8 !important;
+    color: #000000 !important;
+    font-size: 13px !important;
+    padding: 2px 6px !important;
+    border-radius: 3px !important;
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace !important;
+}
+
+#event_bus_bot .markdown-text pre {
+    background: #f7f7f8 !important;
+    color: #000000 !important;
+    font-size: 13px !important;
+    border-radius: 6px !important;
+    padding: 12px 16px !important;
+    margin: 12px 0 !important;
+    border: 1px solid #e5e5e5 !important;
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace !important;
+    line-height: 1.6 !important;
+}
+
+/* Enlaces dentro del chatbot */
+#event_bus_bot .markdown-text a {
+    color: #10a37f !important;
+    text-decoration: none !important;
+    font-size: 16px !important;
+}
+
+#event_bus_bot .markdown-text a:hover {
+    text-decoration: underline !important;
+}
+
+/* Tablas dentro del chatbot */
+#event_bus_bot .markdown-text table {
+    background: #ffffff !important;
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 6px !important;
+    font-size: 16px !important;
+    margin: 12px 0 !important;
+}
+
+#event_bus_bot .markdown-text th {
+    background: #f7f7f8 !important;
+    color: #000000 !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 10px 12px !important;
+    border-bottom: 1px solid #e5e5e5 !important;
+}
+
+#event_bus_bot .markdown-text td {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 16px !important;
+    padding: 10px 12px !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+}
+
+/* Separador entre mensajes */
+#event_bus_bot .message + .message {
+    border-top: 1px solid #f0f0f0 !important;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Scrollbar del chatbot */
+#event_bus_bot::-webkit-scrollbar {
+    width: 6px !important;
+}
+
+#event_bus_bot::-webkit-scrollbar-track {
+    background: #ffffff !important;
+}
+
+#event_bus_bot::-webkit-scrollbar-thumb {
+    background: #d1d5db !important;
+    border-radius: 3px !important;
+}
+
+#event_bus_bot::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af !important;
+}
+
+/* Botón de copiar */
+#event_bus_bot .copy-button {
+    background: #ffffff !important;
+    color: #6b7280 !important;
+    font-size: 12px !important;
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 4px !important;
+    padding: 4px 8px !important;
+}
+
+#event_bus_bot .copy-button:hover {
+    background: #f7f7f8 !important;
+    color: #353740 !important;
+}
+
+/* Asegurar que todo el contenido del chatbot tenga fondo blanco */
+#event_bus_bot * {
+    background-color: transparent !important;
+}
+
+#event_bus_bot .message,
+#event_bus_bot .message * {
+    background-color: #ffffff !important;
+}
+
+/* Override para cualquier fondo oscuro */
+#event_bus_bot .dark,
+#event_bus_bot [class*="dark"] {
+    background: #ffffff !important;
+    color: #000000 !important;
+}
+
+/* Asegurar que el contenedor principal tenga fondo blanco */
+div[id*="event_bus_bot"],
+div[class*="event_bus_bot"] {
+    background: #ffffff !important;
+}
+
+/* Input box también estilo ChatGPT */
+#event_bus_input {
+    background: #ffffff !important;
+    border: 1px solid #e5e5e5 !important;
+    border-radius: 12px !important;
+    color: #353740 !important;
+    font-size: 14px !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    padding: 12px 16px !important;
+}
+
+#event_bus_input:focus {
+    border-color: #10a37f !important;
+    box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.1) !important;
+}
+
+#event_bus_input::placeholder {
+    color: #9ca3af !important;
+    font-size: 14px !important;
+}
 """
 
 # Interfaz Gradio - Tema Profesional Azul DeepSeek
-with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
+with gr.Blocks(title="Enterprise Data AI", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
     
     # ==================== MENÚ DE CONFIGURACIÓN DE API KEYS ====================
     # Estado para almacenar las API keys del usuario
@@ -4268,7 +4596,7 @@ with gr.Blocks(title="DocChat Enterprise", theme=gr.themes.Soft(primary_hue="blu
         with gr.Column(scale=4):
             gr.Markdown(
                 """
-                # 🚀 DocChat Enterprise · Multi-Agent RAG con Agentes Autónomos
+                # 🚀 Enterprise Data AI · Multi-Agent RAG con Agentes Autónomos
                 
                 Sistema avanzado de análisis de documentos con agentes autónomos, memoria persistente y procesamiento masivo.
                 """
@@ -9182,6 +9510,1137 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 show_progress="full"
             )
 
+        # Tab: 👑 ADVICE GOD - Clon de Enterprise API
+        with gr.Tab("👑 ADVICE GOD"):
+            gr.Markdown("### 👑 ADVICE GOD - Procesamiento Automático con Agentic AI Avanzado")
+            gr.Markdown("""
+            **🚀 Capabilities:**
+            - Automatically processes documents (similar to RAG Query)
+            - Detects problems, opportunities, and patterns proactively
+            - Generates automatic summaries per document
+            - Executes actions based on custom rules
+            - Learns and improves continuously
+            
+            **💼 Perfect for companies that need:**
+            - Mass processing of contracts, emails, documents
+            - Automatic risk and opportunity detection
+            - Automation of enterprise workflows
+            """)
+            
+            # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
+            gr.Markdown("""
+            ---
+            ### 📥 Use Synced PDFs
+            
+            **Already synced PDFs from Gmail, Drive or Outlook?** Use them directly here with one click.
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    ag_sync_source_selector = gr.Dropdown(
+                        choices=[
+                            ("📧 Gmail", "gmail"),
+                            ("📁 Google Drive", "google_drive"),
+                            ("📨 Outlook", "outlook"),
+                            ("💼 OneDrive", "onedrive"),
+                            ("📄 Todos", "all")
+                        ],
+                        label="Select source",
+                        value="all"
+                    )
+                    ag_load_synced_btn = gr.Button("📥 Load Synced PDFs", variant="primary")
+                
+                with gr.Column(scale=2):
+                    ag_synced_pdfs_info = gr.Markdown("*Click 'Load Synced PDFs' to see available files.*")
+            
+            ag_synced_files_checkboxes = gr.CheckboxGroup(
+                label="📋 Select PDFs to process",
+                choices=[],
+                value=[],
+                interactive=True,
+                visible=False
+            )
+            
+            with gr.Row():
+                ag_select_all_synced_btn = gr.Button("✅ Select All", variant="secondary", visible=False)
+                ag_process_synced_btn = gr.Button("🚀 PROCESS SELECTED PDFs", variant="primary", visible=False, size="lg")
+            
+            ag_synced_files_paths = gr.State(value={})  # Guarda {nombre: path}
+            
+            def ag_load_synced_pdfs(source):
+                """Load list of synced PDFs."""
+                sync_dir = Path(config.memory_dir) / "synced_documents"
+                
+                if not sync_dir.exists():
+                    return (
+                        "❌ No synced PDFs. Go to '🔗 Connections' to sync first.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                # Buscar PDFs según la fuente seleccionada
+                pdf_files = []
+                file_paths = {}
+                
+                if source == "all":
+                    sources = ["gmail", "google_drive", "outlook", "onedrive", "dropbox"]
+                else:
+                    sources = [source]
+                
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        for pdf in src_dir.rglob("*.pdf"):
+                            relative_path = pdf.relative_to(sync_dir)
+                            display_name = f"[{src.upper()}] {pdf.name}"
+                            pdf_files.append(display_name)
+                            file_paths[display_name] = str(pdf)
+                
+                if not pdf_files:
+                    return (
+                        f"📭 No synced PDFs from **{source}**.\n\nGo to '🔗 Connections' → '🔄 Sync' to download PDFs.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                # Organizar información
+                info = f"""### ✅ {len(pdf_files)} PDFs found
+
+| Fuente | Cantidad |
+|--------|----------|
+"""
+                counts = {}
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        count = len(list(src_dir.rglob("*.pdf")))
+                        if count > 0:
+                            icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
+                            info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
+                
+                info += "\n**Select the PDFs you want to process below:**"
+                
+                return (
+                    info,
+                    gr.update(choices=pdf_files, value=[], visible=True),
+                    gr.update(visible=True),
+                    gr.update(visible=True),
+                    file_paths
+                )
+            
+            def ag_select_all_synced(current_choices):
+                """Select all PDFs."""
+                return current_choices
+            
+            def ag_process_synced_pdfs(selected_files, file_paths_dict, rules_json):
+                """Process selected PDFs with ADVICE GOD."""
+                if not selected_files:
+                    raise gr.Error("Please select at least one PDF to process.")
+                
+                # Obtener las rutas de los archivos seleccionados
+                files_to_process = []
+                for name in selected_files:
+                    if name in file_paths_dict:
+                        files_to_process.append(file_paths_dict[name])
+                
+                if not files_to_process:
+                    raise gr.Error("Selected files not found.")
+                
+                # Procesar con ADVICE GOD
+                try:
+                    # Parsear reglas si se proporcionaron
+                    rules = None
+                    if rules_json and rules_json.strip():
+                        try:
+                            rules = json.loads(rules_json)
+                        except:
+                            pass
+                    
+                    # Generar resultado con streaming
+                    output = f"## 👑 ADVICE GOD - Processing {len(files_to_process)} Synced PDFs\n\n"
+                    output += "**Files:**\n"
+                    for f in files_to_process[:10]:
+                        output += f"- {Path(f).name}\n"
+                    if len(files_to_process) > 10:
+                        output += f"- ... and {len(files_to_process) - 10} more\n"
+                    output += "\n---\n\n"
+                    
+                    # Usar el procesador de ADVICE GOD
+                    for chunk in advice_god.process_enterprise_documents_streaming(
+                        files=files_to_process,
+                        auto_detect=True,
+                        rules=rules
+                    ):
+                        output += chunk
+                        yield output
+                    
+                except Exception as e:
+                    yield f"❌ Error procesando: {str(e)}"
+            
+            ag_load_synced_btn.click(
+                fn=ag_load_synced_pdfs,
+                inputs=[ag_sync_source_selector],
+                outputs=[ag_synced_pdfs_info, ag_synced_files_checkboxes, ag_select_all_synced_btn, ag_process_synced_btn, ag_synced_files_paths]
+            )
+            
+            ag_select_all_synced_btn.click(
+                fn=ag_select_all_synced,
+                inputs=[ag_synced_files_checkboxes],
+                outputs=[ag_synced_files_checkboxes]
+            )
+            
+            gr.Markdown("""
+            ---
+            ### 📂 Or upload files manually
+            """)
+            
+            with gr.Row():
+                ag_files = gr.Files(
+                    label="📂 Enterprise Documents (PDF, DOCX, TXT, MD, Emails)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                ag_rules_input = gr.Textbox(
+                    label="⚙️ Rules & Automations (optional JSON)",
+                    placeholder='''[
+  {
+    "name": "Expired Contract Alert",
+    "type": "condition",
+    "condition": {
+      "type": "keyword",
+      "keyword": "expiration"
+    },
+    "action": {
+      "type": "notify",
+      "channel": "email"
+    }
+  }
+]''',
+                    lines=8,
+                )
+            
+            with gr.Row():
+                ag_auto_detect_check = gr.Checkbox(
+                    label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                    value=True,
+                )
+                ag_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
+            
+            ag_output = gr.Markdown(label="📊 Resultados ADVICE GOD")
+            
+            def ag_run_advice_god_mode_streaming(files, auto_detect, rules_json, provider):
+                """Ejecuta ADVICE GOD Mode con streaming."""
+                if not files:
+                    yield "❌ Por favor, sube al menos un archivo."
+                    return
+                
+                try:
+                    rules = None
+                    if rules_json and rules_json.strip():
+                        try:
+                            rules = json.loads(rules_json)
+                        except:
+                            pass
+                    
+                    # Crear instancia temporal con el provider seleccionado
+                    temp_advice_god = AdviceGodMode(config, provider=provider)
+                    
+                    for chunk in temp_advice_god.process_enterprise_documents_streaming(
+                        files=files,
+                        auto_detect=auto_detect,
+                        rules=rules
+                    ):
+                        yield chunk
+                    
+                except Exception as e:
+                    yield f"❌ Error: {str(e)}"
+            
+            ag_button = gr.Button("🚀 Procesar con ADVICE GOD", variant="primary", size="lg")
+            
+            ag_button.click(
+                fn=ag_run_advice_god_mode_streaming,
+                inputs=[ag_files, ag_auto_detect_check, ag_rules_input, ag_provider_toggle],
+                outputs=[ag_output],
+                show_progress="full"
+            )
+            
+            # Conectar el botón de PDFs sincronizados
+            ag_process_synced_btn.click(
+                fn=ag_process_synced_pdfs,
+                inputs=[ag_synced_files_checkboxes, ag_synced_files_paths, ag_rules_input],
+                outputs=[ag_output],
+                show_progress="full"
+            )
+
+        # Tab: 🤖 Optimus - Clon de Enterprise API
+        with gr.Tab("🤖 Optimus"):
+            gr.Markdown("### 🤖 Optimus - Procesamiento Automático con Agentic AI Avanzado")
+            gr.Markdown("""
+            **🚀 Capabilities:**
+            - Automatically processes documents (similar to RAG Query)
+            - Detects problems, opportunities, and patterns proactively
+            - Generates automatic summaries per document
+            - Executes actions based on custom rules
+            - Learns and improves continuously
+            
+            **💼 Perfect for companies that need:**
+            - Mass processing of contracts, emails, documents
+            - Automatic risk and opportunity detection
+            - Automation of enterprise workflows
+            """)
+            
+            # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
+            gr.Markdown("""
+            ---
+            ### 📥 Use Synced PDFs
+            
+            **Already synced PDFs from Gmail, Drive or Outlook?** Use them directly here with one click.
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    opt_sync_source_selector = gr.Dropdown(
+                        choices=[
+                            ("📧 Gmail", "gmail"),
+                            ("📁 Google Drive", "google_drive"),
+                            ("📨 Outlook", "outlook"),
+                            ("💼 OneDrive", "onedrive"),
+                            ("📄 Todos", "all")
+                        ],
+                        label="Select source",
+                        value="all"
+                    )
+                    opt_load_synced_btn = gr.Button("📥 Load Synced PDFs", variant="primary")
+                
+                with gr.Column(scale=2):
+                    opt_synced_pdfs_info = gr.Markdown("*Click 'Load Synced PDFs' to see available files.*")
+            
+            opt_synced_files_checkboxes = gr.CheckboxGroup(
+                label="📋 Select PDFs to process",
+                choices=[],
+                value=[],
+                interactive=True,
+                visible=False
+            )
+            
+            with gr.Row():
+                opt_select_all_synced_btn = gr.Button("✅ Select All", variant="secondary", visible=False)
+                opt_process_synced_btn = gr.Button("🚀 PROCESS SELECTED PDFs", variant="primary", visible=False, size="lg")
+            
+            opt_synced_files_paths = gr.State(value={})  # Guarda {nombre: path}
+            
+            def opt_load_synced_pdfs(source):
+                """Load list of synced PDFs."""
+                sync_dir = Path(config.memory_dir) / "synced_documents"
+                
+                if not sync_dir.exists():
+                    return (
+                        "❌ No synced PDFs. Go to '🔗 Connections' to sync first.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                # Buscar PDFs según la fuente seleccionada
+                pdf_files = []
+                file_paths = {}
+                
+                if source == "all":
+                    sources = ["gmail", "google_drive", "outlook", "onedrive", "dropbox"]
+                else:
+                    sources = [source]
+                
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        for pdf in src_dir.rglob("*.pdf"):
+                            relative_path = pdf.relative_to(sync_dir)
+                            display_name = f"[{src.upper()}] {pdf.name}"
+                            pdf_files.append(display_name)
+                            file_paths[display_name] = str(pdf)
+                
+                if not pdf_files:
+                    return (
+                        f"📭 No synced PDFs from **{source}**.\n\nGo to '🔗 Connections' → '🔄 Sync' to download PDFs.",
+                        gr.update(choices=[], visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        {}
+                    )
+                
+                # Organizar información
+                info = f"""### ✅ {len(pdf_files)} PDFs found
+
+| Fuente | Cantidad |
+|--------|----------|
+"""
+                counts = {}
+                for src in sources:
+                    src_dir = sync_dir / src
+                    if src_dir.exists():
+                        count = len(list(src_dir.rglob("*.pdf")))
+                        if count > 0:
+                            icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
+                            info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
+                
+                info += "\n**Select the PDFs you want to process below:**"
+                
+                return (
+                    info,
+                    gr.update(choices=pdf_files, value=[], visible=True),
+                    gr.update(visible=True),
+                    gr.update(visible=True),
+                    file_paths
+                )
+            
+            def opt_select_all_synced(current_choices):
+                """Select all PDFs."""
+                return current_choices
+            
+            def opt_process_synced_pdfs(selected_files, file_paths_dict, rules_json):
+                """Process selected PDFs with Optimus."""
+                if not selected_files:
+                    raise gr.Error("Please select at least one PDF to process.")
+                
+                # Obtener las rutas de los archivos seleccionados
+                files_to_process = []
+                for name in selected_files:
+                    if name in file_paths_dict:
+                        files_to_process.append(file_paths_dict[name])
+                
+                if not files_to_process:
+                    raise gr.Error("Selected files not found.")
+                
+                # Procesar con Optimus
+                try:
+                    # Parsear reglas si se proporcionaron
+                    rules = None
+                    if rules_json and rules_json.strip():
+                        try:
+                            rules = json.loads(rules_json)
+                        except:
+                            pass
+                    
+                    # Generar resultado con streaming
+                    output = f"## 🤖 Optimus - Processing {len(files_to_process)} Synced PDFs\n\n"
+                    output += "**Files:**\n"
+                    for f in files_to_process[:10]:
+                        output += f"- {Path(f).name}\n"
+                    if len(files_to_process) > 10:
+                        output += f"- ... and {len(files_to_process) - 10} more\n"
+                    output += "\n---\n\n"
+                    
+                    # Usar el procesador de Optimus
+                    for chunk in optimus.process_enterprise_documents_streaming(
+                        files=files_to_process,
+                        auto_detect=True,
+                        rules=rules
+                    ):
+                        output += chunk
+                        yield output
+                    
+                except Exception as e:
+                    yield f"❌ Error procesando: {str(e)}"
+            
+            opt_load_synced_btn.click(
+                fn=opt_load_synced_pdfs,
+                inputs=[opt_sync_source_selector],
+                outputs=[opt_synced_pdfs_info, opt_synced_files_checkboxes, opt_select_all_synced_btn, opt_process_synced_btn, opt_synced_files_paths]
+            )
+            
+            opt_select_all_synced_btn.click(
+                fn=opt_select_all_synced,
+                inputs=[opt_synced_files_checkboxes],
+                outputs=[opt_synced_files_checkboxes]
+            )
+            
+            gr.Markdown("""
+            ---
+            ### 📂 Or upload files manually
+            """)
+            
+            with gr.Row():
+                opt_files = gr.Files(
+                    label="📂 Enterprise Documents (PDF, DOCX, TXT, MD, Emails)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                opt_rules_input = gr.Textbox(
+                    label="⚙️ Rules & Automations (optional JSON)",
+                    placeholder='''[
+  {
+    "name": "Expired Contract Alert",
+    "type": "condition",
+    "condition": {
+      "type": "keyword",
+      "keyword": "expiration"
+    },
+    "action": {
+      "type": "notify",
+      "channel": "email"
+    }
+  }
+]''',
+                    lines=8,
+                )
+            
+            with gr.Row():
+                opt_auto_detect_check = gr.Checkbox(
+                    label="🔍 Detección Automática (Problemas, Oportunidades, Patrones)",
+                    value=True,
+                )
+                opt_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
+            
+            opt_output = gr.Markdown(label="📊 Resultados Optimus")
+            
+            def opt_run_optimus_mode_streaming(files, auto_detect, rules_json, provider):
+                """Ejecuta Optimus Mode con streaming - ELIMINADO."""
+                yield "❌ Modo Optimus ha sido eliminado."
+                return
+                
+                # CÓDIGO ELIMINADO - OptimusMode ya no existe
+                # try:
+                #     rules = None
+                #     if rules_json and rules_json.strip():
+                #         try:
+                #             rules = json.loads(rules_json)
+                #         except:
+                #             pass
+                #     
+                #     # Crear instancia temporal con el provider seleccionado
+                #     temp_optimus = OptimusMode(config, provider=provider)
+                #     
+                #     for chunk in temp_optimus.process_enterprise_documents_streaming(
+                #         files=files,
+                #         auto_detect=auto_detect,
+                #         rules=rules
+                #     ):
+                #         yield chunk
+                #     
+                # except Exception as e:
+                #     yield f"❌ Error: {str(e)}"
+            
+            opt_button = gr.Button("🚀 Procesar con Optimus", variant="primary", size="lg")
+            
+            opt_button.click(
+                fn=opt_run_optimus_mode_streaming,
+                inputs=[opt_files, opt_auto_detect_check, opt_rules_input, opt_provider_toggle],
+                outputs=[opt_output],
+                show_progress="full"
+            )
+            
+            # Conectar el botón de PDFs sincronizados
+            opt_process_synced_btn.click(
+                fn=opt_process_synced_pdfs,
+                inputs=[opt_synced_files_checkboxes, opt_synced_files_paths, opt_rules_input],
+                outputs=[opt_output],
+                show_progress="full"
+            )
+
+        # Tab: 💰 MARKETPLACE - Plataforma de Monetización tipo Meta Ads
+        with gr.Tab("💰 MARKETPLACE"):
+            gr.Markdown("### 💰 MARKETPLACE - Plataforma Completa de Monetización")
+            gr.Markdown("""
+            **🚀 Objetivo: Generar $100B en Revenue como Meta**
+            
+            **💼 Funcionalidades:**
+            - ✅ Sistema de subastas de anuncios en tiempo real
+            - ✅ Generación automática de creativos con IA (Portal ADS + AD LLM)
+            - ✅ Marketplace de creadores con comisiones
+            - ✅ AI Agents autónomos para marketing
+            - ✅ Retargeting y personalización avanzada
+            - ✅ Analytics y dashboards completos
+            - ✅ Integración con todos los modos existentes
+            
+            **📊 Modelo de Precios:**
+            - **FREE**: 100 impresiones/mes, targeting básico
+            - **PRO ($99/mes)**: 10,000 impresiones, IA creativos, retargeting
+            - **ENTERPRISE ($999/mes)**: Ilimitado, agentes autónomos, API, white-label
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Crear Campaña
+                with gr.Tab("📢 Crear Campaña"):
+                    gr.Markdown("### 🚀 Crear Nueva Campaña Publicitaria")
+                    gr.Markdown("**Genera creativos automáticamente con IA y lanza tu campaña en minutos**")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            mp_advertiser_id = gr.Textbox(
+                                label="ID del Anunciante",
+                                placeholder="advertiser_123",
+                                value="advertiser_demo",
+                                info="Identificador único del anunciante"
+                            )
+                            mp_campaign_name = gr.Textbox(
+                                label="Nombre de la Campaña *",
+                                placeholder="Campaña de Verano 2025 - Producto X",
+                                info="Nombre descriptivo para tu campaña"
+                            )
+                            mp_budget = gr.Number(
+                                label="Presupuesto Total ($) *",
+                                value=1000.0,
+                                minimum=10.0,
+                                info="Presupuesto total de la campaña"
+                            )
+                            mp_daily_budget = gr.Number(
+                                label="Presupuesto Diario ($) - Opcional",
+                                value=None,
+                                minimum=1.0,
+                                info="Si se especifica, limita el gasto diario"
+                            )
+                            mp_pricing_tier = gr.Radio(
+                                label="Plan *",
+                                choices=[
+                                    ("🆓 FREE - 100 impresiones/mes", "free"),
+                                    ("⭐ PRO - $99/mes - 10K impresiones", "pro"),
+                                    ("👑 ENTERPRISE - $999/mes - Ilimitado", "enterprise")
+                                ],
+                                value="pro",
+                                info="Selecciona el plan que mejor se adapte a tus necesidades"
+                            )
+                        
+                        with gr.Column(scale=1):
+                            mp_target_audience = gr.Textbox(
+                                label="Audiencia Objetivo (JSON) *",
+                                placeholder='''{
+  "age_range": [25, 45],
+  "gender": "all",
+  "interests": ["technology", "business", "entrepreneurship"],
+  "location": "United States",
+  "behaviors": ["online_shoppers", "tech_early_adopters"]
+}''',
+                                lines=10,
+                                info="Define tu audiencia objetivo en formato JSON"
+                            )
+                            mp_product_description = gr.Textbox(
+                                label="Descripción del Producto/Servicio *",
+                                placeholder="Describe tu producto o servicio para generar creativos automáticos con IA. Ejemplo: 'Software de gestión empresarial que automatiza procesos y aumenta la productividad en un 40%'",
+                                lines=5,
+                                info="Cuanto más detallado, mejores serán los creativos generados"
+                            )
+                    
+                    mp_create_campaign_btn = gr.Button("🚀 Crear Campaña con IA", variant="primary", size="lg")
+                    mp_campaign_output = gr.Markdown(label="Resultado", value="**💡 Instrucciones:**\n\n1. Completa todos los campos marcados con *\n2. Describe tu producto en detalle\n3. Define tu audiencia objetivo\n4. Selecciona tu plan\n5. Click en 'Crear Campaña con IA'")
+                    
+                    def create_campaign_handler(advertiser_id, name, budget, daily_budget, tier, audience_json, product_desc):
+                        """Crea una nueva campaña con generación automática de creativos"""
+                        if not name or not product_desc:
+                            return "❌ **Error:** El nombre de la campaña y la descripción del producto son obligatorios."
+                        
+                        try:
+                            import json
+                            # Parsear audiencia
+                            try:
+                                target_audience = json.loads(audience_json) if audience_json else {}
+                            except json.JSONDecodeError:
+                                target_audience = {"interests": ["general"], "age_range": [18, 65], "gender": "all"}
+                            
+                            # Generar creativos automáticos con IA
+                            creatives = []
+                            if product_desc:
+                                yield "🔄 Generando creativos publicitarios con IA...\n\n"
+                                variations = marketplace.generate_multiple_variations(
+                                    product_description=product_desc,
+                                    target_audience=target_audience,
+                                    num_variations=5
+                                )
+                                creatives = variations
+                                yield f"✅ {len(creatives)} creativos generados exitosamente\n\n"
+                            
+                            # Crear campaña
+                            tier_enum = PricingTier(tier)
+                            campaign = marketplace.create_campaign(
+                                advertiser_id=advertiser_id,
+                                name=name,
+                                budget=budget,
+                                daily_budget=daily_budget if daily_budget else None,
+                                target_audience=target_audience,
+                                ad_creatives=creatives,
+                                pricing_tier=tier_enum
+                            )
+                            
+                            output = f"""## ✅ Campaña Creada Exitosamente
+
+**🎯 ID de Campaña:** `{campaign.campaign_id}`  
+**📝 Nombre:** {campaign.name}  
+**💰 Presupuesto:** ${campaign.budget:,.2f}  
+**📊 Plan:** {campaign.pricing_tier.value.upper()}  
+**📈 Estado:** {campaign.status.value.upper()}
+
+### 🎨 Creativos Generados: {len(creatives)}
+"""
+                            for i, creative in enumerate(creatives[:3], 1):
+                                output += f"""
+**Variación {i}:**
+- **Headline:** {creative.get('headline', 'N/A')}
+- **Description:** {creative.get('description', 'N/A')}
+- **CTA:** {creative.get('cta', 'N/A')}
+- **Principio de Persuasión:** {creative.get('persuasion_principle', 'N/A')}
+"""
+                            
+                            output += f"""
+### 🎯 Audiencia Objetivo:
+```json
+{json.dumps(target_audience, indent=2)}
+```
+
+### 📋 Próximos Pasos:
+1. ✅ **Activa la campaña** desde el tab "📋 Mis Campañas"
+2. 📊 **Revisa los creativos** generados arriba
+3. 🎯 **Ajusta el targeting** si es necesario
+4. 📈 **Monitorea el rendimiento** en "📊 Analytics"
+5. 💰 **Optimiza** basándote en los datos
+
+### 💡 Tips:
+- Los creativos se generan automáticamente usando IA avanzada
+- Puedes crear más variaciones desde "📋 Mis Campañas"
+- El sistema optimizará automáticamente los mejores creativos
+"""
+                            return output
+                        except Exception as e:
+                            import traceback
+                            return f"❌ **Error al crear campaña:**\n\n```\n{str(e)}\n{traceback.format_exc()}\n```"
+                    
+                    mp_create_campaign_btn.click(
+                        fn=create_campaign_handler,
+                        inputs=[mp_advertiser_id, mp_campaign_name, mp_budget, mp_daily_budget, mp_pricing_tier, mp_target_audience, mp_product_description],
+                        outputs=[mp_campaign_output],
+                        show_progress="full"
+                    )
+                
+                # Sub-tab: Mis Campañas
+                with gr.Tab("📋 Mis Campañas"):
+                    gr.Markdown("### 📋 Gestionar Campañas Existentes")
+                    gr.Markdown("**Visualiza, activa, pausa y optimiza tus campañas publicitarias**")
+                    
+                    with gr.Row():
+                        mp_list_advertiser_id = gr.Textbox(
+                            label="ID del Anunciante",
+                            placeholder="advertiser_123 (dejar vacío para ver todas)",
+                            info="Filtra campañas por anunciante específico"
+                        )
+                        mp_list_campaigns_btn = gr.Button("📋 Listar Campañas", variant="primary", size="lg")
+                    
+                    mp_campaigns_list = gr.Markdown(
+                        label="Campañas",
+                        value="**💡 Instrucciones:**\n\n1. Ingresa el ID del anunciante (opcional)\n2. Click en 'Listar Campañas'\n3. Usa los controles de abajo para activar/pausar campañas"
+                    )
+                    
+                    def list_campaigns_handler(advertiser_id):
+                        """Lista campañas con estadísticas detalladas"""
+                        try:
+                            campaigns = marketplace.list_campaigns(advertiser_id=advertiser_id.strip() if advertiser_id else None)
+                            
+                            if not campaigns:
+                                return "📭 **No hay campañas creadas aún.**\n\n💡 Ve al tab '📢 Crear Campaña' para crear tu primera campaña."
+                            
+                            output = f"## 📊 {len(campaigns)} Campaña(s) Encontrada(s)\n\n"
+                            output += "---\n\n"
+                            
+                            for i, camp in enumerate(campaigns, 1):
+                                status_emoji = "🟢" if camp.status == AdStatus.ACTIVE else "⏸️" if camp.status == AdStatus.PAUSED else "📝"
+                                
+                                output += f"""### {status_emoji} {camp.name}
+
+**📌 ID:** `{camp.campaign_id}`  
+**📊 Estado:** **{camp.status.value.upper()}**  
+**💰 Presupuesto:** ${camp.budget:,.2f}  
+**📈 Plan:** {camp.pricing_tier.value.upper()}
+
+**📊 Métricas:**
+- **Impresiones:** {camp.impressions:,}
+- **Clicks:** {camp.clicks:,}
+- **CTR:** {camp.ctr:.2%}
+- **Revenue:** ${camp.revenue:,.2f}
+- **ROAS:** {camp.roas:.2f}x
+
+**📅 Fechas:**
+- **Creada:** {camp.created_at.strftime('%Y-%m-%d %H:%M')}
+- **Inicio:** {camp.start_date.strftime('%Y-%m-%d') if camp.start_date else 'N/A'}
+- **Fin:** {camp.end_date.strftime('%Y-%m-%d') if camp.end_date else 'Sin límite'}
+
+---
+"""
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    mp_list_campaigns_btn.click(
+                        fn=list_campaigns_handler,
+                        inputs=[mp_list_advertiser_id],
+                        outputs=[mp_campaigns_list]
+                    )
+                    
+                    gr.Markdown("---\n\n### ⚙️ Gestionar Campañas")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            mp_campaign_id_activate = gr.Textbox(
+                                label="ID de Campaña para Activar",
+                                placeholder="camp_abc123",
+                                info="Pega el ID de la campaña que quieres activar"
+                            )
+                            mp_activate_btn = gr.Button("▶️ Activar Campaña", variant="primary")
+                        
+                        with gr.Column():
+                            mp_campaign_id_pause = gr.Textbox(
+                                label="ID de Campaña para Pausar",
+                                placeholder="camp_abc123",
+                                info="Pega el ID de la campaña que quieres pausar"
+                            )
+                            mp_pause_btn = gr.Button("⏸️ Pausar Campaña", variant="secondary")
+                    
+                    mp_manage_output = gr.Markdown(value="**💡 Ingresa el ID de una campaña y usa los botones para activar o pausar.**")
+                    
+                    def activate_campaign_handler(campaign_id):
+                        """Activa una campaña"""
+                        if not campaign_id:
+                            return "❌ Por favor, ingresa un ID de campaña."
+                        try:
+                            success = marketplace.activate_campaign(campaign_id.strip())
+                            if success:
+                                campaign = marketplace.get_campaign(campaign_id.strip())
+                                return f"""✅ **Campaña Activada Exitosamente**
+
+**📌 ID:** `{campaign_id}`  
+**📝 Nombre:** {campaign.name if campaign else 'N/A'}  
+**📊 Estado:** ACTIVE
+
+🚀 **La campaña está ahora activa y comenzará a mostrar anuncios.**  
+📈 **Monitorea el rendimiento en el tab '📊 Analytics'**
+"""
+                            return f"❌ **No se encontró la campaña** `{campaign_id}`\n\n💡 Verifica que el ID sea correcto."
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    def pause_campaign_handler(campaign_id):
+                        """Pausa una campaña"""
+                        if not campaign_id:
+                            return "❌ Por favor, ingresa un ID de campaña."
+                        try:
+                            success = marketplace.pause_campaign(campaign_id.strip())
+                            if success:
+                                campaign = marketplace.get_campaign(campaign_id.strip())
+                                return f"""⏸️ **Campaña Pausada Exitosamente**
+
+**📌 ID:** `{campaign_id}`  
+**📝 Nombre:** {campaign.name if campaign else 'N/A'}  
+**📊 Estado:** PAUSED
+
+⏸️ **La campaña está pausada y no mostrará anuncios.**  
+🔄 **Puedes reactivarla en cualquier momento.**
+"""
+                            return f"❌ **No se encontró la campaña** `{campaign_id}`\n\n💡 Verifica que el ID sea correcto."
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    mp_activate_btn.click(fn=activate_campaign_handler, inputs=[mp_campaign_id_activate], outputs=[mp_manage_output])
+                    mp_pause_btn.click(fn=pause_campaign_handler, inputs=[mp_campaign_id_pause], outputs=[mp_manage_output])
+                
+                # Sub-tab: Analytics
+                with gr.Tab("📊 Analytics"):
+                    gr.Markdown("### 📊 Analytics y Reportes de Campañas")
+                    gr.Markdown("**Métricas detalladas, insights de IA y recomendaciones de optimización**")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            mp_analytics_campaign_id = gr.Textbox(
+                                label="ID de Campaña *",
+                                placeholder="camp_abc123",
+                                info="Ingresa el ID de la campaña para ver sus analytics"
+                            )
+                            mp_get_analytics_btn = gr.Button("📊 Obtener Analytics", variant="primary", size="lg")
+                        
+                        with gr.Column(scale=1):
+                            mp_platform_stats_btn = gr.Button("🌐 Estadísticas de la Plataforma", variant="secondary", size="lg")
+                    
+                    mp_analytics_output = gr.Markdown(
+                        label="Analytics de Campaña",
+                        value="**💡 Instrucciones:**\n\n1. Ingresa el ID de una campaña\n2. Click en 'Obtener Analytics' para ver métricas detalladas\n3. O click en 'Estadísticas de la Plataforma' para ver el panorama general"
+                    )
+                    mp_platform_stats_output = gr.Markdown(label="Estadísticas de la Plataforma")
+                    
+                    def get_analytics_handler(campaign_id):
+                        """Obtiene analytics detallados de una campaña"""
+                        if not campaign_id:
+                            return "❌ Por favor, ingresa un ID de campaña."
+                        try:
+                            analytics = marketplace.get_campaign_analytics(campaign_id.strip())
+                            
+                            output = f"""## 📊 Analytics de Campaña `{campaign_id}`
+
+### 📈 Métricas Principales
+
+| Métrica | Valor |
+|---------|-------|
+| **Impresiones** | {analytics.total_impressions:,} |
+| **Clicks** | {analytics.total_clicks:,} |
+| **Conversiones** | {analytics.total_conversions:,} |
+| **CTR** | **{analytics.ctr:.2%}** |
+| **CPC** | ${analytics.cpc:.2f} |
+| **CPA** | ${analytics.cpa:.2f} |
+| **ROAS** | **{analytics.roas:.2f}x** |
+
+### 💰 Financiero
+
+| Concepto | Monto |
+|---------|-------|
+| **Total Spend** | ${analytics.total_spend:,.2f} |
+| **Total Revenue** | ${analytics.total_revenue:,.2f} |
+| **Profit** | ${analytics.total_revenue - analytics.total_spend:,.2f} |
+
+### 🎯 Recomendaciones de Optimización
+
+"""
+                            for i, rec in enumerate(analytics.recommendations, 1):
+                                output += f"{i}. {rec}\n"
+                            
+                            # Agregar insights de audiencia si están disponibles
+                            if analytics.audience_insights:
+                                output += "\n### 👥 Insights de Audiencia\n\n"
+                                for key, value in analytics.audience_insights.items():
+                                    if isinstance(value, list):
+                                        output += f"**{key.replace('_', ' ').title()}:** {', '.join(map(str, value))}\n"
+                                    else:
+                                        output += f"**{key.replace('_', ' ').title()}:** {value}\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}\n\n💡 Verifica que el ID de la campaña sea correcto."
+                    
+                    def get_platform_stats_handler():
+                        """Obtiene estadísticas generales de la plataforma"""
+                        try:
+                            stats = marketplace.get_platform_statistics()
+                            
+                            # Calcular progreso hacia $100B
+                            progress_pct = (stats['estimated_annual_revenue'] / 100_000_000_000) * 100
+                            progress_bar = "█" * min(50, int(progress_pct / 2)) + "░" * (50 - min(50, int(progress_pct / 2)))
+                            
+                            output = f"""## 🌐 Estadísticas de la Plataforma
+
+### 📊 Resumen General
+
+| Categoría | Valor |
+|-----------|-------|
+| **Total Campañas** | {stats['total_campaigns']} |
+| **Campañas Activas** | {stats['active_campaigns']} |
+| **Creadores Registrados** | {stats['total_creators']} |
+| **Colaboraciones** | {stats['total_collaborations']} |
+
+### 📈 Performance
+
+| Métrica | Valor |
+|---------|-------|
+| **Total Impresiones** | {stats['total_impressions']:,} |
+| **Total Clicks** | {stats['total_clicks']:,} |
+| **CTR Promedio** | **{stats['average_ctr']:.2%}** |
+
+### 💰 Revenue
+
+| Concepto | Monto |
+|---------|-------|
+| **Revenue Total** | ${stats['total_revenue']:,.2f} |
+| **Comisiones Ganadas** | ${stats['platform_commission_earned']:,.2f} |
+| **Proyección Anual** | **${stats['estimated_annual_revenue']:,.2f}** |
+
+### 🎯 Meta: $100B en Revenue
+
+**Progreso:** {progress_pct:.6f}%
+
+```
+{progress_bar}
+```
+
+**Faltan:** ${100_000_000_000 - stats['estimated_annual_revenue']:,.2f}
+
+💡 **Sigue creando campañas y atrayendo anunciantes para alcanzar la meta!**
+"""
+                            return output
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    mp_get_analytics_btn.click(
+                        fn=get_analytics_handler,
+                        inputs=[mp_analytics_campaign_id],
+                        outputs=[mp_analytics_output]
+                    )
+                    
+                    mp_platform_stats_btn.click(fn=get_platform_stats_handler, outputs=[mp_platform_stats_output])
+                
+                # Sub-tab: Marketplace de Creadores
+                with gr.Tab("👥 Creadores"):
+                    gr.Markdown("### 👥 Marketplace de Creadores")
+                    gr.Markdown("**Conecta marcas con creadores de contenido. Gana comisiones en cada colaboración.**")
+                    
+                    with gr.Tabs():
+                        with gr.Tab("➕ Registrar Creador"):
+                            gr.Markdown("### ➕ Registra un Nuevo Creador")
+                            gr.Markdown("**Los creadores pueden registrarse para recibir oportunidades de colaboración con marcas**")
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    mp_creator_name = gr.Textbox(label="Nombre Completo *", placeholder="Juan Pérez")
+                                    mp_creator_email = gr.Textbox(label="Email *", placeholder="juan@example.com")
+                                    mp_creator_niche = gr.Textbox(
+                                        label="Nicho *",
+                                        placeholder="tech, fashion, fitness, travel, food",
+                                        info="Describe el tipo de contenido que creas"
+                                    )
+                                
+                                with gr.Column():
+                                    mp_creator_instagram = gr.Textbox(label="Instagram Handle", placeholder="@username")
+                                    mp_creator_youtube = gr.Textbox(label="YouTube Handle", placeholder="@channel")
+                                    mp_creator_tiktok = gr.Textbox(label="TikTok Handle", placeholder="@username")
+                            
+                            with gr.Row():
+                                mp_creator_followers_ig = gr.Number(label="Seguidores Instagram", value=0, minimum=0)
+                                mp_creator_followers_yt = gr.Number(label="Suscriptores YouTube", value=0, minimum=0)
+                                mp_creator_followers_tt = gr.Number(label="Seguidores TikTok", value=0, minimum=0)
+                            
+                            mp_register_creator_btn = gr.Button("✅ Registrar Creador", variant="primary", size="lg")
+                            mp_creator_output = gr.Markdown(value="**💡 Completa los campos obligatorios (*) y click en 'Registrar Creador'**")
+                            
+                            def register_creator_handler(name, email, ig, yt, tt, followers_ig, followers_yt, followers_tt, niche):
+                                """Registra un creador en el marketplace"""
+                                if not name or not email or not niche:
+                                    return "❌ **Error:** Nombre, email y nicho son obligatorios."
+                                
+                                try:
+                                    social_handles = {}
+                                    if ig: social_handles["instagram"] = ig.replace("@", "")
+                                    if yt: social_handles["youtube"] = yt.replace("@", "")
+                                    if tt: social_handles["tiktok"] = tt.replace("@", "")
+                                    
+                                    follower_count = {}
+                                    if followers_ig: follower_count["instagram"] = int(followers_ig)
+                                    if followers_yt: follower_count["youtube"] = int(followers_yt)
+                                    if followers_tt: follower_count["tiktok"] = int(followers_tt)
+                                    
+                                    creator = marketplace.register_creator(
+                                        name=name,
+                                        email=email,
+                                        social_handles=social_handles,
+                                        follower_count=follower_count,
+                                        niche=niche
+                                    )
+                                    
+                                    total_followers = sum(follower_count.values())
+                                    tier_emoji = {"beginner": "🌱", "intermediate": "⭐", "advanced": "🔥", "elite": "👑"}
+                                    
+                                    return f"""## ✅ Creador Registrado Exitosamente
+
+**🆔 ID:** `{creator.creator_id}`  
+**👤 Nombre:** {creator.name}  
+**📧 Email:** {creator.email}  
+**🏷️ Tier:** {tier_emoji.get(creator.tier.value, '⭐')} {creator.tier.value.upper()}  
+**👥 Total Seguidores:** {total_followers:,}  
+**📊 Engagement Rate:** {creator.engagement_rate:.2%}  
+**🎯 Nicho:** {creator.niche}
+
+### 📱 Redes Sociales:
+"""
+                                    for platform, handle in social_handles.items():
+                                        count = follower_count.get(platform, 0)
+                                        output += f"- **{platform.title()}:** @{handle} ({count:,} seguidores)\n"
+                                    
+                                    return output + "\n\n💡 **Próximos pasos:** Las marcas podrán encontrarte y contactarte para colaboraciones."
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            mp_register_creator_btn.click(
+                                fn=register_creator_handler,
+                                inputs=[mp_creator_name, mp_creator_email, mp_creator_instagram, mp_creator_youtube, mp_creator_tiktok, mp_creator_followers_ig, mp_creator_followers_yt, mp_creator_followers_tt, mp_creator_niche],
+                                outputs=[mp_creator_output]
+                            )
+                        
+                        with gr.Tab("🔍 Buscar Creadores"):
+                            gr.Markdown("### 🔍 Buscar Creadores")
+                            gr.Markdown("**Encuentra creadores por nicho, audiencia o engagement rate**")
+                            
+                            with gr.Row():
+                                mp_search_niche = gr.Textbox(
+                                    label="Nicho (opcional)",
+                                    placeholder="tech, fashion, fitness",
+                                    info="Busca creadores por tipo de contenido"
+                                )
+                                mp_search_min_followers = gr.Number(
+                                    label="Mínimo Seguidores (opcional)",
+                                    value=None,
+                                    minimum=0,
+                                    info="Filtra por número mínimo de seguidores"
+                                )
+                            
+                            mp_search_btn = gr.Button("🔍 Buscar Creadores", variant="primary", size="lg")
+                            mp_search_results = gr.Markdown(value="**💡 Usa los filtros arriba para buscar creadores y click en 'Buscar Creadores'**")
+                            
+                            def search_creators_handler(niche, min_followers):
+                                """Busca creadores según criterios"""
+                                try:
+                                    creators = marketplace.search_creators(
+                                        niche=niche.strip() if niche else None,
+                                        min_followers=int(min_followers) if min_followers else None
+                                    )
+                                    
+                                    if not creators:
+                                        return "📭 **No se encontraron creadores con esos criterios.**\n\n💡 Intenta ajustar los filtros de búsqueda."
+                                    
+                                    output = f"## 👥 {len(creators)} Creador(es) Encontrado(s)\n\n"
+                                    output += "---\n\n"
+                                    
+                                    tier_emojis = {"beginner": "🌱", "intermediate": "⭐", "advanced": "🔥", "elite": "👑"}
+                                    
+                                    for c in creators[:10]:  # Mostrar top 10
+                                        total_followers = sum(c.follower_count.values())
+                                        tier_emoji = tier_emojis.get(c.tier.value, "⭐")
+                                        
+                                        output += f"""### {tier_emoji} {c.name}
+
+**🆔 ID:** `{c.creator_id}`  
+**📊 Tier:** {c.tier.value.upper()}  
+**👥 Seguidores:** {total_followers:,}  
+**📈 Engagement:** {c.engagement_rate:.2%}  
+**🎯 Nicho:** {c.niche}  
+**💰 Earnings:** ${c.earnings:,.2f}  
+**🤝 Colaboraciones:** {c.completed_collaborations}
+
+---
+"""
+                                    
+                                    if len(creators) > 10:
+                                        output += f"\n**... y {len(creators) - 10} creadores más**\n"
+                                    
+                                    return output
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            mp_search_btn.click(
+                                fn=search_creators_handler,
+                                inputs=[mp_search_niche, mp_search_min_followers],
+                                outputs=[mp_search_results]
+                            )
+
         # Tab: ⚡ Lightning - Clon de Enterprise API
         with gr.Tab("⚡ Lightning"):
             gr.Markdown("### ⚡ Lightning - Procesamiento Rápido con Agentic AI")
@@ -9953,6 +11412,8 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 
                 # Inicializar modo BANKS
                 try:
+                    # Asegurar que Path esté disponible
+                    from pathlib import Path
                     banks_mode = BanksMode(config)
                     
                     with gr.Tabs():
@@ -10497,6 +11958,271 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                             - **Tier 3** (grande): $29,999–$65k/mes (ilimitado)
                             - **Setup fee**: $50k–$150k (integración custom)
                             """)
+                        
+                        # Sub-tab: Co-Investigator AI (NUEVO)
+                        with gr.Tab("🤖 Co-Investigator AI"):
+                            gr.Markdown("### 🤖 Co-Investigator AI - Generación Inteligente de SARs")
+                            gr.Markdown("""
+                            **🚀 Sistema de agentes AI para generar narrativas SAR de alta calidad**
+                            
+                            Basado en el paper "Co-Investigator AI: The Rise of Agentic AI for Smarter, Trustworthy AML Compliance Narratives"
+                            
+                            **✨ Características:**
+                            - 🔍 **Detección automática de tipologías**: Identifica múltiples tipos de crímenes financieros (elder exploitation, romance scam, money mule, etc.)
+                            - 📝 **Generación de narrativas con Chain-of-Thought**: Narrativas SAR coherentes y regulatorias
+                            - ✅ **Validación de cumplimiento en tiempo real**: Agent-as-a-Judge valida automáticamente
+                            - 🌐 **Inteligencia externa**: Integración con MCP para búsqueda de negative news y sanctions
+                            - 🔒 **AI-Privacy Guard**: Anonimización automática de datos sensibles
+                            - 💾 **Memoria dinámica**: Aprende de narrativas históricas y guidelines regulatorios
+                            - 🔄 **Feedback iterativo**: Refina narrativas basándose en feedback del investigador
+                            
+                            **📊 Beneficios:**
+                            - 70% de completitud narrativa (87% en tipologías específicas)
+                            - 61% de ahorro de tiempo
+                            - 100% precisión en detección de anomalías geográficas
+                            - 93% precisión en monitoreo de integridad de cuentas
+                            
+                            **💼 Perfecto para:**
+                            - Generar SARs regulatorios de alta calidad
+                            - Reducir tiempo de investigación de 25-315 minutos a minutos
+                            - Mejorar consistencia y cumplimiento regulatorio
+                            - Escalar producción de SARs sin sacrificar calidad
+                            """)
+                            
+                            # Inputs para Co-Investigator AI
+                            co_investigator_case_data = gr.Textbox(
+                                label="📋 Case Data (JSON)",
+                                placeholder='''{
+  "transactions": [
+    {"date": "2024-01-15", "amount": 50000, "type": "wire_transfer", "to": "Panama"},
+    {"date": "2024-01-20", "amount": 25000, "type": "wire_transfer", "to": "Cayman Islands"}
+  ],
+  "communications": [
+    {"date": "2024-01-10", "type": "email", "subject": "Urgent transfer request"}
+  ],
+  "documents": [
+    {"name": "account_statement.pdf", "type": "statement"}
+  ]
+}''',
+                                lines=10,
+                                info="Datos del caso en formato JSON. Puede incluir transacciones, comunicaciones, documentos, etc."
+                            )
+                            
+                            co_investigator_jurisdiction = gr.Dropdown(
+                                label="🌍 Jurisdiction",
+                                choices=[
+                                    ("Estados Unidos (FinCEN)", "US"),
+                                    ("Unión Europea", "EU"),
+                                    ("México (UIF)", "MX"),
+                                    ("Colombia (UIAF)", "CO")
+                                ],
+                                value="US",
+                                info="Jurisdicción para generar SAR en el formato correcto"
+                            )
+                            
+                            co_investigator_feedback = gr.Textbox(
+                                label="👤 Investigator Feedback (Opcional)",
+                                placeholder='Ej: "Añade más detalles sobre las transacciones a Panamá" o "Incluye información sobre el UBO"',
+                                lines=3,
+                                info="Feedback del investigador para refinar la narrativa"
+                            )
+                            
+                            generate_sar_narrative_btn = gr.Button("🚀 Generate SAR Narrative", variant="primary")
+                            co_investigator_output = gr.Markdown(label="📊 SAR Narrative Generated")
+                            
+                            def generate_sar_narrative(
+                                case_data_json: str,
+                                jurisdiction: str,
+                                feedback: str
+                            ) -> str:
+                                """
+                                Genera narrativa SAR usando Co-Investigator AI.
+                                
+                                Args:
+                                    case_data_json: Datos del caso en JSON
+                                    jurisdiction: Jurisdicción
+                                    feedback: Feedback del investigador (opcional)
+                                
+                                Returns:
+                                    Narrativa SAR generada
+                                """
+                                try:
+                                    from docchat.banks.co_investigator import CoInvestigatorAI
+                                    
+                                    # Inicializar Co-Investigator AI
+                                    co_investigator = CoInvestigatorAI(config=config)
+                                    
+                                    # Parsear case data
+                                    if not case_data_json or not case_data_json.strip():
+                                        return "❌ Error: Debes proporcionar case data en formato JSON"
+                                    
+                                    import json
+                                    try:
+                                        case_data = json.loads(case_data_json)
+                                    except json.JSONDecodeError as e:
+                                        return f"❌ Error: JSON inválido en case data: {e}"
+                                    
+                                    # Extraer entidades, sanctions, risk scores del case_data si están disponibles
+                                    extracted_entities = case_data.get("entities", [])
+                                    sanction_hits = case_data.get("sanction_hits", [])
+                                    risk_scores = case_data.get("risk_scores", [])
+                                    
+                                    # Parsear feedback
+                                    investigator_feedback = None
+                                    if feedback and feedback.strip():
+                                        investigator_feedback = [f.strip() for f in feedback.split('\n') if f.strip()]
+                                    
+                                    # Generar narrativa SAR
+                                    result = co_investigator.generate_sar_narrative(
+                                        case_data=case_data,
+                                        extracted_entities=extracted_entities,
+                                        sanction_hits=sanction_hits,
+                                        risk_scores=risk_scores,
+                                        jurisdiction=jurisdiction,
+                                        investigator_feedback=investigator_feedback
+                                    )
+                                    
+                                    if result.get("success"):
+                                        narrative = result.get("narrative")
+                                        compliance_validation = result.get("compliance_validation", {})
+                                        crime_typologies = result.get("crime_typologies", [])
+                                        
+                                        output = f"""
+## ✅ SAR Narrative Generada Exitosamente
+
+### 📊 Resumen
+- **Narrative ID:** `{narrative.narrative_id if hasattr(narrative, 'narrative_id') else 'N/A'}`
+- **Compliance Score:** {result.get('compliance_score', 0.0):.1%}
+- **Tipologías Detectadas:** {len(crime_typologies)}
+- **Requiere Revisión:** {'Sí' if compliance_validation.get('requires_review', True) else 'No'}
+
+### 🔍 Tipologías de Crímenes Detectadas
+"""
+                                        for typology in crime_typologies:
+                                            typology_type = typology.get('typology_type', 'unknown') if isinstance(typology, dict) else (typology.typology_type if hasattr(typology, 'typology_type') else 'unknown')
+                                            confidence = typology.get('confidence_score', 0.0) if isinstance(typology, dict) else (typology.confidence_score if hasattr(typology, 'confidence_score') else 0.0)
+                                            output += f"- **{typology_type.replace('_', ' ').title()}**: {confidence:.1%} confianza\n"
+                                        
+                                        output += f"\n### 📝 Narrativa SAR\n\n"
+                                        narrative_text = narrative.narrative_text if hasattr(narrative, 'narrative_text') else str(narrative)
+                                        output += f"{narrative_text}\n\n"
+                                        
+                                        # Validación de cumplimiento
+                                        if compliance_validation:
+                                            output += f"\n### ✅ Validación de Cumplimiento\n\n"
+                                            output += f"- **Compliance Score:** {compliance_validation.get('compliance_score', 0.0):.1%}\n"
+                                            output += f"- **Coherencia Semántica:** {compliance_validation.get('semantic_coherence', 0.0):.1%}\n"
+                                            output += f"- **Precisión Factual:** {compliance_validation.get('factual_accuracy', 0.0):.1%}\n"
+                                            output += f"- **Cumplimiento Regulatorio:** {compliance_validation.get('regulatory_compliance', 0.0):.1%}\n"
+                                            
+                                            issues = compliance_validation.get('issues', [])
+                                            if issues:
+                                                output += f"\n**⚠️ Issues Detectados:**\n"
+                                                for issue in issues:
+                                                    output += f"- {issue}\n"
+                                            
+                                            strengths = compliance_validation.get('strengths', [])
+                                            if strengths:
+                                                output += f"\n**✅ Fortalezas:**\n"
+                                                for strength in strengths:
+                                                    output += f"- {strength}\n"
+                                        
+                                        # Confidence scores
+                                        confidence_scores = result.get('confidence_scores', {})
+                                        if confidence_scores:
+                                            output += f"\n### 📊 Confidence Scores\n\n"
+                                            for key, value in confidence_scores.items():
+                                                output += f"- **{key.replace('_', ' ').title()}:** {value:.1%}\n"
+                                        
+                                        return output
+                                    else:
+                                        return f"❌ Error generando narrativa SAR: {result.get('error', 'Unknown error')}"
+                                
+                                except Exception as e:
+                                    import traceback
+                                    return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}"
+                            
+                            generate_sar_narrative_btn.click(
+                                fn=generate_sar_narrative,
+                                inputs=[co_investigator_case_data, co_investigator_jurisdiction, co_investigator_feedback],
+                                outputs=[co_investigator_output]
+                            )
+                            
+                            # Botón para refinar narrativa con feedback
+                            refine_narrative_btn = gr.Button("🔄 Refine Narrative with Feedback", variant="secondary")
+                            refine_narrative_output = gr.Markdown(label="📊 Refined Narrative")
+                            
+                            narrative_id_input = gr.Textbox(
+                                label="📋 Narrative ID",
+                                placeholder="SAR_20241209_163045",
+                                info="ID de la narrativa a refinar (obtenido de la generación anterior)"
+                            )
+                            
+                            refine_feedback_input = gr.Textbox(
+                                label="👤 Feedback para Refinamiento",
+                                placeholder='Ej: "Añade más detalles sobre las transacciones sospechosas" o "Incluye información sobre el UBO"',
+                                lines=3
+                            )
+                            
+                            def refine_narrative(narrative_id: str, feedback: str, case_data_json: str) -> str:
+                                """Refina una narrativa existente con feedback."""
+                                try:
+                                    from docchat.banks.co_investigator import CoInvestigatorAI
+                                    
+                                    if not narrative_id or not narrative_id.strip():
+                                        return "❌ Error: Debes proporcionar un Narrative ID"
+                                    
+                                    if not feedback or not feedback.strip():
+                                        return "❌ Error: Debes proporcionar feedback"
+                                    
+                                    # Inicializar Co-Investigator AI
+                                    co_investigator = CoInvestigatorAI(config=config)
+                                    
+                                    # Parsear case data
+                                    case_data = {}
+                                    if case_data_json and case_data_json.strip():
+                                        import json
+                                        case_data = json.loads(case_data_json)
+                                    
+                                    # Parsear feedback
+                                    feedback_list = [f.strip() for f in feedback.split('\n') if f.strip()]
+                                    
+                                    # Refinar narrativa
+                                    result = co_investigator.refine_narrative_with_feedback(
+                                        narrative_id=narrative_id.strip(),
+                                        feedback=feedback_list,
+                                        case_data=case_data
+                                    )
+                                    
+                                    if result.get("success"):
+                                        narrative = result.get("narrative")
+                                        compliance_validation = result.get("compliance_validation", {})
+                                        
+                                        output = f"""
+## ✅ Narrativa Refinada Exitosamente
+
+### 📝 Narrativa Refinada
+
+{narrative.get('narrative_text', 'N/A') if isinstance(narrative, dict) else (narrative.narrative_text if hasattr(narrative, 'narrative_text') else str(narrative))}
+
+### ✅ Validación de Cumplimiento Actualizada
+
+- **Compliance Score:** {compliance_validation.get('compliance_score', 0.0):.1%}
+- **Refinada en:** {result.get('refined_at', 'N/A')}
+"""
+                                        return output
+                                    else:
+                                        return f"❌ Error refinando narrativa: {result.get('error', 'Unknown error')}"
+                                
+                                except Exception as e:
+                                    import traceback
+                                    return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}"
+                            
+                            refine_narrative_btn.click(
+                                fn=refine_narrative,
+                                inputs=[narrative_id_input, refine_feedback_input, co_investigator_case_data],
+                                outputs=[refine_narrative_output]
+                            )
                 except Exception as e:
                     gr.Markdown(f"### ❌ Error al inicializar modo BANKS")
                     gr.Markdown(f"**Error:** {str(e)}\n\nPor favor, verifica la configuración y las dependencias.")
@@ -15729,6 +17455,5609 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 inputs=[alien_session_id],
                 outputs=[alien_stats_output],
             )
+
+        # Tab: 🤖 OPTIMUS PRIME - Clon de Alien Mode
+        with gr.Tab("🤖 OPTIMUS PRIME"):
+            gr.Markdown("### 🤖 OPTIMUS PRIME - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            """)
+            
+            # Generar session_id único
+            optimus_prime_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                optimus_prime_files = gr.Files(
+                    label="📂 OPTIMUS PRIME Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                optimus_prime_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                optimus_prime_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            optimus_prime_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                optimus_prime_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                optimus_prime_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_optimus_prime_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_optimus_prime_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                optimus_prime_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            optimus_prime_status = gr.Markdown(label="ℹ️ Chat Status")
+            optimus_prime_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def optimus_prime_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_optimus_prime_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_optimus_prime(history, session_id):
+                # Clear session for optimus prime mode
+                optimus_prime_mode = get_optimus_prime_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(optimus_prime_mode, 'sessions') and session_id in optimus_prime_mode.sessions:
+                    optimus_prime_mode.sessions[session_id]["history"] = []
+                    optimus_prime_mode.sessions[session_id]["docs"] = []
+                    optimus_prime_mode.sessions[session_id]["retriever"] = None
+                    optimus_prime_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_optimus_prime_files(files, session_id):
+                optimus_prime_mode = get_optimus_prime_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(optimus_prime_mode, 'sessions') and session_id in optimus_prime_mode.sessions:
+                    optimus_prime_mode.sessions[session_id]["processed_files"].clear()
+                    optimus_prime_mode.sessions[session_id]["docs"] = []
+                    optimus_prime_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_optimus_prime_stats(session_id):
+                optimus_prime_mode = get_optimus_prime_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = optimus_prime_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - OPTIMUS PRIME Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Learned strategies: {stats['reinforcement_planning']['learned_strategies']}\n\n"
+                
+                output += f"### 🔌 MCP Integration\n"
+                output += f"- Connected servers: {stats['mcp_integration']['connected_servers']}\n"
+                output += f"- Available tools: {stats['mcp_integration']['available_tools']}\n"
+                output += f"- Tools used: {stats['mcp_integration']['tools_used']}\n\n"
+                
+                output += f"### 📊 Session Info\n"
+                output += f"- Documents: {stats['session']['doc_count']}\n"
+                output += f"- Messages: {stats['session']['history_count']}\n"
+                output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            optimus_prime_submit_btn.click(
+                fn=optimus_prime_submit,
+                inputs=[optimus_prime_input, optimus_prime_bot, optimus_prime_files, optimus_prime_session_id, optimus_prime_speed_mode, optimus_prime_provider_toggle],
+                outputs=[optimus_prime_bot, optimus_prime_bot, optimus_prime_status, optimus_prime_stats_output],
+            ).then(
+                lambda: "", None, optimus_prime_input
+            )
+            
+            optimus_prime_input.submit(
+                fn=optimus_prime_submit,
+                inputs=[optimus_prime_input, optimus_prime_bot, optimus_prime_files, optimus_prime_session_id, optimus_prime_speed_mode, optimus_prime_provider_toggle],
+                outputs=[optimus_prime_bot, optimus_prime_bot, optimus_prime_status, optimus_prime_stats_output],
+            ).then(
+                lambda: "", None, optimus_prime_input
+            )
+            
+            clear_optimus_prime_btn.click(
+                fn=clear_optimus_prime,
+                inputs=[optimus_prime_bot, optimus_prime_session_id],
+                outputs=[optimus_prime_bot, optimus_prime_status, optimus_prime_stats_output],
+            )
+            
+            clear_optimus_prime_files_btn.click(
+                fn=clear_optimus_prime_files,
+                inputs=[optimus_prime_files, optimus_prime_session_id],
+                outputs=[optimus_prime_files, optimus_prime_status, optimus_prime_stats_output],
+            )
+            
+            optimus_prime_stats_btn.click(
+                fn=show_optimus_prime_stats,
+                inputs=[optimus_prime_session_id],
+                outputs=[optimus_prime_stats_output],
+            )
+        
+        # Tab 4.5.5.5.5: Portal ADS - Clon de Alien Mode
+        with gr.Tab("🚪 Portal ADS"):
+            gr.Markdown("### 🚪 Portal ADS - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            
+            **💡 Ejemplo del Proceso Multi-Agente:**
+            1. Subes 500 PDFs de documentos legales
+            2. Preguntas: "¿Cuáles son los valores de eficiencia PUE del centro de datos en Singapur?"
+            3. **Relevance Checker** verifica que los documentos contengan información relevante
+            4. **Hybrid Retriever** busca usando BM25 (keywords) + Vector Search (semántica)
+            5. **Research Agent** genera respuesta inicial basada en documentos recuperados
+            6. **Verification Agent** verifica que la respuesta esté soportada por los documentos
+            7. Si hay contradicciones o claims sin soporte, **Self-Correction** re-ejecuta research
+            8. El sistema retorna respuesta verificada con reporte completo de verificación
+            9. **RL & Planning** aprende qué estrategias funcionan mejor para futuras consultas similares
+            10. **Data Provenance** rastrea cada fuente para compliance y auditoría
+            
+            **🎯 Ventajas sobre ChatGPT/DeepSeek:**
+            - ✅ **Sin alucinaciones**: Cada respuesta es verificada contra los documentos
+            - ✅ **Precisión en tablas**: Lee correctamente tablas complejas y datos estructurados
+            - ✅ **Múltiples documentos**: Encuentra inteligentemente el documento correcto entre muchos
+            - ✅ **Auto-corrección**: Re-ejecuta research si detecta problemas
+            - ✅ **Trazabilidad completa**: Rastrea cada pieza de información hasta su fuente
+            """)
+            
+            # ==================== MINDFUSE AGENTIC AI PARA ADVERTISING ====================
+            gr.Markdown("---")
+            gr.Markdown("## 🚀 MindFuse Agentic AI - Co-Creación Estratégica de Marketing")
+            gr.Markdown("""
+            **Sistema completo de Agentic AI para Advertising basado en el framework MindFuse:**
+            
+            **🔬 CAPACIDADES:**
+            - 📊 **Content Pillar Extraction**: Extrae pilares semánticos estructurados de anuncios (necesidades, emociones, audiencias)
+            - 👥 **Persona Mining**: Identifica personas de cliente mediante clustering semántico de audiencias
+            - 🎯 **Thematic Challenge Mining**: Descubre desafíos temáticos y puntos de dolor en campañas
+            - 📝 **Narrative Generation**: Genera narrativas estratégicas combinando personas + desafíos (estructura "héroe + conflicto")
+            - 📈 **Content Scoring**: Scoring predictivo de creativos con explicabilidad (heatmaps de atención)
+            - 🤖 **Performance Marketing Agent**: Agente autónomo que analiza métricas y optimiza campañas en tiempo real
+            
+            **💡 FLUJO DE TRABAJO:**
+            1. Sube un corpus de anuncios (JSON, CSV, o documentos con datos de campañas)
+            2. El sistema extrae pilares de contenido, identifica personas y desafíos
+            3. Genera narrativas estratégicas listas para usar como briefs de campaña
+            4. Evalúa creativos y predice performance antes del lanzamiento
+            5. Analiza métricas en tiempo real y proporciona recomendaciones de optimización
+            
+            **🎯 BASADO EN:**
+            - Paper: "MindFuse: Towards GenAI Explainability in Marketing Strategy Co-Creation"
+            - Meta's Vision: AI Agent Advertising (Zuckerberg 2025)
+            - Google's ACAI: Co-creative AI approach
+            """)
+            
+            with gr.Accordion("🔬 MindFuse Agentic AI Tools", open=False):
+                with gr.Tabs():
+                    with gr.Tab("📊 Process Ad Corpus"):
+                        gr.Markdown("### Procesar Corpus de Anuncios")
+                        gr.Markdown("Sube anuncios en formato JSON o CSV para extraer personas, desafíos y pilares de contenido.")
+                        
+                        ads_corpus_input = gr.File(
+                            label="📂 Ad Corpus (JSON/CSV)",
+                            file_types=[".json", ".csv", ".txt"],
+                        )
+                        process_corpus_btn = gr.Button("🚀 Process Corpus", variant="primary")
+                        corpus_output = gr.Markdown(label="📊 Results")
+                        
+                        def process_ads_corpus(file):
+                            if not file:
+                                return "⚠️ Por favor sube un archivo con anuncios."
+                            
+                            try:
+                                import json
+                                import csv
+                                
+                                # Leer archivo
+                                with open(file.name, 'r', encoding='utf-8') as f:
+                                    if file.name.endswith('.json'):
+                                        data = json.load(f)
+                                        if isinstance(data, list):
+                                            ad_corpus = data
+                                        else:
+                                            ad_corpus = [data]
+                                    elif file.name.endswith('.csv'):
+                                        reader = csv.DictReader(f)
+                                        ad_corpus = [row for row in reader]
+                                    else:
+                                        # Intentar JSON
+                                        data = json.load(f)
+                                        ad_corpus = [data] if not isinstance(data, list) else data
+                                
+                                # Procesar con MindFuse
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                results = portal_ads_mode.process_ads_corpus(ad_corpus)
+                                
+                                # Formatear output
+                                output = "## 📊 Resultados del Procesamiento\n\n"
+                                output += f"✅ **Anuncios procesados:** {results.get('total_ads_processed', 0)}\n"
+                                output += f"✅ **Pilares extraídos:** {len(results.get('content_pillars', []))}\n"
+                                output += f"✅ **Personas identificadas:** {len(results.get('personas', []))}\n"
+                                output += f"✅ **Desafíos identificados:** {len(results.get('challenges', []))}\n\n"
+                                
+                                # Mostrar personas
+                                if results.get('personas'):
+                                    output += "### 👥 Personas Identificadas:\n\n"
+                                    for persona in results.get('personas', []):
+                                        output += f"**{persona.name}** ({persona.cluster_size} anuncios)\n"
+                                        output += f"- {persona.description[:200]}...\n\n"
+                                
+                                # Mostrar desafíos
+                                if results.get('challenges'):
+                                    output += "### 🎯 Desafíos Temáticos:\n\n"
+                                    for challenge in results.get('challenges', []):
+                                        output += f"**{challenge.name}** ({challenge.cluster_size} anuncios)\n"
+                                        output += f"- {challenge.description[:200]}...\n\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error procesando corpus: {str(e)}"
+                        
+                        process_corpus_btn.click(
+                            fn=process_ads_corpus,
+                            inputs=[ads_corpus_input],
+                            outputs=[corpus_output]
+                        )
+                    
+                    with gr.Tab("📝 Generate Narratives"):
+                        gr.Markdown("### Generar Narrativas Estratégicas")
+                        gr.Markdown("Genera narrativas de campaña combinando personas + desafíos.")
+                        
+                        brand_context_input = gr.Textbox(
+                            label="🏢 Brand Context (opcional)",
+                            placeholder="Describe tu marca, productos, servicios...",
+                            lines=3
+                        )
+                        max_narratives_input = gr.Slider(
+                            label="Número de Narrativas",
+                            minimum=1,
+                            maximum=10,
+                            value=5,
+                            step=1
+                        )
+                        generate_narratives_btn = gr.Button("✨ Generate Narratives", variant="primary")
+                        narratives_output = gr.Markdown(label="📝 Generated Narratives")
+                        
+                        def generate_narratives(brand_context, max_narratives):
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                brand_ctx = {"description": brand_context} if brand_context else None
+                                narratives = portal_ads_mode.generate_campaign_narratives(
+                                    brand_context=brand_ctx,
+                                    max_narratives=int(max_narratives)
+                                )
+                                
+                                if not narratives:
+                                    return "⚠️ Primero procesa un corpus de anuncios."
+                                
+                                output = f"## 📝 Narrativas Estratégicas Generadas ({len(narratives)})\n\n"
+                                
+                                for i, narrative in enumerate(narratives, 1):
+                                    output += f"### Narrativa {i}: {narrative.persona.name} × {narrative.challenge.name}\n\n"
+                                    output += f"**📖 Historia:**\n{narrative.story}\n\n"
+                                    output += f"**💡 Insight de Campaña:**\n{narrative.campaign_insight}\n\n"
+                                    output += f"**🎨 Dirección Creativa:**\n{narrative.creative_direction}\n\n"
+                                    output += f"**📢 Mensaje Objetivo:**\n{narrative.target_messaging}\n\n"
+                                    output += "---\n\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error generando narrativas: {str(e)}"
+                        
+                        generate_narratives_btn.click(
+                            fn=generate_narratives,
+                            inputs=[brand_context_input, max_narratives_input],
+                            outputs=[narratives_output]
+                        )
+                    
+                    with gr.Tab("📈 Analyze Performance"):
+                        gr.Markdown("### Análisis de Performance de Campaña")
+                        gr.Markdown("Analiza métricas de campaña y obtén insights estratégicos del agente de performance.")
+                        
+                        metrics_file_input = gr.File(
+                            label="📊 Campaign Metrics (JSON)",
+                            file_types=[".json"],
+                        )
+                        analyze_performance_btn = gr.Button("🔍 Analyze Performance", variant="primary")
+                        performance_output = gr.Markdown(label="📈 Performance Insights")
+                        
+                        def analyze_performance(metrics_file):
+                            if not metrics_file:
+                                return "⚠️ Por favor sube un archivo JSON con métricas de campaña."
+                            
+                            try:
+                                import json
+                                from docchat.ads_agentic_ai import CampaignMetrics
+                                
+                                # Leer métricas
+                                with open(metrics_file.name, 'r', encoding='utf-8') as f:
+                                    metrics_data = json.load(f)
+                                
+                                # Convertir a CampaignMetrics
+                                metrics_history = []
+                                if isinstance(metrics_data, list):
+                                    for m in metrics_data:
+                                        metrics_history.append(CampaignMetrics(**m))
+                                else:
+                                    metrics_history.append(CampaignMetrics(**metrics_data))
+                                
+                                # Analizar
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                insight = portal_ads_mode.analyze_campaign_performance(metrics_history)
+                                
+                                output = "## 📈 Performance Insights\n\n"
+                                output += f"**🔍 Disrupción de Métricas:**\n{insight.metric_disruption}\n\n"
+                                output += f"**🔗 Análisis Causal:**\n{insight.causal_analysis}\n\n"
+                                output += f"**💡 Recomendación Estratégica:**\n{insight.strategic_recommendation}\n\n"
+                                output += f"**⚡ Acciones Tácticas:**\n"
+                                for action in insight.tactical_actions:
+                                    output += f"- {action}\n"
+                                output += f"\n**🎯 Confianza:** {insight.confidence*100:.1f}%\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error analizando performance: {str(e)}"
+                        
+                        analyze_performance_btn.click(
+                            fn=analyze_performance,
+                            inputs=[metrics_file_input],
+                            outputs=[performance_output]
+                        )
+                    
+                    with gr.Tab("🤖 Meta Autonomous Ads (2026 Vision)"):
+                        gr.Markdown("### 🤖 Meta Autonomous Ads - Agentes Completamente Autónomos")
+                        gr.Markdown("""
+                        **Meta Vision 2026: Solo necesitas una imagen de producto y un presupuesto.**
+                        
+                        El AI hace TODO automáticamente:
+                        - 🎨 **Genera creativos completos** (texto, imágenes, video, CTAs)
+                        - 🎯 **Segmenta audiencias dinámicamente** (sin parámetros manuales)
+                        - 💰 **Gestiona presupuesto automáticamente** entre plataformas
+                        - 🔄 **Optimiza 24/7** (aprende, se auto-corrige, reasigna presupuesto)
+                        - 💬 **Responde leads en tiempo real** (vende solos)
+                        - 🧪 **Testea creativos automáticamente** (A/B testing)
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                gr.Markdown("### 🚀 Crear Campaña Autónoma")
+                                
+                                meta_product_image_input = gr.Textbox(
+                                    label="URL de Imagen del Producto",
+                                    placeholder="https://ejemplo.com/producto.jpg",
+                                    value=""
+                                )
+                                
+                                meta_budget_input = gr.Number(
+                                    label="Presupuesto ($)",
+                                    value=1000.0,
+                                    minimum=100.0,
+                                    step=100.0
+                                )
+                                
+                                meta_business_goal_dropdown = gr.Dropdown(
+                                    label="Objetivo de Negocio",
+                                    choices=[
+                                        ("Vender Producto", "sell_product"),
+                                        ("Generar Leads", "get_leads"),
+                                        ("Brand Awareness", "brand_awareness"),
+                                        ("Instalar App", "app_install"),
+                                        ("Video Views", "video_views")
+                                    ],
+                                    value="sell_product"
+                                )
+                                
+                                meta_product_description_input = gr.Textbox(
+                                    label="Descripción del Producto (opcional)",
+                                    placeholder="Describe tu producto, beneficios, características...",
+                                    lines=3
+                                )
+                                
+                                meta_create_campaign_btn = gr.Button("🚀 Crear Campaña Autónoma", variant="primary")
+                                meta_create_campaign_output = gr.Markdown(label="Resultado")
+                            
+                            with gr.Column():
+                                gr.Markdown("### 📊 Gestionar Campañas")
+                                
+                                meta_campaign_id_input = gr.Textbox(
+                                    label="Campaign ID",
+                                    placeholder="Pega el ID de la campaña aquí..."
+                                )
+                                
+                                with gr.Row():
+                                    meta_optimize_btn = gr.Button("🔄 Optimizar Campaña", variant="primary")
+                                    meta_test_btn = gr.Button("🧪 Test A/B Creativos", variant="secondary")
+                                    meta_get_info_btn = gr.Button("📋 Ver Info", variant="secondary")
+                                
+                                meta_campaign_actions_output = gr.Markdown(label="Resultado")
+                                
+                                meta_list_campaigns_btn = gr.Button("📋 Listar Todas las Campañas", variant="secondary")
+                                meta_campaigns_list_output = gr.Markdown(label="Lista de Campañas")
+                        
+                        with gr.Row():
+                            gr.Markdown("### 💬 Responder a Leads (Sales Agent)")
+                            
+                            meta_lead_message_input = gr.Textbox(
+                                label="Mensaje del Lead",
+                                placeholder="Escribe el mensaje del lead aquí...",
+                                lines=3
+                            )
+                            
+                            meta_lead_source_dropdown = gr.Dropdown(
+                                label="Fuente",
+                                choices=[
+                                    ("Messenger", "messenger"),
+                                    ("WhatsApp", "whatsapp"),
+                                    ("Instagram DM", "instagram"),
+                                    ("Email", "email")
+                                ],
+                                value="messenger"
+                            )
+                            
+                            meta_respond_lead_btn = gr.Button("💬 Responder Lead", variant="primary")
+                            meta_lead_response_output = gr.Markdown(label="Respuesta del Agente")
+                        
+                        def meta_create_autonomous_campaign(product_image, budget, business_goal, product_description):
+                            if not product_image.strip():
+                                return "⚠️ Por favor ingresa la URL de la imagen del producto."
+                            
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                result = asyncio.run(portal_ads_mode.create_autonomous_campaign(
+                                    product_image_url=product_image,
+                                    budget=float(budget),
+                                    business_goal=business_goal,
+                                    product_description=product_description if product_description.strip() else None
+                                ))
+                                
+                                if result.get("success"):
+                                    output = f"## ✅ Campaña Autónoma Creada\n\n"
+                                    output += f"**Campaign ID:** `{result['campaign_id']}`\n"
+                                    output += f"**Estado:** {result['status']}\n"
+                                    output += f"**Creativos Generados:** {result['creatives_generated']}\n"
+                                    output += f"**Audiencias Identificadas:** {result['audiences_identified']}\n"
+                                    output += f"**Presupuesto Asignado:** ${result['budget_allocated']:.2f}\n\n"
+                                    output += f"💡 **Siguiente paso:** Usa el Campaign ID para optimizar, testear o responder leads."
+                                    return output
+                                else:
+                                    return f"❌ Error: {result.get('error', 'Unknown error')}"
+                            except Exception as e:
+                                return f"❌ Error creando campaña: {str(e)}"
+                        
+                        def meta_optimize_campaign(campaign_id):
+                            if not campaign_id.strip():
+                                return "⚠️ Por favor ingresa un Campaign ID."
+                            
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                result = asyncio.run(portal_ads_mode.optimize_campaign_autonomous(campaign_id))
+                                
+                                if result.get("success"):
+                                    output = f"## 🔄 Optimización Completada\n\n"
+                                    output += f"**Campaign ID:** `{campaign_id}`\n\n"
+                                    output += f"**Acciones Tomadas:**\n"
+                                    for action in result.get("actions_taken", []):
+                                        output += f"- {action}\n"
+                                    output += f"\n**Mejora de Performance:** {result.get('performance_improvement', 0):.2f}x ROAS\n"
+                                    output += f"**Creativos Activos:** {result.get('active_creatives', 0)}\n"
+                                    output += f"**Creativos Pausados:** {result.get('paused_creatives', 0)}\n"
+                                    return output
+                                else:
+                                    return f"❌ Error: {result.get('error', 'Unknown error')}"
+                            except Exception as e:
+                                return f"❌ Error optimizando: {str(e)}"
+                        
+                        def meta_test_creatives(campaign_id):
+                            if not campaign_id.strip():
+                                return "⚠️ Por favor ingresa un Campaign ID."
+                            
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                result = asyncio.run(portal_ads_mode.test_creatives_autonomous(campaign_id, test_duration_hours=24))
+                                
+                                if result.get("success"):
+                                    output = f"## 🧪 A/B Test Completado\n\n"
+                                    output += f"**Campaign ID:** `{campaign_id}`\n"
+                                    output += f"**Duración:** {result.get('test_duration_hours', 24)} horas\n"
+                                    output += f"**Creativos Testeados:** {result.get('tested_creatives', 0)}\n"
+                                    output += f"**Winners Identificados:** {len(result.get('winners', []))}\n\n"
+                                    output += f"**Recomendación:**\n{result.get('recommendation', 'N/A')}\n\n"
+                                    output += f"**Winners:**\n"
+                                    for winner_id in result.get('winners', []):
+                                        output += f"- `{winner_id}`\n"
+                                    return output
+                                else:
+                                    return f"❌ Error: {result.get('error', 'Unknown error')}"
+                            except Exception as e:
+                                return f"❌ Error en test: {str(e)}"
+                        
+                        def meta_get_campaign_info(campaign_id):
+                            if not campaign_id.strip():
+                                return "⚠️ Por favor ingresa un Campaign ID."
+                            
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                campaign_info = portal_ads_mode.get_autonomous_campaign(campaign_id)
+                                
+                                if not campaign_info:
+                                    return "❌ Campaña no encontrada."
+                                
+                                output = f"## 📋 Información de Campaña\n\n"
+                                output += f"**Campaign ID:** `{campaign_info['campaign_id']}`\n"
+                                output += f"**Estado:** {campaign_info['status']}\n"
+                                output += f"**Objetivo:** {campaign_info['business_goal']}\n"
+                                output += f"**Presupuesto:** ${campaign_info['budget']:.2f}\n"
+                                output += f"**Creativos Activos:** {campaign_info['active_creatives_count']}\n"
+                                output += f"**Total Creativos:** {len(campaign_info['creatives'])}\n"
+                                output += f"**Audiencias:** {len(campaign_info['target_audiences'])}\n"
+                                output += f"**Optimizaciones:** {campaign_info['optimization_count']}\n"
+                                output += f"**Última Optimización:** {campaign_info.get('last_optimized', 'Nunca')}\n\n"
+                                
+                                if campaign_info['creatives']:
+                                    output += f"### 🎨 Creativos:\n\n"
+                                    for creative in campaign_info['creatives'][:5]:  # Mostrar top 5
+                                        status = "✅ Activo" if creative['is_active'] else "⏸️ Pausado"
+                                        output += f"**{creative['creative_id']}** - {status}\n"
+                                        output += f"- Headline: {creative['headline']}\n"
+                                        output += f"- CTA: {creative['cta']}\n\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def meta_list_campaigns():
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                campaigns = portal_ads_mode.list_autonomous_campaigns()
+                                
+                                if not campaigns:
+                                    return "📭 No hay campañas creadas aún."
+                                
+                                output = f"## 📋 Campañas Autónomas ({len(campaigns)})\n\n"
+                                for camp in campaigns:
+                                    output += f"### 🎯 {camp['campaign_id']}\n"
+                                    output += f"- **Estado:** {camp['status']}\n"
+                                    output += f"- **Objetivo:** {camp['business_goal']}\n"
+                                    output += f"- **Presupuesto:** ${camp['budget']:.2f}\n"
+                                    output += f"- **Creativos Activos:** {camp['active_creatives']}/{camp['total_creatives']}\n"
+                                    output += f"- **Creada:** {camp['created_at']}\n"
+                                    if camp.get('last_optimized'):
+                                        output += f"- **Última Optimización:** {camp['last_optimized']}\n"
+                                    output += "\n---\n\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def meta_respond_to_lead(campaign_id, lead_message, lead_source):
+                            if not campaign_id.strip():
+                                return "⚠️ Por favor ingresa un Campaign ID."
+                            if not lead_message.strip():
+                                return "⚠️ Por favor escribe el mensaje del lead."
+                            
+                            try:
+                                portal_ads_mode = get_portal_ads_mode(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                result = asyncio.run(portal_ads_mode.respond_to_lead_autonomous(
+                                    campaign_id=campaign_id,
+                                    lead_message=lead_message,
+                                    lead_source=lead_source
+                                ))
+                                
+                                if result.get("success"):
+                                    output = f"## 💬 Respuesta del Sales Agent\n\n"
+                                    output += f"**Respuesta:**\n{result.get('response', 'N/A')}\n\n"
+                                    output += f"**Lead Score:** {result.get('lead_score', 0)*100:.0f}/100\n"
+                                    output += f"**Próxima Acción:** {result.get('next_action', 'N/A')}\n"
+                                    return output
+                                else:
+                                    return f"❌ Error: {result.get('error', 'Unknown error')}"
+                            except Exception as e:
+                                return f"❌ Error respondiendo lead: {str(e)}"
+                        
+                        meta_create_campaign_btn.click(
+                            fn=meta_create_autonomous_campaign,
+                            inputs=[meta_product_image_input, meta_budget_input, meta_business_goal_dropdown, meta_product_description_input],
+                            outputs=[meta_create_campaign_output]
+                        )
+                        
+                        meta_optimize_btn.click(
+                            fn=meta_optimize_campaign,
+                            inputs=[meta_campaign_id_input],
+                            outputs=[meta_campaign_actions_output]
+                        )
+                        
+                        meta_test_btn.click(
+                            fn=meta_test_creatives,
+                            inputs=[meta_campaign_id_input],
+                            outputs=[meta_campaign_actions_output]
+                        )
+                        
+                        meta_get_info_btn.click(
+                            fn=meta_get_campaign_info,
+                            inputs=[meta_campaign_id_input],
+                            outputs=[meta_campaign_actions_output]
+                        )
+                        
+                        meta_list_campaigns_btn.click(
+                            fn=meta_list_campaigns,
+                            outputs=[meta_campaigns_list_output]
+                        )
+                        
+                        meta_respond_lead_btn.click(
+                            fn=meta_respond_to_lead,
+                            inputs=[meta_campaign_id_input, meta_lead_message_input, meta_lead_source_dropdown],
+                            outputs=[meta_lead_response_output]
+                        )
+                        
+                        # Auto-cargar lista al abrir
+                        meta_campaigns_list_output.value = meta_list_campaigns()
+            
+            # Generar session_id único
+            portal_ads_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                portal_ads_files = gr.Files(
+                    label="📂 Portal ADS Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                portal_ads_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                portal_ads_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            portal_ads_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                portal_ads_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                portal_ads_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_portal_ads_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_portal_ads_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                portal_ads_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            portal_ads_status = gr.Markdown(label="ℹ️ Chat Status")
+            portal_ads_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def portal_ads_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_portal_ads_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_portal_ads(history, session_id):
+                # Clear session for portal ads mode
+                portal_ads_mode = get_portal_ads_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(portal_ads_mode, 'sessions') and session_id in portal_ads_mode.sessions:
+                    portal_ads_mode.sessions[session_id]["history"] = []
+                    portal_ads_mode.sessions[session_id]["docs"] = []
+                    portal_ads_mode.sessions[session_id]["retriever"] = None
+                    portal_ads_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_portal_ads_files(files, session_id):
+                portal_ads_mode = get_portal_ads_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(portal_ads_mode, 'sessions') and session_id in portal_ads_mode.sessions:
+                    portal_ads_mode.sessions[session_id]["processed_files"].clear()
+                    portal_ads_mode.sessions[session_id]["docs"] = []
+                    portal_ads_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_portal_ads_stats(session_id):
+                portal_ads_mode = get_portal_ads_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = portal_ads_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - Portal ADS\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+                
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+                
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            portal_ads_submit_btn.click(
+                fn=portal_ads_submit,
+                inputs=[portal_ads_input, portal_ads_bot, portal_ads_files, portal_ads_session_id, portal_ads_speed_mode, portal_ads_provider_toggle],
+                outputs=[portal_ads_bot, portal_ads_bot, portal_ads_status, portal_ads_stats_output],
+            ).then(
+                lambda: "", None, portal_ads_input
+            )
+            
+            portal_ads_input.submit(
+                fn=portal_ads_submit,
+                inputs=[portal_ads_input, portal_ads_bot, portal_ads_files, portal_ads_session_id, portal_ads_speed_mode, portal_ads_provider_toggle],
+                outputs=[portal_ads_bot, portal_ads_bot, portal_ads_status, portal_ads_stats_output],
+            ).then(
+                lambda: "", None, portal_ads_input
+            )
+            
+            clear_portal_ads_btn.click(
+                fn=clear_portal_ads,
+                inputs=[portal_ads_bot, portal_ads_session_id],
+                outputs=[portal_ads_bot, portal_ads_status, portal_ads_stats_output],
+            )
+            
+            clear_portal_ads_files_btn.click(
+                fn=clear_portal_ads_files,
+                inputs=[portal_ads_files, portal_ads_session_id],
+                outputs=[portal_ads_files, portal_ads_status, portal_ads_stats_output],
+            )
+            
+            portal_ads_stats_btn.click(
+                fn=show_portal_ads_stats,
+                inputs=[portal_ads_session_id],
+                outputs=[portal_ads_stats_output],
+            )
+        
+        # Tab 4.5.5.5.6: AD LLM - Clon de Portal ADS
+        with gr.Tab("🤖 AD LLM"):
+            gr.Markdown("### 🤖 AD LLM - LLM-Generated Ads: From Personalization Parity to Persuasion Superiority")
+            gr.Markdown("""
+            **🎯 Sistema Completo de Generación de Anuncios con LLMs - Basado en Papers de Investigación**
+            
+            **📚 PAPERS IMPLEMENTADOS:**
+            1. **"LLM-Generated Ads: From Personalization Parity to Persuasion Superiority"** (Meguellati et al. 2025)
+               - Personalización basada en personalidad (Big Five: Openness, Neuroticism)
+               - Principios de persuasión (Authority, Consensus, Cognition, Scarcity)
+               - AI ads logran paridad o superioridad vs humanos
+            
+            2. **"Against Opacity: Explainable AI and Large Language Models"** (SODA Framework)
+               - Predicción de CTR con explicabilidad
+               - Attention heatmaps para visualización
+               - Análisis profundo de ads con LLMs
+            
+            3. **"Improving Generative Ad Text using Reinforcement Learning"** (AdLlama/RLPF)
+               - Reinforcement Learning with Performance Feedback
+               - Generación de variaciones optimizadas
+               - Aprendizaje continuo de performance
+            
+            **✨ FUNCIONALIDADES:**
+            - 🎭 **Personalización por Personalidad**: Genera ads para Openness y Neuroticism
+            - 🧠 **Principios de Persuasión**: Authority, Consensus, Cognition, Scarcity
+            - 📊 **Predicción de CTR**: Con explicabilidad y sugerencias de mejora
+            - 🔍 **Análisis Profundo**: Extrae necesidades, arquetipos, tono, content pillars
+            - 🚀 **Variaciones Optimizadas**: RLPF genera múltiples variaciones ordenadas por CTR
+            - ⚖️ **Comparación AI vs Humano**: Análisis comparativo completo
+            
+            **🌟 SISTEMA MULTI-AGENTE DOCCHAT (Core RAG):**
+            - 🔍 Relevance Checker | 🔬 Research Agent | ✅ Verification Agent
+            - 🔄 Self-Correction | 🔀 Hybrid Retriever | 📊 LangGraph Workflow
+            """)
+            
+            # Estado de sesión
+            ad_llm_session_state = gr.State(value=str(uuid.uuid4()))
+            
+            # Upload de documentos
+            with gr.Row():
+                with gr.Column(scale=2):
+                    ad_llm_files = gr.Files(
+                        label="📂 Subir Documentos (PDF, DOCX, TXT, etc.)",
+                        file_types=[".pdf", ".docx", ".txt", ".md", ".csv", ".xlsx"],
+                        file_count="multiple"
+                    )
+                with gr.Column(scale=1):
+                    ad_llm_clear_files_btn = gr.Button("🗑️ Limpiar Archivos", variant="secondary")
+            
+            # Configuración
+            with gr.Row():
+                ad_llm_speed_mode = gr.Radio(
+                    choices=["fast", "balanced", "quality"],
+                    value="balanced",
+                    label="⚡ Modo de Velocidad",
+                    info="Fast: más rápido, Quality: mejor calidad"
+                )
+                ad_llm_provider = gr.Radio(
+                    choices=["openai", "anthropic"],
+                    value="openai",
+                    label="🤖 Proveedor de AI",
+                    info="OpenAI (GPT-4o) o Anthropic (Claude)"
+                )
+            
+            # Chat
+            ad_llm_chatbot = gr.Chatbot(
+                label="💬 Chat",
+                height=600,
+                show_copy_button=True,
+                avatar_images=(None, "🤖")
+            )
+            
+            # Input y botones
+            with gr.Row():
+                ad_llm_msg = gr.Textbox(
+                    label="Mensaje",
+                    placeholder="Escribe tu pregunta aquí...",
+                    scale=4,
+                    lines=2
+                )
+                ad_llm_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+            
+            with gr.Row():
+                ad_llm_clear_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                ad_llm_stats_btn = gr.Button("📊 Estadísticas", variant="secondary")
+            
+            ad_llm_stats_output = gr.Markdown(label="📊 Estadísticas", visible=False)
+            
+            # Event handlers
+            def ad_llm_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history
+                
+                new_history, error = run_ad_llm_mode(
+                    message=message,
+                    history=history or [],
+                    files=files or [],
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                
+                if error:
+                    history = history or []
+                    history.append((message, error))
+                    return history, history
+                
+                return new_history, new_history
+            
+            def clear_ad_llm(history):
+                return [], str(uuid.uuid4())
+            
+            def clear_ad_llm_files(files):
+                return None
+            
+            def show_ad_llm_stats(session_id):
+                try:
+                    ad_llm_mode = get_ad_llm_mode(
+                        config=config,
+                        processor=processor,
+                        retriever_builder=retriever_builder,
+                        context_manager=context_manager
+                    )
+                    stats = ad_llm_mode.get_statistics(session_id)
+                    
+                    output = "## 📊 Estadísticas de AD LLM\n\n"
+                    output += f"### 📦 Context Folding\n"
+                    output += f"- Contextos plegados: {stats.get('context_folding', {}).get('folded_contexts', 0)}\n\n"
+                    output += f"### 🔍 Data Provenance\n"
+                    output += f"- Documentos rastreados: {stats.get('data_provenance', {}).get('documents_tracked', 0)}\n\n"
+                    output += f"### 🧠 Chain of Thought\n"
+                    output += f"- Cadenas creadas: {stats.get('chain_of_thought', {}).get('chains_created', 0)}\n\n"
+                    output += f"### 🛤️ Path Reasoning\n"
+                    output += f"- Paths probados: {stats.get('path_reasoning', {}).get('paths_tested', 0)}\n\n"
+                    output += f"### 📈 Test Time Training\n"
+                    output += f"- Episodios registrados: {stats.get('test_time_training', {}).get('episodes_recorded', 0)}\n\n"
+                    output += f"### 🌳 Reinforcement Planning\n"
+                    output += f"- Árboles creados: {stats.get('reinforcement_planning', {}).get('trees_created', 0)}\n\n"
+                    output += f"### 🔌 MCP Integration\n"
+                    output += f"- Conexiones: {stats.get('mcp_integration', {}).get('connections', 0)}\n\n"
+                    
+                    if session_id and 'session' in stats:
+                        output += f"### 📄 Sesión\n"
+                        output += f"- Documentos: {stats['session'].get('docs_count', 0)}\n"
+                        output += f"- Historial: {stats['session'].get('history_count', 0)}\n"
+                    
+                    return gr.update(value=output, visible=True)
+                except Exception as e:
+                    return gr.update(value=f"❌ Error: {str(e)}", visible=True)
+            
+            ad_llm_submit_btn.click(
+                fn=ad_llm_submit,
+                inputs=[ad_llm_msg, ad_llm_chatbot, ad_llm_files, ad_llm_session_state, ad_llm_speed_mode, ad_llm_provider],
+                outputs=[ad_llm_chatbot, ad_llm_chatbot]
+            ).then(
+                fn=lambda: "",
+                outputs=[ad_llm_msg]
+            )
+            
+            ad_llm_msg.submit(
+                fn=ad_llm_submit,
+                inputs=[ad_llm_msg, ad_llm_chatbot, ad_llm_files, ad_llm_session_state, ad_llm_speed_mode, ad_llm_provider],
+                outputs=[ad_llm_chatbot, ad_llm_chatbot]
+            ).then(
+                fn=lambda: "",
+                outputs=[ad_llm_msg]
+            )
+            
+            ad_llm_clear_btn.click(
+                fn=clear_ad_llm,
+                inputs=[ad_llm_chatbot],
+                outputs=[ad_llm_chatbot, ad_llm_session_state]
+            )
+            
+            ad_llm_clear_files_btn.click(
+                fn=clear_ad_llm_files,
+                inputs=[ad_llm_files],
+                outputs=[ad_llm_files]
+            )
+            
+            ad_llm_stats_btn.click(
+                fn=show_ad_llm_stats,
+                inputs=[ad_llm_session_state],
+                outputs=[ad_llm_stats_output]
+            )
+            
+            # ============================================
+            # LLM-GENERATED ADS (Papers Implementation)
+            # ============================================
+            with gr.Tabs():
+                with gr.Tab("🎯 Generar Ads Personalizados"):
+                    gr.Markdown("### Generar Anuncios con LLMs - Basado en Papers de Investigación")
+                    gr.Markdown("""
+                    **Papers Implementados:**
+                    - "LLM-Generated Ads: From Personalization Parity to Persuasion Superiority" (Meguellati et al. 2025)
+                    - "Against Opacity: Explainable AI and Large Language Models" (SODA Framework)
+                    - "Improving Generative Ad Text using Reinforcement Learning" (AdLlama/RLPF)
+                    
+                    **Características:**
+                    - 🎭 Personalización basada en personalidad (Big Five: Openness, Neuroticism)
+                    - 🧠 Principios de persuasión (Authority, Consensus, Cognition, Scarcity)
+                    - 📊 Predicción de CTR con explicabilidad
+                    - 🤖 Generación optimizada con RLPF
+                    - 📈 Análisis profundo de ads con LLMs
+                    """)
+                    
+                    with gr.Row():
+                        ad_llm_product_name = gr.Textbox(
+                            label="Nombre del Producto",
+                            placeholder="Ej: Xphone",
+                            scale=2
+                        )
+                        ad_llm_product_desc = gr.Textbox(
+                            label="Descripción del Producto (Opcional)",
+                            placeholder="Describe el producto...",
+                            scale=2
+                        )
+                    
+                    with gr.Accordion("🎭 Personalización por Personalidad", open=True):
+                        gr.Markdown("**Study 1: Personalizing with LLMs**")
+                        ad_llm_personality_trait = gr.Radio(
+                            label="Rasgo de Personalidad",
+                            choices=[
+                                ("Openness (Alta apertura - busca novedad)", "openness"),
+                                ("Neuroticism (Alta neuroticismo - busca seguridad)", "neuroticism")
+                            ],
+                            value="openness"
+                        )
+                        ad_llm_generate_personality_btn = gr.Button("🎭 Generar Ad Personalizado", variant="primary")
+                    
+                    with gr.Accordion("🧠 Principios de Persuasión", open=True):
+                        gr.Markdown("**Study 2: Persuasion Principles with LLMs**")
+                        ad_llm_persuasion_principle = gr.Radio(
+                            label="Principio de Persuasión",
+                            choices=[
+                                ("Authority (Credibilidad y experticia)", "authority"),
+                                ("Consensus (Prueba social y popularidad)", "consensus"),
+                                ("Cognition (Racionalidad y características lógicas)", "cognition"),
+                                ("Scarcity (Disponibilidad limitada y urgencia)", "scarcity")
+                            ],
+                            value="authority"
+                        )
+                        ad_llm_generate_persuasion_btn = gr.Button("🧠 Generar Ad de Persuasión", variant="primary")
+                    
+                    ad_llm_generated_ad_output = gr.Markdown(label="Anuncio Generado")
+                    
+                    def generate_personality_ad(product_name, product_desc, personality_trait):
+                        if not product_name.strip():
+                            return "⚠️ Por favor ingresa un nombre de producto."
+                        
+                        try:
+                            ad_llm = get_ad_llm_mode(config, processor, retriever_builder, context_manager)
+                            result = asyncio.run(ad_llm.generate_personality_ad(
+                                product_name=product_name,
+                                personality_trait=personality_trait,
+                                product_description=product_desc if product_desc.strip() else None
+                            ))
+                            
+                            output = f"## ✅ Anuncio Generado (Personalización por Personalidad)\n\n"
+                            output += f"**Variation ID:** `{result['variation_id']}`\n\n"
+                            output += f"### 📝 Headline\n{result['headline']}\n\n"
+                            output += f"### 💬 Texto del Anuncio\n{result['ad_text']}\n\n"
+                            output += f"### 📄 Descripción\n{result['description']}\n\n"
+                            output += f"**Rasgo objetivo:** {result['personality_target']}\n"
+                            output += f"**Confianza:** {result['confidence_score']*100:.1f}%\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def generate_persuasion_ad(product_name, product_desc, principle):
+                        if not product_name.strip():
+                            return "⚠️ Por favor ingresa un nombre de producto."
+                        
+                        try:
+                            ad_llm = get_ad_llm_mode(config, processor, retriever_builder, context_manager)
+                            result = asyncio.run(ad_llm.generate_persuasion_ad(
+                                product_name=product_name,
+                                principle=principle,
+                                product_description=product_desc if product_desc.strip() else None
+                            ))
+                            
+                            output = f"## ✅ Anuncio Generado (Principio de Persuasión)\n\n"
+                            output += f"**Variation ID:** `{result['variation_id']}`\n\n"
+                            output += f"### 📝 Headline\n{result['headline']}\n\n"
+                            output += f"### 💬 Texto del Anuncio\n{result['ad_text']}\n\n"
+                            output += f"### 📄 Descripción\n{result['description']}\n\n"
+                            output += f"**Principio usado:** {result['persuasion_principle']}\n"
+                            output += f"**Confianza:** {result['confidence_score']*100:.1f}%\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    ad_llm_generate_personality_btn.click(
+                        fn=generate_personality_ad,
+                        inputs=[ad_llm_product_name, ad_llm_product_desc, ad_llm_personality_trait],
+                        outputs=[ad_llm_generated_ad_output]
+                    )
+                    
+                    ad_llm_generate_persuasion_btn.click(
+                        fn=generate_persuasion_ad,
+                        inputs=[ad_llm_product_name, ad_llm_product_desc, ad_llm_persuasion_principle],
+                        outputs=[ad_llm_generated_ad_output]
+                    )
+                
+                with gr.Tab("📊 Predecir CTR (SODA)"):
+                    gr.Markdown("### Predicción de CTR con Explicabilidad - SODA Framework")
+                    gr.Markdown("""
+                    **SODA Framework:**
+                    - Predicción de CTR usando análisis multimodal
+                    - Attention heatmaps para visualización
+                    - Identificación de factores clave
+                    - Sugerencias de mejora específicas
+                    """)
+                    
+                    ad_llm_ctr_headline = gr.Textbox(
+                        label="Headline",
+                        placeholder="Ej: Descubre tu próximo libro favorito"
+                    )
+                    ad_llm_ctr_text = gr.Textbox(
+                        label="Texto del Anuncio",
+                        placeholder="Escribe el texto del anuncio...",
+                        lines=3
+                    )
+                    ad_llm_ctr_description = gr.Textbox(
+                        label="Descripción",
+                        placeholder="Descripción adicional...",
+                        lines=2
+                    )
+                    
+                    ad_llm_predict_ctr_btn = gr.Button("📊 Predecir CTR", variant="primary")
+                    ad_llm_ctr_prediction_output = gr.Markdown(label="Predicción de CTR")
+                    
+                    def predict_ctr(headline, text, description):
+                        if not headline.strip() or not text.strip():
+                            return "⚠️ Por favor completa el headline y el texto del anuncio."
+                        
+                        try:
+                            ad_llm = get_ad_llm_mode(config, processor, retriever_builder, context_manager)
+                            result = asyncio.run(ad_llm.predict_ad_ctr(
+                                ad_text=text,
+                                headline=headline,
+                                description=description if description.strip() else ""
+                            ))
+                            
+                            output = f"## 📊 Predicción de CTR\n\n"
+                            output += f"### 📈 Métricas\n"
+                            output += f"- **CTR Predicho:** {result['ctr_percentage']:.2f}%\n"
+                            output += f"- **Categoría:** {result['category'].upper()}\n"
+                            output += f"- **Confianza:** {result['confidence']*100:.1f}%\n\n"
+                            
+                            if result['key_factors']:
+                                output += f"### 🔑 Factores Clave\n"
+                                for factor in result['key_factors']:
+                                    output += f"- {factor}\n"
+                                output += "\n"
+                            
+                            if result['improvement_suggestions']:
+                                output += f"### 💡 Sugerencias de Mejora\n"
+                                for suggestion in result['improvement_suggestions']:
+                                    output += f"- {suggestion}\n"
+                                output += "\n"
+                            
+                            if result.get('attention_heatmap'):
+                                heatmap = result['attention_heatmap']
+                                if heatmap.get('high_impact_words'):
+                                    output += f"### 🎯 Palabras de Alto Impacto\n"
+                                    output += f"{', '.join(heatmap['high_impact_words'])}\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    ad_llm_predict_ctr_btn.click(
+                        fn=predict_ctr,
+                        inputs=[ad_llm_ctr_headline, ad_llm_ctr_text, ad_llm_ctr_description],
+                        outputs=[ad_llm_ctr_prediction_output]
+                    )
+                
+                with gr.Tab("🔍 Analizar Ad (SODA)"):
+                    gr.Markdown("### Análisis Profundo de Anuncios con LLMs - SODA Framework")
+                    
+                    ad_llm_analyze_headline = gr.Textbox(
+                        label="Headline",
+                        placeholder="Ej: Descubre tu próximo libro favorito"
+                    )
+                    ad_llm_analyze_text = gr.Textbox(
+                        label="Texto del Anuncio",
+                        placeholder="Escribe el texto del anuncio...",
+                        lines=3
+                    )
+                    ad_llm_analyze_description = gr.Textbox(
+                        label="Descripción",
+                        placeholder="Descripción adicional...",
+                        lines=2
+                    )
+                    
+                    ad_llm_analyze_btn = gr.Button("🔍 Analizar Anuncio", variant="primary")
+                    ad_llm_analysis_output = gr.Markdown(label="Análisis del Anuncio")
+                    
+                    def analyze_ad(headline, text, description):
+                        if not headline.strip() or not text.strip():
+                            return "⚠️ Por favor completa el headline y el texto del anuncio."
+                        
+                        try:
+                            ad_llm = get_ad_llm_mode(config, processor, retriever_builder, context_manager)
+                            result = asyncio.run(ad_llm.analyze_ad(
+                                ad_text=text,
+                                headline=headline,
+                                description=description if description.strip() else ""
+                            ))
+                            
+                            output = f"## 🔍 Análisis del Anuncio\n\n"
+                            output += f"**Ad ID:** `{result['ad_id']}`\n\n"
+                            output += f"### 🎯 Necesidad Humana\n{result['human_need']}\n\n"
+                            output += f"### 📦 Categoría de Producto\n{result['product_category']}\n\n"
+                            output += f"### 🎭 Arquetipo\n{result['archetype']}\n\n"
+                            output += f"### ❤️ Apelación Emocional\n{result['emotional_appeal']}\n\n"
+                            output += f"### 🎨 Tono Estilístico\n{result['stylistic_tone']}\n\n"
+                            
+                            if result['content_pillars']:
+                                output += f"### 📊 Content Pillars\n"
+                                for pillar in result['content_pillars']:
+                                    output += f"- {pillar}\n"
+                                output += "\n"
+                            
+                            if result.get('target_persona'):
+                                output += f"### 👤 Persona Objetivo\n{result['target_persona']}\n\n"
+                            
+                            if result.get('persuasion_principle'):
+                                output += f"### 🧠 Principio de Persuasión\n{result['persuasion_principle'].upper()}\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    ad_llm_analyze_btn.click(
+                        fn=analyze_ad,
+                        inputs=[ad_llm_analyze_headline, ad_llm_analyze_text, ad_llm_analyze_description],
+                        outputs=[ad_llm_analysis_output]
+                    )
+                
+                with gr.Tab("🚀 Variaciones Optimizadas (RLPF)"):
+                    gr.Markdown("### Generar Variaciones Optimizadas - AdLlama/RLPF")
+                    gr.Markdown("""
+                    **Reinforcement Learning with Performance Feedback (RLPF):**
+                    - Genera múltiples variaciones del anuncio
+                    - Predice CTR para cada variación
+                    - Ordena por performance esperada
+                    - Aprende de feedback histórico
+                    """)
+                    
+                    ad_llm_original_ad = gr.Textbox(
+                        label="Anuncio Original",
+                        placeholder="Escribe el anuncio original...",
+                        lines=3
+                    )
+                    ad_llm_rlpf_product_name = gr.Textbox(
+                        label="Nombre del Producto",
+                        placeholder="Ej: Xphone"
+                    )
+                    ad_llm_num_variations = gr.Slider(
+                        label="Número de Variaciones",
+                        minimum=3,
+                        maximum=10,
+                        value=5,
+                        step=1
+                    )
+                    
+                    ad_llm_generate_variations_btn = gr.Button("🚀 Generar Variaciones Optimizadas", variant="primary")
+                    ad_llm_variations_output = gr.Markdown(label="Variaciones Generadas")
+                    
+                    def generate_variations(original_ad, product_name, num_variations):
+                        if not original_ad.strip() or not product_name.strip():
+                            return "⚠️ Por favor completa el anuncio original y el nombre del producto."
+                        
+                        try:
+                            ad_llm = get_ad_llm_mode(config, processor, retriever_builder, context_manager)
+                            variations = asyncio.run(ad_llm.generate_optimized_variations(
+                                original_ad_text=original_ad,
+                                product_name=product_name,
+                                num_variations=int(num_variations)
+                            ))
+                            
+                            output = f"## 🚀 Variaciones Optimizadas (Ordenadas por CTR Predicho)\n\n"
+                            
+                            for i, var in enumerate(variations, 1):
+                                output += f"### 🥇 Variación #{i} (CTR: {var['ctr_percentage']:.2f}%)\n\n"
+                                output += f"**Variation ID:** `{var['variation_id']}`\n\n"
+                                output += f"**Headline:** {var['headline']}\n\n"
+                                output += f"**Texto:** {var['ad_text']}\n\n"
+                                output += f"**Descripción:** {var['description']}\n\n"
+                                output += f"**CTR Predicho:** {var['ctr_percentage']:.2f}%\n"
+                                output += f"**Confianza:** {var['confidence_score']*100:.1f}%\n\n"
+                                output += "---\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    ad_llm_generate_variations_btn.click(
+                        fn=generate_variations,
+                        inputs=[ad_llm_original_ad, ad_llm_rlpf_product_name, ad_llm_num_variations],
+                        outputs=[ad_llm_variations_output]
+                    )
+                
+                with gr.Tab("⚖️ Comparar AI vs Humano"):
+                    gr.Markdown("### Comparar Anuncios AI vs Humanos")
+                    gr.Markdown("""
+                    **Basado en los estudios:**
+                    - AI ads pueden lograr paridad o superioridad
+                    - Quality Resilience: la calidad supera el origen
+                    - Análisis comparativo completo
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("### 🤖 Anuncio Generado por AI")
+                            ad_llm_ai_headline = gr.Textbox(label="Headline (AI)")
+                            ad_llm_ai_text = gr.Textbox(label="Texto (AI)", lines=3)
+                            ad_llm_ai_description = gr.Textbox(label="Descripción (AI)", lines=2)
+                        
+                        with gr.Column():
+                            gr.Markdown("### 👤 Anuncio Escrito por Humano")
+                            ad_llm_human_headline = gr.Textbox(label="Headline (Humano)")
+                            ad_llm_human_text = gr.Textbox(label="Texto (Humano)", lines=3)
+                            ad_llm_human_description = gr.Textbox(label="Descripción (Humano)", lines=2)
+                    
+                    ad_llm_compare_btn = gr.Button("⚖️ Comparar Anuncios", variant="primary")
+                    ad_llm_comparison_output = gr.Markdown(label="Comparación")
+                    
+                    def compare_ads(ai_headline, ai_text, ai_desc, human_headline, human_text, human_desc):
+                        if not ai_text.strip() or not human_text.strip():
+                            return "⚠️ Por favor completa ambos anuncios."
+                        
+                        try:
+                            ad_llm = get_ad_llm_mode(config, processor, retriever_builder, context_manager)
+                            comparison = asyncio.run(ad_llm.compare_ads(
+                                ai_ad_text=ai_text,
+                                ai_headline=ai_headline,
+                                ai_description=ai_desc,
+                                human_ad_text=human_text,
+                                human_headline=human_headline,
+                                human_description=human_desc
+                            ))
+                            
+                            output = f"## ⚖️ Comparación: AI vs Humano\n\n"
+                            
+                            output += f"### 🤖 Anuncio AI\n"
+                            output += f"**Headline:** {comparison['ai_ad']['headline']}\n"
+                            output += f"**Texto:** {comparison['ai_ad']['text']}\n"
+                            output += f"**CTR Predicho:** {comparison['ai_ad']['predicted_ctr']*100:.2f}%\n"
+                            output += f"**Categoría:** {comparison['ai_ad']['category'].upper()}\n"
+                            output += f"**Necesidad:** {comparison['ai_ad']['analysis']['human_need']}\n"
+                            output += f"**Apelación:** {comparison['ai_ad']['analysis']['emotional_appeal']}\n\n"
+                            
+                            output += f"### 👤 Anuncio Humano\n"
+                            output += f"**Headline:** {comparison['human_ad']['headline']}\n"
+                            output += f"**Texto:** {comparison['human_ad']['text']}\n"
+                            output += f"**CTR Predicho:** {comparison['human_ad']['predicted_ctr']*100:.2f}%\n"
+                            output += f"**Categoría:** {comparison['human_ad']['category'].upper()}\n"
+                            output += f"**Necesidad:** {comparison['human_ad']['analysis']['human_need']}\n"
+                            output += f"**Apelación:** {comparison['human_ad']['analysis']['emotional_appeal']}\n\n"
+                            
+                            comp = comparison['comparison']
+                            output += f"### 📊 Comparación\n"
+                            output += f"**Diferencia de CTR:** {comp['ctr_difference']*100:+.2f}%\n"
+                            output += f"**Ventaja AI:** {'✅ Sí' if comp['ai_advantage'] else '❌ No'}\n"
+                            output += f"**Mejora Relativa:** {comp['relative_improvement']:+.1f}%\n"
+                            
+                            if comp['ai_advantage']:
+                                output += f"\n🎉 **El anuncio AI supera al humano en {abs(comp['relative_improvement']):.1f}%**\n"
+                            else:
+                                output += f"\n📊 **El anuncio humano supera al AI en {abs(comp['relative_improvement']):.1f}%**\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    ad_llm_compare_btn.click(
+                        fn=compare_ads,
+                        inputs=[
+                            ad_llm_ai_headline, ad_llm_ai_text, ad_llm_ai_description,
+                            ad_llm_human_headline, ad_llm_human_text, ad_llm_human_description
+                        ],
+                        outputs=[ad_llm_comparison_output]
+                    )
+        
+        # Tab 4.5.5.5.7: SNIPE SHOT Mode - Clon de Alien Mode
+        with gr.Tab("🎯 SNIPE SHOT"):
+            gr.Markdown("### 🎯 SNIPE SHOT Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            
+            **💡 Ejemplo del Proceso Multi-Agente:**
+            1. Subes 500 PDFs de documentos legales
+            2. Preguntas: "¿Cuáles son los valores de eficiencia PUE del centro de datos en Singapur?"
+            3. **Relevance Checker** verifica que los documentos contengan información relevante
+            4. **Hybrid Retriever** busca usando BM25 (keywords) + Vector Search (semántica)
+            5. **Research Agent** genera respuesta inicial basada en documentos recuperados
+            6. **Verification Agent** verifica que la respuesta esté soportada por los documentos
+            7. Si hay contradicciones o claims sin soporte, **Self-Correction** re-ejecuta research
+            8. El sistema retorna respuesta verificada con reporte completo de verificación
+            9. **RL & Planning** aprende qué estrategias funcionan mejor para futuras consultas similares
+            10. **Data Provenance** rastrea cada fuente para compliance y auditoría
+            
+            **🎯 Ventajas sobre ChatGPT/DeepSeek:**
+            - ✅ **Sin alucinaciones**: Cada respuesta es verificada contra los documentos
+            - ✅ **Precisión en tablas**: Lee correctamente tablas complejas y datos estructurados
+            - ✅ **Múltiples documentos**: Encuentra inteligentemente el documento correcto entre muchos
+            - ✅ **Auto-corrección**: Re-ejecuta research si detecta problemas
+            - ✅ **Trazabilidad completa**: Rastrea cada pieza de información hasta su fuente
+            """)
+            
+            # Generar session_id único
+            snipe_shot_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                snipe_shot_files = gr.Files(
+                    label="📂 SNIPE SHOT Mode Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                snipe_shot_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                snipe_shot_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            snipe_shot_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                snipe_shot_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                snipe_shot_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_snipe_shot_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_snipe_shot_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                snipe_shot_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            snipe_shot_status = gr.Markdown(label="ℹ️ Chat Status")
+            snipe_shot_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def snipe_shot_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_snipe_shot_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_snipe_shot(history, session_id):
+                # Clear session for snipe shot mode
+                snipe_shot_mode = get_snipe_shot_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(snipe_shot_mode, 'sessions') and session_id in snipe_shot_mode.sessions:
+                    snipe_shot_mode.sessions[session_id]["history"] = []
+                    snipe_shot_mode.sessions[session_id]["docs"] = []
+                    snipe_shot_mode.sessions[session_id]["retriever"] = None
+                    snipe_shot_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_snipe_shot_files(files, session_id):
+                snipe_shot_mode = get_snipe_shot_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(snipe_shot_mode, 'sessions') and session_id in snipe_shot_mode.sessions:
+                    snipe_shot_mode.sessions[session_id]["processed_files"].clear()
+                    snipe_shot_mode.sessions[session_id]["docs"] = []
+                    snipe_shot_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_snipe_shot_stats(session_id):
+                snipe_shot_mode = get_snipe_shot_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = snipe_shot_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - SNIPE SHOT Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+                
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+                
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            snipe_shot_submit_btn.click(
+                fn=snipe_shot_submit,
+                inputs=[snipe_shot_input, snipe_shot_bot, snipe_shot_files, snipe_shot_session_id, snipe_shot_speed_mode, snipe_shot_provider_toggle],
+                outputs=[snipe_shot_bot, snipe_shot_bot, snipe_shot_status, snipe_shot_stats_output],
+            ).then(
+                lambda: "", None, snipe_shot_input
+            )
+            
+            snipe_shot_input.submit(
+                fn=snipe_shot_submit,
+                inputs=[snipe_shot_input, snipe_shot_bot, snipe_shot_files, snipe_shot_session_id, snipe_shot_speed_mode, snipe_shot_provider_toggle],
+                outputs=[snipe_shot_bot, snipe_shot_bot, snipe_shot_status, snipe_shot_stats_output],
+            ).then(
+                lambda: "", None, snipe_shot_input
+            )
+            
+            clear_snipe_shot_btn.click(
+                fn=clear_snipe_shot,
+                inputs=[snipe_shot_bot, snipe_shot_session_id],
+                outputs=[snipe_shot_bot, snipe_shot_status, snipe_shot_stats_output],
+            )
+            
+            clear_snipe_shot_files_btn.click(
+                fn=clear_snipe_shot_files,
+                inputs=[snipe_shot_files, snipe_shot_session_id],
+                outputs=[snipe_shot_files, snipe_shot_status, snipe_shot_stats_output],
+            )
+            
+            snipe_shot_stats_btn.click(
+                fn=show_snipe_shot_stats,
+                inputs=[snipe_shot_session_id],
+                outputs=[snipe_shot_stats_output],
+            )
+        
+        # Tab 4.5.5.6: Agent Builder Studio - Plataforma No-Code para Crear AI Agents
+        with gr.Tab("🏗️ Agent Builder Studio"):
+            gr.Markdown("### 🏗️ Agent Builder Studio - Plataforma No-Code para Crear AI Agents")
+            gr.Markdown("""
+            **Basado en la visión de Mark Zuckerberg:**
+            - "Cientos de millones de pequeñas empresas necesitarán AI agents"
+            - "Más de 200 millones de creadores necesitarán AI agents"
+            - "Probablemente más AI agents que personas en el mundo"
+            
+            **Características:**
+            - 🎨 **No-code/Low-code:** Crea agentes personalizados sin programar
+            - 📋 **Templates Pre-construidos:** Soporte, Ventas, Marketing, Creadores, Research
+            - 🤖 **Multi-LLM:** OpenAI, Anthropic, Google, Meta Llama, DeepSeek
+            - 🚀 **Deployment Automático:** Web, API, WhatsApp, Messenger, Slack, Teams
+            - 📊 **Analytics Integrados:** Métricas de uso, costos, satisfacción
+            - 🛒 **Marketplace:** Comparte y vende tus agentes
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("✨ Crear Agente"):
+                    gr.Markdown("### Crear un Nuevo Agente AI")
+                    
+                    with gr.Row():
+                        agent_name_input = gr.Textbox(
+                            label="Nombre del Agente",
+                            placeholder="Ej: Asistente de Ventas",
+                            scale=2
+                        )
+                        agent_template_dropdown = gr.Dropdown(
+                            label="Template",
+                            choices=[
+                                ("🎯 Personalizado", "custom"),
+                                ("💬 Soporte al Cliente", "customer_support"),
+                                ("💰 Ventas", "sales"),
+                                ("📢 Marketing", "marketing"),
+                                ("🎨 Creador de Contenido", "creator"),
+                                ("🔬 Research", "research"),
+                                ("👤 Asistente Personal", "personal_assistant")
+                            ],
+                            value="custom",
+                            scale=1
+                        )
+                    
+                    agent_description_input = gr.Textbox(
+                        label="Descripción",
+                        placeholder="Describe qué hace tu agente...",
+                        lines=2
+                    )
+                    
+                    agent_system_prompt_input = gr.Textbox(
+                        label="System Prompt (Personalizado)",
+                        placeholder="Eres un asistente útil y profesional...",
+                        lines=5,
+                        value=""
+                    )
+                    
+                    with gr.Row():
+                        llm_provider_dropdown = gr.Dropdown(
+                            label="Proveedor LLM",
+                            choices=[
+                                ("OpenAI (GPT-4o)", "openai"),
+                                ("Anthropic (Claude)", "anthropic"),
+                                ("Google (Gemini)", "google"),
+                                ("Meta Llama", "meta_llama"),
+                                ("DeepSeek", "deepseek")
+                            ],
+                            value="openai"
+                        )
+                        llm_model_input = gr.Textbox(
+                            label="Modelo",
+                            placeholder="gpt-4o",
+                            value="gpt-4o"
+                        )
+                    
+                    with gr.Row():
+                        temperature_slider = gr.Slider(
+                            label="Temperature",
+                            minimum=0.0,
+                            maximum=1.0,
+                            value=0.7,
+                            step=0.1
+                        )
+                        max_tokens_slider = gr.Slider(
+                            label="Max Tokens",
+                            minimum=500,
+                            maximum=8000,
+                            value=2000,
+                            step=500
+                        )
+                    
+                    create_agent_btn = gr.Button("✨ Crear Agente", variant="primary")
+                    create_agent_output = gr.Markdown(label="Resultado")
+                    
+                    def create_agent(
+                        name, template, description, system_prompt,
+                        llm_provider, llm_model, temperature, max_tokens
+                    ):
+                        try:
+                            studio = get_agent_builder_studio(config)
+                            
+                            # Convertir template string a enum
+                            template_enum = AgentTemplate(template)
+                            provider_enum = LLMProvider(llm_provider)
+                            
+                            # Si hay template, usar system_prompt del template si está vacío
+                            if template != "custom" and not system_prompt.strip():
+                                system_prompt = ""  # Se llenará automáticamente desde el template
+                            
+                            agent_id = studio.create_agent(
+                                name=name,
+                                description=description,
+                                system_prompt=system_prompt,
+                                template=template_enum,
+                                llm_provider=provider_enum,
+                                llm_model=llm_model,
+                                temperature=float(temperature),
+                                max_tokens=int(max_tokens)
+                            )
+                            
+                            agent_config = studio.get_agent_config(agent_id)
+                            
+                            output = f"## ✅ Agente Creado Exitosamente\n\n"
+                            output += f"**ID:** `{agent_id}`\n"
+                            output += f"**Nombre:** {agent_config.name}\n"
+                            output += f"**Template:** {agent_config.template.value}\n"
+                            output += f"**LLM:** {agent_config.llm_provider.value} - {agent_config.llm_model}\n"
+                            output += f"**Creado:** {agent_config.created_at}\n\n"
+                            output += f"💡 **Siguiente paso:** Ve a la pestaña '💬 Probar Agente' para probarlo."
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error creando agente: {str(e)}"
+                    
+                    create_agent_btn.click(
+                        fn=create_agent,
+                        inputs=[
+                            agent_name_input, agent_template_dropdown, agent_description_input,
+                            agent_system_prompt_input, llm_provider_dropdown, llm_model_input,
+                            temperature_slider, max_tokens_slider
+                        ],
+                        outputs=[create_agent_output]
+                    )
+                
+                with gr.Tab("📋 Mis Agentes"):
+                    gr.Markdown("### Mis Agentes Creados")
+                    
+                    refresh_agents_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                    agents_list_output = gr.Markdown(label="Lista de Agentes")
+                    
+                    def list_agents():
+                        try:
+                            studio = get_agent_builder_studio(config)
+                            agents = studio.list_agents()
+                            
+                            if not agents:
+                                return "📭 No has creado ningún agente aún. Ve a '✨ Crear Agente' para crear uno."
+                            
+                            output = "## 📋 Mis Agentes\n\n"
+                            for agent in agents:
+                                output += f"### 🤖 {agent['name']}\n"
+                                output += f"- **ID:** `{agent['agent_id']}`\n"
+                                output += f"- **Descripción:** {agent.get('description', 'N/A')}\n"
+                                output += f"- **Template:** {agent['template']}\n"
+                                output += f"- **Estado:** {'✅ Desplegado' if agent['deployed'] else '⏸️ No desplegado'}\n"
+                                output += f"- **Creado:** {agent['created_at']}\n"
+                                output += "\n---\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error listando agentes: {str(e)}"
+                    
+                    refresh_agents_btn.click(
+                        fn=list_agents,
+                        outputs=[agents_list_output]
+                    )
+                    
+                    # Auto-cargar al abrir la pestaña
+                    agents_list_output.value = list_agents()
+                
+                with gr.Tab("💬 Probar Agente"):
+                    gr.Markdown("### Probar un Agente")
+                    
+                    with gr.Row():
+                        test_agent_id_input = gr.Textbox(
+                            label="Agent ID",
+                            placeholder="Pega el ID del agente aquí...",
+                            scale=2
+                        )
+                        load_agent_info_btn = gr.Button("📥 Cargar Info", scale=1)
+                    
+                    agent_info_display = gr.Markdown(label="Información del Agente", visible=False)
+                    
+                    test_message_input = gr.Textbox(
+                        label="Mensaje",
+                        placeholder="Escribe un mensaje para probar el agente...",
+                        lines=3
+                    )
+                    
+                    test_agent_btn = gr.Button("🚀 Probar Agente", variant="primary")
+                    test_agent_output = gr.Markdown(label="Respuesta del Agente")
+                    
+                    def load_agent_info(agent_id):
+                        try:
+                            studio = get_agent_builder_studio(config)
+                            agent_config = studio.get_agent_config(agent_id)
+                            
+                            if not agent_config:
+                                return gr.Markdown("❌ Agente no encontrado", visible=True), ""
+                            
+                            info = f"### 🤖 {agent_config.name}\n"
+                            info += f"**Descripción:** {agent_config.description}\n"
+                            info += f"**Template:** {agent_config.template.value}\n"
+                            info += f"**LLM:** {agent_config.llm_provider.value} - {agent_config.llm_model}\n"
+                            
+                            return gr.Markdown(info, visible=True), agent_id
+                        except Exception as e:
+                            return gr.Markdown(f"❌ Error: {str(e)}", visible=True), ""
+                    
+                    def test_agent(agent_id, message):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID primero."
+                        if not message.strip():
+                            return "⚠️ Por favor escribe un mensaje."
+                        
+                        try:
+                            studio = get_agent_builder_studio(config)
+                            response = asyncio.run(studio.run_agent(agent_id, message))
+                            
+                            output = f"## 💬 Respuesta del Agente\n\n"
+                            output += f"{response.get('response', 'No se pudo generar respuesta.')}\n\n"
+                            
+                            if response.get('tool_calls'):
+                                output += "### 🔧 Herramientas Usadas:\n"
+                                for tool_call in response['tool_calls']:
+                                    output += f"- **{tool_call.get('tool_name', 'unknown')}**\n"
+                            
+                            if response.get('reasoning_steps'):
+                                output += f"\n### 🧠 Pasos de Razonamiento: {len(response['reasoning_steps'])}\n"
+                            
+                            if not response.get('success'):
+                                output += f"\n⚠️ **Error:** {response.get('error', 'Unknown error')}"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error probando agente: {str(e)}"
+                    
+                    load_agent_info_btn.click(
+                        fn=load_agent_info,
+                        inputs=[test_agent_id_input],
+                        outputs=[agent_info_display, test_agent_id_input]
+                    )
+                    
+                    test_agent_btn.click(
+                        fn=test_agent,
+                        inputs=[test_agent_id_input, test_message_input],
+                        outputs=[test_agent_output]
+                    )
+                
+                with gr.Tab("🚀 Deployment"):
+                    gr.Markdown("### Desplegar Agente en Canales")
+                    
+                    deploy_agent_id_input = gr.Textbox(
+                        label="Agent ID",
+                        placeholder="ID del agente a desplegar..."
+                    )
+                    
+                    deploy_channels_checkbox = gr.CheckboxGroup(
+                        label="Canales de Deployment",
+                        choices=[
+                            ("🌐 Web", "web"),
+                            ("🔌 API", "api"),
+                            ("💬 WhatsApp", "whatsapp"),
+                            ("📱 Messenger", "messenger"),
+                            ("💼 Slack", "slack"),
+                            ("👥 Teams", "teams")
+                        ],
+                        value=["web"]
+                    )
+                    
+                    deploy_webhook_input = gr.Textbox(
+                        label="Webhook URL (opcional)",
+                        placeholder="https://tu-webhook.com/endpoint"
+                    )
+                    
+                    deploy_btn = gr.Button("🚀 Desplegar Agente", variant="primary")
+                    deploy_output = gr.Markdown(label="Resultado del Deployment")
+                    
+                    def deploy_agent(agent_id, channels, webhook_url):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID."
+                        if not channels:
+                            return "⚠️ Por favor selecciona al menos un canal."
+                        
+                        try:
+                            studio = get_agent_builder_studio(config)
+                            
+                            channel_enums = [DeploymentChannel(c) for c in channels]
+                            
+                            deployment = studio.deploy_agent(
+                                agent_id=agent_id,
+                                channels=channel_enums,
+                                webhook_url=webhook_url if webhook_url.strip() else None
+                            )
+                            
+                            output = f"## ✅ Agente Desplegado Exitosamente\n\n"
+                            output += f"**Agent ID:** `{agent_id}`\n"
+                            output += f"**Canales:** {', '.join([c.value for c in channel_enums])}\n"
+                            output += f"**Desplegado:** {deployment.deployed_at}\n"
+                            output += f"**Estado:** {'✅ Activo' if deployment.active else '⏸️ Inactivo'}\n\n"
+                            
+                            if "web" in channels:
+                                output += f"🌐 **Web URL:** `{deployment.web_url or 'Generando...'}`\n"
+                            if "api" in channels:
+                                output += f"🔌 **API Endpoint:** `{deployment.api_endpoint or 'Generando...'}`\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error desplegando agente: {str(e)}"
+                    
+                    deploy_btn.click(
+                        fn=deploy_agent,
+                        inputs=[deploy_agent_id_input, deploy_channels_checkbox, deploy_webhook_input],
+                        outputs=[deploy_output]
+                    )
+                
+                with gr.Tab("📊 Analytics"):
+                    gr.Markdown("### Analytics y Métricas de Agentes")
+                    
+                    analytics_agent_id_input = gr.Textbox(
+                        label="Agent ID",
+                        placeholder="ID del agente a analizar..."
+                    )
+                    
+                    load_analytics_btn = gr.Button("📊 Cargar Analytics", variant="primary")
+                    analytics_output = gr.Markdown(label="Analytics")
+                    
+                    def load_analytics(agent_id):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID."
+                        
+                        try:
+                            studio = get_agent_builder_studio(config)
+                            analytics = studio.get_agent_analytics(agent_id)
+                            
+                            if not analytics:
+                                return "❌ No se encontraron analytics para este agente."
+                            
+                            output = f"## 📊 Analytics - {agent_id}\n\n"
+                            output += f"### 📈 Interacciones\n"
+                            output += f"- **Total:** {analytics.total_interactions}\n"
+                            output += f"- **Exitosas:** {analytics.successful_interactions} ({analytics.successful_interactions/max(analytics.total_interactions,1)*100:.1f}%)\n"
+                            output += f"- **Fallidas:** {analytics.failed_interactions} ({analytics.failed_interactions/max(analytics.total_interactions,1)*100:.1f}%)\n\n"
+                            
+                            output += f"### 💰 Costos\n"
+                            output += f"- **Tokens Usados:** {analytics.total_tokens_used:,}\n"
+                            output += f"- **Costo Total:** ${analytics.total_cost_usd:.2f} USD\n"
+                            output += f"- **Costo Promedio/Interacción:** ${analytics.total_cost_usd/max(analytics.total_interactions,1):.4f} USD\n\n"
+                            
+                            output += f"### ⚡ Performance\n"
+                            output += f"- **Tiempo Promedio de Respuesta:** {analytics.average_response_time_ms:.0f} ms\n"
+                            output += f"- **Satisfacción del Usuario:** {analytics.user_satisfaction_score*100:.1f}%\n\n"
+                            
+                            if analytics.tool_usage_stats:
+                                output += f"### 🔧 Uso de Herramientas\n"
+                                for tool, count in analytics.tool_usage_stats.items():
+                                    output += f"- **{tool}:** {count} veces\n"
+                            
+                            output += f"\n**Última actualización:** {analytics.last_updated}"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error cargando analytics: {str(e)}"
+                    
+                    load_analytics_btn.click(
+                        fn=load_analytics,
+                        inputs=[analytics_agent_id_input],
+                        outputs=[analytics_output]
+                    )
+        
+        # Tab 4.5.5.7: PRIME AGENTS - Clon de Agent Builder Studio
+        with gr.Tab("👑 PRIME AGENTS"):
+            gr.Markdown("### 👑 PRIME AGENTS - Plataforma No-Code para Crear AI Agents de Máxima Calidad")
+            gr.Markdown("""
+            **Basado en la visión de Mark Zuckerberg:**
+            - "Cientos de millones de pequeñas empresas necesitarán AI agents"
+            - "Más de 200 millones de creadores necesitarán AI agents"
+            - "Probablemente más AI agents que personas en el mundo"
+            
+            **Características:**
+            - 🎨 **No-code/Low-code:** Crea agentes personalizados sin programar
+            - 📋 **Templates Pre-construidos:** Soporte, Ventas, Marketing, Creadores, Research
+            - 🤖 **Multi-LLM:** OpenAI, Anthropic, Google, Meta Llama, DeepSeek
+            - 🚀 **Deployment Automático:** Web, API, WhatsApp, Messenger, Slack, Teams
+            - 📊 **Analytics Integrados:** Métricas de uso, costos, satisfacción
+            - 🛒 **Marketplace:** Comparte y vende tus agentes
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("✨ Crear Agente"):
+                    gr.Markdown("### Crear un Nuevo Agente AI")
+                    
+                    with gr.Row():
+                        prime_agent_name_input = gr.Textbox(
+                            label="Nombre del Agente",
+                            placeholder="Ej: Asistente de Ventas",
+                            scale=2
+                        )
+                        prime_agent_template_dropdown = gr.Dropdown(
+                            label="Template Enterprise (Meta Vision)",
+                            choices=[
+                                # Enterprise Templates (Meta Vision)
+                                ("👑 Customer Service 24/7", "customer_service_24_7"),
+                                ("💰 AI Sales Agent", "sales_agent"),
+                                ("📢 AI Ads Agent", "ads_agent"),
+                                ("🛠️ AI Customer Support", "customer_support"),
+                                ("📚 AI Knowledge Agent", "knowledge_agent"),
+                                ("🛒 AI Commerce Agent", "commerce_agent"),
+                                ("⭐ AI Brand Persona", "brand_persona"),
+                                # Legacy Templates
+                                ("🎯 Personalizado", "custom"),
+                                ("💬 Soporte al Cliente (Legacy)", "customer_support"),
+                                ("💰 Ventas (Legacy)", "sales"),
+                                ("📢 Marketing (Legacy)", "marketing"),
+                                ("🎨 Creador de Contenido", "creator"),
+                                ("🔬 Research", "research"),
+                                ("👤 Asistente Personal", "personal_assistant")
+                            ],
+                            value="customer_service_24_7",
+                            scale=1
+                        )
+                    
+                    prime_agent_description_input = gr.Textbox(
+                        label="Descripción",
+                        placeholder="Describe qué hace tu agente...",
+                        lines=2
+                    )
+                    
+                    prime_agent_system_prompt_input = gr.Textbox(
+                        label="System Prompt (Personalizado)",
+                        placeholder="Eres un asistente útil y profesional...",
+                        lines=5,
+                        value=""
+                    )
+                    
+                    with gr.Row():
+                        prime_llm_provider_dropdown = gr.Dropdown(
+                            label="Proveedor LLM",
+                            choices=[
+                                ("OpenAI (GPT-4o)", "openai"),
+                                ("Anthropic (Claude)", "anthropic"),
+                                ("Google (Gemini)", "google"),
+                                ("Meta Llama", "meta_llama"),
+                                ("DeepSeek", "deepseek")
+                            ],
+                            value="openai"
+                        )
+                        prime_llm_model_input = gr.Textbox(
+                            label="Modelo",
+                            placeholder="gpt-4o",
+                            value="gpt-4o"
+                        )
+                    
+                    with gr.Row():
+                        prime_temperature_slider = gr.Slider(
+                            label="Temperature",
+                            minimum=0.0,
+                            maximum=1.0,
+                            value=0.7,
+                            step=0.1
+                        )
+                        prime_max_tokens_slider = gr.Slider(
+                            label="Max Tokens",
+                            minimum=500,
+                            maximum=8000,
+                            value=2000,
+                            step=500
+                        )
+                    
+                    prime_create_agent_btn = gr.Button("✨ Crear Agente", variant="primary")
+                    prime_create_agent_output = gr.Markdown(label="Resultado")
+                    
+                    def prime_create_agent(
+                        name, template, description, system_prompt,
+                        llm_provider, llm_model, temperature, max_tokens
+                    ):
+                        try:
+                            prime_agents = get_prime_agents_mode(config)
+                            
+                            # Convertir template string a enum
+                            template_enum = AgentTemplate(template)
+                            provider_enum = LLMProvider(llm_provider)
+                            
+                            # Si hay template, usar system_prompt del template si está vacío
+                            if template != "custom" and not system_prompt.strip():
+                                system_prompt = ""  # Se llenará automáticamente desde el template
+                            
+                            agent_id = prime_agents.create_agent(
+                                name=name,
+                                description=description,
+                                system_prompt=system_prompt,
+                                template=template_enum,
+                                llm_provider=provider_enum,
+                                llm_model=llm_model,
+                                temperature=float(temperature),
+                                max_tokens=int(max_tokens)
+                            )
+                            
+                            agent_config = prime_agents.get_agent_config(agent_id)
+                            
+                            output = f"## ✅ Agente Creado Exitosamente\n\n"
+                            output += f"**ID:** `{agent_id}`\n"
+                            output += f"**Nombre:** {agent_config.name}\n"
+                            output += f"**Template:** {agent_config.template.value}\n"
+                            output += f"**LLM:** {agent_config.llm_provider.value} - {agent_config.llm_model}\n"
+                            output += f"**Creado:** {agent_config.created_at}\n\n"
+                            output += f"💡 **Siguiente paso:** Ve a la pestaña '💬 Probar Agente' para probarlo."
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error creando agente: {str(e)}"
+                    
+                    prime_create_agent_btn.click(
+                        fn=prime_create_agent,
+                        inputs=[
+                            prime_agent_name_input, prime_agent_template_dropdown, prime_agent_description_input,
+                            prime_agent_system_prompt_input, prime_llm_provider_dropdown, prime_llm_model_input,
+                            prime_temperature_slider, prime_max_tokens_slider
+                        ],
+                        outputs=[prime_create_agent_output]
+                    )
+                
+                with gr.Tab("📋 Mis Agentes"):
+                    gr.Markdown("### Mis Agentes Creados")
+                    
+                    prime_refresh_agents_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                    prime_agents_list_output = gr.Markdown(label="Lista de Agentes")
+                    
+                    def prime_list_agents():
+                        try:
+                            prime_agents = get_prime_agents_mode(config)
+                            agents = prime_agents.list_agents()
+                            
+                            if not agents:
+                                return "📭 No has creado ningún agente aún. Ve a '✨ Crear Agente' para crear uno."
+                            
+                            output = "## 📋 Mis Agentes\n\n"
+                            for agent in agents:
+                                output += f"### 🤖 {agent['name']}\n"
+                                output += f"- **ID:** `{agent['agent_id']}`\n"
+                                output += f"- **Descripción:** {agent.get('description', 'N/A')}\n"
+                                output += f"- **Template:** {agent['template']}\n"
+                                output += f"- **Estado:** {'✅ Desplegado' if agent['deployed'] else '⏸️ No desplegado'}\n"
+                                output += f"- **Creado:** {agent['created_at']}\n"
+                                output += "\n---\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error listando agentes: {str(e)}"
+                    
+                    prime_refresh_agents_btn.click(
+                        fn=prime_list_agents,
+                        outputs=[prime_agents_list_output]
+                    )
+                    
+                    # Auto-cargar al abrir la pestaña
+                    prime_agents_list_output.value = prime_list_agents()
+                
+                with gr.Tab("💬 Probar Agente"):
+                    gr.Markdown("### Probar un Agente")
+                    
+                    with gr.Row():
+                        prime_test_agent_id_input = gr.Textbox(
+                            label="Agent ID",
+                            placeholder="Pega el ID del agente aquí...",
+                            scale=2
+                        )
+                        prime_load_agent_info_btn = gr.Button("📥 Cargar Info", scale=1)
+                    
+                    prime_agent_info_display = gr.Markdown(label="Información del Agente", visible=False)
+                    
+                    prime_test_message_input = gr.Textbox(
+                        label="Mensaje",
+                        placeholder="Escribe un mensaje para probar el agente...",
+                        lines=3
+                    )
+                    
+                    prime_test_agent_btn = gr.Button("🚀 Probar Agente", variant="primary")
+                    prime_test_agent_output = gr.Markdown(label="Respuesta del Agente")
+                    
+                    def prime_load_agent_info(agent_id):
+                        try:
+                            prime_agents = get_prime_agents_mode(config)
+                            agent_config = prime_agents.get_agent_config(agent_id)
+                            
+                            if not agent_config:
+                                return gr.Markdown("❌ Agente no encontrado", visible=True), ""
+                            
+                            info = f"### 🤖 {agent_config.name}\n"
+                            info += f"**Descripción:** {agent_config.description}\n"
+                            info += f"**Template:** {agent_config.template.value}\n"
+                            info += f"**LLM:** {agent_config.llm_provider.value} - {agent_config.llm_model}\n"
+                            
+                            return gr.Markdown(info, visible=True), agent_id
+                        except Exception as e:
+                            return gr.Markdown(f"❌ Error: {str(e)}", visible=True), ""
+                    
+                    def prime_test_agent(agent_id, message):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID primero."
+                        if not message.strip():
+                            return "⚠️ Por favor escribe un mensaje."
+                        
+                        try:
+                            prime_agents = get_prime_agents_mode(config)
+                            response = asyncio.run(prime_agents.run_agent(agent_id, message))
+                            
+                            output = f"## 💬 Respuesta del Agente\n\n"
+                            output += f"{response.get('response', 'No se pudo generar respuesta.')}\n\n"
+                            
+                            if response.get('tool_calls'):
+                                output += "### 🔧 Herramientas Usadas:\n"
+                                for tool_call in response['tool_calls']:
+                                    output += f"- **{tool_call.get('tool_name', 'unknown')}**\n"
+                            
+                            if response.get('reasoning_steps'):
+                                output += f"\n### 🧠 Pasos de Razonamiento: {len(response['reasoning_steps'])}\n"
+                            
+                            if not response.get('success'):
+                                output += f"\n⚠️ **Error:** {response.get('error', 'Unknown error')}"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error probando agente: {str(e)}"
+                    
+                    prime_load_agent_info_btn.click(
+                        fn=prime_load_agent_info,
+                        inputs=[prime_test_agent_id_input],
+                        outputs=[prime_agent_info_display, prime_test_agent_id_input]
+                    )
+                    
+                    prime_test_agent_btn.click(
+                        fn=prime_test_agent,
+                        inputs=[prime_test_agent_id_input, prime_test_message_input],
+                        outputs=[prime_test_agent_output]
+                    )
+                
+                with gr.Tab("🚀 Deployment"):
+                    gr.Markdown("### Desplegar Agente en Canales")
+                    
+                    prime_deploy_agent_id_input = gr.Textbox(
+                        label="Agent ID",
+                        placeholder="ID del agente a desplegar..."
+                    )
+                    
+                    prime_deploy_channels_checkbox = gr.CheckboxGroup(
+                        label="Canales de Deployment",
+                        choices=[
+                            ("🌐 Web", "web"),
+                            ("🔌 API", "api"),
+                            ("💬 WhatsApp", "whatsapp"),
+                            ("📱 Messenger", "messenger"),
+                            ("💼 Slack", "slack"),
+                            ("👥 Teams", "teams")
+                        ],
+                        value=["web"]
+                    )
+                    
+                    prime_deploy_webhook_input = gr.Textbox(
+                        label="Webhook URL (opcional)",
+                        placeholder="https://tu-webhook.com/endpoint"
+                    )
+                    
+                    prime_deploy_btn = gr.Button("🚀 Desplegar Agente", variant="primary")
+                    prime_deploy_output = gr.Markdown(label="Resultado del Deployment")
+                    
+                    def prime_deploy_agent(agent_id, channels, webhook_url):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID."
+                        if not channels:
+                            return "⚠️ Por favor selecciona al menos un canal."
+                        
+                        try:
+                            prime_agents = get_prime_agents_mode(config)
+                            
+                            channel_enums = [DeploymentChannel(c) for c in channels]
+                            
+                            deployment = prime_agents.deploy_agent(
+                                agent_id=agent_id,
+                                channels=channel_enums,
+                                webhook_url=webhook_url if webhook_url.strip() else None
+                            )
+                            
+                            output = f"## ✅ Agente Desplegado Exitosamente\n\n"
+                            output += f"**Agent ID:** `{agent_id}`\n"
+                            output += f"**Canales:** {', '.join([c.value for c in channel_enums])}\n"
+                            output += f"**Desplegado:** {deployment.deployed_at}\n"
+                            output += f"**Estado:** {'✅ Activo' if deployment.active else '⏸️ Inactivo'}\n\n"
+                            
+                            if "web" in channels:
+                                output += f"🌐 **Web URL:** `{deployment.web_url or 'Generando...'}`\n"
+                            if "api" in channels:
+                                output += f"🔌 **API Endpoint:** `{deployment.api_endpoint or 'Generando...'}`\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error desplegando agente: {str(e)}"
+                    
+                    prime_deploy_btn.click(
+                        fn=prime_deploy_agent,
+                        inputs=[prime_deploy_agent_id_input, prime_deploy_channels_checkbox, prime_deploy_webhook_input],
+                        outputs=[prime_deploy_output]
+                    )
+                
+                with gr.Tab("📊 Analytics"):
+                    gr.Markdown("### Analytics y Métricas de Agentes")
+                    
+                    prime_analytics_agent_id_input = gr.Textbox(
+                        label="Agent ID",
+                        placeholder="ID del agente a analizar..."
+                    )
+                    
+                    prime_load_analytics_btn = gr.Button("📊 Cargar Analytics", variant="primary")
+                    prime_analytics_output = gr.Markdown(label="Analytics")
+                    
+                    def prime_load_analytics(agent_id):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID."
+                        
+                        try:
+                            prime_agents = get_prime_agents_mode(config)
+                            analytics = prime_agents.get_agent_analytics(agent_id)
+                            
+                            if not analytics:
+                                return "❌ No se encontraron analytics para este agente."
+                            
+                            output = f"## 📊 Analytics - {agent_id}\n\n"
+                            output += f"### 📈 Interacciones\n"
+                            output += f"- **Total:** {analytics.total_interactions}\n"
+                            output += f"- **Exitosas:** {analytics.successful_interactions} ({analytics.successful_interactions/max(analytics.total_interactions,1)*100:.1f}%)\n"
+                            output += f"- **Fallidas:** {analytics.failed_interactions} ({analytics.failed_interactions/max(analytics.total_interactions,1)*100:.1f}%)\n\n"
+                            
+                            output += f"### 💰 Costos\n"
+                            output += f"- **Tokens Usados:** {analytics.total_tokens_used:,}\n"
+                            output += f"- **Costo Total:** ${analytics.total_cost_usd:.2f} USD\n"
+                            output += f"- **Costo Promedio/Interacción:** ${analytics.total_cost_usd/max(analytics.total_interactions,1):.4f} USD\n\n"
+                            
+                            output += f"### ⚡ Performance\n"
+                            output += f"- **Tiempo Promedio de Respuesta:** {analytics.average_response_time_ms:.0f} ms\n"
+                            output += f"- **Satisfacción del Usuario:** {analytics.user_satisfaction_score*100:.1f}%\n\n"
+                            
+                            if analytics.tool_usage_stats:
+                                output += f"### 🔧 Uso de Herramientas\n"
+                                for tool, count in analytics.tool_usage_stats.items():
+                                    output += f"- **{tool}:** {count} veces\n"
+                            
+                            output += f"\n**Última actualización:** {analytics.last_updated}"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error cargando analytics: {str(e)}"
+                    
+                    prime_load_analytics_btn.click(
+                        fn=prime_load_analytics,
+                        inputs=[prime_analytics_agent_id_input],
+                        outputs=[prime_analytics_output]
+                    )
+        
+        # Tab: AI Agent Factory - Plataforma No-Code Ultra Útil
+        with gr.Tab("🏭 AI Agent Factory"):
+            gr.Markdown("### 🏭 AI Agent Factory - Crea AI Agents Personalizados en Minutos")
+            gr.Markdown("""
+            **Basado en la visión de Mark Zuckerberg:**
+            - "Cientos de millones de pequeñas empresas necesitarán AI agents"
+            - "Más de 200 millones de creadores necesitarán AI agents"
+            - "Probablemente más AI agents que personas en el mundo"
+            
+            **Características Ultra Útiles:**
+            - 🎨 **No-Code:** Crea agentes en minutos sin programar
+            - 🎭 **Personalización Profunda:** Voz, personalidad, valores únicos
+            - 📱 **Integración Social:** Entrena agentes desde Instagram, TikTok, YouTube
+            - 🚀 **Deployment Multi-Canal:** Web, WhatsApp, Messenger, Instagram, API
+            - 🏪 **Marketplace:** Comparte, clona y mejora agentes de la comunidad
+            - 📊 **Analytics Avanzados:** Monitoreo en tiempo real, engagement, satisfacción
+            - 🤝 **BYOA:** Bring Your Own Assistant - Tu agente personal portátil
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("✨ Crear Agente"):
+                    gr.Markdown("### Crear un Nuevo Agente AI (No-Code)")
+                    
+                    with gr.Row():
+                        factory_agent_name_input = gr.Textbox(
+                            label="Nombre del Agente",
+                            placeholder="Ej: Asistente de Mi Tienda Online",
+                            scale=2
+                        )
+                        factory_agent_category_dropdown = gr.Dropdown(
+                            label="Categoría",
+                            choices=[
+                                ("🏪 Pequeña Empresa", "small_business"),
+                                ("🎨 Creador de Contenido", "creator"),
+                                ("⭐ Influencer", "influencer"),
+                                ("🏢 Enterprise", "enterprise"),
+                                ("👤 Personal", "personal"),
+                                ("👥 Comunidad", "community"),
+                                ("🎓 Educación", "education"),
+                                ("🏥 Salud", "healthcare"),
+                                ("🛒 E-commerce", "ecommerce"),
+                                ("🔧 Personalizado", "custom")
+                            ],
+                            value="small_business",
+                            scale=1
+                        )
+                    
+                    factory_agent_template_dropdown = gr.Dropdown(
+                        label="Template (Elige uno o personaliza después)",
+                        choices=[
+                            # Pequeñas Empresas
+                            ("🛒 Atención al Cliente 24/7", "customer_service_24_7"),
+                            ("💰 Asistente de Ventas", "sales_assistant"),
+                            ("📅 Gestor de Reservas", "booking_manager"),
+                            ("🎯 Recomendador de Productos", "product_recommender"),
+                            ("❓ FAQ Bot", "faq_bot"),
+                            # Creadores
+                            ("🎨 Asistente para Creadores", "creator_assistant"),
+                            ("👥 Gestor de Comunidad", "community_manager"),
+                            ("📝 Planificador de Contenido", "content_planner"),
+                            ("💬 Interacción con Fans", "fan_interaction"),
+                            ("🤝 Colaborador de Marcas", "brand_collaborator"),
+                            # Influencers
+                            ("⭐ Persona de Influencer", "influencer_persona"),
+                            ("💌 Respondedor de DMs", "dm_responder"),
+                            ("📸 Creador de Contenido", "content_creator"),
+                            ("📈 Booster de Engagement", "engagement_booster"),
+                            # E-commerce
+                            ("🛍️ Asistente de Compras", "shopping_assistant"),
+                            ("📦 Rastreador de Pedidos", "order_tracker"),
+                            ("↩️ Gestor de Devoluciones", "return_handler"),
+                            ("🛒 Recuperación de Carrito", "cart_recovery"),
+                            # Personalizado
+                            ("🔧 Personalizado", "custom")
+                        ],
+                        value="customer_service_24_7"
+                    )
+                    
+                    factory_agent_description_input = gr.Textbox(
+                        label="Descripción",
+                        placeholder="Describe qué hace tu agente y para quién...",
+                        lines=3
+                    )
+                    
+                    with gr.Accordion("🎭 Personalización Avanzada (Opcional)", open=False):
+                        gr.Markdown("**Personaliza la voz y personalidad de tu agente**")
+                        
+                        with gr.Row():
+                            factory_tone_dropdown = gr.Dropdown(
+                                label="Tono",
+                                choices=["friendly", "professional", "casual", "enthusiastic", "authentic", "personal"],
+                                value="friendly"
+                            )
+                            factory_communication_style_dropdown = gr.Dropdown(
+                                label="Estilo de Comunicación",
+                                choices=["helpful", "consultative", "storytelling", "conversational", "concise", "detailed"],
+                                value="helpful"
+                            )
+                        
+                        with gr.Row():
+                            factory_humor_level_dropdown = gr.Dropdown(
+                                label="Nivel de Humor",
+                                choices=["none", "subtle", "moderate", "high"],
+                                value="subtle"
+                            )
+                            factory_empathy_level_dropdown = gr.Dropdown(
+                                label="Nivel de Empatía",
+                                choices=["low", "medium", "high"],
+                                value="high"
+                            )
+                        
+                        factory_custom_voice_input = gr.Textbox(
+                            label="Descripción de Voz Personalizada",
+                            placeholder="Ej: Habla como un amigo cercano, usa emojis ocasionalmente, siempre positivo...",
+                            lines=2
+                        )
+                    
+                    with gr.Accordion("💎 Valores y Principios (Opcional)", open=False):
+                        factory_core_values_input = gr.Textbox(
+                            label="Valores Principales (separados por comas)",
+                            placeholder="Ej: transparency, customer_first, innovation",
+                            value=""
+                        )
+                        factory_brand_voice_input = gr.Textbox(
+                            label="Voz de Marca",
+                            placeholder="Ej: Amigable y profesional, siempre buscando ayudar",
+                            value=""
+                        )
+                        factory_do_not_say_input = gr.Textbox(
+                            label="Nunca Digas (separadas por comas)",
+                            placeholder="Ej: No puedo ayudarte, Eso no es mi problema",
+                            value=""
+                        )
+                        factory_must_mention_input = gr.Textbox(
+                            label="Siempre Menciona (separadas por comas)",
+                            placeholder="Ej: Estoy aquí para ayudarte, ¿Hay algo más?",
+                            value=""
+                        )
+                    
+                    factory_custom_instructions_input = gr.Textbox(
+                        label="Instrucciones Personalizadas Adicionales",
+                        placeholder="Cualquier instrucción especial para tu agente...",
+                        lines=3
+                    )
+                    
+                    factory_create_agent_btn = gr.Button("✨ Crear Agente", variant="primary", size="lg")
+                    factory_create_agent_output = gr.Markdown(label="Resultado")
+                    
+                    def factory_create_agent(
+                        name, category, template, description,
+                        tone, communication_style, humor_level, empathy_level, custom_voice,
+                        core_values, brand_voice, do_not_say, must_mention,
+                        custom_instructions
+                    ):
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory, AgentCategory, AgentTemplate
+                            
+                            factory = get_ai_agent_factory(config)
+                            
+                            # Construir personalidad
+                            personality = {
+                                "tone": tone,
+                                "communication_style": communication_style,
+                                "humor_level": humor_level,
+                                "empathy_level": empathy_level,
+                                "formality": "casual" if tone in ["friendly", "casual", "authentic"] else "professional",
+                                "custom_voice_description": custom_voice if custom_voice.strip() else None
+                            }
+                            
+                            # Construir valores
+                            values = {
+                                "core_values": [v.strip() for v in core_values.split(",") if v.strip()] if core_values else [],
+                                "brand_voice": brand_voice if brand_voice.strip() else "",
+                                "do_not_say": [v.strip() for v in do_not_say.split(",") if v.strip()] if do_not_say else [],
+                                "must_mention": [v.strip() for v in must_mention.split(",") if v.strip()] if must_mention else []
+                            }
+                            
+                            agent_id = factory.create_agent(
+                                name=name,
+                                description=description,
+                                category=category,
+                                template=template,
+                                personality=personality,
+                                values=values if any(values.values()) else None,
+                                custom_instructions=custom_instructions if custom_instructions.strip() else "",
+                                deployment_channels=["web"]  # Default
+                            )
+                            
+                            agent = factory.get_agent(agent_id)
+                            
+                            output = f"## ✅ Agente Creado Exitosamente\n\n"
+                            output += f"**ID:** `{agent_id}`\n"
+                            output += f"**Nombre:** {agent.name}\n"
+                            output += f"**Categoría:** {agent.category.value}\n"
+                            output += f"**Template:** {agent.template.value}\n"
+                            output += f"**Creado:** {agent.created_at}\n\n"
+                            output += f"💡 **Siguiente paso:**\n"
+                            output += f"1. Ve a '💬 Chatear con Agente' para probarlo\n"
+                            output += f"2. Ve a '🚀 Deployment' para desplegarlo en canales\n"
+                            output += f"3. Ve a '📊 Analytics' para monitorear su performance\n"
+                            
+                            return output
+                        except Exception as e:
+                            import traceback
+                            return f"❌ Error creando agente: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                    
+                    factory_create_agent_btn.click(
+                        fn=factory_create_agent,
+                        inputs=[
+                            factory_agent_name_input, factory_agent_category_dropdown, factory_agent_template_dropdown,
+                            factory_agent_description_input,
+                            factory_tone_dropdown, factory_communication_style_dropdown, factory_humor_level_dropdown,
+                            factory_empathy_level_dropdown, factory_custom_voice_input,
+                            factory_core_values_input, factory_brand_voice_input, factory_do_not_say_input,
+                            factory_must_mention_input, factory_custom_instructions_input
+                        ],
+                        outputs=[factory_create_agent_output]
+                    )
+                
+                with gr.Tab("💬 Chatear con Agente"):
+                    gr.Markdown("### Chatea con tu Agente")
+                    
+                    with gr.Row():
+                        factory_chat_agent_id_input = gr.Textbox(
+                            label="Agent ID",
+                            placeholder="Pega el ID del agente aquí...",
+                            scale=2
+                        )
+                        factory_load_chat_agent_btn = gr.Button("📥 Cargar Agente", scale=1)
+                    
+                    factory_chat_agent_info = gr.Markdown(label="Información del Agente", visible=False)
+                    
+                    factory_chatbot = gr.Chatbot(label="Conversación", height=400)
+                    factory_chat_message_input = gr.Textbox(
+                        label="Mensaje",
+                        placeholder="Escribe tu mensaje...",
+                        lines=2
+                    )
+                    
+                    with gr.Row():
+                        factory_chat_send_btn = gr.Button("💬 Enviar", variant="primary")
+                        factory_chat_clear_btn = gr.Button("🗑️ Limpiar Chat")
+                    
+                    factory_chat_session_id = gr.State(value=str(uuid.uuid4()))
+                    
+                    def factory_load_chat_agent(agent_id):
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory
+                            factory = get_ai_agent_factory(config)
+                            agent = factory.get_agent(agent_id)
+                            
+                            if not agent:
+                                return gr.Markdown("❌ Agente no encontrado", visible=True), []
+                            
+                            info = f"### 🤖 {agent.name}\n"
+                            info += f"**Descripción:** {agent.description}\n"
+                            info += f"**Categoría:** {agent.category.value}\n"
+                            info += f"**Template:** {agent.template.value}\n"
+                            
+                            return gr.Markdown(info, visible=True), []
+                        except Exception as e:
+                            return gr.Markdown(f"❌ Error: {str(e)}", visible=True), []
+                    
+                    def factory_chat_with_agent(agent_id, message, history, session_id):
+                        if not agent_id.strip():
+                            return history, "⚠️ Por favor ingresa un Agent ID primero."
+                        if not message.strip():
+                            return history, ""
+                        
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory
+                            factory = get_ai_agent_factory(config)
+                            
+                            # Agregar mensaje del usuario
+                            history.append([message, None])
+                            
+                            # Obtener respuesta
+                            response = asyncio.run(factory.chat_with_agent(agent_id, message, session_id))
+                            
+                            if "error" in response:
+                                history[-1][1] = f"❌ Error: {response['error']}"
+                            else:
+                                history[-1][1] = response.get("response", "No se pudo generar respuesta.")
+                            
+                            return history, ""
+                        except Exception as e:
+                            history[-1][1] = f"❌ Error: {str(e)}"
+                            return history, ""
+                    
+                    factory_load_chat_agent_btn.click(
+                        fn=factory_load_chat_agent,
+                        inputs=[factory_chat_agent_id_input],
+                        outputs=[factory_chat_agent_info, factory_chatbot]
+                    )
+                    
+                    factory_chat_send_btn.click(
+                        fn=factory_chat_with_agent,
+                        inputs=[factory_chat_agent_id_input, factory_chat_message_input, factory_chatbot, factory_chat_session_id],
+                        outputs=[factory_chatbot, factory_chat_message_input]
+                    )
+                    
+                    factory_chat_clear_btn.click(
+                        fn=lambda: ([], str(uuid.uuid4())),
+                        outputs=[factory_chatbot, factory_chat_session_id]
+                    )
+                
+                with gr.Tab("📋 Mis Agentes"):
+                    gr.Markdown("### Mis Agentes Creados")
+                    
+                    factory_refresh_agents_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                    factory_agents_list_output = gr.Markdown(label="Lista de Agentes")
+                    
+                    def factory_list_agents():
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory
+                            factory = get_ai_agent_factory(config)
+                            agents = factory.list_agents()
+                            
+                            if not agents:
+                                return "📭 No has creado ningún agente aún. Ve a '✨ Crear Agente' para crear uno."
+                            
+                            output = "## 📋 Mis Agentes\n\n"
+                            for agent in agents:
+                                output += f"### 🤖 {agent.name}\n"
+                                output += f"- **ID:** `{agent.agent_id}`\n"
+                                output += f"- **Descripción:** {agent.description}\n"
+                                output += f"- **Categoría:** {agent.category.value}\n"
+                                output += f"- **Template:** {agent.template.value}\n"
+                                output += f"- **Estado:** {'✅ Habilitado' if agent.enabled else '⏸️ Deshabilitado'}\n"
+                                output += f"- **Interacciones:** {agent.usage_count}\n"
+                                output += f"- **Creado:** {agent.created_at}\n"
+                                output += "\n---\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error listando agentes: {str(e)}"
+                    
+                    factory_refresh_agents_btn.click(
+                        fn=factory_list_agents,
+                        outputs=[factory_agents_list_output]
+                    )
+                    
+                    factory_agents_list_output.value = factory_list_agents()
+                
+                with gr.Tab("🚀 Deployment"):
+                    gr.Markdown("### Desplegar Agente en Canales")
+                    
+                    factory_deploy_agent_id_input = gr.Textbox(
+                        label="Agent ID",
+                        placeholder="ID del agente a desplegar..."
+                    )
+                    
+                    factory_deploy_channels_checkbox = gr.CheckboxGroup(
+                        label="Canales de Deployment",
+                        choices=[
+                            ("🌐 Web", "web"),
+                            ("🔌 API", "api"),
+                            ("💬 WhatsApp", "whatsapp"),
+                            ("📱 Messenger", "messenger"),
+                            ("📸 Instagram", "instagram"),
+                            ("💼 Slack", "slack"),
+                            ("👥 Teams", "teams"),
+                            ("📧 Email", "email"),
+                            ("📱 SMS", "sms"),
+                            ("🎤 Voz", "voice")
+                        ],
+                        value=["web"]
+                    )
+                    
+                    factory_deploy_btn = gr.Button("🚀 Desplegar Agente", variant="primary")
+                    factory_deploy_output = gr.Markdown(label="Resultado del Deployment")
+                    
+                    def factory_deploy_agent(agent_id, channels):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID."
+                        if not channels:
+                            return "⚠️ Por favor selecciona al menos un canal."
+                        
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory
+                            factory = get_ai_agent_factory(config)
+                            
+                            output = "## 🚀 Deployment Exitoso\n\n"
+                            
+                            for channel in channels:
+                                deployment_info = factory.deploy_agent(agent_id, channel)
+                                
+                                if "error" in deployment_info:
+                                    output += f"❌ **{channel}:** {deployment_info['error']}\n"
+                                else:
+                                    output += f"### {channel.upper()}\n"
+                                    if "web_url" in deployment_info:
+                                        output += f"🌐 **Web URL:** `{deployment_info['web_url']}`\n"
+                                    if "api_endpoint" in deployment_info:
+                                        output += f"🔌 **API Endpoint:** `{deployment_info['api_endpoint']}`\n"
+                                        output += f"🔑 **API Key:** `{deployment_info['api_key']}`\n"
+                                    if "whatsapp_number" in deployment_info:
+                                        output += f"💬 **WhatsApp:** {deployment_info['whatsapp_number']}\n"
+                                    if "messenger_page_id" in deployment_info:
+                                        output += f"📱 **Messenger Page ID:** {deployment_info['messenger_page_id']}\n"
+                                    if "setup_instructions" in deployment_info:
+                                        output += f"📋 **Instrucciones:** {deployment_info['setup_instructions']}\n"
+                                    output += "\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error desplegando agente: {str(e)}"
+                    
+                    factory_deploy_btn.click(
+                        fn=factory_deploy_agent,
+                        inputs=[factory_deploy_agent_id_input, factory_deploy_channels_checkbox],
+                        outputs=[factory_deploy_output]
+                    )
+                
+                with gr.Tab("🏪 Marketplace"):
+                    gr.Markdown("### Marketplace de Agentes - Comparte y Descubre")
+                    
+                    with gr.Row():
+                        factory_marketplace_search_input = gr.Textbox(
+                            label="Buscar Agentes",
+                            placeholder="Busca por nombre, descripción o tags...",
+                            scale=3
+                        )
+                        factory_marketplace_category_filter = gr.Dropdown(
+                            label="Categoría",
+                            choices=["Todas", "small_business", "creator", "influencer", "enterprise", "ecommerce"],
+                            value="Todas",
+                            scale=1
+                        )
+                        factory_marketplace_search_btn = gr.Button("🔍 Buscar", scale=1)
+                    
+                    factory_marketplace_results = gr.Markdown(label="Resultados")
+                    
+                    def factory_search_marketplace(query, category):
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory
+                            factory = get_ai_agent_factory(config)
+                            
+                            results = factory.search_marketplace(
+                                query=query if query.strip() else None,
+                                category=category if category != "Todas" else None,
+                                limit=20
+                            )
+                            
+                            if not results:
+                                return "📭 No se encontraron agentes. Sé el primero en publicar uno en el marketplace!"
+                            
+                            output = "## 🏪 Marketplace - Agentes Disponibles\n\n"
+                            for agent in results:
+                                output += f"### ⭐ {agent.name}\n"
+                                output += f"- **Descripción:** {agent.description}\n"
+                                output += f"- **Categoría:** {agent.category}\n"
+                                output += f"- **Template:** {agent.template}\n"
+                                output += f"- **Creador:** {agent.creator}\n"
+                                output += f"- **Rating:** {'⭐' * int(agent.rating)} ({agent.rating:.1f}/5.0)\n"
+                                output += f"- **Clonado:** {agent.clone_count} veces\n"
+                                output += f"- **Tags:** {', '.join(agent.tags)}\n"
+                                output += f"- **ID:** `{agent.agent_id}`\n"
+                                output += "\n---\n\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error buscando en marketplace: {str(e)}"
+                    
+                    factory_marketplace_search_btn.click(
+                        fn=factory_search_marketplace,
+                        inputs=[factory_marketplace_search_input, factory_marketplace_category_filter],
+                        outputs=[factory_marketplace_results]
+                    )
+                    
+                    # Auto-buscar al cargar
+                    factory_marketplace_results.value = factory_search_marketplace("", "Todas")
+                
+                with gr.Tab("📊 Analytics"):
+                    gr.Markdown("### Analytics y Métricas de Agentes")
+                    
+                    factory_analytics_agent_id_input = gr.Textbox(
+                        label="Agent ID",
+                        placeholder="ID del agente a analizar..."
+                    )
+                    
+                    factory_load_analytics_btn = gr.Button("📊 Cargar Analytics", variant="primary")
+                    factory_analytics_output = gr.Markdown(label="Analytics")
+                    
+                    def factory_load_analytics(agent_id):
+                        if not agent_id.strip():
+                            return "⚠️ Por favor ingresa un Agent ID."
+                        
+                        try:
+                            from docchat.ai_agent_factory_mode import get_ai_agent_factory
+                            factory = get_ai_agent_factory(config)
+                            analytics = factory.get_agent_analytics(agent_id)
+                            
+                            if not analytics:
+                                return "❌ No se encontraron analytics para este agente."
+                            
+                            output = f"## 📊 Analytics - {agent_id}\n\n"
+                            output += f"### 📈 Interacciones\n"
+                            output += f"- **Total:** {analytics.total_interactions}\n"
+                            output += f"- **Exitosas:** {analytics.successful_interactions} ({analytics.successful_interactions/max(analytics.total_interactions,1)*100:.1f}%)\n"
+                            output += f"- **Fallidas:** {analytics.failed_interactions} ({analytics.failed_interactions/max(analytics.total_interactions,1)*100:.1f}%)\n\n"
+                            
+                            output += f"### ⚡ Performance\n"
+                            output += f"- **Tiempo Promedio de Respuesta:** {analytics.average_response_time_ms:.0f} ms\n"
+                            output += f"- **Satisfacción del Usuario:** {analytics.user_satisfaction_score*100:.1f}%\n"
+                            output += f"- **Usuarios Activos Diarios:** {analytics.daily_active_users}\n"
+                            output += f"- **Tasa de Retención:** {analytics.retention_rate*100:.1f}%\n\n"
+                            
+                            if analytics.channel_breakdown:
+                                output += f"### 📱 Canales\n"
+                                for channel, count in analytics.channel_breakdown.items():
+                                    output += f"- **{channel}:** {count} interacciones\n"
+                                output += "\n"
+                            
+                            if analytics.most_common_queries:
+                                output += f"### 🔍 Consultas Más Comunes\n"
+                                for i, query_data in enumerate(analytics.most_common_queries[:5], 1):
+                                    output += f"{i}. {query_data.get('query', 'N/A')} ({query_data.get('count', 0)} veces)\n"
+                                output += "\n"
+                            
+                            output += f"**Última actualización:** {analytics.last_updated}"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error cargando analytics: {str(e)}"
+                    
+                    factory_load_analytics_btn.click(
+                        fn=factory_load_analytics,
+                        inputs=[factory_analytics_agent_id_input],
+                        outputs=[factory_analytics_output]
+                    )
+        
+        # Tab 4.5.5.8: Judge Agent Mode - Clon de Alien Mode
+        with gr.Tab("⚖️ Judge Agent Mode"):
+            gr.Markdown("### ⚖️ Judge Agent Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **Arquitectura:** Clon de Alien Mode, especializado en análisis estratégico y toma de decisiones.
+            - 🔍 **Relevance Checker:** Verifica si la pregunta es relevante a los documentos
+            - 🔬 **Research Agent:** Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent:** Verifica que las respuestas estén soportadas (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism:** Re-ejecuta research si hay contradicciones o claims sin soporte
+            - 🔀 **Hybrid Retriever:** Combina BM25 (búsqueda léxica) + Vector Search (búsqueda semántica)
+            - 📦 **Context Folding:** Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance:** Trazabilidad completa de cada pieza de información
+            - 🧠 **Chain of Thought Reasoning:** Razonamiento paso a paso
+            - 🛤️ **Path-dependent Reasoning:** Múltiples enfoques probados
+            - 📈 **Test Time Training:** Mejora continua con cada conversación
+            - 👤 **Person in the Loop:** Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning:** Estrategias adaptativas
+            - 🔌 **MCP Powered:** Conexión a sistemas externos, bases de datos, APIs
+            """)
+
+            judge_agent_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                judge_agent_files = gr.Files(
+                    label="📂 Judge Agent Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+
+            with gr.Row():
+                judge_agent_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                judge_agent_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            judge_agent_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                judge_agent_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What are the main risks in these documents?",
+                    lines=2,
+                    scale=4,
+                )
+                judge_agent_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_judge_agent_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_judge_agent_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                judge_agent_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+                judge_agent_evaluate_btn = gr.Button("⚖️ Evaluate Documents", variant="primary")
+
+            judge_agent_status = gr.Markdown(label="ℹ️ Chat Status")
+            judge_agent_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            judge_agent_evaluation_output = gr.Markdown(label="⚖️ Document Evaluation Report", visible=False)
+
+            def judge_agent_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_judge_agent_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_judge_agent(history, session_id):
+                judge_agent_mode = get_judge_agent_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(judge_agent_mode, 'sessions') and session_id in judge_agent_mode.sessions:
+                    judge_agent_mode.sessions[session_id]["history"] = []
+                    judge_agent_mode.sessions[session_id]["docs"] = []
+                    judge_agent_mode.sessions[session_id]["retriever"] = None
+                    judge_agent_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_judge_agent_files(files, session_id):
+                judge_agent_mode = get_judge_agent_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(judge_agent_mode, 'sessions') and session_id in judge_agent_mode.sessions:
+                    judge_agent_mode.sessions[session_id]["processed_files"].clear()
+                    judge_agent_mode.sessions[session_id]["docs"] = []
+                    judge_agent_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_judge_agent_stats(session_id):
+                judge_agent_mode = get_judge_agent_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = judge_agent_mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Judge Agent Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+
+                return gr.Markdown(output, visible=True)
+
+            judge_agent_submit_btn.click(
+                fn=judge_agent_submit,
+                inputs=[judge_agent_input, judge_agent_bot, judge_agent_files, judge_agent_session_id, judge_agent_speed_mode, judge_agent_provider_toggle],
+                outputs=[judge_agent_bot, judge_agent_bot, judge_agent_status, judge_agent_stats_output],
+            ).then(
+                lambda: "", None, judge_agent_input
+            )
+
+            judge_agent_input.submit(
+                fn=judge_agent_submit,
+                inputs=[judge_agent_input, judge_agent_bot, judge_agent_files, judge_agent_session_id, judge_agent_speed_mode, judge_agent_provider_toggle],
+                outputs=[judge_agent_bot, judge_agent_bot, judge_agent_status, judge_agent_stats_output],
+            ).then(
+                lambda: "", None, judge_agent_input
+            )
+
+            clear_judge_agent_btn.click(
+                fn=clear_judge_agent,
+                inputs=[judge_agent_bot, judge_agent_session_id],
+                outputs=[judge_agent_bot, judge_agent_status, judge_agent_stats_output],
+            )
+
+            clear_judge_agent_files_btn.click(
+                fn=clear_judge_agent_files,
+                inputs=[judge_agent_files, judge_agent_session_id],
+                outputs=[judge_agent_files, judge_agent_status, judge_agent_stats_output],
+            )
+
+            judge_agent_stats_btn.click(
+                fn=show_judge_agent_stats,
+                inputs=[judge_agent_session_id],
+                outputs=[judge_agent_stats_output],
+            )
+            
+            def evaluate_judge_agent_documents(session_id, files):
+                """Evalúa documentos usando el sistema AI Agents-as-Judge."""
+                if not files:
+                    return gr.Markdown("⚠️ Carga documentos primero para evaluar.", visible=True)
+                
+                judge_agent_mode = get_judge_agent_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                
+                try:
+                    # Procesar documentos si no están procesados
+                    result = judge_agent_mode.process_documents(session_id, files)
+                    if result.get("status") == "error":
+                        return gr.Markdown(f"❌ Error procesando documentos: {result.get('error')}", visible=True)
+                    
+                    # Ejecutar evaluación
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    eval_result = loop.run_until_complete(
+                        judge_agent_mode.evaluate_document(session_id=session_id)
+                    )
+                    loop.close()
+                    
+                    if eval_result.get("status") == "error":
+                        return gr.Markdown(f"❌ Error en evaluación: {eval_result.get('error')}", visible=True)
+                    
+                    # Formatear reporte
+                    report = judge_agent_mode.get_evaluation_report(session_id, eval_result.get("evaluation_id"))
+                    
+                    output = "## ⚖️ AI Agents-as-Judge: Reporte de Evaluación de Documentos\n\n"
+                    output += f"**ID de Evaluación:** {eval_result.get('evaluation_id')}\n"
+                    output += f"**Tiempo de Ejecución:** {eval_result.get('execution_time', 0):.2f} segundos\n"
+                    output += f"**Documentos Evaluados:** {eval_result.get('documents_evaluated', 0)}\n\n"
+                    
+                    for doc_report in report.get("documents", []):
+                        output += f"### 📄 Documento: {doc_report.get('document_id', 'Unknown')}\n\n"
+                        
+                        # Scores generales
+                        overall_scores = doc_report.get("overall_scores", {})
+                        output += "#### 📊 Scores Generales\n\n"
+                        output += f"- **Template Compliance:** {overall_scores.get('template_compliance', {}).get('score', 0)}/5 ({overall_scores.get('template_compliance', {}).get('percentage', 0)}%)\n"
+                        output += f"- **Accuracy (Precisión):** {overall_scores.get('accuracy', {}).get('score', 0)}/5 ({overall_scores.get('accuracy', {}).get('percentage', 0)}%)\n"
+                        output += f"- **Consistency (Consistencia):** {overall_scores.get('consistency', {}).get('score', 0)}/5 ({overall_scores.get('consistency', {}).get('percentage', 0)}%)\n"
+                        output += f"- **Completeness (Completitud):** {overall_scores.get('completeness', {}).get('score', 0)}/5 ({overall_scores.get('completeness', {}).get('percentage', 0)}%)\n"
+                        output += f"- **Clarity (Claridad):** {overall_scores.get('clarity', {}).get('score', 0)}/5 ({overall_scores.get('clarity', {}).get('percentage', 0)}%)\n"
+                        output += f"- **Overall Score:** {overall_scores.get('overall', {}).get('score', 0)}/5 ({overall_scores.get('overall', {}).get('percentage', 0)}%)\n\n"
+                        
+                        # Evaluaciones por sección
+                        output += "#### 📋 Evaluaciones por Sección\n\n"
+                        for section in doc_report.get("sections", []):
+                            output += f"##### {section.get('section_name', 'Unknown')}\n\n"
+                            for agent_type, eval_data in section.get("scores", {}).items():
+                                agent_name = {
+                                    "format_checker": "Template Compliance",
+                                    "factual_checker": "Factual Accuracy",
+                                    "terminology_checker": "Terminology Consistency",
+                                    "redundancy_checker": "Redundancy Detection",
+                                    "completeness_checker": "Completeness",
+                                    "clarity_checker": "Clarity"
+                                }.get(agent_type, agent_type)
+                                
+                                output += f"**{agent_name}:** Score {eval_data.get('score', 0)}/5\n"
+                                if eval_data.get("comments"):
+                                    output += f"- {eval_data.get('comments', '')[:200]}\n"
+                                if eval_data.get("issues"):
+                                    output += f"- Issues: {', '.join(eval_data.get('issues', [])[:3])}\n"
+                                output += "\n"
+                            output += "---\n\n"
+                    
+                    return gr.Markdown(output, visible=True)
+                except Exception as e:
+                    import traceback
+                    return gr.Markdown(f"❌ Error en evaluación: {str(e)}\n\n{traceback.format_exc()}", visible=True)
+            
+            judge_agent_evaluate_btn.click(
+                fn=evaluate_judge_agent_documents,
+                inputs=[judge_agent_session_id, judge_agent_files],
+                outputs=[judge_agent_evaluation_output],
+            )
+        
+        # Tab 4.5.5.6.5: Banking Mode - Clon de Alien Mode
+        with gr.Tab("🏦 Banking Mode"):
+            gr.Markdown("### 🏦 Banking Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **Arquitectura:** Clon de Alien Mode, especializado en análisis estratégico y toma de decisiones.
+            - 🔍 **Relevance Checker:** Verifica si la pregunta es relevante a los documentos
+            - 🔬 **Research Agent:** Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent:** Verifica que las respuestas estén soportadas (anti-hallucinación)
+            - 🔄 **Self-Correction:** Re-ejecuta research automáticamente si hay contradicciones
+            - 🔀 **Hybrid Retriever:** BM25 + Vector Search para máxima precisión
+            """)
+
+            banking_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                banking_files = gr.Files(
+                    label="📂 Banking Documents (PDF, DOCX, TXT, MD, XLSX, PNG, JPG)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md", ".xlsx", ".png", ".jpg"],
+                )
+
+            with gr.Row():
+                banking_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                banking_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            banking_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                banking_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What are the main risks in this banking document?",
+                    lines=2,
+                    scale=4,
+                )
+                banking_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_banking_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_banking_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                banking_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+                banking_extract_btn = gr.Button("🏦 Extract Banking Data", variant="primary")
+
+            banking_status = gr.Markdown(label="ℹ️ Chat Status")
+            banking_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            banking_extraction_output = gr.Markdown(label="🏦 Banking Data Extraction (JSON)", visible=False)
+
+            def banking_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_banking_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_banking(history, session_id):
+                banking_mode = get_banking_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(banking_mode, 'sessions') and session_id in banking_mode.sessions:
+                    banking_mode.sessions[session_id]["history"] = []
+                    banking_mode.sessions[session_id]["docs"] = []
+                    banking_mode.sessions[session_id]["retriever"] = None
+                    banking_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_banking_files(files, session_id):
+                banking_mode = get_banking_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(banking_mode, 'sessions') and session_id in banking_mode.sessions:
+                    banking_mode.sessions[session_id]["processed_files"].clear()
+                    banking_mode.sessions[session_id]["docs"] = []
+                    banking_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_banking_stats(session_id):
+                banking_mode = get_banking_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = banking_mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Banking Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+
+                return gr.Markdown(output, visible=True)
+
+            banking_submit_btn.click(
+                fn=banking_submit,
+                inputs=[banking_input, banking_bot, banking_files, banking_session_id, banking_speed_mode, banking_provider_toggle],
+                outputs=[banking_bot, banking_bot, banking_status, banking_stats_output],
+            ).then(
+                lambda: "", None, banking_input
+            )
+
+            banking_input.submit(
+                fn=banking_submit,
+                inputs=[banking_input, banking_bot, banking_files, banking_session_id, banking_speed_mode, banking_provider_toggle],
+                outputs=[banking_bot, banking_bot, banking_status, banking_stats_output],
+            ).then(
+                lambda: "", None, banking_input
+            )
+
+            clear_banking_btn.click(
+                fn=clear_banking,
+                inputs=[banking_bot, banking_session_id],
+                outputs=[banking_bot, banking_status, banking_stats_output],
+            )
+
+            clear_banking_files_btn.click(
+                fn=clear_banking_files,
+                inputs=[banking_files, banking_session_id],
+                outputs=[banking_files, banking_status, banking_stats_output],
+            )
+
+            banking_stats_btn.click(
+                fn=show_banking_stats,
+                inputs=[banking_session_id],
+                outputs=[banking_stats_output],
+            )
+            
+            def extract_banking_data(session_id, files):
+                """Extrae datos estructurados de documentos bancarios."""
+                if not files:
+                    return gr.Markdown("⚠️ Carga documentos primero para extraer datos.", visible=True)
+                
+                banking_mode = get_banking_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                
+                try:
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    result = loop.run_until_complete(
+                        banking_mode.process_banking_documents(session_id=session_id, files=files)
+                    )
+                    loop.close()
+                    
+                    if result.get("status") == "error":
+                        return gr.Markdown(f"❌ Error: {result.get('error')}", visible=True)
+                    
+                    structured_data = result.get("structured_data", {})
+                    json_output = result.get("json_output", "")
+                    
+                    # Formatear output
+                    output = "## 🏦 Banking Data Extraction - Resultados\n\n"
+                    output += f"**Estado:** ✅ Extracción completada\n"
+                    output += f"**Documentos procesados:** {structured_data.get('documents_processed', 0)}\n"
+                    output += f"**Timestamp:** {structured_data.get('processing_timestamp', 'N/A')}\n\n"
+                    
+                    # Clasificaciones
+                    output += "### 📋 Clasificaciones de Documentos\n\n"
+                    for cls in structured_data.get("classifications", []):
+                        output += f"- **{cls.get('file_name', 'Unknown')}:** {cls.get('document_type', 'unknown')} (confianza: {cls.get('confidence', 0):.2f})\n"
+                    output += "\n"
+                    
+                    # Resumen
+                    summary = structured_data.get("summary", {})
+                    if summary.get("identity"):
+                        output += "### 👤 Identidad\n\n"
+                        identity = summary["identity"]
+                        output += f"- **Nombre:** {identity.get('name', 'N/A')}\n"
+                        output += f"- **Documento:** {identity.get('document_id', 'N/A')}\n"
+                        output += f"- **Dirección:** {identity.get('address', 'N/A')}\n\n"
+                    
+                    if summary.get("income"):
+                        output += "### 💰 Ingresos\n\n"
+                        income = summary["income"]
+                        if income.get('monthly_net'):
+                            output += f"- **Neto mensual:** ${income.get('monthly_net', 0):,.2f}\n"
+                        if income.get('monthly_gross'):
+                            output += f"- **Bruto mensual:** ${income.get('monthly_gross', 0):,.2f}\n"
+                        output += f"- **Empleador:** {income.get('employer', 'N/A')}\n"
+                        output += f"- **Estabilidad:** {income.get('income_stability', 'unknown')}\n\n"
+                    
+                    if summary.get("financial_health"):
+                        output += "### 💳 Salud Financiera\n\n"
+                        fh = summary["financial_health"]
+                        if fh.get('average_balance'):
+                            output += f"- **Balance promedio:** ${fh.get('average_balance', 0):,.2f}\n"
+                        output += f"- **Sobregiros totales:** {fh.get('total_overdrafts', 0)}\n"
+                        output += f"- **Nivel de riesgo:** {fh.get('risk_level', 'unknown')}\n\n"
+                    
+                    if summary.get("risk_assessment"):
+                        output += "### ⚠️ Evaluación de Riesgo\n\n"
+                        risk = summary["risk_assessment"]
+                        output += f"- **Score de riesgo:** {risk.get('risk_score', 0)}/100\n"
+                        output += f"- **Nivel:** {risk.get('risk_level', 'unknown')}\n"
+                        output += f"- **Recomendación:** {risk.get('recommendation', 'N/A')}\n"
+                        if risk.get("risk_factors"):
+                            output += f"- **Factores de riesgo:** {', '.join(risk['risk_factors'])}\n"
+                        output += "\n"
+                    
+                    # Validación
+                    validation = structured_data.get("validation", {})
+                    if validation.get("discrepancies"):
+                        output += "### ⚠️ Discrepancias Detectadas\n\n"
+                        for disc in validation["discrepancies"]:
+                            output += f"- **{disc.get('type', 'Unknown')}:** {disc.get('values', [])}\n"
+                        output += "\n"
+                    
+                    # JSON completo
+                    output += "### 📄 JSON Estructurado Completo\n\n"
+                    output += "```json\n"
+                    output += json_output[:5000]  # Limitar a 5000 caracteres
+                    if len(json_output) > 5000:
+                        output += "\n... (truncado, ver datos completos en respuesta)"
+                    output += "\n```\n"
+                    
+                    return gr.Markdown(output, visible=True)
+                except Exception as e:
+                    import traceback
+                    return gr.Markdown(f"❌ Error en extracción: {str(e)}\n\n{traceback.format_exc()}", visible=True)
+            
+            banking_extract_btn.click(
+                fn=extract_banking_data,
+                inputs=[banking_session_id, banking_files],
+                outputs=[banking_extraction_output],
+            )
+        
+        # Tab 4.5.5.7: Event Bus Mode - Sistema Event-Driven Multi-Agente RAG
+        with gr.Tab("📡 Event Bus Mode"):
+            gr.Markdown("### 📡 Event Bus Mode - Sistema Event-Driven Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat con Arquitectura Event-Driven - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **📡 ARQUITECTURA EVENT-DRIVEN:**
+            - 📡 **Event Bus**: Sistema de mensajería interna para comunicación entre componentes
+            - ⚡ **Real-time Processing**: Procesamiento automático basado en eventos
+            - 🔗 **Event-driven Workflows**: Flujos de trabajo que reaccionan a eventos en tiempo real
+            - 📊 **Event History**: Trazabilidad completa de eventos para auditoría
+            - 🔔 **Auto-notifications**: Notificaciones automáticas cuando ocurren eventos importantes
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que necesitan procesamiento automático basado en eventos
+            - Sistemas que requieren workflows event-driven
+            - Aplicaciones que necesitan notificaciones en tiempo real
+            - Organizaciones que requieren trazabilidad completa de eventos
+            - Integración con sistemas externos mediante eventos
+            - Automatización de procesos basada en eventos
+            
+            **💡 Ejemplo del Proceso Event-Driven:**
+            1. Subes 500 PDFs de documentos legales
+            2. **Event Bus** publica evento "document_uploaded" automáticamente
+            3. Sistema reacciona: indexa, genera embeddings, extrae insights (todo automático)
+            4. Preguntas: "¿Cuáles son los valores de eficiencia PUE del centro de datos en Singapur?"
+            5. **Event Bus** publica evento "query_started"
+            6. **Relevance Checker** verifica que los documentos contengan información relevante
+            7. **Hybrid Retriever** busca usando BM25 (keywords) + Vector Search (semántica)
+            8. **Research Agent** genera respuesta inicial basada en documentos recuperados
+            9. **Verification Agent** verifica que la respuesta esté soportada por los documentos
+            10. Si hay contradicciones, **Self-Correction** re-ejecuta research
+            11. **Event Bus** publica evento "query_completed" con resultados
+            12. Sistema notifica automáticamente a componentes suscritos
+            13. **Data Provenance** rastrea cada fuente para compliance y auditoría
+            
+            **🎯 Ventajas sobre ChatGPT/DeepSeek:**
+            - ✅ **Sin alucinaciones**: Cada respuesta es verificada contra los documentos
+            - ✅ **Precisión en tablas**: Lee correctamente tablas complejas y datos estructurados
+            - ✅ **Múltiples documentos**: Encuentra inteligentemente el documento correcto entre muchos
+            - ✅ **Auto-corrección**: Re-ejecuta research si detecta problemas
+            - ✅ **Trazabilidad completa**: Rastrea cada pieza de información hasta su fuente
+            - ✅ **Event-driven**: Procesamiento automático basado en eventos
+            - ✅ **Real-time**: Reacciona a cambios en tiempo real
+            """)
+            
+            # Generar session_id único
+            event_bus_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                event_bus_files = gr.Files(
+                    label="📂 Event Bus Mode Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                event_bus_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                event_bus_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component - Estilo ChatGPT
+            event_bus_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=600,
+                show_copy_button=True,
+                container=True,
+                elem_id="event_bus_bot",
+            )
+            
+            with gr.Row():
+                event_bus_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                    elem_id="event_bus_input",
+                )
+                event_bus_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_event_bus_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_event_bus_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                event_bus_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            event_bus_status = gr.Markdown(label="ℹ️ Chat Status")
+            event_bus_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def event_bus_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_event_bus_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_event_bus(history, session_id):
+                # Clear session for event bus mode
+                event_bus_mode = get_event_bus_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(event_bus_mode, 'sessions') and session_id in event_bus_mode.sessions:
+                    event_bus_mode.sessions[session_id]["history"] = []
+                    event_bus_mode.sessions[session_id]["docs"] = []
+                    event_bus_mode.sessions[session_id]["retriever"] = None
+                    event_bus_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_event_bus_files(files, session_id):
+                event_bus_mode = get_event_bus_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(event_bus_mode, 'sessions') and session_id in event_bus_mode.sessions:
+                    event_bus_mode.sessions[session_id]["processed_files"].clear()
+                    event_bus_mode.sessions[session_id]["docs"] = []
+                    event_bus_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_event_bus_stats(session_id):
+                event_bus_mode = get_event_bus_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = event_bus_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - Event Bus Mode\n\n"
+                output += f"### 📡 Event Bus\n"
+                output += f"- Total events: {stats['event_bus']['total_events']}\n"
+                output += f"- Event types: {stats['event_bus']['event_types']}\n"
+                output += f"- Recent events: {stats['event_bus']['recent_events']}\n\n"
+                
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+                
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+                
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            event_bus_submit_btn.click(
+                fn=event_bus_submit,
+                inputs=[event_bus_input, event_bus_bot, event_bus_files, event_bus_session_id, event_bus_speed_mode, event_bus_provider_toggle],
+                outputs=[event_bus_bot, event_bus_bot, event_bus_status, event_bus_stats_output],
+            ).then(
+                lambda: "", None, event_bus_input
+            )
+            
+            event_bus_input.submit(
+                fn=event_bus_submit,
+                inputs=[event_bus_input, event_bus_bot, event_bus_files, event_bus_session_id, event_bus_speed_mode, event_bus_provider_toggle],
+                outputs=[event_bus_bot, event_bus_bot, event_bus_status, event_bus_stats_output],
+            ).then(
+                lambda: "", None, event_bus_input
+            )
+            
+            clear_event_bus_btn.click(
+                fn=clear_event_bus,
+                inputs=[event_bus_bot, event_bus_session_id],
+                outputs=[event_bus_bot, event_bus_status, event_bus_stats_output],
+            )
+            
+            clear_event_bus_files_btn.click(
+                fn=clear_event_bus_files,
+                inputs=[event_bus_files, event_bus_session_id],
+                outputs=[event_bus_files, event_bus_status, event_bus_stats_output],
+            )
+            
+            event_bus_stats_btn.click(
+                fn=show_event_bus_stats,
+                inputs=[event_bus_session_id],
+                outputs=[event_bus_stats_output],
+            )
+
+        # Tab 4.5.5.7: Event Horizon Mode - Clon de Event Bus con streaming optimizado
+        with gr.Tab("🌌 Event Horizon"):
+            gr.Markdown("### 🌌 Event Horizon Mode - Event-Driven + Streaming en Tiempo Real")
+            gr.Markdown("""
+            **Arquitectura:** Clon de Event Bus Mode con enfoque en streaming y tiempo real.
+
+            - 📡 Event Horizon Bus: mensajería interna + streaming
+            - ⚡ Procesamiento asíncrono (no bloquea la UI)
+            - 🔗 Workflows event-driven automáticos
+            - 📊 Estadísticas en tiempo real (eventos/segundo)
+            - 🔔 Webhooks listos para integrarse con fuentes externas
+            """)
+
+            event_horizon_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                event_horizon_files = gr.Files(
+                    label="📂 Event Horizon Documents (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+
+            with gr.Row():
+                event_horizon_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                event_horizon_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            event_horizon_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                event_horizon_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
+                    lines=2,
+                    scale=4,
+                )
+                event_horizon_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_event_horizon_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_event_horizon_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                event_horizon_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+
+            event_horizon_status = gr.Markdown(label="ℹ️ Chat Status")
+            event_horizon_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+
+            def event_horizon_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_event_horizon_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_event_horizon(history, session_id):
+                mode = get_event_horizon_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["history"] = []
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                    mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_event_horizon_files(files, session_id):
+                mode = get_event_horizon_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["processed_files"].clear()
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_event_horizon_stats(session_id):
+                mode = get_event_horizon_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Event Horizon\n\n"
+                output += f"### 📡 Event Horizon Bus\n"
+                output += f"- Total events: {stats['event_bus']['total_events']}\n"
+                output += f"- Events/sec: {stats['event_bus'].get('events_per_second', 0):.2f}\n"
+                output += f"- Subscribers: {stats['event_bus']['subscribers_count']} (async: {stats['event_bus'].get('async_subscribers_count',0)})\n\n"
+
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\\n### 📋 Session\\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\\n"
+                    output += f"- Messages: {stats['session']['history_count']}\\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\\n"
+
+                return gr.Markdown(output, visible=True)
+
+            event_horizon_submit_btn.click(
+                fn=event_horizon_submit,
+                inputs=[event_horizon_input, event_horizon_bot, event_horizon_files, event_horizon_session_id, event_horizon_speed_mode, event_horizon_provider_toggle],
+                outputs=[event_horizon_bot, event_horizon_bot, event_horizon_status, event_horizon_stats_output],
+            ).then(
+                lambda: "", None, event_horizon_input
+            )
+
+            event_horizon_input.submit(
+                fn=event_horizon_submit,
+                inputs=[event_horizon_input, event_horizon_bot, event_horizon_files, event_horizon_session_id, event_horizon_speed_mode, event_horizon_provider_toggle],
+                outputs=[event_horizon_bot, event_horizon_bot, event_horizon_status, event_horizon_stats_output],
+            ).then(
+                lambda: "", None, event_horizon_input
+            )
+
+            clear_event_horizon_btn.click(
+                fn=clear_event_horizon,
+                inputs=[event_horizon_bot, event_horizon_session_id],
+                outputs=[event_horizon_bot, event_horizon_status, event_horizon_stats_output],
+            )
+
+            clear_event_horizon_files_btn.click(
+                fn=clear_event_horizon_files,
+                inputs=[event_horizon_files, event_horizon_session_id],
+                outputs=[event_horizon_files, event_horizon_status, event_horizon_stats_output],
+            )
+
+            event_horizon_stats_btn.click(
+                fn=show_event_horizon_stats,
+                inputs=[event_horizon_session_id],
+                outputs=[event_horizon_stats_output],
+            )
+        
+        # Tab 4.5.5.8: Event Storage Mode - Clon de Event Horizon con almacenamiento optimizado
+        with gr.Tab("💾 Event Storage"):
+            gr.Markdown("### 💾 Event Storage Mode - Event-Driven + Almacenamiento Optimizado")
+            gr.Markdown("""
+            **Arquitectura:** Clon de Event Horizon Mode con enfoque en almacenamiento y persistencia.
+
+            - 💾 Event Storage Bus: mensajería interna + almacenamiento persistente
+            - ⚡ Procesamiento asíncrono (no bloquea la UI)
+            - 🔗 Workflows event-driven automáticos
+            - 📊 Estadísticas en tiempo real (eventos/segundo)
+            - 🔔 Webhooks listos para integrarse con fuentes externas
+            - 🗄️ Almacenamiento optimizado para grandes volúmenes de datos
+            """)
+
+            event_storage_session_id = gr.State(value=str(uuid.uuid4()))
+
+            # ========== SECCIÓN: ENTERPRISE CONNECTORS ==========
+            gr.Markdown("### 🔌 Enterprise Connectors - Conexión Automática a Apps")
+            gr.Markdown("""
+            **Conecta automáticamente a apps enterprise para detectar y procesar PDFs:**
+            - 📁 SharePoint / OneDrive (Webhooks + Polling)
+            - ☁️ AWS S3 (Polling)
+            - 📂 Google Drive (Polling)
+            - 💼 Salesforce (Webhooks + Polling)
+            - 🎫 ServiceNow (Webhooks + Polling)
+            """)
+            
+            with gr.Accordion("🔌 Configurar Conectores Enterprise", open=False):
+                with gr.Tabs():
+                    # Tab: SharePoint / OneDrive
+                    with gr.Tab("📁 SharePoint / OneDrive"):
+                        gr.Markdown("**Conecta a Microsoft 365 (SharePoint/OneDrive)**")
+                        sharepoint_connector_id = gr.Textbox(label="ID del Conector", value="sharepoint_1", placeholder="sharepoint_1")
+                        sharepoint_display_name = gr.Textbox(label="Nombre", value="SharePoint Empresa", placeholder="SharePoint Empresa")
+                        sharepoint_auth_method = gr.Radio(
+                            label="Método de Autenticación",
+                            choices=[("OAuth2 Completo", "oauth2"), ("Access Token Directo", "token")],
+                            value="oauth2"
+                        )
+                        with gr.Group(visible=True) as sharepoint_oauth_group:
+                            sharepoint_client_id = gr.Textbox(label="Client ID (Azure AD)", placeholder="tu-client-id")
+                            sharepoint_client_secret = gr.Textbox(label="Client Secret", type="password", placeholder="tu-client-secret")
+                            sharepoint_tenant_id = gr.Textbox(label="Tenant ID", placeholder="tu-tenant-id")
+                            sharepoint_redirect_uri = gr.Textbox(label="Redirect URI", value="http://localhost:5001/oauth/callback", placeholder="http://localhost:5001/oauth/callback")
+                        with gr.Group(visible=False) as sharepoint_token_group:
+                            sharepoint_access_token = gr.Textbox(
+                                label="Access Token",
+                                placeholder="eyJ0eXAiOiJKV1QiLCJub... (pega el token completo aquí)",
+                                lines=3
+                            )
+                            gr.Markdown("""
+                            **💡 Cómo obtener el Access Token:**
+                            1. Ve a [Microsoft Graph Explorer](https://developer.microsoft.com/graph/graph-explorer)
+                            2. Inicia sesión con tu cuenta Microsoft 365
+                            3. Selecciona los permisos: `Files.Read.All`, `Sites.Read.All`
+                            4. Copia el "Access token" generado
+                            5. ⏰ El token dura ~1 hora, luego necesitarás uno nuevo
+                            """)
+                        sharepoint_folders = gr.Textbox(label="Carpetas a monitorear (separadas por coma)", placeholder="/Documents/Contratos, /Shared/PDFs")
+                        sharepoint_connect_btn = gr.Button("🔌 Conectar SharePoint", variant="primary")
+                        sharepoint_status = gr.Markdown("")
+                        
+                        def toggle_sharepoint_auth(method):
+                            return gr.Group(visible=(method == "oauth2")), gr.Group(visible=(method == "token"))
+                        sharepoint_auth_method.change(fn=toggle_sharepoint_auth, inputs=[sharepoint_auth_method], outputs=[sharepoint_oauth_group, sharepoint_token_group])
+                    
+                    # Tab: AWS S3
+                    with gr.Tab("☁️ AWS S3"):
+                        gr.Markdown("**Conecta a buckets de AWS S3**")
+                        s3_connector_id = gr.Textbox(label="ID del Conector", value="s3_1", placeholder="s3_1")
+                        s3_display_name = gr.Textbox(label="Nombre", value="S3 Bucket Principal", placeholder="S3 Bucket Principal")
+                        s3_bucket_name = gr.Textbox(label="Bucket Name", placeholder="mi-bucket-empresa")
+                        s3_prefix = gr.Textbox(label="Prefijo/Carpeta (opcional)", placeholder="pdfs/")
+                        s3_access_key = gr.Textbox(label="AWS Access Key ID", placeholder="tu-access-key")
+                        s3_secret_key = gr.Textbox(label="AWS Secret Access Key", type="password", placeholder="tu-secret-key")
+                        s3_region = gr.Textbox(label="AWS Region", value="us-east-1", placeholder="us-east-1")
+                        s3_connect_btn = gr.Button("🔌 Conectar S3", variant="primary")
+                        s3_status = gr.Markdown("")
+                    
+                    # Tab: Google Drive
+                    with gr.Tab("📂 Google Drive"):
+                        gr.Markdown("**Conecta a Google Drive Enterprise**")
+                        gdrive_connector_id = gr.Textbox(label="ID del Conector", value="gdrive_1", placeholder="gdrive_1")
+                        gdrive_display_name = gr.Textbox(label="Nombre", value="Google Drive Empresa", placeholder="Google Drive Empresa")
+                        gdrive_auth_method = gr.Radio(
+                            label="Método de Autenticación",
+                            choices=[("OAuth2 Completo", "oauth2"), ("Access Token (OAuth Playground)", "token")],
+                            value="token"
+                        )
+                        with gr.Group(visible=False) as gdrive_oauth_group:
+                            gdrive_client_id = gr.Textbox(label="Client ID (OAuth2)", placeholder="tu-client-id")
+                            gdrive_client_secret = gr.Textbox(label="Client Secret", type="password", placeholder="tu-client-secret")
+                            gdrive_redirect_uri = gr.Textbox(label="Redirect URI", value="http://localhost:5001/oauth/callback", placeholder="http://localhost:5001/oauth/callback")
+                        with gr.Group(visible=True) as gdrive_token_group:
+                            gdrive_access_token = gr.Textbox(
+                                label="Access Token",
+                                placeholder="ya29.a0AfH6SMC... (pega el token completo aquí, empieza con ya29.)",
+                                lines=3
+                            )
+                            gr.Markdown("""
+                            **🎮 Connection via OAuth Playground (Google Only)**
+                            
+                            **Steps to get the Access Token:**
+                            
+                            1. **Click the blue button below** → OAuth Playground opens
+                            
+                            2. **Check the required scope:**
+                               - For Google Drive: `https://www.googleapis.com/auth/drive.readonly`
+                               - Click "Authorize APIs"
+                               - Sign in with Google
+                               - Click "Exchange authorization code for tokens"
+                            
+                            3. **Copy the "Access token"** and paste it below → Click "Connect"
+                            
+                            💡 **Tip:** The token starts with `ya29.` and is long (more than 100 characters)
+                            
+                            ⏰ **Important:** The token lasts ~1 hour. After that you'll need to generate a new one.
+                            
+                            🔗 **[Open OAuth Playground (Click Here)](https://developers.google.com/oauthplayground/)**
+                            """)
+                        gdrive_folder_ids = gr.Textbox(label="Folder IDs a monitorear (separados por coma)", placeholder="folder-id-1, folder-id-2")
+                        gdrive_connect_btn = gr.Button("🔌 Conectar Google Drive", variant="primary")
+                        gdrive_status = gr.Markdown("")
+                        
+                        def toggle_gdrive_auth(method):
+                            return gr.Group(visible=(method == "oauth2")), gr.Group(visible=(method == "token"))
+                        gdrive_auth_method.change(fn=toggle_gdrive_auth, inputs=[gdrive_auth_method], outputs=[gdrive_oauth_group, gdrive_token_group])
+                    
+                    # Tab: Salesforce
+                    with gr.Tab("💼 Salesforce"):
+                        gr.Markdown("**Conecta a Salesforce**")
+                        sf_connector_id = gr.Textbox(label="ID del Conector", value="salesforce_1", placeholder="salesforce_1")
+                        sf_display_name = gr.Textbox(label="Nombre", value="Salesforce Principal", placeholder="Salesforce Principal")
+                        sf_auth_method = gr.Radio(
+                            label="Método de Autenticación",
+                            choices=[("Username/Password", "username"), ("Access Token (OAuth)", "token")],
+                            value="username"
+                        )
+                        with gr.Group(visible=True) as sf_username_group:
+                            sf_username = gr.Textbox(label="Username", placeholder="usuario@salesforce.com")
+                            sf_password = gr.Textbox(label="Password", type="password", placeholder="tu-password")
+                            sf_security_token = gr.Textbox(label="Security Token", type="password", placeholder="tu-security-token")
+                            sf_domain = gr.Radio(label="Domain", choices=[("Production", "login"), ("Sandbox", "test")], value="login")
+                        with gr.Group(visible=False) as sf_token_group:
+                            sf_access_token = gr.Textbox(
+                                label="Access Token",
+                                placeholder="00D5g000000abcd... (pega el token completo aquí)",
+                                lines=3
+                            )
+                            sf_instance_url = gr.Textbox(label="Instance URL", placeholder="https://yourinstance.salesforce.com")
+                            gr.Markdown("""
+                            **💡 Cómo obtener el Access Token:**
+                            1. Ve a [Salesforce Setup → Connected Apps](https://help.salesforce.com/s/articleView?id=sf.connected_app_create.htm)
+                            2. Crea una Connected App con OAuth2
+                            3. Usa el flujo "User-Agent Flow" o "Web Server Flow"
+                            4. Copia el "Access Token" generado
+                            5. ⏰ El token dura según la configuración de tu org (típicamente 2 horas)
+                            """)
+                        sf_connect_btn = gr.Button("🔌 Conectar Salesforce", variant="primary")
+                        sf_status = gr.Markdown("")
+                        
+                        def toggle_sf_auth(method):
+                            return gr.Group(visible=(method == "username")), gr.Group(visible=(method == "token"))
+                        sf_auth_method.change(fn=toggle_sf_auth, inputs=[sf_auth_method], outputs=[sf_username_group, sf_token_group])
+                    
+                    # Tab: ServiceNow
+                    with gr.Tab("🎫 ServiceNow"):
+                        gr.Markdown("**Conecta a ServiceNow**")
+                        sn_connector_id = gr.Textbox(label="ID del Conector", value="servicenow_1", placeholder="servicenow_1")
+                        sn_display_name = gr.Textbox(label="Nombre", value="ServiceNow Principal", placeholder="ServiceNow Principal")
+                        sn_instance_url = gr.Textbox(label="Instance URL", placeholder="https://tu-instance.service-now.com")
+                        sn_auth_type = gr.Radio(
+                            label="Auth Type",
+                            choices=[("Basic Auth", "basic"), ("OAuth2", "oauth2"), ("Access Token", "token")],
+                            value="basic"
+                        )
+                        with gr.Group(visible=True) as sn_basic_group:
+                            sn_username = gr.Textbox(label="Username", placeholder="admin")
+                            sn_password = gr.Textbox(label="Password", type="password", placeholder="tu-password")
+                        with gr.Group(visible=False) as sn_oauth_group:
+                            sn_client_id = gr.Textbox(label="Client ID (OAuth2)", placeholder="tu-client-id")
+                            sn_client_secret = gr.Textbox(label="Client Secret", type="password", placeholder="tu-client-secret")
+                        with gr.Group(visible=False) as sn_token_group:
+                            sn_access_token = gr.Textbox(
+                                label="Access Token",
+                                placeholder="eyJ0eXAiOiJKV1QiLCJub... (pega el token completo aquí)",
+                                lines=3
+                            )
+                            gr.Markdown("""
+                            **💡 Cómo obtener el Access Token:**
+                            1. Ve a ServiceNow → System OAuth → Application Registry
+                            2. Crea una nueva aplicación OAuth
+                            3. Usa el flujo "Authorization Code" o "Client Credentials"
+                            4. Copia el "Access Token" generado
+                            5. ⏰ El token dura según la configuración (típicamente 1-2 horas)
+                            """)
+                        sn_connect_btn = gr.Button("🔌 Conectar ServiceNow", variant="primary")
+                        sn_status = gr.Markdown("")
+                        
+                        def toggle_sn_auth(auth_type):
+                            return (
+                                gr.Group(visible=(auth_type == "basic")),
+                                gr.Group(visible=(auth_type == "oauth2")),
+                                gr.Group(visible=(auth_type == "token"))
+                            )
+                        sn_auth_type.change(fn=toggle_sn_auth, inputs=[sn_auth_type], outputs=[sn_basic_group, sn_oauth_group, sn_token_group])
+            
+            # Funciones para conectar cada conector
+            def connect_sharepoint(connector_id, display_name, auth_method, client_id, client_secret, tenant_id, redirect_uri, access_token, folders):
+                try:
+                    mode = get_event_storage_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                    
+                    if auth_method == "token":
+                        # Conexión directa con Access Token
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="sharepoint",
+                            display_name=display_name,
+                            access_token=access_token,
+                            folder_paths=[f.strip() for f in folders.split(",")] if folders else [],
+                            use_webhooks=True
+                        )
+                    else:
+                        # OAuth2 completo
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="sharepoint",
+                            display_name=display_name,
+                            client_id=client_id,
+                            client_secret=client_secret,
+                            tenant_id=tenant_id,
+                            redirect_uri=redirect_uri,
+                            folder_paths=[f.strip() for f in folders.split(",")] if folders else [],
+                            use_webhooks=True
+                        )
+                    
+                    success = mode.connector_manager.add_connector(connector_config)
+                    if success:
+                        asyncio.create_task(mode.connector_manager.connect_all())
+                        return f"✅ Conector SharePoint '{display_name}' agregado. Conectando..."
+                    else:
+                        return "❌ Error agregando conector SharePoint"
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
+            
+            def connect_s3(connector_id, display_name, bucket_name, prefix, access_key, secret_key, region):
+                try:
+                    mode = get_event_storage_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                    connector_config = ConnectorConfig(
+                        connector_id=connector_id,
+                        connector_type="aws_s3",
+                        display_name=display_name,
+                        extra_config={
+                            "bucket_name": bucket_name,
+                            "prefix": prefix,
+                            "aws_access_key_id": access_key,
+                            "aws_secret_access_key": secret_key,
+                            "aws_region": region
+                        },
+                        use_webhooks=False  # S3 no tiene webhooks nativos
+                    )
+                    success = mode.connector_manager.add_connector(connector_config)
+                    if success:
+                        asyncio.create_task(mode.connector_manager.connect_all())
+                        return f"✅ Conector S3 '{display_name}' agregado. Conectando..."
+                    else:
+                        return "❌ Error agregando conector S3"
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
+            
+            def connect_gdrive(connector_id, display_name, auth_method, client_id, client_secret, redirect_uri, access_token, folder_ids):
+                try:
+                    mode = get_event_storage_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                    
+                    if auth_method == "token":
+                        # Conexión directa con Access Token del OAuth Playground
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="google_drive",
+                            display_name=display_name,
+                            access_token=access_token,
+                            extra_config={
+                                "folder_ids": [f.strip() for f in folder_ids.split(",")] if folder_ids else []
+                            },
+                            use_webhooks=False  # Google Drive usa polling
+                        )
+                    else:
+                        # OAuth2 completo
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="google_drive",
+                            display_name=display_name,
+                            client_id=client_id,
+                            client_secret=client_secret,
+                            redirect_uri=redirect_uri,
+                            extra_config={
+                                "folder_ids": [f.strip() for f in folder_ids.split(",")] if folder_ids else []
+                            },
+                            use_webhooks=False  # Google Drive usa polling
+                        )
+                    
+                    success = mode.connector_manager.add_connector(connector_config)
+                    if success:
+                        asyncio.create_task(mode.connector_manager.connect_all())
+                        return f"✅ Conector Google Drive '{display_name}' agregado. Conectando..."
+                    else:
+                        return "❌ Error agregando conector Google Drive"
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
+            
+            def connect_salesforce(connector_id, display_name, auth_method, username, password, security_token, domain, access_token, instance_url):
+                try:
+                    mode = get_event_storage_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                    
+                    if auth_method == "token":
+                        # Conexión directa con Access Token
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="salesforce",
+                            display_name=display_name,
+                            access_token=access_token,
+                            extra_config={
+                                "instance_url": instance_url
+                            },
+                            use_webhooks=False  # Requiere configuración en Salesforce
+                        )
+                    else:
+                        # Username/Password
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="salesforce",
+                            display_name=display_name,
+                            extra_config={
+                                "username": username,
+                                "password": password,
+                                "security_token": security_token,
+                                "domain": domain
+                            },
+                            use_webhooks=False  # Requiere configuración en Salesforce
+                        )
+                    
+                    success = mode.connector_manager.add_connector(connector_config)
+                    if success:
+                        asyncio.create_task(mode.connector_manager.connect_all())
+                        return f"✅ Conector Salesforce '{display_name}' agregado. Conectando..."
+                    else:
+                        return "❌ Error agregando conector Salesforce"
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
+            
+            def connect_servicenow(connector_id, display_name, instance_url, auth_type, username, password, client_id, client_secret, access_token):
+                try:
+                    mode = get_event_storage_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                    
+                    if auth_type == "token":
+                        # Conexión directa con Access Token
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="servicenow",
+                            display_name=display_name,
+                            access_token=access_token,
+                            extra_config={
+                                "instance_url": instance_url,
+                                "auth_type": "oauth2"  # Token implica OAuth2
+                            },
+                            use_webhooks=False  # Requiere configuración en ServiceNow
+                        )
+                    else:
+                        extra_config = {
+                            "instance_url": instance_url,
+                            "auth_type": auth_type
+                        }
+                        if auth_type == "basic":
+                            extra_config["username"] = username
+                            extra_config["password"] = password
+                        elif auth_type == "oauth2":
+                            extra_config["client_id"] = client_id
+                            extra_config["client_secret"] = client_secret
+                        
+                        connector_config = ConnectorConfig(
+                            connector_id=connector_id,
+                            connector_type="servicenow",
+                            display_name=display_name,
+                            extra_config=extra_config,
+                            use_webhooks=False  # Requiere configuración en ServiceNow
+                        )
+                    
+                    success = mode.connector_manager.add_connector(connector_config)
+                    if success:
+                        asyncio.create_task(mode.connector_manager.connect_all())
+                        return f"✅ Conector ServiceNow '{display_name}' agregado. Conectando..."
+                    else:
+                        return "❌ Error agregando conector ServiceNow"
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
+            
+            # Conectar eventos
+            sharepoint_connect_btn.click(
+                fn=connect_sharepoint,
+                inputs=[sharepoint_connector_id, sharepoint_display_name, sharepoint_auth_method, sharepoint_client_id, sharepoint_client_secret, sharepoint_tenant_id, sharepoint_redirect_uri, sharepoint_access_token, sharepoint_folders],
+                outputs=[sharepoint_status]
+            )
+            s3_connect_btn.click(
+                fn=connect_s3,
+                inputs=[s3_connector_id, s3_display_name, s3_bucket_name, s3_prefix, s3_access_key, s3_secret_key, s3_region],
+                outputs=[s3_status]
+            )
+            gdrive_connect_btn.click(
+                fn=connect_gdrive,
+                inputs=[gdrive_connector_id, gdrive_display_name, gdrive_auth_method, gdrive_client_id, gdrive_client_secret, gdrive_redirect_uri, gdrive_access_token, gdrive_folder_ids],
+                outputs=[gdrive_status]
+            )
+            sf_connect_btn.click(
+                fn=connect_salesforce,
+                inputs=[sf_connector_id, sf_display_name, sf_auth_method, sf_username, sf_password, sf_security_token, sf_domain, sf_access_token, sf_instance_url],
+                outputs=[sf_status]
+            )
+            sn_connect_btn.click(
+                fn=connect_servicenow,
+                inputs=[sn_connector_id, sn_display_name, sn_instance_url, sn_auth_type, sn_username, sn_password, sn_client_id, sn_client_secret, sn_access_token],
+                outputs=[sn_status]
+            )
+            
+            # Estado de conectores
+            with gr.Accordion("📊 Estado de Conectores", open=True):
+                connectors_status_output = gr.Markdown("")
+                refresh_connectors_btn = gr.Button("🔄 Actualizar Estado", variant="secondary")
+                
+                def refresh_connectors_status():
+                    try:
+                        mode = get_event_storage_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                        all_status = mode.connector_manager.get_all_status()
+                        
+                        if not all_status:
+                            return "ℹ️ No hay conectores configurados aún."
+                        
+                        output = "## 📊 Estado de Conectores Enterprise\n\n"
+                        for connector_id, status in all_status.items():
+                            status_emoji = "✅" if status["status"] == "connected" else "⚠️" if status["status"] == "connecting" else "❌"
+                            output += f"### {status_emoji} {status['display_name']} ({status['connector_type']})\n"
+                            output += f"- **Estado:** {status['status']}\n"
+                            output += f"- **Webhook activo:** {'Sí' if status.get('webhook_active') else 'No'}\n"
+                            output += f"- **Polling activo:** {'Sí' if status.get('polling_active') else 'No'}\n"
+                            output += f"- **Archivos detectados:** {status.get('total_files_detected', 0)}\n"
+                            output += f"- **Archivos procesados:** {status.get('total_files_processed', 0)}\n"
+                            if status.get('last_sync'):
+                                output += f"- **Última sincronización:** {status['last_sync']}\n"
+                            output += "\n"
+                        
+                        return output
+                    except Exception as e:
+                        return f"❌ Error obteniendo estado: {str(e)}"
+                
+                refresh_connectors_btn.click(fn=refresh_connectors_status, outputs=[connectors_status_output])
+
+            with gr.Row():
+                event_storage_files = gr.Files(
+                    label="📂 Event Storage Documents (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+
+            with gr.Row():
+                event_storage_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                event_storage_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            event_storage_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                event_storage_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
+                    lines=2,
+                    scale=4,
+                )
+                event_storage_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_event_storage_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_event_storage_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                event_storage_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+
+            event_storage_status = gr.Markdown(label="ℹ️ Chat Status")
+            event_storage_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+
+            def event_storage_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_event_storage_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_event_storage(history, session_id):
+                mode = get_event_storage_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["history"] = []
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                    mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_event_storage_files(files, session_id):
+                mode = get_event_storage_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["processed_files"].clear()
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_event_storage_stats(session_id):
+                mode = get_event_storage_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Event Storage\n\n"
+                output += f"### 💾 Event Storage Bus\n"
+                output += f"- Total events: {stats['event_bus']['total_events']}\n"
+                output += f"- Events/sec: {stats['event_bus'].get('events_per_second', 0):.2f}\n"
+                output += f"- Subscribers: {stats['event_bus']['subscribers_count']} (async: {stats['event_bus'].get('async_subscribers_count',0)})\n\n"
+
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\\n### 📋 Session\\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\\n"
+                    output += f"- Messages: {stats['session']['history_count']}\\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\\n"
+
+                return gr.Markdown(output, visible=True)
+
+            event_storage_submit_btn.click(
+                fn=event_storage_submit,
+                inputs=[event_storage_input, event_storage_bot, event_storage_files, event_storage_session_id, event_storage_speed_mode, event_storage_provider_toggle],
+                outputs=[event_storage_bot, event_storage_bot, event_storage_status, event_storage_stats_output],
+            ).then(
+                lambda: "", None, event_storage_input
+            )
+
+            event_storage_input.submit(
+                fn=event_storage_submit,
+                inputs=[event_storage_input, event_storage_bot, event_storage_files, event_storage_session_id, event_storage_speed_mode, event_storage_provider_toggle],
+                outputs=[event_storage_bot, event_storage_bot, event_storage_status, event_storage_stats_output],
+            ).then(
+                lambda: "", None, event_storage_input
+            )
+
+            clear_event_storage_btn.click(
+                fn=clear_event_storage,
+                inputs=[event_storage_bot, event_storage_session_id],
+                outputs=[event_storage_bot, event_storage_status, event_storage_stats_output],
+            )
+
+            clear_event_storage_files_btn.click(
+                fn=clear_event_storage_files,
+                inputs=[event_storage_files, event_storage_session_id],
+                outputs=[event_storage_files, event_storage_status, event_storage_stats_output],
+            )
+
+            event_storage_stats_btn.click(
+                fn=show_event_storage_stats,
+                inputs=[event_storage_session_id],
+                outputs=[event_storage_stats_output],
+            )
+        
+        # Tab 4.5.5.9: Extasis Mode - Clon de Event Horizon
+        with gr.Tab("🌀 Extasis"):
+            gr.Markdown("### 🌀 Extasis Mode - Event-Driven + Streaming en Tiempo Real")
+            gr.Markdown("""
+            **Arquitectura:** Clon de Event Horizon Mode con enfoque en streaming y tiempo real.
+
+            - 📡 Extasis Bus: mensajería interna + streaming
+            - ⚡ Procesamiento asíncrono (no bloquea la UI)
+            - 🔗 Workflows event-driven automáticos
+            - 📊 Estadísticas en tiempo real (eventos/segundo)
+            - 🔔 Webhooks listos para integrarse con fuentes externas
+            """)
+
+            extasis_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                extasis_files = gr.Files(
+                    label="📂 Extasis Documents (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+
+            with gr.Row():
+                extasis_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                extasis_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            extasis_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                extasis_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
+                    lines=2,
+                    scale=4,
+                )
+                extasis_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_extasis_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_extasis_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                extasis_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+
+            extasis_status = gr.Markdown(label="ℹ️ Chat Status")
+            extasis_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+
+            def extasis_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_extasis_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_extasis(history, session_id):
+                mode = get_extasis_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["history"] = []
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                    mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_extasis_files(files, session_id):
+                mode = get_extasis_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["processed_files"].clear()
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_extasis_stats(session_id):
+                mode = get_extasis_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Extasis\n\n"
+                output += f"### 📡 Extasis Bus\n"
+                output += f"- Total events: {stats['event_bus']['total_events']}\n"
+                output += f"- Events/sec: {stats['event_bus'].get('events_per_second', 0):.2f}\n"
+                output += f"- Subscribers: {stats['event_bus']['subscribers_count']} (async: {stats['event_bus'].get('async_subscribers_count',0)})\n\n"
+
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\\n### 📋 Session\\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\\n"
+                    output += f"- Messages: {stats['session']['history_count']}\\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\\n"
+
+                return gr.Markdown(output, visible=True)
+
+            extasis_submit_btn.click(
+                fn=extasis_submit,
+                inputs=[extasis_input, extasis_bot, extasis_files, extasis_session_id, extasis_speed_mode, extasis_provider_toggle],
+                outputs=[extasis_bot, extasis_bot, extasis_status, extasis_stats_output],
+            ).then(
+                lambda: "", None, extasis_input
+            )
+
+            extasis_input.submit(
+                fn=extasis_submit,
+                inputs=[extasis_input, extasis_bot, extasis_files, extasis_session_id, extasis_speed_mode, extasis_provider_toggle],
+                outputs=[extasis_bot, extasis_bot, extasis_status, extasis_stats_output],
+            ).then(
+                lambda: "", None, extasis_input
+            )
+
+            clear_extasis_btn.click(
+                fn=clear_extasis,
+                inputs=[extasis_bot, extasis_session_id],
+                outputs=[extasis_bot, extasis_status, extasis_stats_output],
+            )
+
+            clear_extasis_files_btn.click(
+                fn=clear_extasis_files,
+                inputs=[extasis_files, extasis_session_id],
+                outputs=[extasis_files, extasis_status, extasis_stats_output],
+            )
+
+            extasis_stats_btn.click(
+                fn=show_extasis_stats,
+                inputs=[extasis_session_id],
+                outputs=[extasis_stats_output],
+            )
+        
+        # Tab 4.5.5.10: Extraction X Mode - Clon de Event Horizon
+        with gr.Tab("⚡ Extraction X"):
+            gr.Markdown("### ⚡ Extraction X Mode - Extracción Inteligente + Recomendaciones Accionables")
+            gr.Markdown("""
+            **🌟 Sistema de Extracción Inteligente para Documentos Empresariales**
+
+            **📄 Procesa múltiples tipos de documentos:**
+            - PDFs, contratos, emails, documentos legales, políticas, reportes, facturas, presentaciones
+
+            **🔍 Extracción Inteligente:**
+            - ✅ Extrae entidades (personas, empresas, organizaciones)
+            - 📅 Detecta fechas críticas (vencimientos, plazos, expiraciones)
+            - ⚠️ Identifica riesgos (legales, financieros, operacionales, compliance)
+            - 📋 Genera obligaciones (contratos, regulaciones, compromisos)
+            - 📊 Extrae métricas y valores numéricos
+            - 👥 Identifica roles y responsabilidades
+            - 📑 Detecta cláusulas críticas
+
+            **🎯 Recomendaciones Accionables:**
+            - 🚨 Recomendaciones operativas (vencimientos, renovaciones)
+            - 🔴 Recomendaciones de riesgo (alto, medio, bajo)
+            - 🔒 Recomendaciones de compliance (GDPR, PCI, etc.)
+            - 🔄 Recomendaciones de workflow (asignaciones, notificaciones)
+            - 📝 Resúmenes accionables (qué hacer, qué falta, qué riesgo hay)
+
+            **⚡ Tecnología:**
+            - 📡 Extraction X Bus: mensajería interna + streaming
+            - ⚡ Procesamiento asíncrono (no bloquea la UI)
+            - 🔗 Workflows event-driven automáticos
+            - 📊 Estadísticas en tiempo real
+            """)
+
+            extraction_x_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                extraction_x_files = gr.Files(
+                    label="📂 Extraction X Documents (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+
+            with gr.Row():
+                extraction_x_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                extraction_x_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            extraction_x_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                extraction_x_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
+                    lines=2,
+                    scale=4,
+                )
+                extraction_x_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_extraction_x_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_extraction_x_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                extraction_x_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+                extraction_x_recommendations_btn = gr.Button("🎯 View Recommendations", variant="primary")
+
+            extraction_x_status = gr.Markdown(label="ℹ️ Chat Status")
+            extraction_x_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            extraction_x_recommendations_output = gr.Markdown(label="🎯 Actionable Recommendations", visible=False)
+
+            def extraction_x_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_extraction_x_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_extraction_x(history, session_id):
+                mode = get_extraction_x_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["history"] = []
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                    mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_extraction_x_files(files, session_id):
+                mode = get_extraction_x_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["processed_files"].clear()
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_extraction_x_stats(session_id):
+                mode = get_extraction_x_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Extraction X\n\n"
+                output += f"### 📡 Extraction X Bus\n"
+                output += f"- Total events: {stats['event_bus']['total_events']}\n"
+                output += f"- Events/sec: {stats['event_bus'].get('events_per_second', 0):.2f}\n"
+                output += f"- Subscribers: {stats['event_bus']['subscribers_count']} (async: {stats['event_bus'].get('async_subscribers_count',0)})\n\n"
+
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\\n### 📋 Session\\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\\n"
+                    output += f"- Messages: {stats['session']['history_count']}\\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\\n"
+
+                return gr.Markdown(output, visible=True)
+
+            extraction_x_submit_btn.click(
+                fn=extraction_x_submit,
+                inputs=[extraction_x_input, extraction_x_bot, extraction_x_files, extraction_x_session_id, extraction_x_speed_mode, extraction_x_provider_toggle],
+                outputs=[extraction_x_bot, extraction_x_bot, extraction_x_status, extraction_x_stats_output],
+            ).then(
+                lambda: "", None, extraction_x_input
+            )
+
+            extraction_x_input.submit(
+                fn=extraction_x_submit,
+                inputs=[extraction_x_input, extraction_x_bot, extraction_x_files, extraction_x_session_id, extraction_x_speed_mode, extraction_x_provider_toggle],
+                outputs=[extraction_x_bot, extraction_x_bot, extraction_x_status, extraction_x_stats_output],
+            ).then(
+                lambda: "", None, extraction_x_input
+            )
+
+            clear_extraction_x_btn.click(
+                fn=clear_extraction_x,
+                inputs=[extraction_x_bot, extraction_x_session_id],
+                outputs=[extraction_x_bot, extraction_x_status, extraction_x_stats_output],
+            )
+
+            clear_extraction_x_files_btn.click(
+                fn=clear_extraction_x_files,
+                inputs=[extraction_x_files, extraction_x_session_id],
+                outputs=[extraction_x_files, extraction_x_status, extraction_x_stats_output],
+            )
+
+            extraction_x_stats_btn.click(
+                fn=show_extraction_x_stats,
+                inputs=[extraction_x_session_id],
+                outputs=[extraction_x_stats_output],
+            )
+
+            def show_extraction_x_recommendations(session_id):
+                mode = get_extraction_x_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                summary = mode.get_actionable_summary(session_id=session_id)
+                
+                if not summary or summary.get("total_documents", 0) == 0:
+                    return gr.Markdown("## 🎯 No hay recomendaciones disponibles\n\nSube documentos para generar recomendaciones accionables.", visible=True)
+                
+                output = "## 🎯 Recomendaciones Accionables - Extraction X\n\n"
+                output += f"### 📊 Resumen General\n"
+                output += f"- **Documentos procesados:** {summary['total_documents']}\n"
+                output += f"- **Entidades extraídas:** {summary['total_entities']}\n"
+                output += f"- **Fechas críticas:** {summary['total_critical_dates']} ({summary['urgent_dates']} urgentes, {summary['expired_dates']} expiradas)\n"
+                output += f"- **Riesgos detectados:** {summary['total_risks']} ({summary['high_risks']} altos)\n"
+                output += f"- **Obligaciones:** {summary['total_obligations']}\n"
+                output += f"- **Recomendaciones:** {summary['total_recommendations']}\n\n"
+                
+                # Mostrar recomendaciones por prioridad
+                output += "### 🚨 Recomendaciones de Alta Prioridad\n\n"
+                high_priority = [r for r in summary['recommendations'] if r.get('priority') == 'alta']
+                if high_priority:
+                    for i, rec in enumerate(high_priority[:10], 1):
+                        output += f"#### {i}. {rec.get('title', 'Recomendación')}\n"
+                        output += f"- **Tipo:** {rec.get('type', 'N/A')} | **Categoría:** {rec.get('category', 'N/A')}\n"
+                        output += f"- **Acción:** {rec.get('action', 'N/A')}\n"
+                        output += f"- **Asignar a:** {rec.get('assign_to', 'N/A')}\n"
+                        output += f"- **Plazo:** {rec.get('deadline', 'N/A')}\n"
+                        output += f"- **Archivo:** {rec.get('source_file', 'N/A')}\n\n"
+                else:
+                    output += "✅ No hay recomendaciones de alta prioridad.\n\n"
+                
+                # Recomendaciones de media prioridad
+                output += "### ⚠️ Recomendaciones de Media Prioridad\n\n"
+                medium_priority = [r for r in summary['recommendations'] if r.get('priority') == 'media']
+                if medium_priority:
+                    for i, rec in enumerate(medium_priority[:10], 1):
+                        output += f"#### {i}. {rec.get('title', 'Recomendación')}\n"
+                        output += f"- **Tipo:** {rec.get('type', 'N/A')} | **Categoría:** {rec.get('category', 'N/A')}\n"
+                        output += f"- **Acción:** {rec.get('action', 'N/A')}\n"
+                        output += f"- **Asignar a:** {rec.get('assign_to', 'N/A')}\n"
+                        output += f"- **Plazo:** {rec.get('deadline', 'N/A')}\n"
+                        output += f"- **Archivo:** {rec.get('source_file', 'N/A')}\n\n"
+                else:
+                    output += "✅ No hay recomendaciones de media prioridad.\n\n"
+                
+                # Agrupar por tipo
+                output += "### 📋 Recomendaciones por Tipo\n\n"
+                for rec_type, recs in summary.get('recommendations_by_type', {}).items():
+                    output += f"#### {rec_type.upper()}: {len(recs)} recomendaciones\n"
+                    for rec in recs[:5]:
+                        output += f"- {rec.get('title', 'Recomendación')}: {rec.get('action', '')[:100]}...\n"
+                    output += "\n"
+                
+                return gr.Markdown(output, visible=True)
+
+            extraction_x_recommendations_btn.click(
+                fn=show_extraction_x_recommendations,
+                inputs=[extraction_x_session_id],
+                outputs=[extraction_x_recommendations_output],
+            )
+        
+        # Tab 4.5.5.11: Data Point Mode - Clon de Event Horizon
+        with gr.Tab("📊 Data Point"):
+            gr.Markdown("### 📊 Data Point Mode - Event-Driven + Streaming en Tiempo Real")
+            gr.Markdown("""
+            **Arquitectura:** Clon de Event Horizon Mode con enfoque en streaming y tiempo real.
+
+            - 📡 Data Point Bus: mensajería interna + streaming
+            - ⚡ Procesamiento asíncrono (no bloquea la UI)
+            - 🔗 Workflows event-driven automáticos
+            - 📊 Estadísticas en tiempo real (eventos/segundo)
+            - 🔔 Webhooks listos para integrarse con fuentes externas
+            """)
+
+            data_point_session_id = gr.State(value=str(uuid.uuid4()))
+
+            with gr.Row():
+                data_point_files = gr.Files(
+                    label="📂 Data Point Documents (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+
+            with gr.Row():
+                data_point_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                data_point_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                )
+
+            data_point_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+
+            with gr.Row():
+                data_point_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these documents?",
+                    lines=2,
+                    scale=4,
+                )
+                data_point_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            with gr.Row():
+                clear_data_point_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_data_point_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                data_point_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+
+            data_point_status = gr.Markdown(label="ℹ️ Chat Status")
+            data_point_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+
+            def data_point_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                new_history, error = run_data_point_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def clear_data_point(history, session_id):
+                mode = get_data_point_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["history"] = []
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                    mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+
+            def clear_data_point_files(files, session_id):
+                mode = get_data_point_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(mode, 'sessions') and session_id in mode.sessions:
+                    mode.sessions[session_id]["processed_files"].clear()
+                    mode.sessions[session_id]["docs"] = []
+                    mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+
+            def show_data_point_stats(session_id):
+                mode = get_data_point_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = mode.get_statistics(session_id=session_id)
+
+                output = "## 📊 Advanced Statistics - Data Point\n\n"
+                output += f"### 📡 Data Point Bus\n"
+                output += f"- Total events: {stats['event_bus']['total_events']}\n"
+                output += f"- Events/sec: {stats['event_bus'].get('events_per_second', 0):.2f}\n"
+                output += f"- Subscribers: {stats['event_bus']['subscribers_count']} (async: {stats['event_bus'].get('async_subscribers_count',0)})\n\n"
+
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+
+                if 'session' in stats:
+                    output += f"\\n### 📋 Session\\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\\n"
+                    output += f"- Messages: {stats['session']['history_count']}\\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\\n"
+
+                return gr.Markdown(output, visible=True)
+
+            data_point_submit_btn.click(
+                fn=data_point_submit,
+                inputs=[data_point_input, data_point_bot, data_point_files, data_point_session_id, data_point_speed_mode, data_point_provider_toggle],
+                outputs=[data_point_bot, data_point_bot, data_point_status, data_point_stats_output],
+            ).then(
+                lambda: "", None, data_point_input
+            )
+
+            data_point_input.submit(
+                fn=data_point_submit,
+                inputs=[data_point_input, data_point_bot, data_point_files, data_point_session_id, data_point_speed_mode, data_point_provider_toggle],
+                outputs=[data_point_bot, data_point_bot, data_point_status, data_point_stats_output],
+            ).then(
+                lambda: "", None, data_point_input
+            )
+
+            clear_data_point_btn.click(
+                fn=clear_data_point,
+                inputs=[data_point_bot, data_point_session_id],
+                outputs=[data_point_bot, data_point_status, data_point_stats_output],
+            )
+
+            clear_data_point_files_btn.click(
+                fn=clear_data_point_files,
+                inputs=[data_point_files, data_point_session_id],
+                outputs=[data_point_files, data_point_status, data_point_stats_output],
+            )
+
+            data_point_stats_btn.click(
+                fn=show_data_point_stats,
+                inputs=[data_point_session_id],
+                outputs=[data_point_stats_output],
+            )
         
         # Tab 4.5.6: Company Knowledge (NUEVO - Con conexión de apps y tareas autónomas)
         with gr.Tab("📚 Company Knowledge"):
@@ -17401,19 +24730,80 @@ Genera el análisis ahora siguiendo EXACTAMENTE el formato especificado arriba.
                                             traceback.print_exc()
                                             # Continuar sin streaming si falla
                                     
-                                    # Ejecutar process_query_async (ya optimizado con todas las mejoras)
-                                    # Si ya tenemos resultados de la búsqueda con streaming, pasarlos directamente
-                                    new_hist, err, meta = loop.run_until_complete(
-                                        company_knowledge.process_query_async(
-                                            session_id=session_id,
-                                            message=message,
-                                            history=history,
-                                            speed_mode=speed_mode,
-                                            provider=provider,
-                                            filters=filters,
-                                            urls_in_bullets=urls_in_bullets
-                                        )
-                                    )
+                                    # Ejecutar process_query_async con streaming en tiempo real (como Enterprise API)
+                                    # process_query_async es un async generator que yield actualizaciones en tiempo real
+                                    async def consume_with_streaming():
+                                        async_gen = None
+                                        final_result = None
+                                        
+                                        try:
+                                            async_gen = company_knowledge.process_query_async(
+                                                session_id=session_id,
+                                                message=message,
+                                                history=history,
+                                                speed_mode=speed_mode,
+                                                provider=provider,
+                                                filters=filters,
+                                                urls_in_bullets=urls_in_bullets
+                                            )
+                                            
+                                            # Consumir el async generator y yield cada actualización en tiempo real
+                                            async for update in async_gen:
+                                                new_hist, err, meta = update
+                                                
+                                                # Verificar si es un fallo silencioso
+                                                if meta.get("silent_fail", False):
+                                                    return (history, None, meta)
+                                                
+                                                # Si hay error, retornar
+                                                if err:
+                                                    return (new_hist, err, meta)
+                                                
+                                                # Guardar resultado final (se actualiza con cada yield)
+                                                final_result = (new_hist, err, meta)
+                                            
+                                            # Retornar resultado final
+                                            return final_result if final_result else (history, "❌ Error: No se generó respuesta", {})
+                                        
+                                        except StopAsyncIteration:
+                                            return final_result if final_result else (history, "❌ Error: No se generó respuesta", {})
+                                        except Exception as e:
+                                            print(f"⚠️ [Company Knowledge] Error en async generator: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                                            return (history, f"❌ Error: {str(e)}", {})
+                                        finally:
+                                            # CRÍTICO: Cerrar el generator correctamente
+                                            if async_gen is not None:
+                                                try:
+                                                    await async_gen.aclose()
+                                                except Exception as close_error:
+                                                    pass
+                                    
+                                    # Ejecutar y obtener resultado final
+                                    new_hist, err, meta = loop.run_until_complete(consume_with_streaming())
+                                    
+                                    # CRÍTICO: Cerrar el loop correctamente para evitar warnings
+                                    try:
+                                        # Cancelar todas las tareas pendientes
+                                        pending = asyncio.all_tasks(loop)
+                                        for task in pending:
+                                            if not task.done():
+                                                task.cancel()
+                                        # Ejecutar todas las cancelaciones
+                                        if pending:
+                                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                                    except Exception as cleanup_error:
+                                        # Ignorar errores de limpieza
+                                        pass
+                                    
+                                    # Verificar si es un fallo silencioso (tokens expirados - no mostrar nada)
+                                    silent_fail = meta.get("silent_fail", False)
+                                    if silent_fail:
+                                        # No mostrar nada al usuario - simplemente retornar sin respuesta
+                                        print(f"⚠️ [Company Knowledge] Fallo silencioso (tokens expirados) - No mostrando mensaje al usuario")
+                                        yield history, history, "", gr.Markdown(visible=False), gr.Markdown("", visible=False)
+                                        return
                                     
                                     if err:
                                         error_history = history + [(message, f"❌ {err}")]

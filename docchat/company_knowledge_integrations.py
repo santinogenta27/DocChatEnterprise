@@ -1906,28 +1906,14 @@ class CompanyKnowledgeIntegrations:
             
             print(f"🔍 [Google Drive] Status code: {response.status_code}")
             
-            # Manejar error 401 ANTES de procesar cualquier cosa
+            # Manejar error 401 SILENCIOSAMENTE (no mostrar error al usuario, no desconectar)
             if response.status_code == 401:
-                print(f"❌ [Google Drive] Error 401: Token inválido o expirado")
-                # Retornar resultado especial indicando que el token expiró
-                error_result = AppSearchResult(
-                    app_type=IntegrationType.GOOGLE_DRIVE,
-                    app_name="Google Drive",
-                    source_id="error_401",
-                    source_name="Token expirado - Reconecta Google Drive",
-                    content="",
-                    snippet="⚠️ **Token de Google Drive expirado**\n\nPor favor, ve a la pestaña 'Conectar Apps' y reconecta Google Drive para continuar.",
-                    url="",
-                    metadata={
-                        "error": "token_expired",
-                        "error_code": 401,
-                        "error_message": "Token inválido o expirado. Reconecta Google Drive en 'Conectar Apps'."
-                    },
-                    relevance_score=0.0
-                )
-                results.append(error_result)
-                print(f"📊 [Google Drive] Retornando resultado de error (token expirado)")
-                return results  # Retornar inmediatamente sin procesar más
+                print(f"⚠️ [Google Drive] Token expirado (401) - Continuando silenciosamente sin mostrar error al usuario")
+                # NO retornar error_result - simplemente retornar lista vacía
+                # Esto permite que la app continúe funcionando con otras apps conectadas
+                # El usuario puede seguir usando la app sin problemas
+                print(f"📊 [Google Drive] Retornando lista vacía (token expirado - no se muestra error al usuario)")
+                return results  # Retornar lista vacía (ya está inicializada como [])
             
             if response.status_code == 200:
                 data = response.json()
@@ -1961,11 +1947,17 @@ class CompanyKnowledgeIntegrations:
                     
                     # Si es PDF, verificar límite ANTES de procesar
                     if mime_type == "application/pdf":
+                        # CRÍTICO: Verificar límite ANTES de incrementar contador
                         if pdf_count >= max_pdfs_to_process:
-                            print(f"⏸️ [Google Drive] Límite de {max_pdfs_to_process} PDFs alcanzado. Saltando {name}")
+                            print(f"⏸️ [Google Drive] Límite de {max_pdfs_to_process} PDFs alcanzado. Saltando {name} y todos los PDFs siguientes.")
                             continue  # Saltar PDFs adicionales
                         pdf_count += 1
                         print(f"📄 [Google Drive] Procesando PDF {pdf_count}/{max_pdfs_to_process}: {name}")
+                        
+                        # CRÍTICO: Si ya alcanzamos el límite después de incrementar, salir del loop
+                        if pdf_count > max_pdfs_to_process:
+                            print(f"🛑 [Google Drive] Límite excedido. Deteniendo procesamiento de PDFs.")
+                            break
                     
                     # Intentar obtener contenido para Google Docs/Sheets/PDFs
                     content = ""
@@ -2084,10 +2076,17 @@ class CompanyKnowledgeIntegrations:
                     final_snippet = snippet if snippet else (content[:200] if content else f"Archivo encontrado: {name}")
                     final_content = content if content else f"Archivo: {name}"
                     
-                    # Solo agregar a resultados si no es PDF o si aún no hemos alcanzado el límite
-                    # (para PDFs, ya verificamos el límite antes de procesar, pero por seguridad verificamos de nuevo)
-                    if mime_type == "application/pdf" and pdf_count > max_pdfs_to_process:
-                        continue  # No agregar este PDF a resultados
+                    # CRÍTICO: Solo agregar a resultados si no es PDF o si aún no hemos alcanzado el límite
+                    # Verificación doble para asegurar que NO se agreguen PDFs adicionales
+                    if mime_type == "application/pdf":
+                        if pdf_count > max_pdfs_to_process:
+                            print(f"🚫 [Google Drive] NO agregando PDF {name} a resultados (límite: {max_pdfs_to_process}, procesados: {pdf_count})")
+                            continue  # No agregar este PDF a resultados
+                        # Verificación adicional: si ya tenemos suficientes PDFs en resultados, no agregar más
+                        pdf_results_so_far = [r for r in results if r.metadata.get("mime_type") == "application/pdf"]
+                        if len(pdf_results_so_far) >= max_pdfs_to_process:
+                            print(f"🚫 [Google Drive] Ya tenemos {len(pdf_results_so_far)} PDFs en resultados. NO agregando más.")
+                            continue
                     
                     results.append(AppSearchResult(
                         app_type=IntegrationType.GOOGLE_DRIVE,
@@ -2106,11 +2105,26 @@ class CompanyKnowledgeIntegrations:
                         relevance_score=min(relevance, 1.0)  # Cap a 1.0
                     ))
                 
-                # Mensaje final con resumen
+                # Mensaje final con resumen - VERIFICACIÓN CRÍTICA DEL LÍMITE
                 pdf_results = [r for r in results if r.metadata.get("mime_type") == "application/pdf"]
-                print(f"✅ [Google Drive] Procesados {len(pdf_results)} PDFs de {max_pdfs_to_process} permitidos. Total resultados: {len(results)}")
-                if len(pdf_results) >= max_pdfs_to_process:
-                    print(f"⚠️ [Google Drive] Se alcanzó el límite de {max_pdfs_to_process} PDFs. Se omitieron PDFs adicionales.")
+                actual_pdf_count = len(pdf_results)
+                
+                # CRÍTICO: Asegurar que NO excedamos el límite (por seguridad, truncar si es necesario)
+                if actual_pdf_count > max_pdfs_to_process:
+                    print(f"⚠️ [Google Drive] ADVERTENCIA: Se procesaron {actual_pdf_count} PDFs pero el límite era {max_pdfs_to_process}. Truncando resultados...")
+                    pdf_results = pdf_results[:max_pdfs_to_process]
+                    # Remover PDFs excedentes de results
+                    non_pdf_results = [r for r in results if r.metadata.get("mime_type") != "application/pdf"]
+                    results = non_pdf_results + pdf_results
+                    actual_pdf_count = len(pdf_results)
+                    print(f"✅ [Google Drive] Resultados truncados a {actual_pdf_count} PDFs (límite: {max_pdfs_to_process})")
+                
+                # Mensaje final confirmando el límite
+                print(f"✅ [Google Drive] Procesados EXACTAMENTE {actual_pdf_count} PDFs de {max_pdfs_to_process} permitidos. Total resultados: {len(results)}")
+                if actual_pdf_count >= max_pdfs_to_process:
+                    print(f"✅ [Google Drive] ✓ Límite de {max_pdfs_to_process} PDFs respetado correctamente. Se omitieron PDFs adicionales.")
+                elif actual_pdf_count < max_pdfs_to_process:
+                    print(f"ℹ️ [Google Drive] Se procesaron {actual_pdf_count} PDFs (menos que el límite de {max_pdfs_to_process} porque no había más disponibles).")
             elif response.status_code == 403:
                 print(f"❌ [Google Drive] Error 403: Token sin permisos suficientes. Verifica los scopes.")
                 print(f"   Response: {response.text[:200]}")

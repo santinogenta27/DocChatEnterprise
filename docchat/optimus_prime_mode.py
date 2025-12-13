@@ -1,5 +1,5 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+Optimus Prime Mode - Sistema Multi-Agente RAG de Máxima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
@@ -47,11 +47,12 @@ from .test_time_training import TestTimeTrainer
 from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
+from .situational_reasoning import SituationalReasoner, ReasoningType
 
 
-class AlienMode:
+class OptimusPrimeMode:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    Optimus Prime Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
@@ -87,7 +88,7 @@ class AlienMode:
         
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY requerida para Optimus Prime Mode")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -143,6 +144,12 @@ class AlienMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # Situational Reasoning Module - Instruction-Grounded, Context-Aware Reasoning
+        self.situational_reasoner = SituationalReasoner(
+            llm=self.llm,
+            config=config
+        )
+        
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
     
@@ -191,7 +198,7 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [Optimus Prime Mode] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -206,7 +213,7 @@ class AlienMode:
             # Reconstruir retriever
             if session["docs"]:
                 session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                print(f"✅ [Optimus Prime Mode] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {
                 "status": "success",
@@ -216,7 +223,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"❌ [Optimus Prime Mode] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -259,6 +266,29 @@ class AlienMode:
         
         start_time = time.time()
         
+        # DETECTAR si es una pregunta estratégica que requiere Situational Reasoning
+        reasoning_type = self.situational_reasoner._detect_reasoning_type(message)
+        is_strategic_query = reasoning_type != ReasoningType.STRATEGIC_INSIGHTS or any(
+            keyword in message.lower() for keyword in [
+                "cómo podemos mejorar", "how can we improve", "qué nos está pasando",
+                "what is happening", "qué deberíamos hacer", "what should we do",
+                "qué hacer", "mejoras", "recomendaciones", "recomendación",
+                "qué decisión", "what decision", "deberíamos", "should we"
+            ]
+        )
+        
+        # Si es una pregunta estratégica, usar Situational Reasoning
+        if is_strategic_query:
+            return await self._process_strategic_query(
+                session_id=session_id,
+                message=message,
+                history=history,
+                all_docs=all_docs,
+                reasoning_type=reasoning_type,
+                speed_mode=speed_mode,
+                provider=provider
+            )
+        
         # Si usar procesamiento paralelo, procesar cada documento por separado
         if use_parallel_processing:
             return await self._process_query_parallel(
@@ -281,7 +311,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [Optimus Prime Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -317,7 +347,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"⚠️ [Optimus Prime Mode] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -334,7 +364,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"⚠️ [Optimus Prime Mode] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -347,7 +377,7 @@ class AlienMode:
                 # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"⚠️ [Optimus Prime Mode] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -518,7 +548,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "optimus_prime_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -910,7 +940,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [Optimus Prime Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -929,7 +959,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [Optimus Prime Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1097,7 +1127,7 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
         # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        print(f"🔄 [Optimus Prime Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1109,9 +1139,9 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    print(f"✅ [Optimus Prime Mode] Análisis completado para: {Path(doc_name).name}")
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
+                    print(f"❌ [Optimus Prime Mode] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
         # OPCIÓN A: Mostrar todos los análisis individuales
@@ -1241,6 +1271,112 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         
         return tuple_history, None, metadata
     
+    async def _process_strategic_query(
+        self,
+        session_id: str,
+        message: str,
+        history: List[Tuple[str, str]],
+        all_docs: List[Document],
+        reasoning_type: ReasoningType,
+        speed_mode: str = "balanced",
+        provider: str = "openai"
+    ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
+        """
+        Procesa consultas estratégicas usando Situational Reasoning.
+        Implementa Instruction-Grounded, Context-Aware Reasoning con:
+        - Synthesis: Combinar info de múltiples documentos
+        - Abstraction: Resumir a alto nivel
+        - Inference: Leer entre líneas
+        - Recommendation: Consejo estratégico
+        - Decision Support: Insights accionables
+        """
+        session = self.sessions.get(session_id, {})
+        start_time = time.time()
+        
+        print(f"🧠 [Optimus Prime Mode] Procesando consulta estratégica: {reasoning_type.value}")
+        
+        try:
+            # Usar SituationalReasoner para análisis estratégico
+            report, assessment = self.situational_reasoner.analyze_situation(
+                query=message,
+                documents=all_docs
+            )
+            
+            # Formatear respuesta con información adicional
+            formatted_answer = report
+            
+            # Agregar información del proceso
+            formatted_answer += "\n\n---\n\n"
+            formatted_answer += "## 🧠 Proceso de Reasoning Estratégico\n\n"
+            formatted_answer += f"**Tipo de Análisis:** {reasoning_type.value.replace('_', ' ').title()}\n"
+            formatted_answer += f"**Documentos Analizados:** {len(all_docs)}\n"
+            formatted_answer += f"**Nivel de Confianza:** {assessment.confidence_score*100:.0f}%\n"
+            formatted_answer += f"**Hallazgos Identificados:** {len(assessment.key_findings)}\n"
+            formatted_answer += f"**Problemas:** {len(assessment.problems_identified)}\n"
+            formatted_answer += f"**Oportunidades:** {len(assessment.opportunities_identified)}\n"
+            formatted_answer += f"**Riesgos:** {len(assessment.risks_identified)}\n"
+            formatted_answer += f"**Recomendaciones:** {len(assessment.recommendations)}\n\n"
+            
+            formatted_answer += "**Capacidades Utilizadas:**\n"
+            formatted_answer += "- ✅ **Synthesis:** Combinación de información de múltiples documentos\n"
+            formatted_answer += "- ✅ **Abstraction:** Resumen ejecutivo de alto nivel\n"
+            formatted_answer += "- ✅ **Inference:** Lectura entre líneas e insights no obvios\n"
+            formatted_answer += "- ✅ **Recommendation:** Recomendaciones estratégicas accionables\n"
+            formatted_answer += "- ✅ **Decision Support:** Apoyo a la toma de decisiones\n"
+            formatted_answer += "- ✅ **Instruction-Grounded Reasoning:** Análisis alineado con el prompt\n"
+            formatted_answer += "- ✅ **Context-Aware:** Comprensión situacional completa\n"
+            
+            # Actualizar historial
+            session["history"].append({
+                "question": message,
+                "answer": formatted_answer,
+                "reasoning_type": reasoning_type.value,
+                "assessment": {
+                    "confidence": assessment.confidence_score,
+                    "findings_count": len(assessment.key_findings),
+                    "recommendations_count": len(assessment.recommendations)
+                },
+                "timestamp": datetime.now().isoformat(),
+                "processing_mode": "situational_reasoning"
+            })
+            
+            execution_time = time.time() - start_time
+            metadata = {
+                "execution_time": execution_time,
+                "reasoning_type": reasoning_type.value,
+                "confidence_score": assessment.confidence_score,
+                "findings_count": len(assessment.key_findings),
+                "recommendations_count": len(assessment.recommendations),
+                "processing_mode": "situational_reasoning"
+            }
+            
+            # Convertir historial a formato tuples para Gradio
+            tuple_history = []
+            for entry in session["history"]:
+                if isinstance(entry, dict):
+                    tuple_history.append((entry.get("question", ""), entry.get("answer", "")))
+                else:
+                    tuple_history.append(entry)
+            
+            return tuple_history, None, metadata
+            
+        except Exception as e:
+            error_msg = f"❌ Error en análisis estratégico: {str(e)}"
+            print(f"❌ [Optimus Prime Mode] {error_msg}")
+            
+            # Actualizar historial con error
+            if history and isinstance(history[0], dict):
+                tuple_history = []
+                for i in range(0, len(history) - 1, 2):
+                    if i + 1 < len(history):
+                        user_msg = history[i].get("content", "") if isinstance(history[i], dict) else history[i]
+                        bot_msg = history[i + 1].get("content", "") if isinstance(history[i + 1], dict) else history[i + 1]
+                        tuple_history.append((user_msg, bot_msg))
+                history = tuple_history
+            
+            history.append((message, error_msg))
+            return history, error_msg, {}
+    
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
@@ -1269,30 +1405,30 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_optimus_prime_mode_instance: Optional[OptimusPrimeMode] = None
 
 
-def get_alien_mode(
+def get_optimus_prime_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> OptimusPrimeMode:
+    """Obtiene o crea la instancia global de Optimus Prime Mode."""
+    global _optimus_prime_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _optimus_prime_mode_instance is None:
+        _optimus_prime_mode_instance = OptimusPrimeMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _optimus_prime_mode_instance
 
 
-def run_alien_mode(
+def run_optimus_prime_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1305,14 +1441,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
+    Función principal para ejecutar Optimus Prime Mode.
     Compatible con Gradio (síncrona).
     """
     if not config or not processor or not retriever_builder:
         return history, "❌ Configuración incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    optimus_prime_mode = get_optimus_prime_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1321,7 +1457,7 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = optimus_prime_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
     
@@ -1330,7 +1466,7 @@ def run_alien_mode(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            optimus_prime_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,

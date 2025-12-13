@@ -1,5 +1,5 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+Judge Agent Mode - Sistema Multi-Agente RAG de Máxima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
@@ -49,9 +49,9 @@ from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
 
 
-class AlienMode:
+class JudgeAgentMode:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    Judge Agent Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
@@ -87,7 +87,7 @@ class AlienMode:
         
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY requerida para Judge Agent Mode")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -143,8 +143,24 @@ class AlienMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # AI Agents-as-Judge: Sistema de evaluación de documentos empresariales
+        # Integración con CrewAI para agentes especializados
+        try:
+            from .integrations.crewai_integration import CrewAIIntegration
+            self.crewai = CrewAIIntegration(config)
+            print("✅ [Judge Agent Mode] CrewAI integrado para evaluación de documentos")
+        except Exception as e:
+            print(f"⚠️ [Judge Agent Mode] CrewAI no disponible: {e}")
+            self.crewai = None
+        
+        # Inicializar agentes especializados de evaluación
+        self._initialize_evaluation_agents()
+        
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
+        
+        # Métricas de evaluación acumuladas
+        self.evaluation_metrics: Dict[str, Dict[str, Any]] = {}
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
         """Inicializa una nueva sesión."""
@@ -191,7 +207,7 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [Judge Agent Mode] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -206,7 +222,7 @@ class AlienMode:
             # Reconstruir retriever
             if session["docs"]:
                 session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                print(f"✅ [Judge Agent Mode] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {
                 "status": "success",
@@ -216,7 +232,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"❌ [Judge Agent Mode] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -281,7 +297,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [Judge Agent Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -317,7 +333,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"⚠️ [Judge Agent Mode] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -334,7 +350,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"⚠️ [Judge Agent Mode] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -347,7 +363,7 @@ class AlienMode:
                 # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"⚠️ [Judge Agent Mode] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -518,7 +534,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "judge_agent_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -910,7 +926,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [Judge Agent Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -929,7 +945,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [Judge Agent Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1097,7 +1113,7 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
         # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        print(f"🔄 [Judge Agent Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1109,9 +1125,9 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    print(f"✅ [Judge Agent Mode] Análisis completado para: {Path(doc_name).name}")
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
+                    print(f"❌ [Judge Agent Mode] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
         # OPCIÓN A: Mostrar todos los análisis individuales
@@ -1241,6 +1257,652 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         
         return tuple_history, None, metadata
     
+    # ============================================================================
+    # AI AGENTS-AS-JUDGE: Sistema de Evaluación de Documentos Empresariales
+    # Implementa evaluación automática de Accuracy, Consistency, Completeness, Clarity
+    # ============================================================================
+    
+    def _initialize_evaluation_agents(self):
+        """Inicializa los agentes especializados para evaluación de documentos empresariales."""
+        # Los agentes se crearán bajo demanda cuando se necesiten
+        self.evaluation_agents = {
+            "format_checker": None,
+            "factual_checker": None,
+            "terminology_checker": None,
+            "redundancy_checker": None,
+            "completeness_checker": None,
+            "clarity_checker": None
+        }
+    
+    def _create_evaluation_agent(self, agent_type: str) -> Optional[Any]:
+        """Crea un agente especializado de evaluación usando CrewAI si está disponible."""
+        if not self.crewai:
+            return None
+        
+        agent_configs = {
+            "format_checker": {
+                "role": "Template Compliance Expert",
+                "goal": "Verify that document sections follow the required template structure and format",
+                "backstory": "You are an expert in document template compliance. You check if sections match required layouts, include mandatory fields, and follow formatting rules."
+            },
+            "factual_checker": {
+                "role": "Factual Accuracy Validator",
+                "goal": "Verify factual accuracy of information, data, and statements within documents",
+                "backstory": "You are an expert fact-checker. You validate that all facts, data, and statements are accurate and can be verified."
+            },
+            "terminology_checker": {
+                "role": "Terminology Consistency Specialist",
+                "goal": "Ensure consistent use of terminology, technical terms, and industry-specific language throughout the document",
+                "backstory": "You are a terminology expert. You ensure that technical terms, industry jargon, and key concepts are used consistently across all document sections."
+            },
+            "redundancy_checker": {
+                "role": "Redundancy Detection Analyst",
+                "goal": "Identify redundant information, repeated content, or unnecessary duplication across document sections",
+                "backstory": "You are an efficiency expert. You identify when information is repeated unnecessarily or when content could be consolidated."
+            },
+            "completeness_checker": {
+                "role": "Document Completeness Auditor",
+                "goal": "Verify that all required sections, information, and elements are present and complete",
+                "backstory": "You are a completeness auditor. You check that all mandatory sections, required fields, and essential information are present in the document."
+            },
+            "clarity_checker": {
+                "role": "Clarity and Readability Expert",
+                "goal": "Assess document clarity, readability, and appropriate use of language for the target audience",
+                "backstory": "You are a clarity expert. You evaluate whether the document is clear, well-written, and appropriate for its intended audience."
+            }
+        }
+        
+        if agent_type not in agent_configs:
+            return None
+        
+        config = agent_configs[agent_type]
+        try:
+            agent = self.crewai.create_agent(
+                agent_id=agent_type,
+                role=config["role"],
+                goal=config["goal"],
+                backstory=config["backstory"],
+                verbose=False
+            )
+            return agent
+        except Exception as e:
+            print(f"⚠️ [Judge Agent Mode] Error creando agente {agent_type}: {e}")
+            return None
+    
+    def _segment_document(self, doc_content: str, doc_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Segmenta un documento en secciones basándose en su estructura.
+        
+        Args:
+            doc_content: Contenido completo del documento
+            doc_metadata: Metadatos del documento
+            
+        Returns:
+            Lista de secciones con su contenido y metadatos
+        """
+        sections = []
+        
+        # Intentar detectar secciones por headers comunes
+        common_headers = [
+            "Introduction", "Executive Summary", "Business Needs", "Solution Overview",
+            "Assumptions", "Constraints", "Risk Analysis", "Test Cases", "Conclusion",
+            "Introducción", "Resumen Ejecutivo", "Necesidades del Negocio", "Visión General de la Solución",
+            "Supuestos", "Restricciones", "Análisis de Riesgos", "Casos de Prueba", "Conclusión"
+        ]
+        
+        lines = doc_content.split('\n')
+        current_section = {"name": "Introduction", "content": "", "start_line": 0}
+        
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            
+            # Detectar si es un header
+            is_header = False
+            for header in common_headers:
+                if header.lower() in line_stripped.lower() and len(line_stripped) < 100:
+                    # Guardar sección anterior
+                    if current_section["content"].strip():
+                        sections.append({
+                            "name": current_section["name"],
+                            "content": current_section["content"].strip(),
+                            "start_line": current_section["start_line"],
+                            "end_line": i
+                        })
+                    
+                    # Nueva sección
+                    current_section = {
+                        "name": header,
+                        "content": "",
+                        "start_line": i
+                    }
+                    is_header = True
+                    break
+            
+            if not is_header:
+                current_section["content"] += line + "\n"
+        
+        # Agregar última sección
+        if current_section["content"].strip():
+            sections.append({
+                "name": current_section["name"],
+                "content": current_section["content"].strip(),
+                "start_line": current_section["start_line"],
+                "end_line": len(lines)
+            })
+        
+        # Si no se encontraron secciones, crear una sección única
+        if not sections:
+            sections.append({
+                "name": "Full Document",
+                "content": doc_content,
+                "start_line": 0,
+                "end_line": len(lines)
+            })
+        
+        return sections
+    
+    async def _evaluate_section_with_agent(
+        self,
+        agent_type: str,
+        section: Dict[str, Any],
+        document_context: str
+    ) -> Dict[str, Any]:
+        """
+        Evalúa una sección del documento usando un agente especializado.
+        
+        Args:
+            agent_type: Tipo de agente (format_checker, factual_checker, etc.)
+            section: Información de la sección a evaluar
+            document_context: Contexto completo del documento
+            
+        Returns:
+            Resultado de evaluación estructurado en JSON
+        """
+        # Crear agente si no existe
+        if self.evaluation_agents[agent_type] is None:
+            self.evaluation_agents[agent_type] = self._create_evaluation_agent(agent_type)
+        
+        # Si CrewAI no está disponible, usar LLM directo
+        if not self.crewai or not self.evaluation_agents[agent_type]:
+            return await self._evaluate_section_with_llm(agent_type, section, document_context)
+        
+        # Usar CrewAI para evaluación
+        try:
+            # Crear task para el agente
+            evaluation_prompt = self._build_evaluation_prompt(agent_type, section, document_context)
+            
+            task = self.crewai.create_task(
+                task_id=f"{agent_type}_{section['name']}",
+                description=evaluation_prompt,
+                agent_id=agent_type
+            )
+            
+            # Ejecutar task
+            crew = self.crewai.create_crew(
+                crew_id=f"evaluation_{agent_type}",
+                agents=[self.evaluation_agents[agent_type]],
+                tasks=[task],
+                process="sequential"
+            )
+            
+            result = self.crewai.execute_crew(crew_id=f"evaluation_{agent_type}", inputs={})
+            
+            # Parsear resultado a JSON
+            return self._parse_evaluation_result(result, agent_type)
+            
+        except Exception as e:
+            print(f"⚠️ [Judge Agent Mode] Error en evaluación con CrewAI: {e}")
+            # Fallback a LLM directo
+            return await self._evaluate_section_with_llm(agent_type, section, document_context)
+    
+    async def _evaluate_section_with_llm(
+        self,
+        agent_type: str,
+        section: Dict[str, Any],
+        document_context: str
+    ) -> Dict[str, Any]:
+        """Evalúa una sección usando LLM directo (sin CrewAI)."""
+        prompt = self._build_evaluation_prompt(agent_type, section, document_context)
+        
+        try:
+            response = self.llm.invoke(prompt)
+            result_text = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+            return self._parse_evaluation_result(result_text, agent_type)
+        except Exception as e:
+            print(f"⚠️ [Judge Agent Mode] Error en evaluación con LLM: {e}")
+            return {
+                "score": 0,
+                "comments": f"Error en evaluación: {str(e)}",
+                "missing_elements": [],
+                "issues": [],
+                "agent_type": agent_type
+            }
+    
+    def _build_evaluation_prompt(
+        self,
+        agent_type: str,
+        section: Dict[str, Any],
+        document_context: str
+    ) -> str:
+        """Construye el prompt de evaluación para un agente específico."""
+        agent_prompts = {
+            "format_checker": """You are a Template Compliance Expert. Evaluate this document section for template compliance.
+
+SECTION NAME: {section_name}
+SECTION CONTENT:
+{section_content}
+
+FULL DOCUMENT CONTEXT:
+{document_context}
+
+INSTRUCTIONS:
+- Check if this section follows the required template structure
+- Verify that mandatory fields are present
+- Check formatting rules compliance
+- Rate compliance from 1 (poor) to 5 (perfect)
+
+Return your answer as JSON with this exact structure:
+{{
+    "score": <1-5>,
+    "comments": "<detailed comments>",
+    "missing_elements": ["<list of missing required elements>"],
+    "issues": ["<list of formatting or structure issues>"],
+    "compliance_percentage": <0-100>
+}}""",
+            
+            "factual_checker": """You are a Factual Accuracy Validator. Evaluate this document section for factual accuracy.
+
+SECTION NAME: {section_name}
+SECTION CONTENT:
+{section_content}
+
+FULL DOCUMENT CONTEXT:
+{document_context}
+
+INSTRUCTIONS:
+- Verify factual accuracy of all information, data, and statements
+- Check for inconsistencies or contradictions
+- Validate that claims are supported
+- Rate accuracy from 1 (poor) to 5 (perfect)
+
+Return your answer as JSON with this exact structure:
+{{
+    "score": <1-5>,
+    "comments": "<detailed comments>",
+    "inaccuracies": ["<list of factual inaccuracies found>"],
+    "inconsistencies": ["<list of inconsistencies>"],
+    "accuracy_percentage": <0-100>
+}}""",
+            
+            "terminology_checker": """You are a Terminology Consistency Specialist. Evaluate this document section for terminology consistency.
+
+SECTION NAME: {section_name}
+SECTION CONTENT:
+{section_content}
+
+FULL DOCUMENT CONTEXT:
+{document_context}
+
+INSTRUCTIONS:
+- Check for consistent use of terminology throughout the document
+- Identify inconsistent use of technical terms
+- Verify industry-specific language is used correctly
+- Rate consistency from 1 (poor) to 5 (perfect)
+
+Return your answer as JSON with this exact structure:
+{{
+    "score": <1-5>,
+    "comments": "<detailed comments>",
+    "inconsistent_terms": ["<list of inconsistently used terms>"],
+    "terminology_issues": ["<list of terminology problems>"],
+    "consistency_percentage": <0-100>
+}}""",
+            
+            "redundancy_checker": """You are a Redundancy Detection Analyst. Evaluate this document section for redundancy.
+
+SECTION NAME: {section_name}
+SECTION CONTENT:
+{section_content}
+
+FULL DOCUMENT CONTEXT:
+{document_context}
+
+INSTRUCTIONS:
+- Identify redundant information or repeated content
+- Check for unnecessary duplication
+- Suggest consolidation opportunities
+- Rate efficiency from 1 (poor) to 5 (perfect)
+
+Return your answer as JSON with this exact structure:
+{{
+    "score": <1-5>,
+    "comments": "<detailed comments>",
+    "redundant_content": ["<list of redundant sections or information>"],
+    "consolidation_suggestions": ["<suggestions for consolidation>"],
+    "efficiency_percentage": <0-100>
+}}""",
+            
+            "completeness_checker": """You are a Document Completeness Auditor. Evaluate this document section for completeness.
+
+SECTION NAME: {section_name}
+SECTION CONTENT:
+{section_content}
+
+FULL DOCUMENT CONTEXT:
+{document_context}
+
+INSTRUCTIONS:
+- Verify that all required sections and elements are present
+- Check for missing mandatory information
+- Validate completeness of each section
+- Rate completeness from 1 (poor) to 5 (perfect)
+
+Return your answer as JSON with this exact structure:
+{{
+    "score": <1-5>,
+    "comments": "<detailed comments>",
+    "missing_elements": ["<list of missing required elements>"],
+    "incomplete_sections": ["<list of incomplete sections>"],
+    "completeness_percentage": <0-100>
+}}""",
+            
+            "clarity_checker": """You are a Clarity and Readability Expert. Evaluate this document section for clarity and readability.
+
+SECTION NAME: {section_name}
+SECTION CONTENT:
+{section_content}
+
+FULL DOCUMENT CONTEXT:
+{document_context}
+
+INSTRUCTIONS:
+- Assess clarity and readability of the section
+- Check if language is appropriate for the target audience
+- Identify unclear or confusing passages
+- Rate clarity from 1 (poor) to 5 (perfect)
+
+Return your answer as JSON with this exact structure:
+{{
+    "score": <1-5>,
+    "comments": "<detailed comments>",
+    "unclear_passages": ["<list of unclear or confusing passages>"],
+    "readability_issues": ["<list of readability problems>"],
+    "clarity_percentage": <0-100>
+}}"""
+        }
+        
+        prompt_template = agent_prompts.get(agent_type, agent_prompts["format_checker"])
+        
+        return prompt_template.format(
+            section_name=section.get("name", "Unknown"),
+            section_content=section.get("content", "")[:3000],  # Limitar contenido de sección
+            document_context=document_context[:5000]  # Limitar contexto
+        )
+    
+    def _parse_evaluation_result(self, result: Any, agent_type: str) -> Dict[str, Any]:
+        """Parsea el resultado de evaluación a formato JSON estructurado."""
+        result_text = str(result)
+        
+        # Intentar extraer JSON del resultado
+        try:
+            # Buscar JSON en el texto
+            import re
+            json_match = re.search(r'\{[^{}]*"score"[^{}]*\}', result_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                # Intentar parsear JSON expandido
+                json_str = json_str.replace("'", '"')  # Reemplazar comillas simples
+                parsed = json.loads(json_str)
+                parsed["agent_type"] = agent_type
+                return parsed
+        except:
+            pass
+        
+        # Si no se puede parsear, crear resultado básico
+        return {
+            "score": 3,
+            "comments": result_text[:500],
+            "agent_type": agent_type,
+            "raw_result": result_text
+        }
+    
+    async def evaluate_document(
+        self,
+        session_id: str,
+        document_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Evalúa un documento empresarial completo usando agentes especializados.
+        
+        Implementa el sistema "AI Agents-as-Judge" para evaluación automática de:
+        - Accuracy (Precisión)
+        - Consistency (Consistencia)
+        - Completeness (Completitud)
+        - Clarity (Claridad)
+        
+        Args:
+            session_id: ID de la sesión
+            document_id: ID del documento específico (opcional, si no se proporciona evalúa todos)
+            
+        Returns:
+            Resultado de evaluación completo con métricas y scores
+        """
+        session = self.initialize_session(session_id)
+        
+        if not session["docs"]:
+            return {
+                "status": "error",
+                "error": "No hay documentos para evaluar"
+            }
+        
+        start_time = time.time()
+        evaluation_results = []
+        
+        # Seleccionar documentos a evaluar
+        docs_to_evaluate = session["docs"]
+        if document_id:
+            docs_to_evaluate = [d for d in session["docs"] if document_id in str(d.metadata.get("source", ""))]
+        
+        print(f"📊 [Judge Agent Mode] Iniciando evaluación de {len(docs_to_evaluate)} documento(s)...")
+        
+        for doc in docs_to_evaluate:
+            doc_content = doc.page_content
+            doc_metadata = doc.metadata
+            
+            # Segmentar documento
+            sections = self._segment_document(doc_content, doc_metadata)
+            print(f"📄 [Judge Agent Mode] Documento segmentado en {len(sections)} secciones")
+            
+            doc_evaluation = {
+                "document_id": doc_metadata.get("source", "unknown"),
+                "sections": [],
+                "overall_scores": {},
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Evaluar cada sección con todos los agentes
+            for section in sections:
+                print(f"🔍 [Judge Agent Mode] Evaluando sección: {section['name']}")
+                section_evaluation = {
+                    "section_name": section["name"],
+                    "evaluations": {}
+                }
+                
+                # Evaluar con cada agente especializado
+                agent_types = [
+                    "format_checker",
+                    "factual_checker",
+                    "terminology_checker",
+                    "redundancy_checker",
+                    "completeness_checker",
+                    "clarity_checker"
+                ]
+                
+                for agent_type in agent_types:
+                    try:
+                        eval_result = await self._evaluate_section_with_agent(
+                            agent_type=agent_type,
+                            section=section,
+                            document_context=doc_content
+                        )
+                        section_evaluation["evaluations"][agent_type] = eval_result
+                    except Exception as e:
+                        print(f"⚠️ [Judge Agent Mode] Error evaluando sección {section['name']} con {agent_type}: {e}")
+                        section_evaluation["evaluations"][agent_type] = {
+                            "score": 0,
+                            "comments": f"Error: {str(e)}",
+                            "agent_type": agent_type
+                        }
+                
+                doc_evaluation["sections"].append(section_evaluation)
+            
+            # Calcular scores generales del documento
+            doc_evaluation["overall_scores"] = self._calculate_overall_scores(doc_evaluation["sections"])
+            
+            evaluation_results.append(doc_evaluation)
+            print(f"✅ [Judge Agent Mode] Evaluación completada para documento: {doc_metadata.get('source', 'unknown')}")
+        
+        # Guardar métricas
+        evaluation_id = f"eval_{int(time.time())}"
+        self.evaluation_metrics[evaluation_id] = {
+            "session_id": session_id,
+            "results": evaluation_results,
+            "timestamp": datetime.now().isoformat(),
+            "execution_time": time.time() - start_time
+        }
+        
+        # Guardar en sesión
+        if "evaluations" not in session:
+            session["evaluations"] = []
+        session["evaluations"].append({
+            "evaluation_id": evaluation_id,
+            "results": evaluation_results
+        })
+        
+        return {
+            "status": "success",
+            "evaluation_id": evaluation_id,
+            "results": evaluation_results,
+            "execution_time": time.time() - start_time,
+            "documents_evaluated": len(evaluation_results)
+        }
+    
+    def _calculate_overall_scores(self, sections: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Calcula los scores generales del documento basándose en las evaluaciones de secciones."""
+        scores_by_type = defaultdict(list)
+        
+        for section in sections:
+            for agent_type, evaluation in section.get("evaluations", {}).items():
+                score = evaluation.get("score", 0)
+                if isinstance(score, (int, float)) and 1 <= score <= 5:
+                    scores_by_type[agent_type].append(score)
+        
+        overall_scores = {}
+        
+        # Mapear agentes a métricas principales
+        metric_mapping = {
+            "format_checker": "template_compliance",
+            "factual_checker": "accuracy",
+            "terminology_checker": "consistency",
+            "completeness_checker": "completeness",
+            "clarity_checker": "clarity"
+        }
+        
+        for agent_type, metric_name in metric_mapping.items():
+            if scores_by_type[agent_type]:
+                avg_score = sum(scores_by_type[agent_type]) / len(scores_by_type[agent_type])
+                overall_scores[metric_name] = {
+                    "score": round(avg_score, 2),
+                    "max_score": 5.0,
+                    "percentage": round((avg_score / 5.0) * 100, 2)
+                }
+            else:
+                overall_scores[metric_name] = {
+                    "score": 0.0,
+                    "max_score": 5.0,
+                    "percentage": 0.0
+                }
+        
+        # Calcular score general
+        if overall_scores:
+            general_score = sum(s["score"] for s in overall_scores.values()) / len(overall_scores)
+            overall_scores["overall"] = {
+                "score": round(general_score, 2),
+                "max_score": 5.0,
+                "percentage": round((general_score / 5.0) * 100, 2)
+            }
+        
+        return overall_scores
+    
+    def get_evaluation_report(
+        self,
+        session_id: str,
+        evaluation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Obtiene un reporte detallado de evaluación.
+        
+        Args:
+            session_id: ID de la sesión
+            evaluation_id: ID de evaluación específica (opcional)
+            
+        Returns:
+            Reporte de evaluación formateado
+        """
+        if evaluation_id and evaluation_id in self.evaluation_metrics:
+            evaluation = self.evaluation_metrics[evaluation_id]
+        else:
+            session = self.initialize_session(session_id)
+            if "evaluations" in session and session["evaluations"]:
+                last_eval = session["evaluations"][-1]
+                evaluation_id = last_eval["evaluation_id"]
+                evaluation = self.evaluation_metrics.get(evaluation_id, {})
+            else:
+                return {
+                    "status": "error",
+                    "error": "No hay evaluaciones disponibles"
+                }
+        
+        if not evaluation:
+            return {
+                "status": "error",
+                "error": "Evaluación no encontrada"
+            }
+        
+        # Formatear reporte
+        report = {
+            "evaluation_id": evaluation_id,
+            "timestamp": evaluation.get("timestamp"),
+            "execution_time": evaluation.get("execution_time"),
+            "documents": []
+        }
+        
+        for doc_result in evaluation.get("results", []):
+            doc_report = {
+                "document_id": doc_result.get("document_id"),
+                "overall_scores": doc_result.get("overall_scores", {}),
+                "sections": []
+            }
+            
+            for section in doc_result.get("sections", []):
+                section_report = {
+                    "section_name": section.get("section_name"),
+                    "scores": {}
+                }
+                
+                for agent_type, eval_data in section.get("evaluations", {}).items():
+                    section_report["scores"][agent_type] = {
+                        "score": eval_data.get("score", 0),
+                        "comments": eval_data.get("comments", ""),
+                        "issues": eval_data.get("issues", eval_data.get("inaccuracies", eval_data.get("missing_elements", [])))
+                    }
+                
+                doc_report["sections"].append(section_report)
+            
+            report["documents"].append(doc_report)
+        
+        return report
+    
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
@@ -1269,30 +1931,30 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_judge_agent_mode_instance: Optional[JudgeAgentMode] = None
 
 
-def get_alien_mode(
+def get_judge_agent_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> JudgeAgentMode:
+    """Obtiene o crea la instancia global de Judge Agent Mode."""
+    global _judge_agent_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _judge_agent_mode_instance is None:
+        _judge_agent_mode_instance = JudgeAgentMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _judge_agent_mode_instance
 
 
-def run_alien_mode(
+def run_judge_agent_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1305,14 +1967,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
+    Función principal para ejecutar Judge Agent Mode.
     Compatible con Gradio (síncrona).
     """
     if not config or not processor or not retriever_builder:
         return history, "❌ Configuración incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    judge_agent_mode = get_judge_agent_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1321,7 +1983,7 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = judge_agent_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
     
@@ -1330,7 +1992,7 @@ def run_alien_mode(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            judge_agent_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,

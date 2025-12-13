@@ -1,5 +1,5 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+SNIPE SHOT Mode - Sistema Multi-Agente RAG de Máxima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
@@ -47,11 +47,13 @@ from .test_time_training import TestTimeTrainer
 from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
+from .rag.advanced_graphrag import AdvancedGraphRAG
+from .confluent_streaming import ConfluentStreamingManager, CONFLUENT_AVAILABLE
 
 
-class AlienMode:
+class SnipeShotMode:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    SNIPE SHOT Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
@@ -87,7 +89,7 @@ class AlienMode:
         
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY requerida para SNIPE SHOT Mode")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -143,8 +145,140 @@ class AlienMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # Advanced GraphRAG (basado en papers más recientes)
+        try:
+            embeddings = OpenAIEmbeddings(api_key=config.openai_api_key) if config.openai_api_key else None
+            self.advanced_graphrag = AdvancedGraphRAG(llm=self.llm, embeddings=embeddings)
+            print("✅ [SNIPE SHOT Mode] Advanced GraphRAG inicializado")
+        except Exception as e:
+            print(f"⚠️ [SNIPE SHOT Mode] Advanced GraphRAG no disponible: {e}")
+            self.advanced_graphrag = None
+        
+        # Confluent Streaming (Real-Time Data Streaming)
+        self.streaming_manager = None
+        if config.enable_confluent_streaming and CONFLUENT_AVAILABLE:
+            try:
+                bootstrap_servers = config.confluent_bootstrap_servers or config.kafka_bootstrap_servers
+                if bootstrap_servers:
+                    security_config = {}
+                    if config.confluent_api_key and config.confluent_api_secret:
+                        security_config = {
+                            "security.protocol": "SASL_SSL",
+                            "sasl.mechanisms": "PLAIN",
+                            "sasl.username": config.confluent_api_key,
+                            "sasl.password": config.confluent_api_secret
+                        }
+                    
+                    self.streaming_manager = ConfluentStreamingManager(
+                        bootstrap_servers=bootstrap_servers,
+                        security_config=security_config,
+                        enabled=True
+                    )
+                    
+                    # Configurar callbacks para procesamiento en tiempo real
+                    self._setup_streaming_callbacks()
+                    
+                    # Iniciar streaming
+                    self.streaming_manager.start_streaming()
+                    print("✅ [SNIPE SHOT Mode] Confluent Streaming inicializado y activo")
+                else:
+                    print("⚠️ [SNIPE SHOT Mode] Confluent habilitado pero no hay bootstrap_servers configurado")
+            except Exception as e:
+                print(f"⚠️ [SNIPE SHOT Mode] Error inicializando Confluent Streaming: {e}")
+                self.streaming_manager = None
+        else:
+            if not CONFLUENT_AVAILABLE:
+                print("⚠️ [SNIPE SHOT Mode] confluent-kafka no instalado. Streaming deshabilitado.")
+            else:
+                print("ℹ️ [SNIPE SHOT Mode] Confluent Streaming deshabilitado en configuración")
+        
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
+    
+    def _setup_streaming_callbacks(self):
+        """Configura callbacks para procesar eventos en tiempo real."""
+        if not self.streaming_manager:
+            return
+        
+        # Callback para actualizaciones de documentos
+        def on_document_update(payload: Dict[str, Any]):
+            """Procesa actualización de documento en tiempo real."""
+            try:
+                document_id = payload.get("data", {}).get("document_id")
+                action = payload.get("data", {}).get("action")
+                
+                # Actualizar sesiones si es necesario
+                for session_id, session in self.sessions.items():
+                    if document_id in [doc.metadata.get("source") for doc in session.get("docs", [])]:
+                        # Documento actualizado, invalidar cache si es necesario
+                        print(f"🔄 [SNIPE SHOT Streaming] Documento {document_id} actualizado ({action})")
+                        
+            except Exception as e:
+                print(f"⚠️ [SNIPE SHOT Streaming] Error procesando actualización de documento: {e}")
+        
+        # Callback para actualizaciones del Knowledge Graph
+        def on_knowledge_graph_update(payload: Dict[str, Any]):
+            """Procesa actualización del Knowledge Graph en tiempo real."""
+            try:
+                entities = payload.get("data", {}).get("entities", [])
+                relationships = payload.get("data", {}).get("relationships", [])
+                action = payload.get("data", {}).get("action", "updated")
+                
+                # Actualizar Advanced GraphRAG si está disponible
+                if self.advanced_graphrag and entities:
+                    print(f"🔄 [SNIPE SHOT Streaming] Knowledge Graph actualizado: {len(entities)} entidades, {len(relationships)} relaciones")
+                    # El Knowledge Graph se actualizará automáticamente en la próxima consulta
+                    
+            except Exception as e:
+                print(f"⚠️ [SNIPE SHOT Streaming] Error procesando actualización de KG: {e}")
+        
+        # Callback para glitches/anomalías
+        def on_glitch_detected(payload: Dict[str, Any]):
+            """Procesa glitch/anomalía detectado en tiempo real."""
+            try:
+                glitch_type = payload.get("glitch_type")
+                severity = payload.get("severity")
+                description = payload.get("description")
+                
+                print(f"⚠️ [SNIPE SHOT Streaming] Glitch detectado: {glitch_type} ({severity}) - {description}")
+                
+                # Aquí se pueden agregar acciones automáticas según la severidad
+                if severity in ["high", "critical"]:
+                    # Acciones para glitches críticos
+                    pass
+                    
+            except Exception as e:
+                print(f"⚠️ [SNIPE SHOT Streaming] Error procesando glitch: {e}")
+        
+        # Callback para datos en streaming
+        def on_streaming_data(payload: Dict[str, Any]):
+            """Procesa datos en streaming en tiempo real."""
+            try:
+                data_type = payload.get("data", {}).get("data_type")
+                data = payload.get("data", {})
+                
+                # Procesar según el tipo de dato
+                if data_type == "entity_detected":
+                    # Nueva entidad detectada, actualizar KG
+                    entity_name = data.get("entity_name")
+                    if entity_name and self.advanced_graphrag:
+                        print(f"🔄 [SNIPE SHOT Streaming] Nueva entidad detectada: {entity_name}")
+                        
+                elif data_type == "relationship_detected":
+                    # Nueva relación detectada, actualizar KG
+                    source = data.get("source")
+                    target = data.get("target")
+                    if source and target and self.advanced_graphrag:
+                        print(f"🔄 [SNIPE SHOT Streaming] Nueva relación detectada: {source} -> {target}")
+                        
+            except Exception as e:
+                print(f"⚠️ [SNIPE SHOT Streaming] Error procesando datos en streaming: {e}")
+        
+        # Asignar callbacks
+        self.streaming_manager.on_document_update = on_document_update
+        self.streaming_manager.on_knowledge_graph_update = on_knowledge_graph_update
+        self.streaming_manager.on_glitch_detected = on_glitch_detected
+        self.streaming_manager.on_streaming_data = on_streaming_data
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
         """Inicializa una nueva sesión."""
@@ -191,7 +325,7 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [SNIPE SHOT Mode] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -202,11 +336,79 @@ class AlienMode:
                 if "provenances" not in session:
                     session["provenances"] = []
                 session["provenances"].append(provenance)
+                
+                # Publicar evento de documento procesado en tiempo real
+                if self.streaming_manager:
+                    try:
+                        doc_id = doc.metadata.get("source", "unknown")
+                        self.streaming_manager.publish_document_update(
+                            document_id=doc_id,
+                            action="processed",
+                            data={
+                                "session_id": session_id,
+                                "chunk_count": len(new_docs),
+                                "metadata": doc.metadata
+                            }
+                        )
+                    except Exception as e:
+                        print(f"⚠️ [SNIPE SHOT Mode] Error publicando evento de documento: {e}")
             
             # Reconstruir retriever
             if session["docs"]:
                 session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                print(f"✅ [SNIPE SHOT Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                
+                # Construir Knowledge Graph usando Advanced GraphRAG
+                if self.advanced_graphrag:
+                    try:
+                        print(f"🔷 [SNIPE SHOT Mode] Construyendo Knowledge Graph desde documentos...")
+                        kg_result = asyncio.run(
+                            self.advanced_graphrag.build_knowledge_graph_from_documents(
+                                session["docs"],
+                                use_llm_extraction=True
+                            )
+                        )
+                        session["knowledge_graph_built"] = True
+                        session["kg_stats"] = kg_result
+                        print(f"✅ [SNIPE SHOT Mode] Knowledge Graph construido: {kg_result.get('entities', 0)} entidades, {kg_result.get('relationships', 0)} relaciones")
+                        
+                        # Publicar evento de actualización del Knowledge Graph en tiempo real
+                        if self.streaming_manager:
+                            try:
+                                # Obtener entidades y relaciones del grafo
+                                entities = list(self.advanced_graphrag.knowledge_graph.entities.keys())[:50]  # Limitar a 50
+                                relationships = [
+                                    {
+                                        "source": rel.source,
+                                        "target": rel.target,
+                                        "type": rel.relationship_type
+                                    }
+                                    for rel in self.advanced_graphrag.knowledge_graph.relationships[:50]  # Limitar a 50
+                                ]
+                                
+                                self.streaming_manager.publish_knowledge_graph_update(
+                                    entities=entities,
+                                    relationships=relationships,
+                                    action="built"
+                                )
+                            except Exception as e:
+                                print(f"⚠️ [SNIPE SHOT Mode] Error publicando actualización de KG: {e}")
+                        
+                    except Exception as e:
+                        print(f"⚠️ [SNIPE SHOT Mode] Error construyendo Knowledge Graph: {e}")
+                        session["knowledge_graph_built"] = False
+                        
+                        # Publicar glitch si hay error
+                        if self.streaming_manager:
+                            try:
+                                self.streaming_manager.publish_glitch(
+                                    glitch_type="knowledge_graph_build_error",
+                                    severity="medium",
+                                    description=f"Error construyendo Knowledge Graph: {str(e)}",
+                                    data={"error": str(e), "documents_count": len(session["docs"])}
+                                )
+                            except Exception:
+                                pass
             
             return {
                 "status": "success",
@@ -216,7 +418,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"❌ [SNIPE SHOT Mode] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -281,7 +483,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [SNIPE SHOT Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -317,7 +519,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"⚠️ [SNIPE SHOT Mode] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -334,7 +536,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"⚠️ [SNIPE SHOT Mode] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -347,7 +549,7 @@ class AlienMode:
                 # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"⚠️ [SNIPE SHOT Mode] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -368,15 +570,78 @@ class AlienMode:
                 query=message
             )
             
+            # ============================================
+            # ADVANCED GRAPHRAG ENHANCEMENT (Papers 2024-2025)
+            # ============================================
+            graphrag_context = ""
+            graphrag_explanation = None
+            graph_evidences = []
+            
+            if self.advanced_graphrag and session.get("knowledge_graph_built", False):
+                try:
+                    print(f"🔷 [SNIPE SHOT Mode] Usando Advanced GraphRAG para mejorar respuesta...")
+                    
+                    # 1. Recuperar subgrafo relevante
+                    subgraph = await self.advanced_graphrag.retrieve_subgraph_for_query(
+                        query=message,
+                        max_entities=20,
+                        max_depth=2
+                    )
+                    
+                    # 2. Multi-hop reasoning
+                    query_entities = await self.advanced_graphrag._extract_query_entities(message)
+                    if query_entities:
+                        graph_evidences = await self.advanced_graphrag.multi_hop_reasoning(
+                            query=message,
+                            start_entities=query_entities,
+                            max_hops=2
+                        )
+                    
+                    # 3. Fusionar texto y grafo
+                    relevant_docs = [doc for doc in session["docs"] 
+                                   if any(doc_id in str(doc.metadata.get("source", "")) 
+                                         for doc_id in subgraph.documents)]
+                    
+                    if relevant_docs:
+                        fused_context = await self.advanced_graphrag.fuse_text_and_graph_context(
+                            text_documents=relevant_docs,
+                            subgraph=subgraph,
+                            query=message
+                        )
+                        graphrag_context = f"\n\n🔷 CONTEXTO DEL GRAFO DE CONOCIMIENTO:\n{fused_context.fused_summary}\n\nEntidades relevantes: {', '.join(fused_context.entities_in_context[:10])}"
+                        
+                        # 4. Query-focused summarization
+                        if len(relevant_docs) > 0:
+                            graph_summary = await self.advanced_graphrag.query_focused_summarization(
+                                query=message,
+                                documents=relevant_docs,
+                                subgraph=subgraph
+                            )
+                            graphrag_context += f"\n\n📊 RESUMEN CENTRADO EN CONSULTA:\n{graph_summary}"
+                    
+                    # 5. Obtener memoria del grafo
+                    if query_entities:
+                        memory_context = self.advanced_graphrag.get_graph_memory_context(query_entities)
+                        if memory_context:
+                            graphrag_context += f"\n\n🧠 MEMORIA DEL GRAFO (Interacciones previas):\n{memory_context}"
+                    
+                    print(f"✅ [SNIPE SHOT Mode] GraphRAG enhancement completado: {len(subgraph.entities)} entidades, {len(graph_evidences)} evidencias")
+                    
+                except Exception as e:
+                    print(f"⚠️ [SNIPE SHOT Mode] Error en Advanced GraphRAG: {e}")
+                    graphrag_context = ""
+            
             # Crear workflow
             temp_workflow = AgentWorkflow(self.config, provider=provider)
             
-            # Ejecutar con contexto plegado y estrategia de RL
+            # Ejecutar con contexto plegado, estrategia de RL, y GraphRAG enhancement
             enriched_query = f"{conversation_context}\n\nPREGUNTA ACTUAL:\n{message}"
             if best_strategy:
                 enriched_query += f"\n\n🎯 ESTRATEGIA DE RL: {best_strategy}"
             if best_approach:
                 enriched_query += f"\n\n🛤️ ENFOQUE RECOMENDADO: {best_approach}"
+            if graphrag_context:
+                enriched_query += graphrag_context
             
             # Verificar tamaño final del query y truncar si es necesario
             enriched_query = self._truncate_query_if_needed(enriched_query, max_tokens=MAX_CONTEXT_TOKENS)
@@ -486,6 +751,23 @@ class AlienMode:
                     formatted_answer += "\n".join(sources_list)
                     formatted_answer += f"\n\n🔍 **Procedencia:** Registro ID {record_id}\n"
             
+            # Agregar explicación GraphRAG si está disponible
+            if graphrag_explanation:
+                formatted_answer += "\n---\n\n"
+                formatted_answer += "### 🔷 Advanced GraphRAG Enhancement (Papers 2024-2025)\n\n"
+                formatted_answer += "**Explicación del Grafo de Conocimiento:**\n"
+                formatted_answer += graphrag_explanation.get("explanation", "No disponible") + "\n\n"
+                formatted_answer += f"- **Evidencias utilizadas:** {graphrag_explanation.get('evidences_used', 0)}\n"
+                formatted_answer += f"- **Entidades involucradas:** {', '.join(graphrag_explanation.get('entities_involved', [])[:10])}\n"
+                formatted_answer += f"- **Confianza del grafo:** {graphrag_explanation.get('confidence', 0.0):.2f}\n"
+                formatted_answer += "\n**Técnicas aplicadas:**\n"
+                formatted_answer += "- 🔷 **GraphRAG:** Retrieval-Augmented Generation with Graphs (Haoyu Han et al. 2025)\n"
+                formatted_answer += "- 🔷 **Subgraph Retrieval:** Recuperación eficiente de subgrafos relevantes (GRAG paper)\n"
+                formatted_answer += "- 🔷 **Multi-hop Reasoning:** Razonamiento sobre relaciones del grafo\n"
+                formatted_answer += "- 🔷 **Text/Graph Fusion:** Fusión de contexto textual y topología del grafo\n"
+                formatted_answer += "- 🔷 **Explainability:** KGRAG-Ex - Explicación de rutas de evidencia\n"
+                formatted_answer += "- 🔷 **Graph Memory:** GMeLLo - Memoria basada en grafo para contexto mejorado\n"
+            
             # Agregar información adicional del proceso
             formatted_answer += "\n---\n\n"
             formatted_answer += "### 🧠 Capacidades Avanzadas Utilizadas\n"
@@ -496,6 +778,12 @@ class AlienMode:
             formatted_answer += "- 📈 **Test Time Training:** Mejora continua con cada conversación\n"
             formatted_answer += "- 🌳 **Reinforcement Learning & Planning:** Estrategias adaptativas\n"
             formatted_answer += "- 🔌 **MCP Powered:** Conexión a sistemas externos\n"
+            if self.advanced_graphrag and session.get("knowledge_graph_built", False):
+                formatted_answer += "- 🔷 **Advanced GraphRAG:** Knowledge Graph-based retrieval y reasoning\n"
+            
+            # Información de streaming en tiempo real
+            if self.streaming_manager and self.streaming_manager.enabled:
+                formatted_answer += "- ⚡ **Real-Time Streaming:** Confluent/Kafka streaming activo\n"
             
             # Agregar advertencia si requiere aprobación
             if requires_approval and approval_id:
@@ -518,7 +806,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "snipe_shot_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -910,7 +1198,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [SNIPE SHOT Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -929,7 +1217,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [SNIPE SHOT Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1097,7 +1385,7 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
         # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        print(f"🔄 [SNIPE SHOT Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1109,9 +1397,9 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    print(f"✅ [SNIPE SHOT Mode] Análisis completado para: {Path(doc_name).name}")
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
+                    print(f"❌ [SNIPE SHOT Mode] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
         # OPCIÓN A: Mostrar todos los análisis individuales
@@ -1254,10 +1542,22 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             "mcp_integration": {
                 "connections": len(self.mcp_manager.connections) if self.mcp_manager else 0,
                 "enabled_connections": len([c for c in self.mcp_manager.connections.values() if c.enabled]) if self.mcp_manager else 0
+            },
+            "advanced_graphrag": self.advanced_graphrag.get_statistics() if self.advanced_graphrag else {
+                "status": "not_available",
+                "total_entities": 0,
+                "total_relationships": 0
+            },
+            "confluent_streaming": self.streaming_manager.get_statistics() if self.streaming_manager else {
+                "enabled": False,
+                "status": "not_available"
             }
         }
         
         if session_id and session_id in self.sessions:
+            session = self.sessions[session_id]
+            if "kg_stats" in session:
+                stats["advanced_graphrag"]["session_kg"] = session["kg_stats"]
             session = self.sessions[session_id]
             stats["session"] = {
                 "docs_count": len(session["docs"]),
@@ -1269,30 +1569,30 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_snipe_shot_mode_instance: Optional[SnipeShotMode] = None
 
 
-def get_alien_mode(
+def get_snipe_shot_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> SnipeShotMode:
+    """Obtiene o crea la instancia global de SNIPE SHOT Mode."""
+    global _snipe_shot_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _snipe_shot_mode_instance is None:
+        _snipe_shot_mode_instance = SnipeShotMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _snipe_shot_mode_instance
 
 
-def run_alien_mode(
+def run_snipe_shot_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1305,14 +1605,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
+    Función principal para ejecutar SNIPE SHOT Mode.
     Compatible con Gradio (síncrona).
     """
     if not config or not processor or not retriever_builder:
         return history, "❌ Configuración incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    snipe_shot_mode = get_snipe_shot_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1321,7 +1621,7 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = snipe_shot_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
     
@@ -1330,7 +1630,7 @@ def run_alien_mode(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            snipe_shot_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,

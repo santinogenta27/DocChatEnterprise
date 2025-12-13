@@ -1,5 +1,5 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+Banking Mode - Sistema Multi-Agente RAG de Máxima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
@@ -49,9 +49,9 @@ from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
 
 
-class AlienMode:
+class BankingMode:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    Banking Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
@@ -87,7 +87,7 @@ class AlienMode:
         
         # LLM para generación
         if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY requerida para Banking Mode")
         
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
@@ -143,6 +143,10 @@ class AlienMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # Banking-specific: Extracción y análisis de documentos bancarios
+        self.banking_extractions: Dict[str, Dict[str, Any]] = {}  # Almacena extracciones por documento
+        self.banking_validations: Dict[str, Dict[str, Any]] = {}  # Almacena validaciones
+        
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
     
@@ -191,7 +195,7 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [Banking Mode] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -206,7 +210,7 @@ class AlienMode:
             # Reconstruir retriever
             if session["docs"]:
                 session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                print(f"✅ [Banking Mode] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {
                 "status": "success",
@@ -216,7 +220,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"❌ [Banking Mode] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -281,7 +285,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [Banking Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -317,7 +321,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"⚠️ [Banking Mode] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -334,7 +338,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"⚠️ [Banking Mode] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -347,7 +351,7 @@ class AlienMode:
                 # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"⚠️ [Banking Mode] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -518,7 +522,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "banking_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -910,7 +914,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [Banking Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -929,7 +933,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [Banking Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1097,7 +1101,7 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
         # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        print(f"🔄 [Banking Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1109,9 +1113,9 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    print(f"✅ [Banking Mode] Análisis completado para: {Path(doc_name).name}")
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
+                    print(f"❌ [Banking Mode] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
         # OPCIÓN A: Mostrar todos los análisis individuales
@@ -1241,6 +1245,538 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         
         return tuple_history, None, metadata
     
+    # ============================================================================
+    # BANKING-SPECIFIC: Extracción, Clasificación y Validación de Documentos Bancarios
+    # Implementa las funcionalidades específicas que los bancos necesitan de los PDFs
+    # ============================================================================
+    
+    async def classify_banking_document(
+        self,
+        doc_content: str,
+        file_name: str
+    ) -> Dict[str, Any]:
+        """
+        Clasifica automáticamente un documento bancario.
+        
+        Tipos soportados:
+        - paystub (Recibo de sueldo)
+        - bank_statement (Extracto bancario)
+        - tax_return (Declaración de impuestos)
+        - mortgage_contract (Contrato hipotecario)
+        - identity_document (DNI, Pasaporte)
+        - proof_of_address (Comprobante de domicilio)
+        - business_financial (Balance sheet, Income statement)
+        - loan_application (Solicitud de préstamo)
+        """
+        prompt = f"""Eres un experto en clasificación de documentos bancarios. Analiza este documento y clasifícalo.
+
+NOMBRE DEL ARCHIVO: {file_name}
+CONTENIDO (primeros 3000 caracteres):
+{doc_content[:3000]}
+
+Clasifica el documento en UNA de estas categorías:
+- paystub: Recibo de sueldo, nómina, payslip
+- bank_statement: Extracto bancario, estado de cuenta
+- tax_return: Declaración de impuestos, W-2, 1099
+- mortgage_contract: Contrato hipotecario, préstamo hipotecario
+- identity_document: DNI, Pasaporte, Licencia de conducir
+- proof_of_address: Factura de servicio, comprobante de domicilio
+- business_financial: Balance sheet, Income statement, Cash flow statement
+- loan_application: Solicitud de préstamo, aplicación de crédito
+- other: Otro tipo de documento
+
+Responde SOLO con un JSON válido:
+{{
+    "document_type": "tipo_documento",
+    "confidence": 0.95,
+    "reasoning": "breve explicación de por qué es este tipo"
+}}"""
+        
+        try:
+            response = self.llm.invoke(prompt)
+            content = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+            
+            # Extraer JSON
+            import re
+            json_match = re.search(r'\{[^{}]*"document_type"[^{}]*\}', content, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(0))
+                return {
+                    "document_type": data.get("document_type", "other"),
+                    "confidence": float(data.get("confidence", 0.5)),
+                    "reasoning": data.get("reasoning", "")
+                }
+        except Exception as e:
+            print(f"⚠️ [Banking Mode] Error clasificando documento: {e}")
+        
+        return {
+            "document_type": "other",
+            "confidence": 0.0,
+            "reasoning": "Error en clasificación"
+        }
+    
+    async def extract_banking_data(
+        self,
+        doc_content: str,
+        file_name: str,
+        document_type: str
+    ) -> Dict[str, Any]:
+        """
+        Extrae datos estructurados de documentos bancarios según el tipo.
+        
+        Extrae:
+        - Identidad: nombre, DNI, dirección, fecha de nacimiento, firma
+        - Ingresos: salario, empleador, fechas, estabilidad
+        - Salud financiera: saldos, cash flow, patrones de gastos, riesgo
+        - Documentos empresariales: balance sheet, ratios, cash flow
+        """
+        extraction_prompts = {
+            "paystub": """Extrae datos de este recibo de sueldo:
+
+CONTENIDO:
+{doc_content}
+
+Extrae estos campos en JSON:
+{{
+    "identity": {{
+        "name": "nombre completo",
+        "document_id": "número de documento si aparece"
+    }},
+    "income": {{
+        "monthly_gross": número,
+        "monthly_net": número,
+        "employer": "nombre del empleador",
+        "pay_period_start": "fecha inicio",
+        "pay_period_end": "fecha fin",
+        "bonuses": número o null,
+        "commissions": número o null,
+        "income_stability": "stable|volatile|unknown"
+    }},
+    "metadata": {{
+        "extraction_date": "{datetime.now().isoformat()}",
+        "source_file": "{file_name}"
+    }}
+}}""",
+            
+            "bank_statement": """Extrae datos de este extracto bancario:
+
+CONTENIDO:
+{doc_content}
+
+Extrae estos campos en JSON:
+{{
+    "account": {{
+        "account_number": "número de cuenta (parcial o completo)",
+        "account_type": "checking|savings|other",
+        "bank_name": "nombre del banco"
+    }},
+    "financial_health": {{
+        "opening_balance": número,
+        "closing_balance": número,
+        "total_deposits": número,
+        "total_withdrawals": número,
+        "cash_flow": número (deposits - withdrawals),
+        "overdrafts": número de sobregiros,
+        "bounced_checks": número de cheques rechazados,
+        "risk_level": "low|medium|high"
+    }},
+    "patterns": {{
+        "recurring_inflows": ["descripción de entradas recurrentes"],
+        "recurring_outflows": ["descripción de salidas recurrentes"],
+        "unusual_transactions": ["transacciones inusuales"]
+    }},
+    "period": {{
+        "start_date": "fecha inicio",
+        "end_date": "fecha fin"
+    }},
+    "metadata": {{
+        "extraction_date": "{datetime.now().isoformat()}",
+        "source_file": "{file_name}"
+    }}
+}}""",
+            
+            "identity_document": """Extrae datos de este documento de identidad:
+
+CONTENIDO:
+{doc_content}
+
+Extrae estos campos en JSON:
+{{
+    "identity": {{
+        "full_name": "nombre completo",
+        "document_type": "DNI|Pasaporte|Licencia",
+        "document_number": "número de documento",
+        "date_of_birth": "fecha de nacimiento",
+        "address": "dirección completa",
+        "nationality": "nacionalidad",
+        "expiry_date": "fecha de vencimiento",
+        "is_valid": true/false (si la fecha de vencimiento es futura)
+    }},
+    "metadata": {{
+        "extraction_date": "{datetime.now().isoformat()}",
+        "source_file": "{file_name}"
+    }}
+}}""",
+            
+            "business_financial": """Extrae datos de este documento financiero empresarial:
+
+CONTENIDO:
+{doc_content}
+
+Extrae estos campos en JSON:
+{{
+    "company": {{
+        "name": "nombre de la empresa",
+        "tax_id": "número de identificación fiscal"
+    }},
+    "financial_statements": {{
+        "balance_sheet": {{
+            "total_assets": número,
+            "total_liabilities": número,
+            "equity": número
+        }},
+        "income_statement": {{
+            "revenue": número,
+            "expenses": número,
+            "net_income": número
+        }},
+        "cash_flow": {{
+            "operating_cash_flow": número,
+            "investing_cash_flow": número,
+            "financing_cash_flow": número
+        }}
+    }},
+    "ratios": {{
+        "liquidity_ratio": número,
+        "debt_ratio": número,
+        "current_ratio": número
+    }},
+    "period": {{
+        "start_date": "fecha inicio",
+        "end_date": "fecha fin"
+    }},
+    "metadata": {{
+        "extraction_date": "{datetime.now().isoformat()}",
+        "source_file": "{file_name}"
+    }}
+}}"""
+        }
+        
+        # Prompt por defecto para otros tipos
+        default_prompt = f"""Extrae información relevante de este documento bancario:
+
+CONTENIDO:
+{{doc_content}}
+
+Extrae cualquier información relevante en JSON estructurado."""
+        
+        prompt_template = extraction_prompts.get(document_type, default_prompt)
+        prompt = prompt_template.format(doc_content=doc_content[:5000], file_name=file_name)
+        
+        try:
+            response = self.llm.invoke(prompt)
+            content = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+            
+            # Extraer JSON
+            import re
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(0))
+                return data
+        except Exception as e:
+            print(f"⚠️ [Banking Mode] Error extrayendo datos: {e}")
+        
+        return {
+            "error": "No se pudieron extraer datos",
+            "document_type": document_type
+        }
+    
+    async def validate_banking_data(
+        self,
+        extracted_data_list: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Valida datos extraídos comparando documentos entre sí.
+        
+        Detecta:
+        - Inconsistencias entre documentos
+        - Datos faltantes
+        - Discrepancias en identidad, ingresos, etc.
+        """
+        if len(extracted_data_list) < 2:
+            return {
+                "status": "insufficient_documents",
+                "message": "Se necesitan al menos 2 documentos para validar"
+            }
+        
+        validation_results = {
+            "identity_consistency": {},
+            "income_consistency": {},
+            "address_consistency": {},
+            "discrepancies": [],
+            "missing_data": [],
+            "risk_flags": []
+        }
+        
+        # Comparar identidades
+        identities = []
+        for data in extracted_data_list:
+            if "identity" in data:
+                identities.append(data["identity"])
+        
+        if len(identities) > 1:
+            # Verificar consistencia de nombres
+            names = [id.get("name") or id.get("full_name") for id in identities if id.get("name") or id.get("full_name")]
+            if names and len(set(names)) > 1:
+                validation_results["discrepancies"].append({
+                    "type": "name_mismatch",
+                    "values": names
+                })
+            
+            # Verificar consistencia de documentos
+            doc_numbers = [id.get("document_id") or id.get("document_number") for id in identities if id.get("document_id") or id.get("document_number")]
+            if doc_numbers and len(set(doc_numbers)) > 1:
+                validation_results["discrepancies"].append({
+                    "type": "document_number_mismatch",
+                    "values": doc_numbers
+                })
+        
+        # Comparar ingresos
+        incomes = [data.get("income") for data in extracted_data_list if data.get("income")]
+        if len(incomes) > 1:
+            monthly_amounts = [inc.get("monthly_net") or inc.get("monthly_gross") for inc in incomes if inc.get("monthly_net") or inc.get("monthly_gross")]
+            if monthly_amounts:
+                max_income = max(monthly_amounts)
+                min_income = min(monthly_amounts)
+                variance = ((max_income - min_income) / max_income) * 100 if max_income > 0 else 0
+                
+                if variance > 20:  # Más del 20% de variación
+                    validation_results["discrepancies"].append({
+                        "type": "income_variance",
+                        "variance_percentage": variance,
+                        "min": min_income,
+                        "max": max_income
+                    })
+        
+        # Detectar riesgo
+        for data in extracted_data_list:
+            if "financial_health" in data:
+                fh = data["financial_health"]
+                if fh.get("overdrafts", 0) > 3:
+                    validation_results["risk_flags"].append({
+                        "type": "high_overdrafts",
+                        "count": fh.get("overdrafts")
+                    })
+                if fh.get("risk_level") == "high":
+                    validation_results["risk_flags"].append({
+                        "type": "high_risk_account",
+                        "details": fh
+                    })
+        
+        validation_results["status"] = "completed"
+        validation_results["total_documents"] = len(extracted_data_list)
+        validation_results["total_discrepancies"] = len(validation_results["discrepancies"])
+        validation_results["total_risk_flags"] = len(validation_results["risk_flags"])
+        
+        return validation_results
+    
+    async def process_banking_documents(
+        self,
+        session_id: str,
+        files: List[Any]
+    ) -> Dict[str, Any]:
+        """
+        Procesa documentos bancarios: clasifica, extrae datos y valida.
+        
+        Retorna JSON estructurado listo para guardar en sistemas bancarios.
+        """
+        session = self.initialize_session(session_id)
+        
+        # Procesar documentos
+        result = self.process_documents(session_id, files)
+        if result.get("status") == "error":
+            return result
+        
+        # Clasificar y extraer datos de cada documento
+        extracted_data_list = []
+        classifications = []
+        
+        for doc in session["docs"]:
+            doc_content = doc.page_content
+            file_name = doc.metadata.get("source", "unknown")
+            
+            # Clasificar
+            classification = await self.classify_banking_document(doc_content, file_name)
+            classifications.append({
+                "file_name": file_name,
+                **classification
+            })
+            
+            # Extraer datos según tipo
+            if classification["confidence"] > 0.5:
+                extracted_data = await self.extract_banking_data(
+                    doc_content,
+                    file_name,
+                    classification["document_type"]
+                )
+                extracted_data["file_name"] = file_name
+                extracted_data["classification"] = classification
+                extracted_data_list.append(extracted_data)
+        
+        # Validar datos
+        validation_results = await self.validate_banking_data(extracted_data_list)
+        
+        # Generar JSON estructurado final
+        structured_output = {
+            "customer_id": session_id,
+            "processing_timestamp": datetime.now().isoformat(),
+            "documents_processed": len(extracted_data_list),
+            "classifications": classifications,
+            "extracted_data": extracted_data_list,
+            "validation": validation_results,
+            "summary": {
+                "identity": self._merge_identity_data(extracted_data_list),
+                "income": self._merge_income_data(extracted_data_list),
+                "financial_health": self._merge_financial_health(extracted_data_list),
+                "risk_assessment": self._assess_risk(extracted_data_list, validation_results)
+            }
+        }
+        
+        # Guardar en sesión
+        if "banking_extractions" not in session:
+            session["banking_extractions"] = []
+        session["banking_extractions"].append(structured_output)
+        
+        return {
+            "status": "success",
+            "structured_data": structured_output,
+            "json_output": json.dumps(structured_output, indent=2, ensure_ascii=False)
+        }
+    
+    def _merge_identity_data(self, extracted_data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Combina datos de identidad de múltiples documentos."""
+        merged = {}
+        for data in extracted_data_list:
+            if "identity" in data:
+                identity = data["identity"]
+                if not merged.get("name") and (identity.get("name") or identity.get("full_name")):
+                    merged["name"] = identity.get("name") or identity.get("full_name")
+                if not merged.get("document_id") and (identity.get("document_id") or identity.get("document_number")):
+                    merged["document_id"] = identity.get("document_id") or identity.get("document_number")
+                if not merged.get("address") and identity.get("address"):
+                    merged["address"] = identity.get("address")
+                if not merged.get("date_of_birth") and identity.get("date_of_birth"):
+                    merged["date_of_birth"] = identity.get("date_of_birth")
+        return merged
+    
+    def _merge_income_data(self, extracted_data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Combina datos de ingresos de múltiples documentos."""
+        incomes = [data.get("income") for data in extracted_data_list if data.get("income")]
+        if not incomes:
+            return {}
+        
+        merged = {
+            "monthly_net": None,
+            "monthly_gross": None,
+            "employer": None,
+            "income_stability": "unknown"
+        }
+        
+        # Promediar ingresos si hay múltiples
+        net_amounts = [inc.get("monthly_net") for inc in incomes if inc.get("monthly_net")]
+        gross_amounts = [inc.get("monthly_gross") for inc in incomes if inc.get("monthly_gross")]
+        
+        if net_amounts:
+            merged["monthly_net"] = sum(net_amounts) / len(net_amounts)
+        if gross_amounts:
+            merged["monthly_gross"] = sum(gross_amounts) / len(gross_amounts)
+        
+        # Empleador más común
+        employers = [inc.get("employer") for inc in incomes if inc.get("employer")]
+        if employers:
+            from collections import Counter
+            merged["employer"] = Counter(employers).most_common(1)[0][0]
+        
+        # Estabilidad de ingresos
+        stability_scores = [inc.get("income_stability") for inc in incomes if inc.get("income_stability")]
+        if stability_scores:
+            if all(s == "stable" for s in stability_scores):
+                merged["income_stability"] = "stable"
+            elif any(s == "volatile" for s in stability_scores):
+                merged["income_stability"] = "volatile"
+        
+        return merged
+    
+    def _merge_financial_health(self, extracted_data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Combina datos de salud financiera."""
+        fh_list = [data.get("financial_health") for data in extracted_data_list if data.get("financial_health")]
+        if not fh_list:
+            return {}
+        
+        merged = {
+            "average_balance": None,
+            "total_overdrafts": 0,
+            "risk_level": "low"
+        }
+        
+        balances = [fh.get("closing_balance") for fh in fh_list if fh.get("closing_balance")]
+        if balances:
+            merged["average_balance"] = sum(balances) / len(balances)
+        
+        merged["total_overdrafts"] = sum(fh.get("overdrafts", 0) for fh in fh_list)
+        
+        # Nivel de riesgo más alto
+        risk_levels = [fh.get("risk_level") for fh in fh_list if fh.get("risk_level")]
+        if "high" in risk_levels:
+            merged["risk_level"] = "high"
+        elif "medium" in risk_levels:
+            merged["risk_level"] = "medium"
+        
+        return merged
+    
+    def _assess_risk(
+        self,
+        extracted_data_list: List[Dict[str, Any]],
+        validation_results: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Evalúa el riesgo general basándose en los datos extraídos y validaciones."""
+        risk_score = 0
+        risk_factors = []
+        
+        # Factores de riesgo
+        if validation_results.get("total_discrepancies", 0) > 0:
+            risk_score += 20
+            risk_factors.append("Inconsistencias entre documentos")
+        
+        if validation_results.get("total_risk_flags", 0) > 0:
+            risk_score += 30
+            risk_factors.append("Banderas de riesgo detectadas")
+        
+        for data in extracted_data_list:
+            if "financial_health" in data:
+                fh = data["financial_health"]
+                if fh.get("overdrafts", 0) > 3:
+                    risk_score += 25
+                    risk_factors.append("Múltiples sobregiros")
+                if fh.get("risk_level") == "high":
+                    risk_score += 30
+                    risk_factors.append("Cuenta de alto riesgo")
+        
+        # Determinar nivel de riesgo
+        if risk_score >= 70:
+            risk_level = "high"
+        elif risk_score >= 40:
+            risk_level = "medium"
+        else:
+            risk_level = "low"
+        
+        return {
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "risk_factors": risk_factors,
+            "recommendation": "approve" if risk_level == "low" else ("review" if risk_level == "medium" else "reject")
+        }
+    
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
@@ -1269,30 +1805,30 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_banking_mode_instance: Optional[BankingMode] = None
 
 
-def get_alien_mode(
+def get_banking_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> BankingMode:
+    """Obtiene o crea la instancia global de Banking Mode."""
+    global _banking_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _banking_mode_instance is None:
+        _banking_mode_instance = BankingMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _banking_mode_instance
 
 
-def run_alien_mode(
+def run_banking_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1305,14 +1841,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
+    Función principal para ejecutar Banking Mode.
     Compatible con Gradio (síncrona).
     """
     if not config or not processor or not retriever_builder:
         return history, "❌ Configuración incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    banking_mode = get_banking_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1321,7 +1857,7 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = banking_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
     
@@ -1330,7 +1866,7 @@ def run_alien_mode(
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            banking_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,

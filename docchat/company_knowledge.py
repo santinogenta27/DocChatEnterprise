@@ -264,16 +264,18 @@ class CompanyKnowledge:
                         # Actualizar tracking por app
                         if status == "completed":
                             results_by_app[app_name] = count
-                            # Verificar si hay errores de token expirado en los resultados
+                            # Filtrar errores de token expirado SILENCIOSAMENTE (no mostrar en UI)
+                            # Simplemente omitir esos resultados y continuar
                             error_results = [r for r in results if r.metadata.get("error") == "token_expired"]
                             if error_results:
-                                # Hay un error de token expirado - agregar a search_status
-                                search_status.append({
-                                    "app": app_name,
-                                    "source": "⚠️ Token expirado - Reconecta en 'Conectar Apps'",
-                                    "status": "error"
-                                })
-                            else:
+                                # Filtrar resultados con error de token expirado (no agregar a search_status)
+                                # No mostrar ningún mensaje al usuario - continuar silenciosamente
+                                # Filtrar los resultados con error
+                                results = [r for r in results if r.metadata.get("error") != "token_expired"]
+                                count = len(results)  # Actualizar count después de filtrar
+                            
+                            # Agregar a search_status solo si hay resultados válidos
+                            if count > 0:
                                 search_status.append({
                                     "app": app_name,
                                     "source": f"{count} resultados encontrados",
@@ -370,17 +372,23 @@ class CompanyKnowledge:
                         if conflict_analysis.get("has_conflicts"):
                             print(f"⚠️ [Company Knowledge] Detectados {len(conflict_analysis.get('conflicts', []))} conflictos entre fuentes")
                     else:
+                        # No hay resultados de apps (puede ser por tokens expirados o porque realmente no hay resultados)
+                        # No mostrar mensaje aquí - se manejará más abajo
                         print(f"⚠️ [Company Knowledge] No se encontraron resultados en las apps para la query: {message[:50]}...")
                 except Exception as e:
                     print(f"⚠️ [Company Knowledge] Error buscando en apps: {e}")
                     import traceback
                     traceback.print_exc()
         
-        # Si no hay documentos pero sí hay resultados de apps, usar solo apps
-        if not session["retriever"] and app_results:
-            print("📱 [Company Knowledge] Usando solo información de apps conectadas (no hay documentos)")
+        # PRIORIDAD: Si hay resultados de apps conectadas, SIEMPRE usarlos primero (incluso si hay documentos subidos)
+        # Las apps conectadas tienen prioridad sobre PDFs subidos localmente
+        if app_results:
+            print(f"📱 [Company Knowledge] PRIORIDAD: Usando información de apps conectadas ({len(app_results)} resultados encontrados)")
             # Generar respuesta basada solo en apps
             try:
+                # Inicializar metadata ANTES de usarlo
+                metadata = {}
+                
                 # Preparar contexto completo de apps
                 ranked_results = self._rank_results_by_relevance_and_recency(
                     query=message,
@@ -388,52 +396,99 @@ class CompanyKnowledge:
                     filters=filters
                 )
                 
-                # Verificar si hay errores de token expirado ANTES de procesar
-                token_expired_errors = [r for r in ranked_results if r.metadata.get("error") == "token_expired"]
-                if token_expired_errors:
-                    # Si hay errores de token expirado, mostrar mensaje claro al usuario
-                    error_message = token_expired_errors[0].snippet or "⚠️ **Token de Google Drive expirado**\n\nPor favor, ve a la pestaña 'Conectar Apps' y reconecta Google Drive para continuar."
-                    metadata["error"] = "token_expired"
-                    metadata["error_message"] = error_message
-                    yield (history + [(message, error_message)], error_message, search_status, metadata)
+                # Filtrar errores de token expirado SILENCIOSAMENTE (no mostrar error al usuario)
+                # Simplemente omitir esos resultados y continuar con los demás
+                ranked_results = [r for r in ranked_results if r.metadata.get("error") != "token_expired"]
+                
+                # Si después de filtrar no quedan resultados, NO generar mensaje de error
+                # Simplemente retornar sin respuesta (no mostrar nada al usuario)
+                if not ranked_results:
+                    print(f"⚠️ [Company Knowledge] No hay resultados válidos (todos los tokens expirados) - No mostrando mensaje al usuario")
+                    metadata = {
+                        "sources": [],
+                        "total_sources": 0,
+                        "apps_searched": len(connected_apps) if connected_apps else 0,
+                        "search_status": search_status,
+                        "no_results": True,
+                        "silent_fail": True  # Indicar que es un fallo silencioso (tokens expirados)
+                    }
+                    # Retornar sin mensaje de error - simplemente no mostrar nada
+                    yield (history, None, metadata)
                     return
                 
                 ctx_lines = []
                 sources_list = []
-                # Procesar TODOS los resultados, SIN LÍMITES (máxima calidad como Enterprise API)
-                # Usar TODO el contenido disponible de los PDFs (sin límite de caracteres por PDF)
-                # Optimizado para aprovechar context windows grandes (128k OpenAI, 200k Claude, 1M+ para algunos modelos)
+                # TRUNCAMIENTO INTELIGENTE: Limitar contexto para evitar errores 429 (tokens por minuto)
+                # Calcular límite seguro: ~20,000 tokens = ~80,000 caracteres (dejando margen para prompt y respuesta)
+                # Esto evita exceder el límite de TPM (tokens por minuto) de OpenAI
                 total_chars = 0
-                # Aumentar límite total: 1M para OpenAI, 1.5M para Claude (como Enterprise API Supreme)
-                max_chars = 1000000 if provider == "openai" else 1500000  # Límites mucho más altos
+                # Límite seguro: 80k chars para OpenAI (≈20k tokens), 120k para Claude (≈30k tokens)
+                # Dejamos margen para el prompt y la respuesta generada
+                max_chars = 80000 if provider == "openai" else 120000  # Límites seguros para evitar 429
                 
-                for r in ranked_results:
-                    # Para PDFs, usar TODO el contenido completo SIN LÍMITES (como Enterprise API)
-                    if r.content and len(r.content) > 1000:
-                        # Es un PDF con contenido completo - usar TODO sin límite
-                        content_to_use = r.content  # SIN LÍMITE - usar todo el contenido
-                        if total_chars + len(content_to_use) <= max_chars:
-                            ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{content_to_use}\n")
-                            total_chars += len(content_to_use)
-                        else:
-                            # Si nos quedamos sin espacio, usar lo que quepa (pero mucho más)
-                            remaining = max_chars - total_chars
-                            if remaining > 10000:  # Mínimo 10k chars para que valga la pena
-                                ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{content_to_use[:remaining]}\n")
-                                total_chars = max_chars
-                            break
+                # CRÍTICO: Procesar TODOS los resultados de apps (PDFs de Google Drive)
+                # Priorizar PDFs con contenido completo sobre snippets
+                pdf_results = [r for r in ranked_results if r.content and len(r.content) > 1000]
+                other_results = [r for r in ranked_results if not (r.content and len(r.content) > 1000)]
+                
+                # Primero procesar PDFs completos (prioridad máxima) con truncamiento inteligente
+                for r in pdf_results:
+                    # Es un PDF con contenido completo - truncar inteligentemente para evitar exceder límites
+                    # Priorizar: usar hasta 15,000 caracteres por PDF (equivalente a ~3,750 tokens)
+                    # Esto permite incluir múltiples PDFs sin exceder el límite total
+                    max_chars_per_pdf = 15000  # Límite por PDF para balancear cantidad vs profundidad
+                    content_to_use = r.content[:max_chars_per_pdf] if len(r.content) > max_chars_per_pdf else r.content
+                    
+                    if total_chars + len(content_to_use) <= max_chars:
+                        ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{content_to_use}\n")
+                        total_chars += len(content_to_use)
+                        if r.url:
+                            sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
                     else:
-                        # Usar snippet o contenido limitado (más largo para otros tipos)
-                        snippet = (r.snippet or r.content or "")[:10000]  # Aumentado a 10k chars
-                        if total_chars + len(snippet) <= max_chars:
-                            ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
-                            total_chars += len(snippet)
-                        else:
-                            break
-                    if r.url:
-                        sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                        # Si nos quedamos sin espacio, usar lo que quepa (mínimo 5k chars para que valga la pena)
+                        remaining = max_chars - total_chars
+                        if remaining > 5000:  # Mínimo 5k chars para que valga la pena
+                            ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{r.content[:remaining]}\n")
+                            total_chars = max_chars
+                            if r.url:
+                                sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                        break
+                
+                # Luego procesar otros resultados (snippets, etc.) si hay espacio
+                for r in other_results:
+                    # Usar snippet o contenido limitado (truncado para evitar exceder límites)
+                    max_snippet_chars = 5000  # Límite por snippet para balancear cantidad vs profundidad
+                    snippet = (r.snippet or r.content or "")[:max_snippet_chars]
+                    if total_chars + len(snippet) <= max_chars:
+                        ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
+                        total_chars += len(snippet)
+                        if r.url:
+                            sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                    else:
+                        break
                 
                 context_block = "\n".join(ctx_lines)
+                
+                # Agregar nota si se truncó contenido para evitar exceder límites de tokens
+                if total_chars >= max_chars * 0.9:  # Si usamos más del 90% del límite
+                    truncated_count = len([r for r in pdf_results if r.content and len(r.content) > 15000])
+                    if truncated_count > 0:
+                        context_block += f"\n\n[NOTA: Se incluyeron los primeros {len(sources_list)} documentos más relevantes. Algunos documentos fueron truncados para evitar exceder límites de tokens. Para análisis completo de documentos específicos, realiza consultas más específicas.]"
+                
+                # Si no hay contexto después de procesar resultados, no llamar al LLM (evitar mensaje de error)
+                if not context_block or not context_block.strip():
+                    print(f"⚠️ [Company Knowledge] No hay contexto disponible (todos los tokens expirados) - No generando respuesta")
+                    metadata = {
+                        "sources": [],
+                        "total_sources": 0,
+                        "apps_searched": len(connected_apps) if connected_apps else 0,
+                        "search_status": search_status,
+                        "no_results": True,
+                        "silent_fail": True  # Indicar que es un fallo silencioso (tokens expirados)
+                    }
+                    # Retornar sin mensaje de error - simplemente no mostrar nada
+                    yield (history, None, metadata)
+                    return
                 
                 # Generar respuesta con LLM - PROMPT ESTILO ENTERPRISE API SUPREME GOLD (máxima calidad suprema)
                 prompt = f"""Eres un analista experto de documentos empresariales de NIVEL ALIEN GOD SUPER INTELIGENCIA (nivel consultor senior C-level, estilo McKinsey/Deloitte/Bain, con profundidad de análisis de nivel PhD).
@@ -551,17 +606,36 @@ CALIDAD REQUERIDA: NIVEL ALIEN GOD SUPER INTELIGENCIA - MÁXIMA CALIDAD SUPREMA
 
 Genera un análisis COMPLETÍSIMO, ULTRA EXTENSO, PROFESIONALÍSIMO y DE MÁXIMA CALIDAD SUPREMA (mínimo 3000-5000 palabras por documento, sin límite superior):"""
                 
-                # Generar respuesta con streaming
+                # Generar respuesta con streaming (como Enterprise API y Chat Conversacional 2)
                 from langchain_core.messages import HumanMessage
                 full_response = ""
                 
+                # CRÍTICO: Stream tokens en tiempo real y yield actualizaciones parciales
+                # Esto permite que la respuesta aparezca en tiempo real en la UI (como ChatGPT)
+                print(f"🚀 [Company Knowledge] Generando respuesta con streaming (contexto: {len(context_block):,} caracteres, {len(ranked_results)} PDFs de apps)...")
+                
                 # Stream tokens en tiempo real
+                chunk_count = 0
                 async for chunk in self.llm.astream([HumanMessage(content=prompt)]):
                     if hasattr(chunk, 'content'):
                         token = chunk.content
                     else:
                         token = str(chunk)
                     full_response += token
+                    chunk_count += 1
+                    
+                    # Yield actualización parcial cada 5 chunks para streaming en tiempo real
+                    # Esto permite que la respuesta aparezca mientras se genera (como ChatGPT)
+                    if chunk_count % 5 == 0:
+                        temp_history = history + [(message, full_response)]
+                        temp_metadata = {
+                            "sources": sources_list,
+                            "total_sources": len(sources_list),
+                            "apps_searched": len(connected_apps) if connected_apps else 0,
+                            "search_status": search_status,
+                            "streaming": True  # Indicar que está en streaming
+                        }
+                        yield (temp_history, None, temp_metadata)
                 
                 # OPTIMIZACIÓN 4: Citas mejoradas con snippets exactos
                 if sources_list:
@@ -626,7 +700,7 @@ Genera un análisis COMPLETÍSIMO, ULTRA EXTENSO, PROFESIONALÍSIMO y DE MÁXIMA
                 new_history = history + [(message, full_response)]
                 
                 # OPTIMIZACIÓN 6: Metadata mejorada con información de búsqueda
-                return new_history, None, {
+                metadata = {
                     "sources": sources_list,
                     "total_sources": len(sources_list),
                     "apps_searched": len(connected_apps) if connected_apps else 0,
@@ -637,44 +711,55 @@ Genera un análisis COMPLETÍSIMO, ULTRA EXTENSO, PROFESIONALÍSIMO y DE MÁXIMA
                     "results_by_app": results_by_app,
                     "conflict_resolution": conflict_resolution
                 }
+                
+                # En un async generator, usar yield en lugar de return con valor
+                yield (new_history, None, metadata)
+                return
             except Exception as e:
-                return history, f"❌ Error generando respuesta: {str(e)}", {}
+                yield (history, f"❌ Error generando respuesta: {str(e)}", {})
+                return
         
-        # Si no hay documentos ni resultados de apps, mostrar mensaje apropiado
-        if not session["retriever"] and not app_results:
-            if connected_apps:
-                # Hay apps conectadas pero no se encontraron resultados para esta query
-                apps_names = ", ".join([app.app_name for app in connected_apps[:3]])
-                if len(connected_apps) > 3:
-                    apps_names += f" y {len(connected_apps) - 3} más"
-                
-                # Generar respuesta informativa aunque no haya resultados
-                informative_response = f"""No se encontraron resultados específicos en tus apps conectadas ({apps_names}) para esta pregunta.
-
-**💡 Sugerencias:**
-- Intenta reformular la pregunta con palabras clave diferentes
-- Verifica que la información que buscas esté disponible en esas apps
-- Prueba con una búsqueda más general
-- Asegúrate de que los permisos del token permitan acceder a los archivos que buscas
-
-**🔍 Apps conectadas:** {apps_names}
-
-Si crees que debería haber resultados, verifica:
-1. Que el token tenga los permisos necesarios (scopes)
-2. Que los archivos/documentos existan en las apps
-3. Que la búsqueda use términos que aparezcan en el contenido"""
-                
-                new_history = history + [(message, informative_response)]
-                return new_history, None, {
-                    "sources": [],
-                    "total_sources": 0,
-                    "apps_searched": len(connected_apps),
-                    "message": "No se encontraron resultados en apps conectadas"
-                }
-            elif self.app_integrations and self.app_integrations.get_connected_apps():
-                return history, "⚠️ No hay documentos procesados. Puedes cargar documentos o hacer preguntas sobre tus apps conectadas.", {}
+        # PRIORIDAD: Apps conectadas primero, luego documentos subidos
+        # Verificar si hay documentos disponibles en la sesión (para uso secundario)
+        has_documents = (
+            session.get("retriever") is not None or 
+            (session.get("docs") and len(session.get("docs", [])) > 0)
+        )
+        
+        # Si no hay resultados de apps, verificar si hay documentos subidos para usar como respaldo
+        if not app_results:
+            # Si hay documentos subidos, usarlos automáticamente (incluso si los tokens están expirados)
+            if has_documents:
+                print(f"✅ [Company Knowledge] No hay resultados de apps, pero hay documentos subidos - Usando documentos como respaldo")
+                # Continuar con el procesamiento normal usando documentos subidos
+                # El código continúa más abajo
             else:
-                return history, "⚠️ No hay documentos procesados. Carga documentos primero o conecta apps en 'Conectar Apps'.", {}
+                # No hay resultados de apps NI documentos subidos
+                # Verificar si es por tokens expirados (fallo silencioso)
+                if connected_apps:
+                    # Si hay apps conectadas pero no hay resultados, probablemente todos los tokens están expirados
+                    # Hacer silent_fail (no mostrar mensaje al usuario)
+                    print(f"⚠️ [Company Knowledge] No hay resultados de apps ni documentos subidos - Probablemente todos los tokens expirados (silent_fail)")
+                    metadata = {
+                        "sources": [],
+                        "total_sources": 0,
+                        "apps_searched": len(connected_apps),
+                        "no_results": True,
+                        "silent_fail": True  # Fallo silencioso - probablemente todos los tokens expirados
+                    }
+                    # Retornar sin mensaje de error - simplemente no mostrar nada
+                    yield (history, None, metadata)
+                    return
+                elif self.app_integrations and self.app_integrations.get_connected_apps():
+                    yield (history, "⚠️ No hay documentos procesados. Puedes cargar documentos o hacer preguntas sobre tus apps conectadas.", {})
+                    return
+                else:
+                    yield (history, "⚠️ No hay documentos procesados. Carga documentos primero o conecta apps en 'Conectar Apps'.", {})
+                    return
+        
+        # PRIORIDAD: Si hay resultados de apps, ya se procesaron arriba y se retornó
+        # Si llegamos aquí, significa que no hay resultados de apps, pero puede haber documentos subidos
+        # Continuar con procesamiento normal usando documentos subidos (si existen)
         
         start_time = time.time()
         
@@ -746,11 +831,15 @@ Si crees que debería haber resultados, verifica:
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
-        # 8. Buscar en apps conectadas si están disponibles (combinar con documentos)
-        if self.app_integrations and app_results:
-            # Ya tenemos resultados de apps de antes, agregarlos al contexto
+        # 8. PRIORIDAD: Si hay resultados de apps, usarlos como fuente principal
+        # Si hay documentos subidos, se combinan como fuente secundaria
+        if app_results:
+            # Ya tenemos resultados de apps de antes (prioridad), agregarlos al contexto
             conversation_context += app_context
-            print(f"✅ [Company Knowledge] Combinando {len(app_results)} resultados de apps con documentos")
+            if has_documents:
+                print(f"✅ [Company Knowledge] PRIORIDAD: {len(app_results)} resultados de apps + documentos subidos como complemento")
+            else:
+                print(f"✅ [Company Knowledge] PRIORIDAD: Usando {len(app_results)} resultados de apps conectadas")
         elif self.app_integrations:
             # Buscar en apps ahora si no lo hicimos antes
             connected_apps = self.app_integrations.get_connected_apps()
@@ -932,7 +1021,8 @@ Si crees que debería haber resultados, verifica:
                 "sources_count": len(sources)
             }
             
-            return history, None, metadata
+            yield (history, None, metadata)
+            return
             
         except Exception as e:
             error_msg = f"❌ Error en chat: {str(e)}"
@@ -967,7 +1057,8 @@ Si crees que debería haber resultados, verifica:
             
             history.append((message, error_msg))
             
-            return history, error_msg, {}
+            yield (history, error_msg, {})
+            return
     
     def _build_folded_context(
         self,

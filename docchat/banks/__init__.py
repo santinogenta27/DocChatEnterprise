@@ -7,6 +7,13 @@ from .banks_mode import BanksMode
 from .workflow import BanksWorkflow
 from .dashboard import BanksDashboard
 from .config_manager import BanksConfigManager
+
+try:
+    from .co_investigator import CoInvestigatorAI
+    CO_INVESTIGATOR_AVAILABLE = True
+except ImportError:
+    CO_INVESTIGATOR_AVAILABLE = False
+    CoInvestigatorAI = None
 from .agents import (
     IngestorAgent,
     ExtractorAgent,
@@ -37,6 +44,9 @@ __all__ = [
     "ReportGeneratorAgent",
     "ActionExecutorAgent",
 ]
+
+if CO_INVESTIGATOR_AVAILABLE:
+    __all__.append("CoInvestigatorAI")
 
 if API_AVAILABLE:
     __all__.append("BanksAPI")
