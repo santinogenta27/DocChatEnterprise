@@ -154,19 +154,19 @@ class MarketplaceMode:
         # Inicializar LLM
         if provider == "openai":
             self.llm = ChatOpenAI(
-                model=config.openai_model,
+                model=config.agentic_model,
                 temperature=0.7,
                 api_key=config.openai_api_key
             )
         elif provider == "claude":
             self.llm = ChatAnthropic(
-                model=config.anthropic_model,
+                model="claude-3-5-sonnet-20241022",  # Modelo por defecto para Claude
                 temperature=0.7,
                 api_key=config.anthropic_api_key
             )
         else:
             self.llm = ChatOpenAI(
-                model=config.openai_model,
+                model=config.agentic_model,
                 temperature=0.7,
                 api_key=config.openai_api_key
             )

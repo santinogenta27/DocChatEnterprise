@@ -209,6 +209,7 @@ from docchat.extraction_x_mode import run_extraction_x_mode, get_extraction_x_mo
 from docchat.data_point_mode import run_data_point_mode, get_data_point_mode
 from docchat.enterprise_connectors import EnterpriseConnectorManager, ConnectorConfig, ConnectorStatus
 from docchat.event_bus_mode import run_event_bus_mode, get_event_bus_mode
+from docchat.vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode
 from docchat.company_knowledge import get_company_knowledge, run_company_knowledge
 from docchat.invoice import get_invoice_mode, run_invoice_mode
 from docchat.fullstack_text_to_action import FullStackTextToAction
@@ -367,6 +368,13 @@ data_sight.automation = data_sight_automation
 chatdoc_instance = None  # Se inicializa cuando se use
 # Modo Supreme (clon del Enterprise API original)
 enterprise_api_supreme = EnterpriseAPISupremeMode(config, provider="openai")
+# Vision Alpha Mode - Sistema completo BettaFish
+try:
+    vision_alpha = VisionAlphaMode(config, provider="openai")
+    print("✅ Vision Alpha Mode inicializado")
+except Exception as e:
+    print(f"⚠️ Vision Alpha Mode no disponible: {e}")
+    vision_alpha = None
 # Modo Gold (clon del modo Supreme)
 enterprise_api_gold = EnterpriseAPIGoldMode(config, provider="openai")
 # Enterprise Autonomous Workflows se inicializa más abajo,
@@ -6910,10 +6918,10 @@ Los documentos de ejemplo están en el Dashboard.
                         outputs=[analysis_output]
                     )
                 
-        # Tab 2: JARVIS - Agente Autónomo 24/7 (Ahora es el segundo tab)
-        if jarvis_manager is not None:
-            print("🔍 [DEBUG] Creando tab '🤖 JARVIS' en la interfaz...")
-            with gr.Tab("🤖 JARVIS"):
+        # Tab 2: JARVIS - Agente Autónomo 24/7 (Ahora es el segundo tab) - OCULTO
+        # if jarvis_manager is not None:
+        #     print("🔍 [DEBUG] Creando tab '🤖 JARVIS' en la interfaz...")
+        #     with gr.Tab("🤖 JARVIS"):
                 print("✅ [DEBUG] Tab '🤖 JARVIS' creado exitosamente")
                 gr.Markdown("### 🤖 JARVIS - Tu Agente Autónomo Super Inteligente 24/7")
                 gr.Markdown("""
@@ -8704,154 +8712,156 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                         except Exception as e:
                             api_status_output.value = f"⚠️ Error: {str(e)}"
             
-            print("✅ Tab '🤖 JARVIS' agregado como primer tab (reemplazando Consulta RAG)")
-        else:
-            print("⚠️ JARVIS Manager no está disponible - El tab '🤖 JARVIS' no se mostrará")
+        #     print("✅ Tab '🤖 JARVIS' agregado como primer tab (reemplazando Consulta RAG)")
+        # else:
+        #     print("⚠️ JARVIS Manager no está disponible - El tab '🤖 JARVIS' no se mostrará")
         
-        # Tab 2: Guía Experto - Consejero Empresarial Inteligente
-        with gr.Tab("🎯 Guía Experto"):
-            gr.Markdown("### 🧠 Tu Consejero Empresarial Super Inteligente")
-            gr.Markdown("""
-            **🚀 Guía Experto que te dice QUÉ HACER**
-            
-            - 📊 Analiza tus documentos empresariales
-            - 🎯 Identifica tu tipo de negocio automáticamente
-            - 💡 Te da recomendaciones específicas y accionables
-            - ✅ Te dice exactamente qué hacer: invierte aquí, elimina esto, vende aquello
-            - 🧠 Super inteligencia: no solo analiza, te guía y aconseja
-            
-            **Ejemplos:**
-            - 💰 **Finanzas**: "Invierte en X, diversifica en Y, NO inviertas en Z"
-            - 🛒 **Ecommerce**: "Elimina a este empleado, vende este producto, haz esto"
-            - 🏢 **Cualquier empresa**: Recomendaciones específicas basadas en tus datos
-            """)
-            
-            # Generar session_id único para el guía experto
-            expert_session_id = gr.State(value=str(uuid.uuid4()))
-            
-            with gr.Row():
-                expert_files = gr.Files(
-                    label="📂 Sube tus Documentos Empresariales (PDF, DOCX, TXT, MD)",
-                    file_count="multiple",
-                    file_types=[".pdf", ".docx", ".txt", ".md"],
-                )
-            
-            with gr.Row():
-                expert_speed_mode = gr.Radio(
-                    label="⚡ Modo de Velocidad",
-                    choices=[
-                        ("🚀 Rápido", "fast"),
-                        ("⚖️ Balanceado (recomendado)", "balanced"),
-                        ("🎯 Máxima Calidad", "quality")
-                    ],
-                    value="balanced",
-                )
-                expert_provider = gr.Radio(
-                    label="🤖 Motor de IA",
-                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
-                    value="openai",
-                    info="Motor Alternativo = Claude (mayor precisión)"
-                )
-            
-            # Chatbot para el guía experto
-            expert_chatbot = gr.Chatbot(
-                label="💬 Conversación con tu Guía Experto",
-                height=500,
-                show_copy_button=True,
-            )
-            
-            with gr.Row():
-                expert_input = gr.Textbox(
-                    label="Escribe tu pregunta o situación",
-                    placeholder="Ejemplo: Analiza mis documentos y dime qué debo hacer para mejorar mi negocio",
-                    lines=3,
-                    scale=4,
-                )
-                expert_submit_btn = gr.Button("📤 Consultar Guía", variant="primary", scale=1)
-            
-            with gr.Row():
-                expert_clear_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
-                expert_clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
-            
-            expert_status = gr.Markdown(label="ℹ️ Estado")
-            
-            # Event handlers
-            def expert_chat_submit(message, history, files, session_id, speed_mode, provider):
-                if not message.strip():
-                    return history, history, "⚠️ Escribe una pregunta o solicita análisis."
-                if not files:
-                    return history, history, "⚠️ Primero sube documentos empresariales para que el guía experto los analice."
-                
-                new_history, error = run_expert_guide(
-                    message, history, files, session_id, speed_mode, provider
-                )
-                status = f"✅ {len(new_history)} mensajes en la conversación"
-                if error:
-                    status = error
-                return new_history, new_history, status
-            
-            def expert_clear_chat(history, session_id):
-                if session_id in expert_sessions:
-                    del expert_sessions[session_id]
-                return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
-            
-            def expert_clear_files(files, session_id):
-                if session_id in expert_sessions:
-                    expert_sessions[session_id]["processed_files"].clear()
-                    expert_sessions[session_id]["docs"] = []
-                    expert_sessions[session_id]["retriever"] = None
-                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
-            
-            expert_submit_btn.click(
-                fn=expert_chat_submit,
-                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
-                outputs=[expert_chatbot, expert_chatbot, expert_status],
-            ).then(
-                lambda: "", None, expert_input
-            )
-            
-            expert_input.submit(
-                fn=expert_chat_submit,
-                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
-                outputs=[expert_chatbot, expert_chatbot, expert_status],
-            ).then(
-                lambda: "", None, expert_input
-            )
-            
-            expert_clear_btn.click(
-                fn=expert_clear_chat,
-                inputs=[expert_chatbot, expert_session_id],
-                outputs=[expert_chatbot, expert_status],
-            )
-            
-            expert_clear_files_btn.click(
-                fn=expert_clear_files,
-                inputs=[expert_files, expert_session_id],
-                outputs=[expert_files, expert_status],
-            )
+        # Tab 2: Guía Experto - Consejero Empresarial Inteligente - OCULTO
+        # with gr.Tab("🎯 Guía Experto"):
+        #     gr.Markdown("### 🧠 Tu Consejero Empresarial Super Inteligente")
+        # with gr.Tab("🎯 Guía Experto"):
+        #     gr.Markdown("### 🧠 Tu Consejero Empresarial Super Inteligente")
+        #     gr.Markdown("""
+        #     **🚀 Guía Experto que te dice QUÉ HACER**
+        #     
+        #     - 📊 Analiza tus documentos empresariales
+        #     - 🎯 Identifica tu tipo de negocio automáticamente
+        #     - 💡 Te da recomendaciones específicas y accionables
+        #     - ✅ Te dice exactamente qué hacer: invierte aquí, elimina esto, vende aquello
+        #     - 🧠 Super inteligencia: no solo analiza, te guía y aconseja
+        #     
+        #     **Ejemplos:**
+        #     - 💰 **Finanzas**: "Invierte en X, diversifica en Y, NO inviertas en Z"
+        #     - 🛒 **Ecommerce**: "Elimina a este empleado, vende este producto, haz esto"
+        #     - 🏢 **Cualquier empresa**: Recomendaciones específicas basadas en tus datos
+        #     """)
+        #     
+        #     # Generar session_id único para el guía experto
+        #     expert_session_id = gr.State(value=str(uuid.uuid4()))
+        #     
+        #     with gr.Row():
+        #         expert_files = gr.Files(
+        #             label="📂 Sube tus Documentos Empresariales (PDF, DOCX, TXT, MD)",
+        #             file_count="multiple",
+        #             file_types=[".pdf", ".docx", ".txt", ".md"],
+        #         )
+        #     
+        #     with gr.Row():
+        #         expert_speed_mode = gr.Radio(
+        #             label="⚡ Modo de Velocidad",
+        #             choices=[
+        #                 ("🚀 Rápido", "fast"),
+        #                 ("⚖️ Balanceado (recomendado)", "balanced"),
+        #                 ("🎯 Máxima Calidad", "quality")
+        #             ],
+        #             value="balanced",
+        #         )
+        #         expert_provider = gr.Radio(
+        #             label="🤖 Motor de IA",
+        #             choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+        #             value="openai",
+        #             info="Motor Alternativo = Claude (mayor precisión)"
+        #         )
+        #     
+        #     # Chatbot para el guía experto
+        #     expert_chatbot = gr.Chatbot(
+        #         label="💬 Conversación con tu Guía Experto",
+        #         height=500,
+        #         show_copy_button=True,
+        #     )
+        #     
+        #     with gr.Row():
+        #         expert_input = gr.Textbox(
+        #             label="Escribe tu pregunta o situación",
+        #             placeholder="Ejemplo: Analiza mis documentos y dime qué debo hacer para mejorar mi negocio",
+        #             lines=3,
+        #             scale=4,
+        #         )
+        #         expert_submit_btn = gr.Button("📤 Consultar Guía", variant="primary", scale=1)
+        #     
+        #     with gr.Row():
+        #         expert_clear_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+        #         expert_clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+        #     
+        #     expert_status = gr.Markdown(label="ℹ️ Estado")
+        #     
+        #     # Event handlers
+        #     def expert_chat_submit(message, history, files, session_id, speed_mode, provider):
+        #         if not message.strip():
+        #             return history, history, "⚠️ Escribe una pregunta o solicita análisis."
+        #         if not files:
+        #             return history, history, "⚠️ Primero sube documentos empresariales para que el guía experto los analice."
+        #         
+        #         new_history, error = run_expert_guide(
+        #             message, history, files, session_id, speed_mode, provider
+        #         )
+        #         status = f"✅ {len(new_history)} mensajes en la conversación"
+        #         if error:
+        #             status = error
+        #         return new_history, new_history, status
+        #     
+        #     def expert_clear_chat(history, session_id):
+        #         if session_id in expert_sessions:
+        #             del expert_sessions[session_id]
+        #         return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+        #     
+        #     def expert_clear_files(files, session_id):
+        #         if session_id in expert_sessions:
+        #             expert_sessions[session_id]["processed_files"].clear()
+        #             expert_sessions[session_id]["docs"] = []
+        #             expert_sessions[session_id]["retriever"] = None
+        #         return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+        #     
+        #     expert_submit_btn.click(
+        #         fn=expert_chat_submit,
+        #         inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+        #         outputs=[expert_chatbot, expert_chatbot, expert_status],
+        #     ).then(
+        #         lambda: "", None, expert_input
+        #     )
+        #     
+        #     expert_input.submit(
+        #         fn=expert_chat_submit,
+        #         inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+        #         outputs=[expert_chatbot, expert_chatbot, expert_status],
+        #     ).then(
+        #         lambda: "", None, expert_input
+        #     )
+        #     
+        #     expert_clear_btn.click(
+        #         fn=expert_clear_chat,
+        #         inputs=[expert_chatbot, expert_session_id],
+        #         outputs=[expert_chatbot, expert_status],
+        #     )
+        #     
+        #     expert_clear_files_btn.click(
+        #         fn=expert_clear_files,
+        #         inputs=[expert_files, expert_session_id],
+        #         outputs=[expert_files, expert_status],
+        #     )
         
-        # Tab 3: Agentes Autónomos (Enterprise Agentic AI con IDP)
-        with gr.Tab("🤖 Agentes Autónomos"):
-            gr.Markdown("### 🤖 Enterprise Agentic AI con Intelligent Document Processing (IDP)")
-            gr.Markdown("""
-            **🚀 Funcionalidades:**
-            - Sube todos tus datos empresariales (hasta 1000 documentos)
-            - Procesamiento IDP automático: extrae información estructurada de documentos
-            - Conecta tu Agentic AI por API a tu empresa
-            - Ejecuta 50+ tareas autónomas usando tus datos procesados
-            
-            **📋 Tipos de tareas soportadas:**
-            - Análisis de datos y generación de insights
-            - Automatización de procesos empresariales
-            - Integración con sistemas externos (CRM, ERP, etc.)
-            - Generación de contenido, informes y presentaciones
-            - Optimización de procesos y recursos
-            - **Marketing y Advertising:** Campañas publicitarias, optimización automática, generación de creativos
-            - **Sales:** Gestión de leads, outreach personalizado, seguimiento automático
-            - **Email Marketing:** Campañas automatizadas, personalización, lead nurturing
-            """)
-            
-            with gr.Row():
+        # Tab 3: Agentes Autónomos (Enterprise Agentic AI con IDP) - OCULTO
+        # with gr.Tab("🤖 Agentes Autónomos"):
+        #     gr.Markdown("### 🤖 Enterprise Agentic AI con Intelligent Document Processing (IDP)")
+        #     gr.Markdown("""
+        #     **🚀 Funcionalidades:**
+        #     - Sube todos tus datos empresariales (hasta 1000 documentos)
+        #     - Procesamiento IDP automático: extrae información estructurada de documentos
+        #     - Conecta tu Agentic AI por API a tu empresa
+        #     - Ejecuta 50+ tareas autónomas usando tus datos procesados
+        #     
+        #     **📋 Tipos de tareas soportadas:**
+        #     - Análisis de datos y generación de insights
+        #     - Automatización de procesos empresariales
+        #     - Integración con sistemas externos (CRM, ERP, etc.)
+        #     - Generación de contenido, informes y presentaciones
+        #     - Optimización de procesos y recursos
+        #     - **Marketing y Advertising:** Campañas publicitarias, optimización automática, generación de creativos
+        #     - **Sales:** Gestión de leads, outreach personalizado, seguimiento automático
+        #     - **Email Marketing:** Campañas automatizadas, personalización, lead nurturing
+        #     """)
+        #     
+        #     with gr.Row():
                 with gr.Column(scale=1):
                     gr.Markdown("### 📂 Paso 1: Subir Datos Empresariales")
                     agentic_files = gr.File(
@@ -10641,181 +10651,181 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                                 outputs=[mp_search_results]
                             )
 
-        # Tab: ⚡ Lightning - Clon de Enterprise API
-        with gr.Tab("⚡ Lightning"):
-            gr.Markdown("### ⚡ Lightning - Procesamiento Rápido con Agentic AI")
-            gr.Markdown("""
-            **🚀 Funcionalidades:**
-            - Procesa documentos automáticamente (igual que Consulta RAG)
-            - Detecta problemas, oportunidades y patrones sin que se lo pidas
-            - Genera resúmenes automáticos de cada documento
-            - Ejecuta acciones según reglas personalizadas
-            - Aprende y mejora continuamente
-            
-            **💼 Perfecto para empresas que necesitan:**
-            - Procesar contratos, emails, documentos masivamente
-            - Detección automática de riesgos y oportunidades
-            - Automatización de workflows empresariales
-            """)
-            
-            # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
-            gr.Markdown("""
-            ---
-            ### 📥 Usar PDFs Sincronizados
-            
-            **¿Ya sincronizaste PDFs desde Gmail, Drive u Outlook?** Úsalos directamente aquí con un clic.
-            """)
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    ln_sync_source_selector = gr.Dropdown(
-                        choices=[
-                            ("📧 Gmail", "gmail"),
-                            ("📁 Google Drive", "google_drive"),
-                            ("📨 Outlook", "outlook"),
-                            ("💼 OneDrive", "onedrive"),
-                            ("📄 Todos", "all")
-                        ],
-                        label="Seleccionar fuente",
-                        value="all"
-                    )
-                    ln_load_synced_btn = gr.Button("📥 Cargar PDFs Sincronizados", variant="primary")
-                
-                with gr.Column(scale=2):
-                    ln_synced_pdfs_info = gr.Markdown("*Haz clic en 'Cargar PDFs Sincronizados' para ver los archivos disponibles.*")
-            
-            ln_synced_files_checkboxes = gr.CheckboxGroup(
-                label="📋 Selecciona los PDFs a procesar",
-                choices=[],
-                value=[],
-                interactive=True,
-                visible=False
-            )
-            
-            with gr.Row():
-                ln_select_all_synced_btn = gr.Button("✅ Seleccionar Todos", variant="secondary", visible=False)
-                ln_process_synced_btn = gr.Button("🚀 PROCESAR PDFs SELECCIONADOS", variant="primary", visible=False, size="lg")
-            
-            ln_synced_files_paths = gr.State(value={})
-            
-            def ln_load_synced_pdfs(source):
-                """Carga la lista de PDFs sincronizados."""
-                sync_dir = Path(config.memory_dir) / "synced_documents"
-                
-                if not sync_dir.exists():
-                    return (
-                        "❌ No hay PDFs sincronizados. Ve a '🔗 Conexiones' para sincronizar primero.",
-                        gr.update(choices=[], visible=False),
-                        gr.update(visible=False),
-                        gr.update(visible=False),
-                        {}
-                    )
-                
-                pdf_files = []
-                file_paths = {}
-                
-                if source == "all":
-                    sources = ["gmail", "google_drive", "outlook", "onedrive", "dropbox"]
-                else:
-                    sources = [source]
-                
-                for src in sources:
-                    src_dir = sync_dir / src
-                    if src_dir.exists():
-                        for pdf in src_dir.rglob("*.pdf"):
-                            relative_path = pdf.relative_to(sync_dir)
-                            display_name = f"[{src.upper()}] {pdf.name}"
-                            pdf_files.append(display_name)
-                            file_paths[display_name] = str(pdf)
-                
-                if not pdf_files:
-                    return (
-                        f"📭 No hay PDFs sincronizados de **{source}**.\n\nVe a '🔗 Conexiones' → '🔄 Sincronizar' para descargar PDFs.",
-                        gr.update(choices=[], visible=False),
-                        gr.update(visible=False),
-                        gr.update(visible=False),
-                        {}
-                    )
-                
-                info = f"""### ✅ {len(pdf_files)} PDFs encontrados
-
-| Fuente | Cantidad |
-|--------|----------|
-"""
-                counts = {}
-                for src in sources:
-                    src_dir = sync_dir / src
-                    if src_dir.exists():
-                        count = len(list(src_dir.rglob("*.pdf")))
-                        if count > 0:
-                            icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
-                            info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
-                
-                info += "\n**Selecciona los PDFs que quieres procesar abajo:**"
-                
-                return (
-                    info,
-                    gr.update(choices=pdf_files, value=[], visible=True),
-                    gr.update(visible=True),
-                    gr.update(visible=True),
-                    file_paths
-                )
-            
-            def ln_select_all_synced(current_choices):
-                """Selecciona todos los PDFs."""
-                return current_choices
-            
-            def ln_process_synced_pdfs(selected_files, file_paths_dict, rules_json):
-                """Procesa los PDFs seleccionados con Lightning."""
-                if not selected_files:
-                    raise gr.Error("Please select at least one PDF to process.")
-                
-                files_to_process = []
-                for name in selected_files:
-                    if name in file_paths_dict:
-                        files_to_process.append(file_paths_dict[name])
-                
-                if not files_to_process:
-                    raise gr.Error("Selected files not found.")
-                
-                try:
-                    rules = None
-                    if rules_json and rules_json.strip():
-                        try:
-                            rules = json.loads(rules_json)
-                        except:
-                            pass
-                    
-                    output = f"## ⚡ Lightning - Procesando {len(files_to_process)} PDFs\n\n"
-                    output += "**Archivos:**\n"
-                    for f in files_to_process[:10]:
-                        output += f"- {Path(f).name}\n"
-                    if len(files_to_process) > 10:
-                        output += f"- ... y {len(files_to_process) - 10} más\n"
-                    output += "\n---\n\n"
-                    
-                    for chunk in enterprise_api.process_enterprise_documents_streaming(
-                        files=files_to_process,
-                        auto_detect=True,
-                        rules=rules
-                    ):
-                        output += chunk
-                        yield output
-                    
-                except Exception as e:
-                    yield f"❌ Error procesando: {str(e)}"
-            
-            ln_load_synced_btn.click(
-                fn=ln_load_synced_pdfs,
-                inputs=[ln_sync_source_selector],
-                outputs=[ln_synced_pdfs_info, ln_synced_files_checkboxes, ln_select_all_synced_btn, ln_process_synced_btn, ln_synced_files_paths]
-            )
-            
-            ln_select_all_synced_btn.click(
-                fn=ln_select_all_synced,
-                inputs=[ln_synced_files_checkboxes],
-                outputs=[ln_synced_files_checkboxes]
-            )
+        # Tab: ⚡ Lightning - Clon de Enterprise API - OCULTO
+        # with gr.Tab("⚡ Lightning"):
+        #     gr.Markdown("### ⚡ Lightning - Procesamiento Rápido con Agentic AI")
+        #     gr.Markdown("""
+        #     **🚀 Funcionalidades:**
+        #     - Procesa documentos automáticamente (igual que Consulta RAG)
+        #     - Detecta problemas, oportunidades y patrones sin que se lo pidas
+        #     - Genera resúmenes automáticos de cada documento
+        #     - Ejecuta acciones según reglas personalizadas
+        #     - Aprende y mejora continuamente
+        #     
+        #     **💼 Perfecto para empresas que necesitan:**
+        #     - Procesar contratos, emails, documentos masivamente
+        #     - Detección automática de riesgos y oportunidades
+        #     - Automatización de workflows empresariales
+        #     """)
+        #     
+        #     # ==================== SECCIÓN: PDFs SINCRONIZADOS ====================
+        #     gr.Markdown("""
+        #     ---
+        #     ### 📥 Usar PDFs Sincronizados
+        #     
+        #     **¿Ya sincronizaste PDFs desde Gmail, Drive u Outlook?** Úsalos directamente aquí con un clic.
+        #     """)
+        #     
+        #     with gr.Row():
+        #         with gr.Column(scale=1):
+        #             ln_sync_source_selector = gr.Dropdown(
+        #                 choices=[
+        #                     ("📧 Gmail", "gmail"),
+        #                     ("📁 Google Drive", "google_drive"),
+        #                     ("📨 Outlook", "outlook"),
+        #                     ("💼 OneDrive", "onedrive"),
+        #                     ("📄 Todos", "all")
+        #                 ],
+        #                 label="Seleccionar fuente",
+        #                 value="all"
+        #             )
+        #             ln_load_synced_btn = gr.Button("📥 Cargar PDFs Sincronizados", variant="primary")
+        #         
+        #         with gr.Column(scale=2):
+        #             ln_synced_pdfs_info = gr.Markdown("*Haz clic en 'Cargar PDFs Sincronizados' para ver los archivos disponibles.*")
+        #     
+        #     ln_synced_files_checkboxes = gr.CheckboxGroup(
+        #         label="📋 Selecciona los PDFs a procesar",
+        #         choices=[],
+        #         value=[],
+        #         interactive=True,
+        #         visible=False
+        #     )
+        #     
+        #     with gr.Row():
+        #         ln_select_all_synced_btn = gr.Button("✅ Seleccionar Todos", variant="secondary", visible=False)
+        #         ln_process_synced_btn = gr.Button("🚀 PROCESAR PDFs SELECCIONADOS", variant="primary", visible=False, size="lg")
+        #     
+        #     ln_synced_files_paths = gr.State(value={})
+        #     
+        #     def ln_load_synced_pdfs(source):
+        #         """Carga la lista de PDFs sincronizados."""
+        #         sync_dir = Path(config.memory_dir) / "synced_documents"
+        #         
+        #         if not sync_dir.exists():
+        #             return (
+        #                 "❌ No hay PDFs sincronizados. Ve a '🔗 Conexiones' para sincronizar primero.",
+        #                 gr.update(choices=[], visible=False),
+        #                 gr.update(visible=False),
+        #                 gr.update(visible=False),
+        #                 {}
+        #             )
+        #         
+        #         pdf_files = []
+        #         file_paths = {}
+        #         
+        #         if source == "all":
+        #             sources = ["gmail", "google_drive", "outlook", "onedrive", "dropbox"]
+        #         else:
+        #             sources = [source]
+        #         
+        #         for src in sources:
+        #             src_dir = sync_dir / src
+        #             if src_dir.exists():
+        #                 for pdf in src_dir.rglob("*.pdf"):
+        #                     relative_path = pdf.relative_to(sync_dir)
+        #                     display_name = f"[{src.upper()}] {pdf.name}"
+        #                     pdf_files.append(display_name)
+        #                     file_paths[display_name] = str(pdf)
+        #         
+        #         if not pdf_files:
+        #             return (
+        #                 f"📭 No hay PDFs sincronizados de **{source}**.\n\nVe a '🔗 Conexiones' → '🔄 Sincronizar' para descargar PDFs.",
+        #                 gr.update(choices=[], visible=False),
+        #                 gr.update(visible=False),
+        #                 gr.update(visible=False),
+        #                 {}
+        #             )
+        #         
+        #         info = f"""### ✅ {len(pdf_files)} PDFs encontrados
+        # 
+        # | Fuente | Cantidad |
+        # |--------|----------|
+        # """
+        #         counts = {}
+        #         for src in sources:
+        #             src_dir = sync_dir / src
+        #             if src_dir.exists():
+        #                 count = len(list(src_dir.rglob("*.pdf")))
+        #                 if count > 0:
+        #                     icons = {"gmail": "📧", "google_drive": "📁", "outlook": "📨", "onedrive": "💼", "dropbox": "📦"}
+        #                     info += f"| {icons.get(src, '📄')} {src.replace('_', ' ').title()} | {count} |\n"
+        #         
+        #         info += "\n**Selecciona los PDFs que quieres procesar abajo:**"
+        #         
+        #         return (
+        #             info,
+        #             gr.update(choices=pdf_files, value=[], visible=True),
+        #             gr.update(visible=True),
+        #             gr.update(visible=True),
+        #             file_paths
+        #         )
+        #     
+        #     def ln_select_all_synced(current_choices):
+        #         """Selecciona todos los PDFs."""
+        #         return current_choices
+        #     
+        #     def ln_process_synced_pdfs(selected_files, file_paths_dict, rules_json):
+        #         """Procesa los PDFs seleccionados con Lightning."""
+        #         if not selected_files:
+        #             raise gr.Error("Please select at least one PDF to process.")
+        #         
+        #         files_to_process = []
+        #         for name in selected_files:
+        #             if name in file_paths_dict:
+        #                 files_to_process.append(file_paths_dict[name])
+        #         
+        #         if not files_to_process:
+        #             raise gr.Error("Selected files not found.")
+        #         
+        #         try:
+        #             rules = None
+        #             if rules_json and rules_json.strip():
+        #                 try:
+        #                     rules = json.loads(rules_json)
+        #                 except:
+        #                     pass
+        #             
+        #             output = f"## ⚡ Lightning - Procesando {len(files_to_process)} PDFs\n\n"
+        #             output += "**Archivos:**\n"
+        #             for f in files_to_process[:10]:
+        #                 output += f"- {Path(f).name}\n"
+        #             if len(files_to_process) > 10:
+        #                 output += f"- ... y {len(files_to_process) - 10} más\n"
+        #             output += "\n---\n\n"
+        #             
+        #             for chunk in enterprise_api.process_enterprise_documents_streaming(
+        #                 files=files_to_process,
+        #                 auto_detect=True,
+        #                 rules=rules
+        #             ):
+        #                 output += chunk
+        #                 yield output
+        #             
+        #         except Exception as e:
+        #             yield f"❌ Error procesando: {str(e)}"
+        #     
+        #     ln_load_synced_btn.click(
+        #         fn=ln_load_synced_pdfs,
+        #         inputs=[ln_sync_source_selector],
+        #         outputs=[ln_synced_pdfs_info, ln_synced_files_checkboxes, ln_select_all_synced_btn, ln_process_synced_btn, ln_synced_files_paths]
+        #     )
+        #     
+        #     ln_select_all_synced_btn.click(
+        #         fn=ln_select_all_synced,
+        #         inputs=[ln_synced_files_checkboxes],
+        #         outputs=[ln_synced_files_checkboxes]
+        #     )
             
             gr.Markdown("""
             ---
@@ -11299,19 +11309,19 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[ln_drive_output],
             )
             
-            ln_button.click(
-                fn=ln_stream_and_save,
-                inputs=[ln_files, ln_auto_detect_check, ln_rules_input, ln_provider_toggle],
-                outputs=[ln_output, ln_result_state],
-                show_progress="full"
-            )
-            
-            ln_process_synced_btn.click(
-                fn=ln_stream_synced_and_save,
-                inputs=[ln_synced_files_checkboxes, ln_synced_files_paths, ln_rules_input],
-                outputs=[ln_output, ln_result_state],
-                show_progress="full"
-            )
+        #     ln_button.click(
+        #         fn=ln_stream_and_save,
+        #         inputs=[ln_files, ln_auto_detect_check, ln_rules_input, ln_provider_toggle],
+        #         outputs=[ln_output, ln_result_state],
+        #         show_progress="full"
+        #     )
+        #     
+        #     ln_process_synced_btn.click(
+        #         fn=ln_stream_synced_and_save,
+        #         inputs=[ln_synced_files_checkboxes, ln_synced_files_paths, ln_rules_input],
+        #         outputs=[ln_output, ln_result_state],
+        #         show_progress="full"
+        #     )
 
         # Tab 4.6: Stargate PDF - Clon de Enterprise API para PDFs
         with gr.Tab("🌀 Stargate PDF"):
@@ -15111,164 +15121,164 @@ Formato: **{output_format}**
                 outputs=[awo_execution_output, awo_execution_id, awo_a2a_status],
             )
 
-        # Tab 4.9: Deep Research (Enterprise Deep Research-style)
-        with gr.Tab("🧠 Deep Research"):
-            gr.Markdown("### 🧠 Deep Research - Enterprise Deep Research (EDR) para empresas")
-            gr.Markdown(
-                """
-                **🚀 Modo Deep Research inspirado en Enterprise Deep Research (EDR):**
-                
-                - 🧭 **Master Research Agent**: Usa el Research & Action Agent en modo `deep_search`
-                - 📝 **Plan ligero de investigación (todo)**: crea y registra tareas internas
-                - 📚 **Fuentes internas + externas**: combina RAG enterprise y web
-                - 📑 **Reporte Markdown estructurado**: listo para pegar en Notion/Confluence
-                - 👤 **Steering opcional**: puedes guiar la investigación con mensajes de alto nivel
-                """
-            )
+        # Tab 4.9: Deep Research (Enterprise Deep Research-style) - OCULTO
+        # with gr.Tab("🧠 Deep Research"):
+        #     gr.Markdown("### 🧠 Deep Research - Enterprise Deep Research (EDR) para empresas")
+        #     gr.Markdown(
+        #         """
+        #         **🚀 Modo Deep Research inspirado en Enterprise Deep Research (EDR):**
+        #         
+        #         - 🧭 **Master Research Agent**: Usa el Research & Action Agent en modo `deep_search`
+        #         - 📝 **Plan ligero de investigación (todo)**: crea y registra tareas internas
+        #         - 📚 **Fuentes internas + externas**: combina RAG enterprise y web
+        #         - 📑 **Reporte Markdown estructurado**: listo para pegar en Notion/Confluence
+        #         - 👤 **Steering opcional**: puedes guiar la investigación con mensajes de alto nivel
+        #         """
+        #     )
+        #
+        #     with gr.Row():
+        #         with gr.Column():
+        #             dr_query = gr.Textbox(
+        #                 label="Pregunta o tema de investigación",
+        #                 placeholder="Ejemplo: Impacto de la IA agentic en workflows financieros de AP/AR en bancos medianos",
+        #                 lines=4,
+        #             )
+        #             dr_mode = gr.Radio(
+        #                 ["quick", "standard", "deep"],
+        #                 value="standard",
+        #                 label="Modo de Research",
+        #                 info="quick = visión general; standard = profundo; deep = máximo esfuerzo",
+        #             )
+        #             dr_files = gr.File(
+        #                 label="Archivos internos opcionales (PDF, DOCX, XLSX, etc.)",
+        #                 file_count="multiple",
+        #             )
+        #             dr_steering = gr.Textbox(
+        #                 label="Steering humano (opcional)",
+        #                 placeholder="Ejemplos: 'prioriza fuentes académicas', 'enfócate en casos de bancos europeos', una instrucción por línea.",
+        #                 lines=4,
+        #             )
+        #             dr_run_btn = gr.Button("🧠 Ejecutar Deep Research", variant="primary")
+        #         with gr.Column():
+        #             dr_output = gr.Markdown(label="Reporte de Deep Research")
+        #
+        #     def run_deep_research_ui(query, mode, files, steering_text):
+        #         if not query or not query.strip():
+        #             return "⚠️ Escribe una pregunta o tema de investigación."
+        #         if not deep_research_mode:
+        #             return "❌ Deep Research Mode no está habilitado en este entorno."
+        #
+        #         steering_messages: List[str] = []
+        #         if steering_text:
+        #             steering_messages = [line.strip() for line in steering_text.splitlines() if line.strip()]
+        #
+        #         try:
+        #             result = deep_research_mode.run_research(
+        #                 query=query.strip(),
+        #                 files=files,
+        #                 run_mode=mode,
+        #                 steering_messages=steering_messages,
+        #                 tenant_id="deep_research_ui",
+        #             )
+        #             return result.report_markdown
+        #         except Exception as e:
+        #             import traceback
+        #             traceback.print_exc()
+        #             return f"❌ Error ejecutando Deep Research: {str(e)}"
+        #
+        #     dr_run_btn.click(
+        #         fn=run_deep_research_ui,
+        #         inputs=[dr_query, dr_mode, dr_files, dr_steering],
+        #         outputs=[dr_output],
+        #     )
 
-            with gr.Row():
-                with gr.Column():
-                    dr_query = gr.Textbox(
-                        label="Pregunta o tema de investigación",
-                        placeholder="Ejemplo: Impacto de la IA agentic en workflows financieros de AP/AR en bancos medianos",
-                        lines=4,
-                    )
-                    dr_mode = gr.Radio(
-                        ["quick", "standard", "deep"],
-                        value="standard",
-                        label="Modo de Research",
-                        info="quick = visión general; standard = profundo; deep = máximo esfuerzo",
-                    )
-                    dr_files = gr.File(
-                        label="Archivos internos opcionales (PDF, DOCX, XLSX, etc.)",
-                        file_count="multiple",
-                    )
-                    dr_steering = gr.Textbox(
-                        label="Steering humano (opcional)",
-                        placeholder="Ejemplos: 'prioriza fuentes académicas', 'enfócate en casos de bancos europeos', una instrucción por línea.",
-                        lines=4,
-                    )
-                    dr_run_btn = gr.Button("🧠 Ejecutar Deep Research", variant="primary")
-                with gr.Column():
-                    dr_output = gr.Markdown(label="Reporte de Deep Research")
-
-            def run_deep_research_ui(query, mode, files, steering_text):
-                if not query or not query.strip():
-                    return "⚠️ Escribe una pregunta o tema de investigación."
-                if not deep_research_mode:
-                    return "❌ Deep Research Mode no está habilitado en este entorno."
-
-                steering_messages: List[str] = []
-                if steering_text:
-                    steering_messages = [line.strip() for line in steering_text.splitlines() if line.strip()]
-
-                try:
-                    result = deep_research_mode.run_research(
-                        query=query.strip(),
-                        files=files,
-                        run_mode=mode,
-                        steering_messages=steering_messages,
-                        tenant_id="deep_research_ui",
-                    )
-                    return result.report_markdown
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    return f"❌ Error ejecutando Deep Research: {str(e)}"
-
-            dr_run_btn.click(
-                fn=run_deep_research_ui,
-                inputs=[dr_query, dr_mode, dr_files, dr_steering],
-                outputs=[dr_output],
-            )
-
-        # Tab 4.10: Deep Research Pro / Eric Schmidt
-        with gr.Tab("🧠 Deep Research Pro"):
-            gr.Markdown("### 🧠 Deep Research Pro – Modo Eric Schmidt / 50 PhD × 3 meses")
-            gr.Markdown(
-                """
-                **Modo extremo de investigación multi-agente para preguntas estratégicas muy complejas.**
-
-                - 🧭 Orquesta Deep Research + datos privados + acciones enterprise (opcional)
-                - 📝 Plan de investigación (todo-like) con múltiples iteraciones profundas
-                - 📚 Combina documentos internos (PDF, DOCX, XLSX, etc.) con web / código / perfiles
-                - 📊 Reporte largo (tipo consultoría) + visualizaciones básicas
-
-                Usa este modo cuando quieras un informe de tipo "equipo de 50 PhD trabajando 3 meses".
-                """
-            )
-
-            with gr.Row():
-                with gr.Column():
-                    drp_query = gr.Textbox(
-                        label="Pregunta / Objetivo estratégico",
-                        placeholder="Ej: 'Diseña una estrategia de entrada al mercado para nuestro producto de IA en banca LATAM'",
-                        lines=4,
-                    )
-                    drp_files = gr.File(
-                        label="Archivos internos (datasets, PDFs, contratos, reportes)",
-                        file_count="multiple",
-                    )
-                    drp_steering = gr.Textbox(
-                        label="Steering humano (opcional, una instrucción por línea)",
-                        placeholder="Ej: 'prioriza fuentes académicas', 'ignora datos antes de 2020', 'enfócate en competidores europeos'",
-                        lines=4,
-                    )
-                    drp_mode = gr.Radio(
-                        ["standard", "deep"],
-                        value="deep",
-                        label="Intensidad",
-                        info="standard = profundo; deep = máximo esfuerzo",
-                    )
-                    drp_eric = gr.Checkbox(
-                        label="🧪 Modo Eric Schmidt (50 PhD × 3 meses: 20–30 loops profundos, más coste)",
-                        value=False,
-                    )
-                    drp_run_btn = gr.Button("🚀 Ejecutar Deep Research Pro", variant="primary")
-                with gr.Column():
-                    drp_output = gr.Markdown(label="Reporte Deep Research Pro")
-
-            def run_deep_research_pro_ui(query, files, steering_text, mode, eric_mode):
-                if not query or not query.strip():
-                    return "⚠️ Escribe una pregunta u objetivo estratégico."
-                if not deep_research_mode:
-                    return "❌ Deep Research Mode no está habilitado en este entorno."
-
-                steering_messages: List[str] = []
-                if steering_text:
-                    steering_messages = [line.strip() for line in steering_text.splitlines() if line.strip()]
-
-                # Elegir run_mode interno y nº de loops en función del modo Eric
-                internal_mode = mode or "deep"
-                if eric_mode:
-                    internal_mode = "deep"
-
-                try:
-                    result = deep_research_mode.run_research(
-                        query=query.strip(),
-                        files=files,
-                        run_mode=internal_mode,
-                        steering_messages=steering_messages,
-                        tenant_id="deep_research_pro_ui",
-                    )
-
-                    md = f"## 🧠 Deep Research Pro – Resultado\n\n"
-                    md += result.report_markdown
-                    md += "\n\n---\n\n"
-                    md += f"**Iteraciones utilizadas:** {result.iterations}\n\n"
-                    if eric_mode:
-                        md += "_Modo Eric Schmidt activado: se permitió al sistema ir más profundo y costoso en la investigación._\n"
-                    return md
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    return f"❌ Error ejecutando Deep Research Pro: {str(e)}"
-
-            drp_run_btn.click(
-                fn=run_deep_research_pro_ui,
-                inputs=[drp_query, drp_files, drp_steering, drp_mode, drp_eric],
-                outputs=[drp_output],
-            )
+        # Tab 4.10: Deep Research Pro / Eric Schmidt - OCULTO
+        # with gr.Tab("🧠 Deep Research Pro"):
+        #     gr.Markdown("### 🧠 Deep Research Pro – Modo Eric Schmidt / 50 PhD × 3 meses")
+        #     gr.Markdown(
+        #         """
+        #         **Modo extremo de investigación multi-agente para preguntas estratégicas muy complejas.**
+        #
+        #         - 🧭 Orquesta Deep Research + datos privados + acciones enterprise (opcional)
+        #         - 📝 Plan de investigación (todo-like) con múltiples iteraciones profundas
+        #         - 📚 Combina documentos internos (PDF, DOCX, XLSX, etc.) con web / código / perfiles
+        #         - 📊 Reporte largo (tipo consultoría) + visualizaciones básicas
+        #
+        #         Usa este modo cuando quieras un informe de tipo "equipo de 50 PhD trabajando 3 meses".
+        #         """
+        #     )
+        #
+        #     with gr.Row():
+        #         with gr.Column():
+        #             drp_query = gr.Textbox(
+        #                 label="Pregunta / Objetivo estratégico",
+        #                 placeholder="Ej: 'Diseña una estrategia de entrada al mercado para nuestro producto de IA en banca LATAM'",
+        #                 lines=4,
+        #             )
+        #             drp_files = gr.File(
+        #                 label="Archivos internos (datasets, PDFs, contratos, reportes)",
+        #                 file_count="multiple",
+        #             )
+        #             drp_steering = gr.Textbox(
+        #                 label="Steering humano (opcional, una instrucción por línea)",
+        #                 placeholder="Ej: 'prioriza fuentes académicas', 'ignora datos antes de 2020', 'enfócate en competidores europeos'",
+        #                 lines=4,
+        #             )
+        #             drp_mode = gr.Radio(
+        #                 ["standard", "deep"],
+        #                 value="deep",
+        #                 label="Intensidad",
+        #                 info="standard = profundo; deep = máximo esfuerzo",
+        #             )
+        #             drp_eric = gr.Checkbox(
+        #                 label="🧪 Modo Eric Schmidt (50 PhD × 3 meses: 20–30 loops profundos, más coste)",
+        #                 value=False,
+        #             )
+        #             drp_run_btn = gr.Button("🚀 Ejecutar Deep Research Pro", variant="primary")
+        #         with gr.Column():
+        #             drp_output = gr.Markdown(label="Reporte Deep Research Pro")
+        #
+        #     def run_deep_research_pro_ui(query, files, steering_text, mode, eric_mode):
+        #         if not query or not query.strip():
+        #             return "⚠️ Escribe una pregunta u objetivo estratégico."
+        #         if not deep_research_mode:
+        #             return "❌ Deep Research Mode no está habilitado en este entorno."
+        #
+        #         steering_messages: List[str] = []
+        #         if steering_text:
+        #             steering_messages = [line.strip() for line in steering_text.splitlines() if line.strip()]
+        #
+        #         # Elegir run_mode interno y nº de loops en función del modo Eric
+        #         internal_mode = mode or "deep"
+        #         if eric_mode:
+        #             internal_mode = "deep"
+        #
+        #         try:
+        #             result = deep_research_mode.run_research(
+        #                 query=query.strip(),
+        #                 files=files,
+        #                 run_mode=internal_mode,
+        #                 steering_messages=steering_messages,
+        #                 tenant_id="deep_research_pro_ui",
+        #             )
+        #
+        #             md = f"## 🧠 Deep Research Pro – Resultado\n\n"
+        #             md += result.report_markdown
+        #             md += "\n\n---\n\n"
+        #             md += f"**Iteraciones utilizadas:** {result.iterations}\n\n"
+        #             if eric_mode:
+        #                 md += "_Modo Eric Schmidt activado: se permitió al sistema ir más profundo y costoso en la investigación._\n"
+        #             return md
+        #         except Exception as e:
+        #             import traceback
+        #             traceback.print_exc()
+        #             return f"❌ Error ejecutando Deep Research Pro: {str(e)}"
+        #
+        #     drp_run_btn.click(
+        #         fn=run_deep_research_pro_ui,
+        #         inputs=[drp_query, drp_files, drp_steering, drp_mode, drp_eric],
+        #         outputs=[drp_output],
+        #     )
 
         # Tab 4.11: AI WorkSuite (Un Solo Botón)
         with gr.Tab("🚀 AI WorkSuite (Un Solo Botón)"):
@@ -21488,6 +21498,149 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 outputs=[event_bus_stats_output],
             )
 
+        # Tab 4.5.5.8: Vision Alpha Mode - Sistema completo BettaFish
+        with gr.Tab("🔮 Vision Alpha"):
+            gr.Markdown("### 🔮 Vision Alpha Mode - Sistema Multi-Agente BettaFish Completo")
+            gr.Markdown("""
+            **🌟 Sistema completo de análisis multi-agente integrado desde BettaFish**
+            
+            **🔬 ENGINES INTEGRADOS:**
+            - 📡 **QueryEngine**: Búsqueda inteligente de información en web y noticias
+            - 🎬 **MediaEngine**: Análisis profundo de contenido multimedia (videos, imágenes)
+            - 💡 **InsightEngine**: Análisis de base de datos y análisis de sentimientos
+            - 📊 **ReportEngine**: Generación de reportes profesionales HTML/PDF
+            - 🗣️ **ForumEngine**: Colaboración y debate entre agentes para mejores resultados
+            
+            **✨ CARACTERÍSTICAS:**
+            - 🔍 Análisis multi-fuente simultáneo
+            - 📈 Generación automática de reportes ejecutivos
+            - 🎯 Colaboración inteligente entre agentes
+            - 📊 Visualizaciones y gráficos profesionales
+            - 💼 Templates personalizables para diferentes tipos de análisis
+            
+            **💡 Perfecto para:**
+            - Análisis de opinión pública y tendencias
+            - Investigación de mercado y competencia
+            - Análisis de contenido multimedia
+            - Generación de reportes ejecutivos automáticos
+            """)
+            
+            vision_alpha_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                vision_alpha_query = gr.Textbox(
+                    label="🔍 Consulta de Análisis",
+                    placeholder="Ej: Analiza las tendencias de inteligencia artificial en 2024",
+                    lines=3,
+                )
+            
+            with gr.Row():
+                vision_alpha_use_query = gr.Checkbox(
+                    label="📡 Usar QueryEngine (Búsqueda Web)",
+                    value=True
+                )
+                vision_alpha_use_media = gr.Checkbox(
+                    label="🎬 Usar MediaEngine (Multimedia)",
+                    value=True
+                )
+                vision_alpha_use_insight = gr.Checkbox(
+                    label="💡 Usar InsightEngine (Base de Datos)",
+                    value=False
+                )
+            
+            vision_alpha_bot = gr.Chatbot(
+                label="🔮 Vision Alpha - Análisis Multi-Agente",
+                height=500,
+                show_label=True,
+            )
+            
+            with gr.Row():
+                vision_alpha_submit_btn = gr.Button("🚀 Iniciar Análisis", variant="primary", scale=1)
+                vision_alpha_generate_report_btn = gr.Button("📊 Generar Reporte", variant="secondary", scale=1)
+                clear_vision_alpha_btn = gr.Button("🗑️ Limpiar", variant="secondary", scale=1)
+            
+            vision_alpha_status = gr.Markdown(label="ℹ️ Estado del Análisis")
+            vision_alpha_report_output = gr.File(label="📄 Reporte Generado", visible=False)
+            
+            def vision_alpha_submit(query, history, session_id, use_query, use_media, use_insight):
+                if not query or not query.strip():
+                    return history, history, "❌ Por favor ingresa una consulta", None
+                
+                if vision_alpha is None:
+                    return history, history, "❌ Vision Alpha Mode no está disponible", None
+                
+                try:
+                    new_history = history.copy() if history else []
+                    new_history.append([query, ""])
+                    
+                    # Ejecutar análisis
+                    response_text = ""
+                    for chunk in vision_alpha.analyze_query(
+                        query=query,
+                        session_id=session_id,
+                        use_query_engine=use_query,
+                        use_media_engine=use_media,
+                        use_insight_engine=use_insight
+                    ):
+                        response_text += chunk
+                        new_history[-1][1] = response_text
+                        yield new_history, new_history, f"🔄 Analizando...", None
+                    
+                    status_msg = f"✅ Análisis completado. Sesión: {session_id}"
+                    return new_history, new_history, status_msg, None
+                    
+                except Exception as e:
+                    error_msg = f"❌ Error: {str(e)}"
+                    if history:
+                        new_history = history.copy()
+                        new_history.append([query, error_msg])
+                        return new_history, new_history, error_msg, None
+                    return history, history, error_msg, None
+            
+            def vision_alpha_generate_report(session_id):
+                if vision_alpha is None:
+                    return "❌ Vision Alpha Mode no está disponible", None
+                
+                try:
+                    result = vision_alpha.generate_report(session_id=session_id)
+                    if result["success"]:
+                        report_path = result["report_path"]
+                        return f"✅ Reporte generado: {report_path}", report_path
+                    else:
+                        return f"❌ Error generando reporte: {result.get('error', 'Unknown error')}", None
+                except Exception as e:
+                    return f"❌ Error: {str(e)}", None
+            
+            def clear_vision_alpha(history, session_id):
+                new_session_id = str(uuid.uuid4())
+                return [], new_session_id, "🗑️ Chat limpiado", None
+            
+            vision_alpha_submit_btn.click(
+                fn=vision_alpha_submit,
+                inputs=[vision_alpha_query, vision_alpha_bot, vision_alpha_session_id, 
+                       vision_alpha_use_query, vision_alpha_use_media, vision_alpha_use_insight],
+                outputs=[vision_alpha_bot, vision_alpha_bot, vision_alpha_status, vision_alpha_report_output],
+            )
+            
+            vision_alpha_query.submit(
+                fn=vision_alpha_submit,
+                inputs=[vision_alpha_query, vision_alpha_bot, vision_alpha_session_id,
+                       vision_alpha_use_query, vision_alpha_use_media, vision_alpha_use_insight],
+                outputs=[vision_alpha_bot, vision_alpha_bot, vision_alpha_status, vision_alpha_report_output],
+            )
+            
+            vision_alpha_generate_report_btn.click(
+                fn=vision_alpha_generate_report,
+                inputs=[vision_alpha_session_id],
+                outputs=[vision_alpha_status, vision_alpha_report_output],
+            )
+            
+            clear_vision_alpha_btn.click(
+                fn=clear_vision_alpha,
+                inputs=[vision_alpha_bot, vision_alpha_session_id],
+                outputs=[vision_alpha_bot, vision_alpha_session_id, vision_alpha_status, vision_alpha_report_output],
+            )
+
         # Tab 4.5.5.7: Event Horizon Mode - Clon de Event Bus con streaming optimizado
         with gr.Tab("🌌 Event Horizon"):
             gr.Markdown("### 🌌 Event Horizon Mode - Event-Driven + Streaming en Tiempo Real")
@@ -27280,8 +27433,8 @@ Tu Equipo''',
                     gr.Markdown(f"### ❌ Error al inicializar Gmail Company Knowledge")
                     gr.Markdown(f"**Error:** {str(e)}\n\nPor favor, verifica la configuración y las dependencias.")
         
-        # Tab 4.5.9: Expert Guide NextGen (NUEVO - Consejero Empresarial con Capacidades Avanzadas)
-        with gr.Tab("🎯 Expert Guide NextGen"):
+        # Tab 4.5.9: Expert Guide NextGen (NUEVO - Consejero Empresarial con Capacidades Avanzadas) - OCULTO
+        # with gr.Tab("🎯 Expert Guide NextGen"):
             gr.Markdown("### 🧠 Expert Guide NextGen - Consejero Empresarial con Capacidades de Eric Schmidt")
             gr.Markdown("""
             **🚀 Guía Experto NextGen con TODAS las capacidades avanzadas:**
@@ -27414,8 +27567,8 @@ Tu Equipo''',
                 outputs=[expert_files, expert_status],
             )
         
-        # Tab 4.6: Chat Multi-Formato (NUEVO - Soporta todos los formatos)
-        with gr.Tab("📚 Chat Multi-Formato"):
+        # Tab 4.6: Chat Multi-Formato (NUEVO - Soporta todos los formatos) - OCULTO
+        # with gr.Tab("📚 Chat Multi-Formato"):
             gr.Markdown("### Chat Conversacional con Todos los Formatos")
             gr.Markdown("""
             **🚀 Conversación Natural con CUALQUIER Tipo de Documento**
@@ -28288,8 +28441,8 @@ Body:
                     **💡 Tip:** Consulta la documentación completa en `GUIA_RPA_AUTOMATION.md`
                     """)
         
-        # Tab 4.9: Integraciones Conectadas (NUEVO - Reemplaza Analytics)
-        with gr.Tab("🔌 Integraciones"):
+        # Tab 4.9: Integraciones Conectadas (NUEVO - Reemplaza Analytics) - OCULTO
+        # with gr.Tab("🔌 Integraciones"):
             gr.Markdown("### 🔌 Integraciones Conectadas - Busca en Todas tus Apps")
             gr.Markdown("""
             **🚀 Conecta DocChat con 30+ Apps Empresariales:**

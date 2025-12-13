@@ -137,6 +137,7 @@ from .judge_agent_mode import JudgeAgentMode, run_judge_agent_mode, get_judge_ag
 from .banking_mode import BankingMode, run_banking_mode, get_banking_mode  # noqa: F401
 # Event-driven modes
 from .event_bus_mode import EventBusMode, run_event_bus_mode, get_event_bus_mode, SimpleEventBus  # noqa: F401
+from .vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode  # noqa: F401
 from .event_horizon_mode import EventHorizonMode, run_event_horizon_mode, get_event_horizon_mode  # noqa: F401
 from .event_storage_mode import EventStorageMode, run_event_storage_mode, get_event_storage_mode  # noqa: F401
 from .extasis_mode import ExtasisMode, run_extasis_mode, get_extasis_mode  # noqa: F401
