@@ -216,18 +216,20 @@ class EventBusMode:
                     print(f"⚠️ [Event Bus Mode] No se pudo inicializar Confluent (usando Event Bus interno): {e}")
                     self.confluent_enabled = False
         
-        # LLM para generación
-        if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Event Bus Mode")
+        # LLM para generación - Se creará dinámicamente según el provider
+        # Por defecto, usar OpenAI para compatibilidad
+        if not config.openai_api_key and not config.anthropic_api_key:
+            raise ValueError("OPENAI_API_KEY o ANTHROPIC_API_KEY requerida para Event Bus Mode")
         
+        # LLM por defecto (se actualizará dinámicamente según el provider)
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
             temperature=0.2,
-            api_key=config.openai_api_key,
+            api_key=config.openai_api_key or "",
             max_tokens=4000
         )
         
-        # Inicializar módulos avanzados
+        # Inicializar módulos avanzados (se actualizarán dinámicamente con el LLM correcto)
         self.context_folder = ContextFolder(
             config=config,
             llm=self.llm,
@@ -273,6 +275,53 @@ class EventBusMode:
         # MCP Manager potenciado
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
+    
+    def _get_llm_for_provider(self, provider: str = "openai"):
+        """Crea un LLM dinámico según el provider especificado."""
+        from docchat.utils.llm_factory import create_llm
+        
+        # Normalizar provider (acepta "openai", "claude", "anthropic")
+        provider_lower = provider.lower()
+        if provider_lower in ["claude", "anthropic"]:
+            provider_to_use = "claude"
+            api_key = self.config.anthropic_api_key
+            if not api_key:
+                print(f"⚠️ [Event Bus Mode] ANTHROPIC_API_KEY no configurada, usando OpenAI como fallback")
+                provider_to_use = "openai"
+                api_key = self.config.openai_api_key
+        else:
+            provider_to_use = "openai"
+            api_key = self.config.openai_api_key
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY requerida para Event Bus Mode")
+        
+        return create_llm(
+            provider=provider_to_use,
+            model=self.config.research_model or "gpt-4o",
+            temperature=0.2,
+            api_key=api_key,
+            max_tokens=4000,
+            request_timeout=300
+        )
+    
+    def _update_modules_with_llm(self, llm):
+        """Actualiza los módulos avanzados con el LLM correcto."""
+        # Actualizar LLM
+        self.llm = llm
+        
+        # Actualizar módulos que usan el LLM
+        if hasattr(self.context_folder, 'llm'):
+            self.context_folder.llm = llm
+        if hasattr(self.chain_reasoner, 'llm'):
+            self.chain_reasoner.llm = llm
+        if hasattr(self.path_reasoner, 'llm'):
+            self.path_reasoner.llm = llm
+        if hasattr(self.test_time_trainer, 'llm'):
+            self.test_time_trainer.llm = llm
+        if hasattr(self.reinforcement_planner, 'llm'):
+            self.reinforcement_planner.llm = llm
+        if hasattr(self.mcp_manager, 'llm'):
+            self.mcp_manager.llm = llm
         
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
@@ -720,6 +769,10 @@ class EventBusMode:
         Returns:
             (history, error, metadata): Historial actualizado, error si hay, metadatos
         """
+        # ACTUALIZAR LLM SEGÚN EL PROVIDER - CRÍTICO para usar Claude cuando se selecciona
+        provider_llm = self._get_llm_for_provider(provider)
+        self._update_modules_with_llm(provider_llm)
+        
         session = self.initialize_session(session_id)
         
         if not session["retriever"]:

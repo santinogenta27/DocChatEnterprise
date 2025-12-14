@@ -187,6 +187,8 @@ from docchat.multi_format_processor import MultiFormatProcessor
 from docchat.iterative_learning_agent import IterativeLearningAgent
 from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
 from docchat.alien_mode import run_alien_mode, get_alien_mode
+from docchat.advantage_mode import run_advantage_mode, get_advantage_mode
+from docchat.chat_pdf_mode import run_chat_pdf_mode, get_chat_pdf_mode
 from docchat.snipe_shot_mode import run_snipe_shot_mode, get_snipe_shot_mode
 from docchat.portal_ads_mode import run_portal_ads_mode, get_portal_ads_mode
 from docchat.ad_llm_mode import run_ad_llm_mode, get_ad_llm_mode
@@ -17472,6 +17474,463 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 outputs=[alien_stats_output],
             )
 
+        # Tab 4.5.5.5.1: Advantage Mode - Clon de Alien Mode
+        with gr.Tab("⚡ Advantage Mode"):
+            gr.Markdown("### ⚡ Advantage Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            """)
+            
+            # Generar session_id único
+            advantage_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                advantage_files = gr.Files(
+                    label="📂 Advantage Mode Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                advantage_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                advantage_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            advantage_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                advantage_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                advantage_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_advantage_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_advantage_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                advantage_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            advantage_status = gr.Markdown(label="ℹ️ Chat Status")
+            advantage_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def advantage_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_advantage_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_advantage(history, session_id):
+                # Clear session for advantage mode
+                advantage_mode = get_advantage_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(advantage_mode, 'sessions') and session_id in advantage_mode.sessions:
+                    advantage_mode.sessions[session_id]["history"] = []
+                    advantage_mode.sessions[session_id]["docs"] = []
+                    advantage_mode.sessions[session_id]["retriever"] = None
+                    advantage_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_advantage_files(files, session_id):
+                advantage_mode = get_advantage_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(advantage_mode, 'sessions') and session_id in advantage_mode.sessions:
+                    advantage_mode.sessions[session_id]["processed_files"].clear()
+                    advantage_mode.sessions[session_id]["docs"] = []
+                    advantage_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_advantage_stats(session_id):
+                advantage_mode = get_advantage_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = advantage_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - Advantage Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n\n"
+                
+                output += f"### 🔌 MCP Integration\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Enabled connections: {stats['mcp_integration']['enabled_connections']}\n\n"
+                
+                if 'session' in stats:
+                    output += f"### 📊 Session Statistics\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- History entries: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(value=output, visible=True)
+            
+            advantage_submit_btn.click(
+                fn=advantage_submit,
+                inputs=[advantage_input, advantage_bot, advantage_files, advantage_session_id, advantage_speed_mode, advantage_provider_toggle],
+                outputs=[advantage_bot, advantage_bot, advantage_status, advantage_stats_output],
+            )
+            
+            advantage_input.submit(
+                fn=advantage_submit,
+                inputs=[advantage_input, advantage_bot, advantage_files, advantage_session_id, advantage_speed_mode, advantage_provider_toggle],
+                outputs=[advantage_bot, advantage_bot, advantage_status, advantage_stats_output],
+            ).then(
+                lambda: "", None, advantage_input
+            )
+            
+            clear_advantage_btn.click(
+                fn=clear_advantage,
+                inputs=[advantage_bot, advantage_session_id],
+                outputs=[advantage_bot, advantage_status, advantage_stats_output],
+            )
+            
+            clear_advantage_files_btn.click(
+                fn=clear_advantage_files,
+                inputs=[advantage_files, advantage_session_id],
+                outputs=[advantage_files, advantage_status, advantage_stats_output],
+            )
+            
+            advantage_stats_btn.click(
+                fn=show_advantage_stats,
+                inputs=[advantage_session_id],
+                outputs=[advantage_stats_output],
+            )
+
+        # Tab: 📄 ChatPDF Mode - Clon de Alien Mode
+        with gr.Tab("📄 ChatPDF"):
+            gr.Markdown("### 📄 ChatPDF Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            """)
+            
+            # Generar session_id único
+            chat_pdf_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                chat_pdf_files = gr.Files(
+                    label="📂 ChatPDF Mode Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                chat_pdf_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                chat_pdf_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            chat_pdf_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                chat_pdf_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                chat_pdf_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_chat_pdf_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_chat_pdf_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                chat_pdf_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            chat_pdf_status = gr.Markdown(label="ℹ️ Chat Status")
+            chat_pdf_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers - CON STREAMING EN TIEMPO REAL
+            def chat_pdf_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                # STREAMING: run_chat_pdf_mode es un generador que yield actualizaciones progresivas
+                # Gradio detecta automáticamente el generador y muestra actualizaciones en tiempo real
+                for update in run_chat_pdf_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                ):
+                    # Yield cada actualización para streaming en tiempo real (como ChatGPT)
+                    yield update
+            
+            def clear_chat_pdf(history, session_id):
+                # Clear session for chat_pdf mode
+                chat_pdf_mode = get_chat_pdf_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(chat_pdf_mode, 'sessions') and session_id in chat_pdf_mode.sessions:
+                    chat_pdf_mode.sessions[session_id]["history"] = []
+                    chat_pdf_mode.sessions[session_id]["docs"] = []
+                    chat_pdf_mode.sessions[session_id]["retriever"] = None
+                    chat_pdf_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_chat_pdf_files(files, session_id):
+                chat_pdf_mode = get_chat_pdf_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(chat_pdf_mode, 'sessions') and session_id in chat_pdf_mode.sessions:
+                    chat_pdf_mode.sessions[session_id]["processed_files"].clear()
+                    chat_pdf_mode.sessions[session_id]["docs"] = []
+                    chat_pdf_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_chat_pdf_stats(session_id):
+                chat_pdf_mode = get_chat_pdf_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = chat_pdf_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - ChatPDF Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+                
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+                
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            chat_pdf_submit_btn.click(
+                fn=chat_pdf_submit,
+                inputs=[chat_pdf_input, chat_pdf_bot, chat_pdf_files, chat_pdf_session_id, chat_pdf_speed_mode, chat_pdf_provider_toggle],
+                outputs=[chat_pdf_bot, chat_pdf_bot, chat_pdf_status, chat_pdf_stats_output],
+            ).then(
+                lambda: "", None, chat_pdf_input
+            )
+            
+            chat_pdf_input.submit(
+                fn=chat_pdf_submit,
+                inputs=[chat_pdf_input, chat_pdf_bot, chat_pdf_files, chat_pdf_session_id, chat_pdf_speed_mode, chat_pdf_provider_toggle],
+                outputs=[chat_pdf_bot, chat_pdf_bot, chat_pdf_status, chat_pdf_stats_output],
+            ).then(
+                lambda: "", None, chat_pdf_input
+            )
+            
+            clear_chat_pdf_btn.click(
+                fn=clear_chat_pdf,
+                inputs=[chat_pdf_bot, chat_pdf_session_id],
+                outputs=[chat_pdf_bot, chat_pdf_status, chat_pdf_stats_output],
+            )
+            
+            clear_chat_pdf_files_btn.click(
+                fn=clear_chat_pdf_files,
+                inputs=[chat_pdf_files, chat_pdf_session_id],
+                outputs=[chat_pdf_files, chat_pdf_status, chat_pdf_stats_output],
+            )
+            
+            chat_pdf_stats_btn.click(
+                fn=show_chat_pdf_stats,
+                inputs=[chat_pdf_session_id],
+                outputs=[chat_pdf_stats_output],
+            )
+
         # Tab: 🤖 OPTIMUS PRIME - Clon de Alien Mode
         with gr.Tab("🤖 OPTIMUS PRIME"):
             gr.Markdown("### 🤖 OPTIMUS PRIME - Sistema Multi-Agente RAG de Máxima Calidad")
@@ -32858,6 +33317,8 @@ if __name__ == "__main__":
         pass
     
     demo.launch(
+        show_error=True,
+        quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
         server_name=server_name,
         server_port=port,
         share=False,

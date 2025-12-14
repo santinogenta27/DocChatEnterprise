@@ -1,23 +1,23 @@
-"""
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+﻿"""
+Advantage Mode - Sistema Multi-Agente RAG de MÃ¡xima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
-- 🔍 Relevance Checker: Verifica si la pregunta es relevante a los documentos
-- 🔬 Research Agent: Genera respuestas iniciales basadas en documentos recuperados
-- ✅ Verification Agent: Verifica que las respuestas estén soportadas (anti-hallucinación)
-- 🔄 Self-Correction Mechanism: Re-ejecuta research si hay contradicciones o claims sin soporte
-- 🔀 Hybrid Retriever: Combina BM25 (búsqueda léxica) + Vector Search (búsqueda semántica)
+- ðŸ” Relevance Checker: Verifica si la pregunta es relevante a los documentos
+- ðŸ”¬ Research Agent: Genera respuestas iniciales basadas en documentos recuperados
+- âœ… Verification Agent: Verifica que las respuestas estÃ©n soportadas (anti-hallucinaciÃ³n)
+- ðŸ”„ Self-Correction Mechanism: Re-ejecuta research si hay contradicciones o claims sin soporte
+- ðŸ”€ Hybrid Retriever: Combina BM25 (bÃºsqueda lÃ©xica) + Vector Search (bÃºsqueda semÃ¡ntica)
 
 CAPACIDADES AVANZADAS ADICIONALES:
-- Context Folding: Gestión eficiente de contextos masivos (500+ PDFs)
-- Data Provenance: Trazabilidad completa de cada pieza de información
+- Context Folding: GestiÃ³n eficiente de contextos masivos (500+ PDFs)
+- Data Provenance: Trazabilidad completa de cada pieza de informaciÃ³n
 - Chain of Thought Reasoning: Razonamiento paso a paso
-- Path-dependent Reasoning: Múltiples enfoques probados
-- Test Time Training: Mejora continua con cada conversación
-- Person in the Loop: Control humano para decisiones críticas
+- Path-dependent Reasoning: MÃºltiples enfoques probados
+- Test Time Training: Mejora continua con cada conversaciÃ³n
+- Person in the Loop: Control humano para decisiones crÃ­ticas
 - Reinforcement Learning & Planning: Estrategias adaptativas
-- MCP Powered: Conexión a sistemas externos, bases de datos, APIs
+- MCP Powered: ConexiÃ³n a sistemas externos, bases de datos, APIs
 """
 
 from __future__ import annotations
@@ -49,18 +49,18 @@ from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
 
 
-class AlienMode:
+class AdvantageMode:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    Advantage Mode - Sistema Multi-Agente RAG de MÃ¡xima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
     SISTEMA MULTI-AGENTE DOCCHAT:
-    - 🔍 Relevance Checker: Determina si la pregunta puede responderse con los documentos
-    - 🔬 Research Agent: Genera respuestas iniciales basadas en documentos recuperados
-    - ✅ Verification Agent: Verifica que las respuestas estén soportadas (anti-hallucinación)
-    - 🔄 Self-Correction: Re-ejecuta research automáticamente si hay contradicciones
-    - 🔀 Hybrid Retriever: BM25 + Vector Search para máxima precisión
+    - ðŸ” Relevance Checker: Determina si la pregunta puede responderse con los documentos
+    - ðŸ”¬ Research Agent: Genera respuestas iniciales basadas en documentos recuperados
+    - âœ… Verification Agent: Verifica que las respuestas estÃ©n soportadas (anti-hallucinaciÃ³n)
+    - ðŸ”„ Self-Correction: Re-ejecuta research automÃ¡ticamente si hay contradicciones
+    - ðŸ”€ Hybrid Retriever: BM25 + Vector Search para mÃ¡xima precisiÃ³n
     
     CAPACIDADES AVANZADAS:
     - Gestiona eficientemente 500+ PDFs con Context Folding
@@ -70,7 +70,7 @@ class AlienMode:
     - Aprende continuamente con Test Time Training
     - Control humano con Person in the Loop
     - Reinforcement Learning & Planning para estrategias adaptativas
-    - MCP Powered para conexión a sistemas externos
+    - MCP Powered para conexiÃ³n a sistemas externos
     """
     
     def __init__(
@@ -85,12 +85,12 @@ class AlienMode:
         self.retriever_builder = retriever_builder
         self.context_manager = context_manager
         
-        # LLM para generación - Se creará dinámicamente según el provider
+        # LLM para generaciÃ³n - Se crearÃ¡ dinÃ¡micamente segÃºn el provider
         # Por defecto, usar OpenAI para compatibilidad
         if not config.openai_api_key and not config.anthropic_api_key:
-            raise ValueError("OPENAI_API_KEY o ANTHROPIC_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY o ANTHROPIC_API_KEY requerida para Advantage Mode")
         
-        # LLM por defecto (se actualizará dinámicamente según el provider)
+        # LLM por defecto (se actualizarÃ¡ dinÃ¡micamente segÃºn el provider)
         self.llm = ChatOpenAI(
             model=config.research_model or "gpt-4o",
             temperature=0.2,
@@ -98,7 +98,7 @@ class AlienMode:
             max_tokens=4000
         )
         
-        # Inicializar módulos avanzados (se actualizarán dinámicamente con el LLM correcto)
+        # Inicializar mÃ³dulos avanzados (se actualizarÃ¡n dinÃ¡micamente con el LLM correcto)
         self.context_folder = ContextFolder(
             config=config,
             llm=self.llm,
@@ -146,7 +146,7 @@ class AlienMode:
         self.mcp_manager.initialize()
     
     def _get_llm_for_provider(self, provider: str = "openai"):
-        """Crea un LLM dinámico según el provider especificado."""
+        """Crea un LLM dinÃ¡mico segÃºn el provider especificado."""
         from docchat.utils.llm_factory import create_llm
         
         # Normalizar provider (acepta "openai", "claude", "anthropic")
@@ -155,14 +155,14 @@ class AlienMode:
             provider_to_use = "claude"
             api_key = self.config.anthropic_api_key
             if not api_key:
-                print(f"⚠️ [Alien Mode] ANTHROPIC_API_KEY no configurada, usando OpenAI como fallback")
+                print(f"âš ï¸ [Advantage Mode] ANTHROPIC_API_KEY no configurada, usando OpenAI como fallback")
                 provider_to_use = "openai"
                 api_key = self.config.openai_api_key
         else:
             provider_to_use = "openai"
             api_key = self.config.openai_api_key
             if not api_key:
-                raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+                raise ValueError("OPENAI_API_KEY requerida para Advantage Mode")
         
         return create_llm(
             provider=provider_to_use,
@@ -174,12 +174,12 @@ class AlienMode:
         )
     
     def _update_modules_with_llm(self, llm):
-        """Actualiza los módulos avanzados con el LLM correcto."""
+        """Actualiza los mÃ³dulos avanzados con el LLM correcto."""
         # Actualizar LLM
         self.llm = llm
         
-        # Actualizar módulos que usan el LLM
-        # Nota: Algunos módulos pueden no tener método para actualizar el LLM
+        # Actualizar mÃ³dulos que usan el LLM
+        # Nota: Algunos mÃ³dulos pueden no tener mÃ©todo para actualizar el LLM
         # En ese caso, se recrean temporalmente o se usa el LLM directamente
         if hasattr(self.context_folder, 'llm'):
             self.context_folder.llm = llm
@@ -198,7 +198,7 @@ class AlienMode:
         self.sessions: Dict[str, Dict[str, Any]] = {}
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
-        """Inicializa una nueva sesión."""
+        """Inicializa una nueva sesiÃ³n."""
         if session_id not in self.sessions:
             self.sessions[session_id] = {
                 "docs": [],
@@ -223,7 +223,7 @@ class AlienMode:
         session_id: str,
         files: List[Any]
     ) -> Dict[str, Any]:
-        """Procesa documentos para una sesión."""
+        """Procesa documentos para una sesiÃ³n."""
         session = self.initialize_session(session_id)
         
         # Procesar nuevos archivos
@@ -242,14 +242,14 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"ðŸ“„ [Advantage Mode] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
             # Rastrear procedencia de documentos
             for doc in new_docs:
                 provenance = self.provenance_tracker.track_document_source(doc)
-                # Guardar en sesión para referencia rápida
+                # Guardar en sesiÃ³n para referencia rÃ¡pida
                 if "provenances" not in session:
                     session["provenances"] = []
                 session["provenances"].append(provenance)
@@ -257,7 +257,7 @@ class AlienMode:
             # Reconstruir retriever
             if session["docs"]:
                 session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                print(f"âœ… [Advantage Mode] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {
                 "status": "success",
@@ -267,7 +267,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"âŒ [Advantage Mode] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -287,19 +287,19 @@ class AlienMode:
         Returns:
             (history, error, metadata): Historial actualizado, error si hay, metadatos
         """
-        # ACTUALIZAR LLM SEGÚN EL PROVIDER - CRÍTICO para usar Claude cuando se selecciona
+        # ACTUALIZAR LLM SEGÃšN EL PROVIDER - CRÃTICO para usar Claude cuando se selecciona
         provider_llm = self._get_llm_for_provider(provider)
         self._update_modules_with_llm(provider_llm)
         
         session = self.initialize_session(session_id)
         
         if not session["retriever"]:
-            return history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+            return history, "âš ï¸ No hay documentos procesados. Carga documentos primero.", {}
         
         # DETECTAR si hay muchos documentos para usar procesamiento paralelo
         all_docs = session.get("docs", [])
         if not all_docs:
-            return history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+            return history, "âš ï¸ No hay documentos procesados. Carga documentos primero.", {}
         
         # Agrupar documentos por fuente
         docs_by_source = defaultdict(list)
@@ -336,17 +336,17 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"âš ï¸ [Advantage Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
-        # 4. Determinar si requiere aprobación humana
+        # 4. Determinar si requiere aprobaciÃ³n humana
         requires_approval, criticality = self.person_in_loop.requires_approval(
             decision_type="document_query",
             decision_content=message,
             context=conversation_context[:500]
         )
         
-        # 5. Si requiere aprobación, solicitar
+        # 5. Si requiere aprobaciÃ³n, solicitar
         approval_id = None
         if requires_approval and criticality in [DecisionCriticality.HIGH, DecisionCriticality.CRITICAL]:
             approval_id = self.person_in_loop.request_approval(
@@ -355,8 +355,8 @@ class AlienMode:
                 context=conversation_context[:1000],
                 criticality=criticality
             )
-            # Por ahora, continuar pero marcar que requiere aprobación
-            # En producción, esperar aprobación antes de continuar
+            # Por ahora, continuar pero marcar que requiere aprobaciÃ³n
+            # En producciÃ³n, esperar aprobaciÃ³n antes de continuar
         
         # 6. Usar Reinforcement Learning y Planning para planificar estrategias
         # RL prueba diferentes enfoques: buscar por palabras clave, por secciones, por fechas, etc.
@@ -372,7 +372,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"âš ï¸ [Advantage Mode] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -389,7 +389,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"âš ï¸ [Advantage Mode] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -400,9 +400,9 @@ class AlienMode:
             if mcp_data:
                 session["mcp_queries"].append(mcp_data)
                 # Agregar datos de MCP al contexto
-                conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
+                conversation_context += f"\n\nðŸ“¡ DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"âš ï¸ [Advantage Mode] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -411,10 +411,10 @@ class AlienMode:
         
         try:
             # TRUNCAMIENTO INTELIGENTE: Limitar contexto para evitar error 429 (tokens per minute)
-            # Límite real de OpenAI para gpt-4o: 30,000 TPM (tokens per minute)
-            # Usamos 20,000 como límite MUY conservador (dejando 10,000 para docs recuperados + respuesta)
-            # El workflow también agrega documentos recuperados, así que limitamos el contexto base
-            MAX_CONTEXT_TOKENS = 20000  # Límite MUY conservador: 20,000 tokens (dejando 10,000 para docs + respuesta)
+            # LÃ­mite real de OpenAI para gpt-4o: 30,000 TPM (tokens per minute)
+            # Usamos 20,000 como lÃ­mite MUY conservador (dejando 10,000 para docs recuperados + respuesta)
+            # El workflow tambiÃ©n agrega documentos recuperados, asÃ­ que limitamos el contexto base
+            MAX_CONTEXT_TOKENS = 20000  # LÃ­mite MUY conservador: 20,000 tokens (dejando 10,000 para docs + respuesta)
             
             # Truncar contexto si es muy grande
             conversation_context = self._truncate_context_intelligently(
@@ -429,11 +429,11 @@ class AlienMode:
             # Ejecutar con contexto plegado y estrategia de RL
             enriched_query = f"{conversation_context}\n\nPREGUNTA ACTUAL:\n{message}"
             if best_strategy:
-                enriched_query += f"\n\n🎯 ESTRATEGIA DE RL: {best_strategy}"
+                enriched_query += f"\n\nðŸŽ¯ ESTRATEGIA DE RL: {best_strategy}"
             if best_approach:
-                enriched_query += f"\n\n🛤️ ENFOQUE RECOMENDADO: {best_approach}"
+                enriched_query += f"\n\nðŸ›¤ï¸ ENFOQUE RECOMENDADO: {best_approach}"
             
-            # Verificar tamaño final del query y truncar si es necesario
+            # Verificar tamaÃ±o final del query y truncar si es necesario
             enriched_query = self._truncate_query_if_needed(enriched_query, max_tokens=MAX_CONTEXT_TOKENS)
             
             result = temp_workflow.run(
@@ -465,7 +465,7 @@ class AlienMode:
                 response=answer,
                 sources=source_provenances,
                 processing_steps=[
-                    {"step": "reinforcement_planning", "details": f"Árbol RL: {rl_result.get('tree_id') if rl_result else 'N/A'}, Exploraciones: {rl_result.get('total_explorations', 0) if rl_result else 0}"},
+                    {"step": "reinforcement_planning", "details": f"Ãrbol RL: {rl_result.get('tree_id') if rl_result else 'N/A'}, Exploraciones: {rl_result.get('total_explorations', 0) if rl_result else 0}"},
                     {"step": "path_reasoning", "details": f"Enfoque: {best_approach or 'N/A'}"},
                     {"step": "chain_of_thought", "details": f"Cadena: {chain_id}"},
                     {"step": "mcp_integration", "details": f"Datos externos: {len(mcp_data.get('sources', [])) if mcp_data else 0} fuentes"}
@@ -499,32 +499,32 @@ class AlienMode:
                 }
             )
             
-            # 11. Formatear respuesta con procedencia y reporte de verificación completo
+            # 11. Formatear respuesta con procedencia y reporte de verificaciÃ³n completo
             formatted_answer = answer
             
-            # Agregar información del proceso multi-agente DocChat
+            # Agregar informaciÃ³n del proceso multi-agente DocChat
             formatted_answer += "\n\n---\n\n"
-            formatted_answer += "## 🔬 Proceso Multi-Agente DocChat\n\n"
-            formatted_answer += "### 📋 Análisis de Relevancia\n"
+            formatted_answer += "## ðŸ”¬ Proceso Multi-Agente DocChat\n\n"
+            formatted_answer += "### ðŸ“‹ AnÃ¡lisis de Relevancia\n"
             if relevance_label == "CAN_ANSWER":
-                formatted_answer += "✅ **Relevancia:** CAN_ANSWER - Los documentos proporcionan información suficiente para responder completamente.\n\n"
+                formatted_answer += "âœ… **Relevancia:** CAN_ANSWER - Los documentos proporcionan informaciÃ³n suficiente para responder completamente.\n\n"
             elif relevance_label == "PARTIAL":
-                formatted_answer += "⚠️ **Relevancia:** PARTIAL - Los documentos mencionan el tema pero pueden faltar detalles completos.\n\n"
+                formatted_answer += "âš ï¸ **Relevancia:** PARTIAL - Los documentos mencionan el tema pero pueden faltar detalles completos.\n\n"
             elif relevance_label == "NO_MATCH":
-                formatted_answer += "❌ **Relevancia:** NO_MATCH - Los documentos no contienen información relevante para esta pregunta.\n\n"
+                formatted_answer += "âŒ **Relevancia:** NO_MATCH - Los documentos no contienen informaciÃ³n relevante para esta pregunta.\n\n"
             else:
-                formatted_answer += f"ℹ️ **Relevancia:** {relevance_label}\n\n"
+                formatted_answer += f"â„¹ï¸ **Relevancia:** {relevance_label}\n\n"
             
-            # Agregar reporte de verificación completo
+            # Agregar reporte de verificaciÃ³n completo
             if verification_report:
-                formatted_answer += "### ✅ Verificación de Respuesta (Anti-Hallucinación)\n"
+                formatted_answer += "### âœ… VerificaciÃ³n de Respuesta (Anti-HallucinaciÃ³n)\n"
                 formatted_answer += verification_report
                 formatted_answer += "\n\n"
-                formatted_answer += "**🔍 Sistema de Verificación:**\n"
-                formatted_answer += "- ✅ **Hybrid Retriever:** Combina BM25 (búsqueda léxica) + Vector Search (búsqueda semántica)\n"
-                formatted_answer += "- 🔬 **Research Agent:** Genera respuesta inicial basada en documentos recuperados\n"
-                formatted_answer += "- ✅ **Verification Agent:** Verifica que la respuesta esté soportada por los documentos\n"
-                formatted_answer += "- 🔄 **Self-Correction:** Re-ejecuta research si se detectan contradicciones o claims sin soporte\n"
+                formatted_answer += "**ðŸ” Sistema de VerificaciÃ³n:**\n"
+                formatted_answer += "- âœ… **Hybrid Retriever:** Combina BM25 (bÃºsqueda lÃ©xica) + Vector Search (bÃºsqueda semÃ¡ntica)\n"
+                formatted_answer += "- ðŸ”¬ **Research Agent:** Genera respuesta inicial basada en documentos recuperados\n"
+                formatted_answer += "- âœ… **Verification Agent:** Verifica que la respuesta estÃ© soportada por los documentos\n"
+                formatted_answer += "- ðŸ”„ **Self-Correction:** Re-ejecuta research si se detectan contradicciones o claims sin soporte\n"
                 formatted_answer += "\n"
             
             # Agregar fuentes con procedencia
@@ -533,28 +533,28 @@ class AlienMode:
                 for prov in source_provenances[:10]:  # Mostrar hasta 10 fuentes
                     source_info = f"- {prov.source_name}"
                     if prov.page_number:
-                        source_info += f" (página {prov.page_number})"
+                        source_info += f" (pÃ¡gina {prov.page_number})"
                     sources_list.append(source_info)
                 
                 if sources_list:
-                    formatted_answer += "### 📚 Fuentes Consultadas\n"
+                    formatted_answer += "### ðŸ“š Fuentes Consultadas\n"
                     formatted_answer += "\n".join(sources_list)
-                    formatted_answer += f"\n\n🔍 **Procedencia:** Registro ID {record_id}\n"
+                    formatted_answer += f"\n\nðŸ” **Procedencia:** Registro ID {record_id}\n"
             
-            # Agregar información adicional del proceso
+            # Agregar informaciÃ³n adicional del proceso
             formatted_answer += "\n---\n\n"
-            formatted_answer += "### 🧠 Capacidades Avanzadas Utilizadas\n"
-            formatted_answer += "- 📦 **Context Folding:** Gestión eficiente de contextos masivos (500+ PDFs)\n"
-            formatted_answer += "- 🔍 **Data Provenance:** Trazabilidad completa de cada pieza de información\n"
-            formatted_answer += "- 🧠 **Chain of Thought:** Razonamiento paso a paso\n"
-            formatted_answer += "- 🛤️ **Path-dependent Reasoning:** Múltiples enfoques probados\n"
-            formatted_answer += "- 📈 **Test Time Training:** Mejora continua con cada conversación\n"
-            formatted_answer += "- 🌳 **Reinforcement Learning & Planning:** Estrategias adaptativas\n"
-            formatted_answer += "- 🔌 **MCP Powered:** Conexión a sistemas externos\n"
+            formatted_answer += "### ðŸ§  Capacidades Avanzadas Utilizadas\n"
+            formatted_answer += "- ðŸ“¦ **Context Folding:** GestiÃ³n eficiente de contextos masivos (500+ PDFs)\n"
+            formatted_answer += "- ðŸ” **Data Provenance:** Trazabilidad completa de cada pieza de informaciÃ³n\n"
+            formatted_answer += "- ðŸ§  **Chain of Thought:** Razonamiento paso a paso\n"
+            formatted_answer += "- ðŸ›¤ï¸ **Path-dependent Reasoning:** MÃºltiples enfoques probados\n"
+            formatted_answer += "- ðŸ“ˆ **Test Time Training:** Mejora continua con cada conversaciÃ³n\n"
+            formatted_answer += "- ðŸŒ³ **Reinforcement Learning & Planning:** Estrategias adaptativas\n"
+            formatted_answer += "- ðŸ”Œ **MCP Powered:** ConexiÃ³n a sistemas externos\n"
             
-            # Agregar advertencia si requiere aprobación
+            # Agregar advertencia si requiere aprobaciÃ³n
             if requires_approval and approval_id:
-                formatted_answer += f"\n\n⚠️ **Aprobación requerida:** ID {approval_id} (Criticidad: {criticality.value})"
+                formatted_answer += f"\n\nâš ï¸ **AprobaciÃ³n requerida:** ID {approval_id} (Criticidad: {criticality.value})"
             
             # Actualizar historial
             session["history"].append({
@@ -573,7 +573,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "advantage_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -607,7 +607,7 @@ class AlienMode:
             return history, None, metadata
             
         except Exception as e:
-            error_msg = f"❌ Error en chat: {str(e)}"
+            error_msg = f"âŒ Error en chat: {str(e)}"
             
             # Registrar error en Test Time Training
             execution_time = time.time() - start_time
@@ -651,7 +651,7 @@ class AlienMode:
         
         # Agregar historial al contexto principal
         if history:
-            for user_msg, bot_msg in history[-10:]:  # Últimas 10 interacciones
+            for user_msg, bot_msg in history[-10:]:  # Ãšltimas 10 interacciones
                 if isinstance(user_msg, (tuple, list)) and len(user_msg) == 2:
                     user_msg, bot_msg = user_msg
                 
@@ -666,11 +666,11 @@ class AlienMode:
     
     def _estimate_tokens(self, text: str) -> int:
         """
-        Estima el número de tokens en un texto.
-        Aproximación: 1 token ≈ 4 caracteres (conservador para inglés/español).
+        Estima el nÃºmero de tokens en un texto.
+        AproximaciÃ³n: 1 token â‰ˆ 4 caracteres (conservador para inglÃ©s/espaÃ±ol).
         """
-        # Aproximación conservadora: 1 token = 4 caracteres
-        # En realidad puede variar, pero esta es una buena estimación
+        # AproximaciÃ³n conservadora: 1 token = 4 caracteres
+        # En realidad puede variar, pero esta es una buena estimaciÃ³n
         return len(text) // 4
     
     def _truncate_context_intelligently(
@@ -683,18 +683,18 @@ class AlienMode:
         Trunca el contexto de forma inteligente, priorizando contenido relevante.
         
         Estrategia:
-        1. Si el contexto es menor que el límite, retornar completo
+        1. Si el contexto es menor que el lÃ­mite, retornar completo
         2. Si es mayor, priorizar:
            - Contenido relacionado con la query
-           - Últimas partes del contexto (más reciente)
-           - Resúmenes y metadatos
+           - Ãšltimas partes del contexto (mÃ¡s reciente)
+           - ResÃºmenes y metadatos
         """
         estimated_tokens = self._estimate_tokens(context)
         
         if estimated_tokens <= max_tokens:
             return context
         
-        # Calcular cuántos caracteres podemos usar (dejando margen)
+        # Calcular cuÃ¡ntos caracteres podemos usar (dejando margen)
         max_chars = max_tokens * 4  # 4 chars por token
         max_chars = int(max_chars * 0.95)  # 95% para margen de seguridad
         
@@ -707,7 +707,7 @@ class AlienMode:
             query_lower = query.lower()
             context_lower = context.lower()
             
-            # Buscar párrafos que contengan palabras de la query
+            # Buscar pÃ¡rrafos que contengan palabras de la query
             paragraphs = context.split('\n\n')
             relevant_paragraphs = []
             other_paragraphs = []
@@ -716,21 +716,21 @@ class AlienMode:
             
             for para in paragraphs:
                 para_lower = para.lower()
-                # Contar palabras de la query que aparecen en el párrafo
+                # Contar palabras de la query que aparecen en el pÃ¡rrafo
                 matches = sum(1 for word in query_words if word in para_lower)
                 if matches > 0:
                     relevant_paragraphs.append((para, matches))
                 else:
                     other_paragraphs.append(para)
             
-            # Ordenar párrafos relevantes por número de coincidencias
+            # Ordenar pÃ¡rrafos relevantes por nÃºmero de coincidencias
             relevant_paragraphs.sort(key=lambda x: x[1], reverse=True)
             
             # Construir contexto truncado: primero los relevantes, luego otros
             truncated = []
             current_length = 0
             
-            # Agregar párrafos relevantes primero
+            # Agregar pÃ¡rrafos relevantes primero
             for para, _ in relevant_paragraphs:
                 if current_length + len(para) <= max_chars:
                     truncated.append(para)
@@ -738,7 +738,7 @@ class AlienMode:
                 else:
                     break
             
-            # Agregar otros párrafos si hay espacio
+            # Agregar otros pÃ¡rrafos si hay espacio
             remaining_chars = max_chars - current_length
             if remaining_chars > 1000:  # Solo si hay espacio significativo
                 for para in other_paragraphs:
@@ -750,14 +750,14 @@ class AlienMode:
             
             result = '\n\n'.join(truncated)
             
-            # Si aún es muy grande, truncar desde el final
+            # Si aÃºn es muy grande, truncar desde el final
             if len(result) > max_chars:
                 result = result[:max_chars]
-                result += "\n\n[... contexto truncado para cumplir límite de tokens ...]"
+                result += "\n\n[... contexto truncado para cumplir lÃ­mite de tokens ...]"
             
             return result
         
-        # Estrategia 2: Si no hay query, tomar las últimas partes (más recientes)
+        # Estrategia 2: Si no hay query, tomar las Ãºltimas partes (mÃ¡s recientes)
         truncated = context[-max_chars:]
         
         # Agregar indicador de truncamiento al inicio
@@ -767,13 +767,13 @@ class AlienMode:
         return truncated
     
     def _truncate_query_if_needed(self, query: str, max_tokens: int) -> str:
-        """Trunca el query completo si excede el límite de tokens."""
+        """Trunca el query completo si excede el lÃ­mite de tokens."""
         estimated_tokens = self._estimate_tokens(query)
         
         if estimated_tokens <= max_tokens:
             return query
         
-        # Calcular máximo de caracteres
+        # Calcular mÃ¡ximo de caracteres
         max_chars = max_tokens * 4
         max_chars = int(max_chars * 0.95)  # 95% para margen
         
@@ -789,7 +789,7 @@ class AlienMode:
                 context_max = max_chars - len(question_part) - 100  # Margen
                 if context_max > 0:
                     truncated_context = context_part[:context_max]
-                    truncated_context += "\n\n[... contexto truncado para cumplir límite de tokens ...]"
+                    truncated_context += "\n\n[... contexto truncado para cumplir lÃ­mite de tokens ...]"
                     return truncated_context + "\n\n" + question_part
                 else:
                     # Si la pregunta es muy larga, truncar todo
@@ -808,8 +808,8 @@ class AlienMode:
         context: str
     ) -> Any:
         """Ejecuta un camino de razonamiento."""
-        # Simulación de ejecución de camino
-        # En producción, esto ejecutaría el query con el enfoque específico
+        # SimulaciÃ³n de ejecuciÃ³n de camino
+        # En producciÃ³n, esto ejecutarÃ­a el query con el enfoque especÃ­fico
         return f"Resultado usando enfoque: {approach}"
     
     async def _execute_rl_action(
@@ -818,65 +818,65 @@ class AlienMode:
         context: str
     ) -> Any:
         """
-        Ejecuta una acción del Reinforcement Planner.
+        Ejecuta una acciÃ³n del Reinforcement Planner.
         
         Las acciones pueden ser:
-        - "Buscar por palabras clave: [términos]"
-        - "Buscar por secciones: [sección]"
+        - "Buscar por palabras clave: [tÃ©rminos]"
+        - "Buscar por secciones: [secciÃ³n]"
         - "Buscar por fechas: [rango]"
         - "Buscar por tipo de documento: [tipo]"
         - "Comparar documentos: [docs]"
         - "Analizar estructura: [aspecto]"
         """
-        # Extraer tipo de acción
+        # Extraer tipo de acciÃ³n
         action_lower = action.lower()
         
-        # Simular ejecución de diferentes estrategias
+        # Simular ejecuciÃ³n de diferentes estrategias
         if "palabras clave" in action_lower or "keywords" in action_lower:
-            # Estrategia: búsqueda por palabras clave
+            # Estrategia: bÃºsqueda por palabras clave
             return {
                 "strategy": "keyword_search",
-                "result": "Búsqueda por palabras clave ejecutada",
+                "result": "BÃºsqueda por palabras clave ejecutada",
                 "success": True,
                 "confidence": 0.8
             }
         elif "secciones" in action_lower or "sections" in action_lower:
-            # Estrategia: búsqueda por secciones
+            # Estrategia: bÃºsqueda por secciones
             return {
                 "strategy": "section_search",
-                "result": "Búsqueda por secciones ejecutada",
+                "result": "BÃºsqueda por secciones ejecutada",
                 "success": True,
                 "confidence": 0.75
             }
         elif "fechas" in action_lower or "dates" in action_lower:
-            # Estrategia: búsqueda por fechas
+            # Estrategia: bÃºsqueda por fechas
             return {
                 "strategy": "date_search",
-                "result": "Búsqueda por fechas ejecutada",
+                "result": "BÃºsqueda por fechas ejecutada",
                 "success": True,
                 "confidence": 0.7
             }
         elif "comparar" in action_lower or "compare" in action_lower:
-            # Estrategia: comparación de documentos
+            # Estrategia: comparaciÃ³n de documentos
             return {
                 "strategy": "document_comparison",
-                "result": "Comparación de documentos ejecutada",
+                "result": "ComparaciÃ³n de documentos ejecutada",
                 "success": True,
                 "confidence": 0.85
             }
         elif "analizar" in action_lower or "analyze" in action_lower:
-            # Estrategia: análisis de estructura
+            # Estrategia: anÃ¡lisis de estructura
             return {
                 "strategy": "structure_analysis",
-                "result": "Análisis de estructura ejecutado",
+                "result": "AnÃ¡lisis de estructura ejecutado",
                 "success": True,
                 "confidence": 0.8
             }
         else:
-            # Estrategia genérica
+            # Estrategia genÃ©rica
             return {
                 "strategy": "generic",
-                "result": f"Acción ejecutada: {action}",
+                "result": f"AcciÃ³n ejecutada: {action}",
                 "success": True,
                 "confidence": 0.6
             }
@@ -893,7 +893,7 @@ class AlienMode:
         - Conectarse a bases de datos
         - Consultar APIs externas
         - Acceder a servicios en la nube
-        - Navegar datos crudos sin conectores específicos
+        - Navegar datos crudos sin conectores especÃ­ficos
         """
         if not self.mcp_manager or not self.mcp_manager.connections:
             return None
@@ -905,7 +905,7 @@ class AlienMode:
             if not requires_external:
                 return None
             
-            # Consultar cada conexión MCP disponible
+            # Consultar cada conexiÃ³n MCP disponible
             mcp_results = []
             mcp_sources = []
             
@@ -965,7 +965,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"âš ï¸ [Advantage Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -984,7 +984,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"âš ï¸ [Advantage Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1013,12 +1013,12 @@ class AlienMode:
         query: str
     ) -> Optional[Dict[str, Any]]:
         """Consulta una base de datos usando MCP."""
-        # En producción, esto usaría las herramientas MCP para consultar la BD
-        # Por ahora, simulación
+        # En producciÃ³n, esto usarÃ­a las herramientas MCP para consultar la BD
+        # Por ahora, simulaciÃ³n
         return {
             "type": "database",
             "query": query,
-            "result": "Datos de base de datos obtenidos vía MCP"
+            "result": "Datos de base de datos obtenidos vÃ­a MCP"
         }
     
     async def _query_mcp_api(
@@ -1027,11 +1027,11 @@ class AlienMode:
         query: str
     ) -> Optional[Dict[str, Any]]:
         """Consulta una API externa usando MCP."""
-        # En producción, esto usaría las herramientas MCP para consultar la API
+        # En producciÃ³n, esto usarÃ­a las herramientas MCP para consultar la API
         return {
             "type": "api",
             "query": query,
-            "result": "Datos de API obtenidos vía MCP"
+            "result": "Datos de API obtenidos vÃ­a MCP"
         }
     
     async def _query_mcp_salesforce(
@@ -1040,11 +1040,11 @@ class AlienMode:
         query: str
     ) -> Optional[Dict[str, Any]]:
         """Consulta Salesforce usando MCP."""
-        # En producción, esto usaría las herramientas MCP para consultar Salesforce
+        # En producciÃ³n, esto usarÃ­a las herramientas MCP para consultar Salesforce
         return {
             "type": "salesforce",
             "query": query,
-            "result": "Datos de Salesforce obtenidos vía MCP"
+            "result": "Datos de Salesforce obtenidos vÃ­a MCP"
         }
     
     async def _process_query_parallel(
@@ -1057,14 +1057,18 @@ class AlienMode:
         provider: str = "openai"
     ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
         """
-        Procesa consulta con procesamiento paralelo de documentos (como Enterprise API).
-        Analiza cada documento por separado aplicando el prompt del usuario,
-        luego combina todos los análisis en una respuesta final.
+        Procesa consulta con procesamiento optimizado en lotes para reducir costos.
+        
+        ESTRATEGIA DE OPTIMIZACIÓN DE COSTOS:
+        - Si hay 6+ documentos: procesa en lotes de 5-7 PDFs por request
+        - Reduce de 500 requests a ~70-100 requests (80-90% menos costos)
+        - Evita rate limits (30,000 TPM) con delays entre lotes
+        - Mantiene análisis individual por documento dentro de cada lote
         """
         session = self.sessions.get(session_id, {})
         start_time = time.time()
         
-        # Crear LLM sin límite de max_tokens para respuestas largas (como Enterprise API)
+        # Crear LLM
         from docchat.utils.llm_factory import create_llm
         api_key = self.config.openai_api_key if provider == "openai" else self.config.anthropic_api_key
         parallel_llm = create_llm(
@@ -1072,28 +1076,173 @@ class AlienMode:
             model=self.config.research_model or "gpt-4o",
             temperature=0.2,
             api_key=api_key,
-            # max_tokens REMOVIDO - dejar que la API decida la longitud (como Enterprise API)
-            request_timeout=300  # Timeout más largo para respuestas largas
+            max_tokens=4000,
+            request_timeout=300
         )
         
-        # Construir contexto de conversación (sin documentos, solo historial)
-        conversation_context = self._build_folded_context(session, history)
-        
-        # Procesar cada documento en paralelo
+        num_docs = len(docs_by_source)
         individual_analyses = {}
-        max_workers = min(5, len(docs_by_source))  # Máximo 5 documentos en paralelo
         
-        def analyze_single_document(source_name: str, file_docs: List[Document]) -> Tuple[str, str]:
-            """Analiza un solo documento con el prompt del usuario."""
-            try:
-                # Construir contexto del documento (todos los chunks de este documento)
-                doc_content = "\n\n".join([doc.page_content for doc in file_docs])
-                # Limitar contenido a ~4000 caracteres por documento para evitar límites
-                if len(doc_content) > 4000:
-                    doc_content = doc_content[:4000] + "..."
+        # Guardar num_docs para usar en la síntesis final
+        total_documents = num_docs
+        
+        # ESTRATEGIA: Si hay 6+ documentos, usar procesamiento en lotes (optimización de costos)
+        if num_docs >= 6:
+            # Procesar en lotes de 5-7 PDFs por request para optimizar costos
+            # Esto reduce de 500 requests a ~70-100 requests (80-90% menos costos)
+            DOCS_PER_BATCH = 6  # 6 PDFs por lote (conservador para evitar exceder límites)
+            MAX_CHARS_PER_DOC = 10000  # ~2,500 tokens por PDF (6 × 2,500 = 15k tokens, dentro del límite)
+            
+            print(f"💰 [Advantage Mode] Modo optimizado activado: {num_docs} documentos → procesando en lotes de {DOCS_PER_BATCH} PDFs por request")
+            print(f"💰 [Advantage Mode] Esto reduce de {num_docs} requests a ~{num_docs // DOCS_PER_BATCH + 1} requests (ahorro de ~{int((1 - (num_docs // DOCS_PER_BATCH + 1) / num_docs) * 100)}%)")
+            
+            # Convertir a lista para procesar en lotes
+            doc_items = list(docs_by_source.items())
+            
+            # Procesar en lotes
+            for batch_idx in range(0, len(doc_items), DOCS_PER_BATCH):
+                batch = doc_items[batch_idx:batch_idx + DOCS_PER_BATCH]
+                batch_num = (batch_idx // DOCS_PER_BATCH) + 1
+                total_batches = (len(doc_items) + DOCS_PER_BATCH - 1) // DOCS_PER_BATCH
                 
-                # Prompt CENTRADO EN EL PROMPT DEL USUARIO - Cada PDF responde exactamente lo que el usuario pregunta
-                prompt = f"""Eres un analista estratégico de nivel C-Suite. Tu tarea es analizar ESTE documento específico para responder DIRECTAMENTE la pregunta del usuario.
+                print(f"📦 [Advantage Mode] Procesando lote {batch_num}/{total_batches} ({len(batch)} documentos)...")
+                
+                # Construir contenido combinado del lote
+                batch_docs_content = []
+                batch_doc_names = []
+                
+                for source_name, file_docs in batch:
+                    doc_content = "\n\n".join([doc.page_content for doc in file_docs])
+                    
+                    # Limitar contenido por documento para el lote
+                    if len(doc_content) > MAX_CHARS_PER_DOC:
+                        half_chars = MAX_CHARS_PER_DOC // 2
+                        doc_content = doc_content[:half_chars] + "\n\n... [CONTENIDO TRUNCADO PARA OPTIMIZACIÓN] ...\n\n" + doc_content[-half_chars:]
+                    
+                    batch_docs_content.append(f"=== DOCUMENTO: {Path(source_name).name} ===\n{doc_content}")
+                    batch_doc_names.append(source_name)
+                
+                combined_batch_content = "\n\n".join(batch_docs_content)
+                
+                # Prompt para analizar el lote completo
+                batch_prompt = f"""Eres un analista estratégico de nivel C-Suite. Tu tarea es analizar ESTOS {len(batch)} documentos para responder DIRECTAMENTE la pregunta del usuario.
+
+PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
+{message}
+
+CONTENIDO DE LOS {len(batch)} DOCUMENTOS (cada uno separado):
+{combined_batch_content}
+
+INSTRUCCIONES CRÍTICAS:
+
+1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
+   - Tu objetivo PRINCIPAL es responder: "{message}"
+   - Analiza CADA documento ESPECÍFICAMENTE para encontrar información que responda esa pregunta
+   - Proporciona un análisis INDIVIDUAL para cada documento
+   - ADÁPTATE al tipo de pregunta del usuario
+
+2. ANÁLISIS INDIVIDUAL POR DOCUMENTO:
+   Para cada documento, proporciona:
+   - **Nombre del documento**: [nombre]
+   - **Respuesta Directa** (1-2 párrafos): Responde la pregunta usando información de ESTE documento específico
+   - **Información Específica** (1-2 párrafos): Detalles concretos de ESTE documento que apoyan tu respuesta
+   - **Recomendaciones/Insights** (1 párrafo): Si la pregunta lo requiere, recomendaciones basadas en ESTE documento
+
+3. ESTRUCTURA DE RESPUESTA:
+   Para cada uno de los {len(batch)} documentos, usa este formato:
+
+   ### 📄 [NOMBRE_DEL_DOCUMENTO]
+   
+   **Respuesta Directa:**
+   [Respuesta específica de este documento a la pregunta del usuario]
+   
+   **Información Específica:**
+   [Detalles concretos de este documento]
+   
+   **Recomendaciones/Insights:**
+   [Si aplica, recomendaciones basadas en este documento]
+   
+   ---
+
+4. PROFESIONALISMO ENTERPRISE:
+   - Lenguaje claro y directo (nivel C-Suite)
+   - Enfoque en responder la pregunta específica del usuario
+   - Información accionable y específica de cada documento
+   - Estructura clara y escaneable
+
+IMPORTANTE:
+- Analiza CADA documento por separado
+- NO uses un formato genérico - ADÁPTATE al tipo de pregunta
+- SÍ extrae información específica de cada documento que responda la pregunta
+- SÍ proporciona recomendaciones/insights si la pregunta lo requiere
+
+RESPUESTA CON ANÁLISIS INDIVIDUAL PARA CADA UNO DE LOS {len(batch)} DOCUMENTOS:"""
+                
+                try:
+                    # Procesar el lote completo en un solo request
+                    response = parallel_llm.invoke(batch_prompt)
+                    batch_analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                    
+                    # Extraer análisis individuales del resultado del lote
+                    # El LLM debería haber proporcionado análisis separados por documento
+                    # Si no está perfectamente separado, asignar el análisis completo a cada documento
+                    for doc_name in batch_doc_names:
+                        # Intentar extraer análisis específico del documento si está marcado
+                        doc_clean_name = Path(doc_name).name
+                        if f"### 📄 {doc_clean_name}" in batch_analysis or f"### {doc_clean_name}" in batch_analysis:
+                            # Extraer sección específica del documento
+                            start_marker = f"### 📄 {doc_clean_name}" if f"### 📄 {doc_clean_name}" in batch_analysis else f"### {doc_clean_name}"
+                            start_idx = batch_analysis.find(start_marker)
+                            if start_idx != -1:
+                                # Buscar el siguiente documento o el final
+                                next_doc_idx = len(batch_analysis)
+                                for other_doc_name in batch_doc_names:
+                                    if other_doc_name != doc_name:
+                                        other_clean_name = Path(other_doc_name).name
+                                        other_marker = f"### 📄 {other_clean_name}"
+                                        other_idx = batch_analysis.find(other_marker, start_idx + 1)
+                                        if other_idx != -1 and other_idx < next_doc_idx:
+                                            next_doc_idx = other_idx
+                                
+                                doc_analysis = batch_analysis[start_idx:next_doc_idx].strip()
+                                individual_analyses[doc_name] = doc_analysis
+                            else:
+                                # Si no se encuentra marcador específico, usar análisis completo
+                                individual_analyses[doc_name] = batch_analysis
+                        else:
+                            # Si no hay marcadores, dividir el análisis equitativamente
+                            # O usar el análisis completo para cada documento
+                            individual_analyses[doc_name] = batch_analysis
+                    
+                    print(f"✅ [Advantage Mode] Lote {batch_num}/{total_batches} completado: {len(batch)} documentos analizados")
+                    
+                except Exception as e:
+                    print(f"❌ [Advantage Mode] Error procesando lote {batch_num}: {e}")
+                    # Asignar error a todos los documentos del lote
+                    for doc_name in batch_doc_names:
+                        individual_analyses[doc_name] = f"❌ Error analizando documento en lote: {str(e)[:200]}"
+                
+                # Delay entre lotes para evitar rate limits (30,000 TPM)
+                if batch_idx + DOCS_PER_BATCH < len(doc_items):
+                    delay = 3.0  # 3 segundos entre lotes para respetar TPM
+                    print(f"⏳ [Advantage Mode] Esperando {delay}s antes del siguiente lote para evitar rate limits...")
+                    time.sleep(delay)
+        
+        else:
+            # Si hay menos de 6 documentos, procesar individualmente (más rápido y preciso)
+            print(f"🔄 [Advantage Mode] Procesando {num_docs} documentos individualmente (menos de 6, modo rápido)...")
+            
+            def analyze_single_document(source_name: str, file_docs: List[Document]) -> Tuple[str, str]:
+                """Analiza un solo documento con el prompt del usuario."""
+                try:
+                    doc_content = "\n\n".join([doc.page_content for doc in file_docs])
+                    # Limitar contenido a ~60,000 caracteres por documento
+                    MAX_CHARS_PER_DOC = 60000
+                    if len(doc_content) > MAX_CHARS_PER_DOC:
+                        half_chars = MAX_CHARS_PER_DOC // 2
+                        doc_content = doc_content[:half_chars] + "\n\n... [CONTENIDO TRUNCADO] ...\n\n" + doc_content[-half_chars:]
+                    
+                    prompt = f"""Eres un analista estratégico de nivel C-Suite. Tu tarea es analizar ESTE documento específico para responder DIRECTAMENTE la pregunta del usuario.
 
 PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
 {message}
@@ -1106,70 +1255,45 @@ INSTRUCCIONES CRÍTICAS:
 1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
    - Tu objetivo PRINCIPAL es responder: "{message}"
    - Analiza este documento ESPECÍFICAMENTE para encontrar información que responda esa pregunta
-   - Si el usuario pregunta "información más valiosa" → identifica la información MÁS VALIOSA de este documento
-   - Si el usuario pregunta "qué recomendarías hacer" → proporciona recomendaciones ESPECÍFICAS basadas en este documento
-   - Si el usuario pregunta "cuál es el mejor documento" → evalúa este documento en relación a la pregunta
-   - ADÁPTATE al tipo de pregunta del usuario - no uses un formato genérico
+   - ADÁPTATE al tipo de pregunta del usuario
 
 2. ANÁLISIS ESPECÍFICO PARA ESTE DOCUMENTO:
    - Extrae información del documento que responda DIRECTAMENTE a la pregunta del usuario
    - Cita datos concretos del documento (números, porcentajes, fechas, nombres, métricas)
-   - Identifica entidades, metodologías, frameworks, o conceptos relevantes para la pregunta
-   - Si la pregunta requiere comparación o evaluación, evalúa este documento específicamente
+   - Identifica entidades, metodologías, frameworks, o conceptos relevantes
 
 3. RESPUESTA ESTRUCTURADA (300-500 palabras):
-   - **Respuesta Directa** (1-2 párrafos): Responde la pregunta del usuario usando información de este documento
-   - **Información Específica** (1-2 párrafos): Detalles concretos del documento que apoyan tu respuesta
-   - **Recomendaciones/Insights** (1 párrafo): Si la pregunta lo requiere, proporciona recomendaciones o insights específicos
-
-4. ADAPTACIÓN AL TIPO DE PREGUNTA:
-   - Si pregunta por "información valiosa" → identifica y explica la información MÁS VALIOSA
-   - Si pregunta por "recomendaciones" → proporciona recomendaciones ESPECÍFICAS y ACCIONABLES
-   - Si pregunta por "mejor documento" → evalúa este documento y explica por qué es o no es el mejor
-   - Si pregunta por "análisis" → proporciona análisis profundo relacionado con la pregunta
-   - ADÁPTATE - no uses un formato genérico, responde lo que el usuario realmente pregunta
-
-5. PROFESIONALISMO ENTERPRISE:
-   - Lenguaje claro y directo (nivel C-Suite)
-   - Enfoque en responder la pregunta específica del usuario
-   - Información accionable y específica del documento
-   - Estructura clara y escaneable
-
-IMPORTANTE:
-- NO uses un formato genérico - ADÁPTATE al tipo de pregunta del usuario
-- NO describas el documento en general - RESPONDE la pregunta específica
-- SÍ extrae información específica del documento que responda la pregunta
-- SÍ proporciona recomendaciones/insights si la pregunta lo requiere
+   - **Respuesta Directa** (1-2 párrafos): Responde la pregunta usando información de este documento
+   - **Información Específica** (1-2 párrafos): Detalles concretos del documento
+   - **Recomendaciones/Insights** (1 párrafo): Si la pregunta lo requiere
 
 RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
-                
-                # Generar análisis con LLM (sin límite de max_tokens)
-                response = parallel_llm.invoke(prompt)
-                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
-                
-                return source_name, analysis
-            except Exception as e:
-                return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
-        
-        # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(analyze_single_document, source_name, file_docs): source_name
-                for source_name, file_docs in docs_by_source.items()
-            }
-            
-            for future in as_completed(futures):
-                source_name = futures[future]
-                try:
-                    doc_name, analysis = future.result()
-                    individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
+                    
+                    response = parallel_llm.invoke(prompt)
+                    analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                    return source_name, analysis
                 except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
-                    individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
+                    return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
+            
+            # Procesar documentos individualmente en paralelo
+            max_workers = min(5, num_docs)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(analyze_single_document, source_name, file_docs): source_name
+                    for source_name, file_docs in docs_by_source.items()
+                }
+                
+                for future in as_completed(futures):
+                    source_name = futures[future]
+                    try:
+                        doc_name, analysis = future.result()
+                        individual_analyses[doc_name] = analysis
+                        print(f"✅ [Advantage Mode] Análisis completado para: {Path(doc_name).name}")
+                    except Exception as e:
+                        print(f"❌ [Advantage Mode] Error procesando {source_name}: {e}")
+                        individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
-        # OPCIÓN A: Mostrar todos los análisis individuales
+        # Mostrar todos los análisis individuales
         individual_analyses_text = "## 📄 Análisis Individuales por Documento\n\n"
         for doc_name, analysis in individual_analyses.items():
             clean_name = Path(doc_name).name
@@ -1177,14 +1301,14 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
             individual_analyses_text += f"{analysis}\n\n"
             individual_analyses_text += "---\n\n"
         
-        # OPCIÓN B: Combinar todos los análisis en una respuesta final
+        # Combinar todos los análisis en una respuesta final
         combined_context = "\n\n".join([
             f"=== DOCUMENTO: {Path(doc_name).name} ===\n{analysis}"
             for doc_name, analysis in individual_analyses.items()
         ])
         
         # Generar respuesta combinada que RESPONDE DIRECTAMENTE al prompt del usuario
-        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario.
+        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite. Has analizado {len(individual_analyses)} documentos (procesados en lotes optimizados), cada uno respondiendo la pregunta del usuario.
 
 TU TAREA PRINCIPAL: Combinar todos los análisis individuales para responder DIRECTAMENTE la pregunta del usuario de manera completa y estratégica.
 
@@ -1255,7 +1379,7 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             synthesis_response = parallel_llm.invoke(synthesis_prompt)
             combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
         except Exception as e:
-            combined_answer = f"❌ Error generando respuesta combinada: {str(e)[:200]}"
+            combined_answer = f"âŒ Error generando respuesta combinada: {str(e)[:200]}"
         
         # Combinar ambas opciones en la respuesta final
         formatted_answer = combined_answer
@@ -1264,11 +1388,16 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         
         # Agregar información del proceso
         formatted_answer += "\n\n---\n\n"
-        formatted_answer += "## 🔬 Proceso Multi-Agente DocChat (Modo Paralelo)\n\n"
+        formatted_answer += "## 🔬 Proceso Multi-Agente DocChat (Modo Optimizado)\n\n"
         formatted_answer += f"✅ **Documentos analizados:** {len(individual_analyses)}\n"
-        formatted_answer += "✅ **Procesamiento:** Paralelo (como Enterprise API)\n"
+        if total_documents >= 6:
+            total_batches = (total_documents + 5) // 6
+            formatted_answer += f"💰 **Procesamiento:** Optimizado en lotes ({total_batches} requests en lugar de {total_documents})\n"
+            formatted_answer += f"💰 **Ahorro de costos:** ~{int((1 - total_batches / total_documents) * 100)}% menos requests\n"
+        else:
+            formatted_answer += "✅ **Procesamiento:** Individual (modo rápido para pocos documentos)\n"
         formatted_answer += "✅ **Análisis:** Individual por documento + Respuesta combinada\n"
-        formatted_answer += "✅ **Capacidad:** Respuestas largas sin límite de tokens por documento\n\n"
+        formatted_answer += "✅ **Optimización:** Reducción de costos mediante procesamiento en lotes\n\n"
         
         # Actualizar historial
         session["history"].append({
@@ -1297,7 +1426,7 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         return tuple_history, None, metadata
     
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Obtiene estadísticas del modo."""
+        """Obtiene estadÃ­sticas del modo."""
         stats = {
             "context_folding": self.context_folder.get_statistics(),
             "data_provenance": self.provenance_tracker.get_statistics(),
@@ -1324,30 +1453,30 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_advantage_mode_instance: Optional[AdvantageMode] = None
 
 
-def get_alien_mode(
+def get_advantage_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> AdvantageMode:
+    """Obtiene o crea la instancia global de Advantage Mode."""
+    global _advantage_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _advantage_mode_instance is None:
+        _advantage_mode_instance = AdvantageMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _advantage_mode_instance
 
 
-def run_alien_mode(
+def run_advantage_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1360,14 +1489,14 @@ def run_alien_mode(
     context_manager: Optional[Any] = None
 ) -> Tuple[List[Tuple[str, str]], Optional[str]]:
     """
-    Función principal para ejecutar Alien Mode.
-    Compatible con Gradio (síncrona).
+    FunciÃ³n principal para ejecutar Advantage Mode.
+    Compatible con Gradio (sÃ­ncrona).
     """
     if not config or not processor or not retriever_builder:
-        return history, "❌ Configuración incompleta"
+        return history, "âŒ ConfiguraciÃ³n incompleta"
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    advantage_mode = get_advantage_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1376,16 +1505,16 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = advantage_mode.process_documents(session_id, files)
         if result.get("status") == "error":
-            return history, f"❌ Error procesando documentos: {result.get('error')}"
+            return history, f"âŒ Error procesando documentos: {result.get('error')}"
     
     # Ejecutar query (async wrapper)
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+            advantage_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,
@@ -1396,5 +1525,5 @@ def run_alien_mode(
         loop.close()
         return new_history, error
     except Exception as e:
-        return history, f"❌ Error: {str(e)}"
+        return history, f"âŒ Error: {str(e)}"
 

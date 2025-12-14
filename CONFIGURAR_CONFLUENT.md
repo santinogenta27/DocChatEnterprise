@@ -77,8 +77,26 @@ Agrega las variables al script de inicio. Ya lo hice por ti, solo necesitas agre
    - **API Key** (username)
    - **API Secret** (password)
 
-### Si usas Kafka local:
+### Si usas Kafka local (SIN CLOUD - GRATIS):
 
+**Opción A: Docker (Recomendado - Más Fácil)**
+
+1. Instala Docker Desktop: https://www.docker.com/products/docker-desktop
+2. En la raíz del proyecto, ejecuta:
+   ```powershell
+   docker-compose -f docker-compose-kafka.yml up -d
+   ```
+3. Configura en `.env`:
+   ```env
+   CONFLUENT_BOOTSTRAP_SERVERS=localhost:9092
+   # No necesitas seguridad para Kafka local
+   ```
+
+**Opción B: Instalación Manual**
+
+Ver guía completa en `INSTALAR_KAFKA_LOCAL.md`
+
+**Configuración mínima para Kafka local:**
 ```env
 CONFLUENT_BOOTSTRAP_SERVERS=localhost:9092
 # No necesitas seguridad para Kafka local
@@ -119,4 +137,5 @@ CONFLUENT_SASL_MECHANISM=PLAIN
 CONFLUENT_SASL_USERNAME=TU_API_KEY_AQUI
 CONFLUENT_SASL_PASSWORD=TU_API_SECRET_AQUI
 ```
+
 
