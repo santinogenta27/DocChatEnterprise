@@ -209,7 +209,13 @@ from docchat.extraction_x_mode import run_extraction_x_mode, get_extraction_x_mo
 from docchat.data_point_mode import run_data_point_mode, get_data_point_mode
 from docchat.enterprise_connectors import EnterpriseConnectorManager, ConnectorConfig, ConnectorStatus
 from docchat.event_bus_mode import run_event_bus_mode, get_event_bus_mode
-from docchat.vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode
+# Vision Alpha - manejo condicional si no tiene configuraciones
+try:
+    from docchat.vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode
+except (ImportError, Exception):
+    VisionAlphaMode = None
+    get_vision_alpha_mode = None
+    run_vision_alpha_mode = None
 from docchat.company_knowledge import get_company_knowledge, run_company_knowledge
 from docchat.invoice import get_invoice_mode, run_invoice_mode
 from docchat.fullstack_text_to_action import FullStackTextToAction

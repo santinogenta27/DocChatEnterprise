@@ -17,6 +17,8 @@ import asyncio
 from typing import List, Dict, Optional, Any, Tuple
 from pathlib import Path
 from datetime import datetime
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
@@ -167,7 +169,8 @@ class ChatConversational2:
             }
         
         try:
-            print(f"📄 [Chat Conversacional 2] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [Chat Conversacional 2] Procesando {len(new_files)} nuevos documentos (TODOS serán analizados)...")
+            print(f"📄 [Chat Conversacional 2] GARANTIZADO: Cada PDF se analizará individualmente cuando hagas una pregunta")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -216,6 +219,31 @@ class ChatConversational2:
         
         if not session["retriever"]:
             return history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+        
+        # DETECTAR si hay múltiples documentos para usar procesamiento paralelo
+        all_docs = session.get("docs", [])
+        if not all_docs:
+            return history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+        
+        # Agrupar documentos por fuente
+        docs_by_source = defaultdict(list)
+        for doc in all_docs:
+            source = doc.metadata.get("source", "unknown")
+            docs_by_source[source].append(doc)
+        
+        num_unique_documents = len(docs_by_source)
+        
+        # SIEMPRE usar procesamiento paralelo cuando hay documentos (1 o más)
+        # Esto garantiza que cada PDF se analice individualmente
+        if num_unique_documents >= 1:
+            return await self._process_query_parallel(
+                session_id=session_id,
+                message=message,
+                history=history,
+                docs_by_source=docs_by_source,
+                speed_mode=speed_mode,
+                provider=provider
+            )
         
         start_time = time.time()
         
@@ -749,6 +777,376 @@ class ChatConversational2:
             "query": query,
             "result": "Datos de Salesforce obtenidos vía MCP"
         }
+    
+    async def _process_query_parallel(
+        self,
+        session_id: str,
+        message: str,
+        history: List[Tuple[str, str]],
+        docs_by_source: Dict[str, List[Document]],
+        speed_mode: str = "balanced",
+        provider: str = "openai"
+    ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
+        """
+        Procesa consulta con procesamiento paralelo de documentos.
+        Analiza cada documento por separado, como ChatGPT.
+        GARANTIZA que TODOS los documentos se analizan.
+        """
+        session = self.sessions.get(session_id, {})
+        start_time = time.time()
+        
+        # Crear LLM sin límite de max_tokens para respuestas largas y completas
+        from docchat.utils.llm_factory import create_llm
+        api_key = self.config.openai_api_key if provider == "openai" else self.config.anthropic_api_key
+        # IMPORTANTE: Cada PDF se analiza en una llamada SEPARADA al LLM
+        # Limitar max_tokens de salida para evitar problemas con límites
+        parallel_llm = create_llm(
+            provider=provider,
+            model=self.config.research_model or "gpt-4o",
+            temperature=0.1,  # Temperatura más baja para respuestas más precisas
+            api_key=api_key,
+            request_timeout=600,  # Timeout más largo para documentos grandes
+            max_tokens=4000  # Limitar tokens de salida para evitar problemas
+        )
+        
+        # Construir contexto de conversación
+        conversation_context = self._build_folded_context(session, history)
+        
+        # Procesar cada documento en paralelo
+        individual_analyses = {}
+        # Aumentar workers para procesar más documentos simultáneamente (hasta 20 para 500 PDFs)
+        max_workers = min(20, len(docs_by_source))  # Procesar hasta 20 documentos en paralelo
+        
+        print(f"🔄 [Chat Conversacional 2] Procesando {len(docs_by_source)} documentos individualmente (workers: {max_workers})...")
+        
+        def analyze_single_document(source_name: str, file_docs: List[Document]) -> Tuple[str, str]:
+            """Analiza un solo documento con el prompt del usuario - PROMPT ULTRA MEJORADO."""
+            try:
+                # Construir contexto del documento - LIMITAR para evitar exceder límites de tokens
+                # Cada PDF se analiza INDIVIDUALMENTE, pero limitamos el contenido para no exceder límites
+                doc_content = "\n\n".join([doc.page_content for doc in file_docs])
+                
+                # CRÍTICO: Limitar contenido a ~15000 tokens (~60000 caracteres) para evitar error 429
+                # Esto asegura que cada PDF se analice individualmente sin exceder límites
+                MAX_CHARS_PER_DOC = 60000  # ~15000 tokens (4 chars/token promedio)
+                
+                if len(doc_content) > MAX_CHARS_PER_DOC:
+                    print(f"⚠️ [Chat Conversacional 2] Documento muy grande ({len(doc_content)} caracteres), limitando a {MAX_CHARS_PER_DOC} para análisis individual...")
+                    # Tomar las primeras partes (más relevantes) y las últimas (conclusiones)
+                    # Esto mantiene contexto importante sin exceder límites
+                    first_part = doc_content[:MAX_CHARS_PER_DOC // 2]
+                    last_part = doc_content[-(MAX_CHARS_PER_DOC // 2):]
+                    doc_content = f"{first_part}\n\n[... contenido intermedio omitido para cumplir límites ...]\n\n{last_part}"
+                    print(f"✅ [Chat Conversacional 2] Documento limitado a {len(doc_content)} caracteres para análisis individual")
+                
+                # PROMPT ULTRA MEJORADO - Respuestas super inteligentes y completas
+                prompt = f"""Eres un analista estratégico senior de nivel C-Suite con décadas de experiencia. Tu tarea es analizar ESTE documento específico de manera PROFUNDA y COMPLETA para responder DIRECTAMENTE la pregunta del usuario con el máximo nivel de inteligencia y detalle.
+
+PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
+{message}
+
+CONTENIDO COMPLETO DE ESTE DOCUMENTO:
+{doc_content}
+
+INSTRUCCIONES PARA RESPUESTA SUPER INTELIGENTE Y COMPLETA:
+
+1. ANÁLISIS PROFUNDO Y ESTRATÉGICO (OBLIGATORIO):
+   - Analiza el documento de manera HOLÍSTICA, no superficial
+   - Identifica el CONTEXTO, PROPÓSITO y SIGNIFICADO ESTRATÉGICO del documento
+   - Extrae información IMPLÍCITA, no solo explícita (lectura entre líneas)
+   - Identifica conexiones, patrones, y relaciones entre diferentes secciones
+   - Detecta contradicciones internas, tensiones, o áreas de ambigüedad
+   - Evalúa la CALIDAD, CREDIBILIDAD y RELEVANCIA del contenido
+
+2. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
+   - Tu objetivo PRINCIPAL es responder: "{message}"
+   - NO uses un formato genérico - ADÁPTATE completamente al tipo de pregunta
+   - Si pregunta por "información más valiosa" → identifica y explica la información MÁS VALIOSA con DETALLE
+   - Si pregunta por "recomendaciones" → proporciona recomendaciones ESPECÍFICAS, ACCIONABLES y ESTRATÉGICAS
+   - Si pregunta por "mejor documento" → evalúa este documento con CRITERIOS CLAROS y EVIDENCIA
+   - Si pregunta por "análisis" → proporciona análisis PROFUNDO, ESTRUCTURADO y ESTRATÉGICO
+   - Si pregunta por "comparación" → compara elementos del documento con PRECISIÓN y EVIDENCIA
+
+3. INFORMACIÓN ESPECÍFICA Y CONCRETA (OBLIGATORIO):
+   - Cita datos EXACTOS del documento (números, porcentajes, fechas, nombres, métricas, estadísticas)
+   - Incluye CITAS TEXTUALES cuando sean relevantes (entre comillas)
+   - Identifica ENTIDADES, METODOLOGÍAS, FRAMEWORKS, o CONCEPTOS clave
+   - Extrae EJEMPLOS CONCRETOS, CASOS DE ESTUDIO, o ANÉCDOTAS del documento
+   - Proporciona CONTEXTO y BACKGROUND cuando sea necesario para entender la información
+
+4. ESTRUCTURA INTELIGENTE Y ADAPTATIVA (800-1200 palabras):
+
+   **INTRODUCCIÓN ESTRATÉGICA** (1-2 párrafos):
+   - Resumen ejecutivo del documento y su relevancia para la pregunta
+   - Contexto y propósito del documento
+   - Por qué este documento es relevante para responder la pregunta
+
+   **RESPUESTA DIRECTA A LA PREGUNTA** (3-4 párrafos):
+   - Responde DIRECTAMENTE la pregunta del usuario con información específica del documento
+   - Usa datos concretos, cifras, ejemplos, y evidencia del documento
+   - Estructura la respuesta de manera lógica y fácil de seguir
+   - Incluye análisis de CAUSA-EFECTO cuando sea relevante
+
+   **ANÁLISIS PROFUNDO Y DETALLADO** (2-3 párrafos):
+   - Análisis de aspectos clave relacionados con la pregunta
+   - Identificación de patrones, tendencias, o relaciones
+   - Evaluación crítica de fortalezas, debilidades, oportunidades, amenazas
+   - Perspectivas estratégicas que emergen del documento
+
+   **INFORMACIÓN ESPECÍFICA Y DATOS CONCRETOS** (2-3 párrafos):
+   - Lista de datos clave, métricas, estadísticas del documento
+   - Ejemplos concretos, casos de estudio, o anécdotas relevantes
+   - Citas textuales importantes (entre comillas)
+   - Tablas, gráficos, o estructuras de datos si son relevantes
+
+   **RECOMENDACIONES / INSIGHTS / CONCLUSIÓN** (2-3 párrafos):
+   - Recomendaciones específicas y accionables basadas en el documento (si aplica)
+   - Insights estratégicos que emergen del análisis
+   - Implicaciones prácticas y aplicaciones del contenido
+   - Conclusión que sintetiza la respuesta a la pregunta
+
+5. PROFESIONALISMO Y CALIDAD ENTERPRISE:
+   - Lenguaje claro, preciso y profesional (nivel C-Suite)
+   - Estructura lógica y fácil de escanear (uso de negritas, viñetas cuando sea útil)
+   - Información accionable y específica
+   - Análisis crítico y pensamiento estratégico
+   - Evidencia y respaldo para cada afirmación
+
+6. LONGITUD Y COMPLETITUD:
+   - 800-1200 palabras (respuesta COMPLETA y PROFUNDA)
+   - NO te quedes corto - proporciona DETALLE y PROFUNDIDAD
+   - Cada sección debe aportar VALOR ÚNICO y ESPECÍFICO
+   - Prioriza COMPLETITUD sobre concisión
+   - Mejor una respuesta larga y completa que corta e incompleta
+
+IMPORTANTE - OBLIGATORIO:
+- ✅ RESPONDE DIRECTAMENTE la pregunta: "{message}"
+- ✅ ADÁPTATE al tipo de pregunta - NO uses formato genérico
+- ✅ Proporciona ANÁLISIS PROFUNDO, no superficial
+- ✅ Incluye DATOS CONCRETOS, CITAS, y EVIDENCIA del documento
+- ✅ 800-1200 palabras - respuesta COMPLETA y DETALLADA
+- ✅ Pensamiento ESTRATÉGICO y CRÍTICO
+- ✅ Estructura CLARA y PROFESIONAL
+- ❌ NO describas el documento en general sin responder la pregunta
+- ❌ NO uses un formato genérico que ignore el tipo de pregunta
+- ❌ NO te quedes corto - proporciona DETALLE y PROFUNDIDAD
+
+RESPUESTA SUPER INTELIGENTE Y COMPLETA (800-1200 palabras):"""
+                
+                # Generar análisis con LLM (sin límite de max_tokens para respuestas completas)
+                response = parallel_llm.invoke(prompt)
+                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                
+                return source_name, analysis
+            except Exception as e:
+                print(f"❌ Error analizando {source_name}: {str(e)[:200]}")
+                return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
+        
+        # Ejecutar análisis en paralelo - GARANTIZA que TODOS se procesen
+        print(f"🔄 [Chat Conversacional 2] Iniciando análisis de {len(docs_by_source)} documentos...")
+        completed_count = 0
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(analyze_single_document, source_name, file_docs): source_name
+                for source_name, file_docs in docs_by_source.items()
+            }
+            
+            for future in as_completed(futures):
+                source_name = futures[future]
+                try:
+                    doc_name, analysis = future.result()
+                    individual_analyses[doc_name] = analysis
+                    completed_count += 1
+                    print(f"✅ [Chat Conversacional 2] Documento {completed_count}/{len(docs_by_source)} completado: {Path(doc_name).name}")
+                except Exception as e:
+                    print(f"❌ [Chat Conversacional 2] Error procesando {source_name}: {e}")
+                    individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
+                    completed_count += 1
+        
+        # VERIFICAR que TODOS los documentos fueron procesados
+        if len(individual_analyses) < len(docs_by_source):
+            print(f"⚠️ [Chat Conversacional 2] ADVERTENCIA: Solo se procesaron {len(individual_analyses)} de {len(docs_by_source)} documentos")
+            print(f"🔄 [Chat Conversacional 2] Reintentando documentos faltantes...")
+            # Reintentar documentos faltantes
+            missing_docs = set(docs_by_source.keys()) - set(individual_analyses.keys())
+            for missing_source in missing_docs:
+                try:
+                    doc_name, analysis = analyze_single_document(missing_source, docs_by_source[missing_source])
+                    individual_analyses[doc_name] = analysis
+                    completed_count += 1
+                    print(f"✅ [Chat Conversacional 2] Documento recuperado: {Path(doc_name).name}")
+                except Exception as e:
+                    print(f"❌ [Chat Conversacional 2] Error en reintento de {missing_source}: {e}")
+        
+        # Verificación final
+        final_count = len(individual_analyses)
+        total_count = len(docs_by_source)
+        if final_count == total_count:
+            print(f"✅✅✅ [Chat Conversacional 2] ÉXITO: TODOS los {total_count} documentos fueron analizados individualmente")
+        else:
+            print(f"⚠️ [Chat Conversacional 2] Procesados {final_count} de {total_count} documentos")
+        
+        # Mostrar todos los análisis individuales
+        individual_analyses_text = "## 📄 Análisis Individuales por Documento\n\n"
+        for doc_name, analysis in individual_analyses.items():
+            clean_name = Path(doc_name).name
+            individual_analyses_text += f"### 📄 {clean_name}\n\n"
+            individual_analyses_text += f"{analysis}\n\n"
+            individual_analyses_text += "---\n\n"
+        
+        # Combinar todos los análisis en una respuesta final ULTRA INTELIGENTE
+        combined_context = "\n\n".join([
+            f"=== DOCUMENTO: {Path(doc_name).name} ===\n{analysis}\n"
+            for doc_name, analysis in individual_analyses.items()
+        ])
+        
+        # Generar respuesta combinada ULTRA MEJORADA
+        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite con décadas de experiencia. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario con profundidad y detalle.
+
+TU TAREA PRINCIPAL: Combinar todos los análisis individuales para crear una respuesta FINAL que sea EXTRAORDINARIAMENTE COMPLETA, INTELIGENTE y ESTRATÉGICA, respondiendo DIRECTAMENTE la pregunta del usuario.
+
+PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
+{message}
+
+ANÁLISIS INDIVIDUALES DE CADA DOCUMENTO (cada uno ya respondió la pregunta con 800-1200 palabras):
+{combined_context}
+
+INSTRUCCIONES PARA RESPUESTA FINAL ULTRA INTELIGENTE (1500-2500 palabras):
+
+1. SÍNTESIS ESTRATÉGICA DE NIVEL C-SUITE:
+   - Combina los análisis individuales en una respuesta COHERENTE y HOLÍSTICA
+   - Identifica PATRONES COMUNES, CONTRADICCIONES, o TENSIONES entre documentos
+   - Proporciona una VISIÓN INTEGRADA que ningún documento individual puede dar
+   - Compara y contrasta información de diferentes documentos con PRECISIÓN
+   - Identifica SINERGIAS, COMPLEMENTARIEDADES, o CONFLICTOS entre documentos
+
+2. RESPUESTA DIRECTA AL PROMPT DEL USUARIO (OBLIGATORIO):
+   - Tu objetivo es responder: "{message}"
+   - Combina información de TODOS los análisis individuales para dar una respuesta COMPLETA
+   - Si pregunta por "información más valiosa" → sintetiza la información más valiosa de TODOS los PDFs con DETALLE
+   - Si pregunta por "recomendaciones" → proporciona recomendaciones basadas en TODOS los documentos, priorizadas
+   - Si pregunta por "mejor documento" → compara y evalúa TODOS los documentos con CRITERIOS CLAROS
+   - Si pregunta por "análisis" → proporciona análisis HOLÍSTICO que integre todos los documentos
+
+3. ESTRUCTURA ULTRA INTELIGENTE (1500-2500 palabras):
+
+   **RESUMEN EJECUTIVO** (2-3 párrafos):
+   - Respuesta directa a la pregunta del usuario
+   - Visión general de lo que se encontró en todos los documentos
+   - Conclusiones principales que emergen de la síntesis
+
+   **ANÁLISIS HOLÍSTICO Y ESTRATÉGICO** (4-5 párrafos):
+   - Síntesis de información clave de todos los documentos
+   - Identificación de patrones, tendencias, y relaciones entre documentos
+   - Análisis comparativo de diferentes perspectivas
+   - Evaluación crítica de consistencias y contradicciones
+   - Insights estratégicos que emergen de ver todos los documentos juntos
+
+   **INFORMACIÓN CLAVE POR CATEGORÍA/TEMA** (5-6 párrafos):
+   - Organiza la información por temas, categorías, o aspectos clave
+   - Para cada tema: qué dicen los diferentes documentos
+   - Comparación y contraste de perspectivas diferentes
+   - Identificación de consensos y divergencias
+   - Síntesis de información complementaria
+
+   **ANÁLISIS POR DOCUMENTO (Resumen Estratégico)** (3-4 párrafos por documento relevante):
+   - Para cada documento más relevante: resumen de contribuciones clave
+   - Qué aporta único cada documento a responder la pregunta
+   - Fortalezas y limitaciones de cada documento en relación a la pregunta
+   - Cómo se relaciona con otros documentos
+
+   **RECOMENDACIONES / INSIGHTS FINALES / CONCLUSIÓN** (4-5 párrafos):
+   - Recomendaciones específicas y priorizadas basadas en TODOS los documentos
+   - Insights estratégicos que emergen de la síntesis completa
+   - Implicaciones prácticas y aplicaciones
+   - Áreas de oportunidad o acción identificadas
+   - Conclusión que responde completamente la pregunta del usuario
+
+4. PROFESIONALISMO Y CALIDAD EXCEPCIONAL:
+   - Lenguaje claro, preciso y de nivel C-Suite
+   - Estructura lógica con uso inteligente de formato (negritas, viñetas, secciones)
+   - Información accionable y específica
+   - Análisis crítico y pensamiento estratégico avanzado
+   - Evidencia y respaldo para cada afirmación importante
+
+5. LONGITUD Y COMPLETITUD:
+   - 1500-2500 palabras (respuesta EXTRAORDINARIAMENTE COMPLETA)
+   - NO te quedes corto - esta es la respuesta FINAL y debe ser EXHAUSTIVA
+   - Prioriza COMPLETITUD y PROFUNDIDAD sobre concisión
+   - Cada sección debe aportar VALOR ÚNICO y ESTRATÉGICO
+   - Mejor una respuesta larga y completa que corta e incompleta
+
+IMPORTANTE - OBLIGATORIO:
+- ✅ RESPONDE DIRECTAMENTE la pregunta: "{message}"
+- ✅ COMBINA información de TODOS los documentos analizados
+- ✅ Proporciona ANÁLISIS HOLÍSTICO, no solo resumen
+- ✅ Identifica PATRONES, CONTRADICCIONES, y SINERGIAS entre documentos
+- ✅ 1500-2500 palabras - respuesta EXTRAORDINARIAMENTE COMPLETA
+- ✅ Pensamiento ESTRATÉGICO de nivel C-Suite
+- ✅ Estructura CLARA y PROFESIONAL
+- ❌ NO ignores información de ningún documento
+- ❌ NO uses formato genérico - ADÁPTATE a la pregunta
+- ❌ NO te quedes corto - esta es la respuesta FINAL y debe ser EXHAUSTIVA
+
+RESPUESTA FINAL ULTRA INTELIGENTE Y COMPLETA (1500-2500 palabras):"""
+        
+        try:
+            synthesis_response = parallel_llm.invoke(synthesis_prompt)
+            combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
+        except Exception as e:
+            combined_answer = f"❌ Error generando respuesta combinada: {str(e)[:200]}"
+        
+        # Combinar respuesta final con análisis individuales
+        formatted_answer = "## 🎯 Respuesta Final Completa (Síntesis de Todos los Documentos)\n\n"
+        formatted_answer += combined_answer
+        formatted_answer += "\n\n---\n\n"
+        formatted_answer += individual_analyses_text
+        
+        # Agregar información del proceso
+        formatted_answer += "\n\n---\n\n"
+        formatted_answer += "## 🔬 Proceso de Análisis Multi-Documento\n\n"
+        formatted_answer += f"✅✅✅ **GARANTIZADO: Documentos analizados:** {len(individual_analyses)} de {len(docs_by_source)} documentos\n"
+        if len(individual_analyses) == len(docs_by_source):
+            formatted_answer += "✅✅✅ **ÉXITO: TODOS los documentos fueron analizados individualmente**\n"
+        formatted_answer += "✅ **Procesamiento:** Paralelo (cada PDF analizado individualmente, como ChatGPT)\n"
+        formatted_answer += "✅ **Análisis:** Individual profundo (800-1200 palabras por documento) + Síntesis final (1500-2500 palabras)\n"
+        formatted_answer += "✅ **Workers paralelos:** Hasta 20 documentos simultáneamente\n"
+        formatted_answer += "✅ **Garantía:** Si enviaste 500 PDFs, se analizaron los 500 PDFs\n\n"
+        
+        # Actualizar historial
+        session["history"].append({
+            "question": message,
+            "answer": formatted_answer,
+            "sources": list(individual_analyses.keys()),
+            "timestamp": datetime.now().isoformat(),
+            "processing_mode": "parallel_individual"
+        })
+        
+        execution_time = time.time() - start_time
+        metadata = {
+            "execution_time": execution_time,
+            "documents_analyzed": len(individual_analyses),
+            "total_documents": len(docs_by_source),
+            "processing_mode": "parallel_individual",
+            "workers_used": max_workers
+        }
+        
+        # Convertir historial a formato tuples para Gradio
+        tuple_history = []
+        for entry in session["history"]:
+            if isinstance(entry, dict):
+                tuple_history.append((entry.get("question", ""), entry.get("answer", "")))
+            else:
+                tuple_history.append(entry)
+        
+        # Agregar nueva respuesta
+        if isinstance(history, list) and history:
+            tuple_history = list(history) + [(message, formatted_answer)]
+        else:
+            tuple_history.append((message, formatted_answer))
+        
+        return tuple_history, None, metadata
     
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""

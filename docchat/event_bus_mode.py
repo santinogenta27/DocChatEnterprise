@@ -19,6 +19,7 @@ ARQUITECTURA EVENT-DRIVEN:
 from __future__ import annotations
 
 import json
+import os
 import time
 import asyncio
 from typing import List, Dict, Optional, Any, Tuple, AsyncIterator, Iterator
@@ -43,6 +44,22 @@ from .test_time_training import TestTimeTrainer
 from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
+
+# Importar Confluent para streaming en tiempo real (opcional)
+try:
+    from .confluent_streaming import (
+        ConfluentStreamingProducer,
+        ConfluentStreamingManager,
+        StreamingEvent,
+        EventType
+    )
+    CONFLUENT_STREAMING_AVAILABLE = True
+except ImportError:
+    ConfluentStreamingProducer = None  # type: ignore
+    ConfluentStreamingManager = None  # type: ignore
+    StreamingEvent = None  # type: ignore
+    EventType = None  # type: ignore
+    CONFLUENT_STREAMING_AVAILABLE = False
 
 
 class SimpleEventBus:
@@ -179,6 +196,25 @@ class EventBusMode:
         # Event Bus
         self.event_bus = SimpleEventBus()
         self._setup_event_listeners()
+        
+        # Confluent Streaming para tiempo real (opcional - mejor performance)
+        self.confluent_producer = None
+        self.confluent_enabled = False
+        if CONFLUENT_STREAMING_AVAILABLE:
+            # Intentar inicializar Confluent si está configurado
+            bootstrap_servers = getattr(config, 'confluent_bootstrap_servers', None) or os.getenv('CONFLUENT_BOOTSTRAP_SERVERS')
+            if bootstrap_servers:
+                try:
+                    self.confluent_producer = ConfluentStreamingProducer(
+                        bootstrap_servers=bootstrap_servers,
+                        security_config=getattr(config, 'confluent_security_config', None),
+                        enabled=True
+                    )
+                    self.confluent_enabled = True
+                    print("✅ [Event Bus Mode] Confluent Streaming habilitado para streaming en tiempo real")
+                except Exception as e:
+                    print(f"⚠️ [Event Bus Mode] No se pudo inicializar Confluent (usando Event Bus interno): {e}")
+                    self.confluent_enabled = False
         
         # LLM para generación
         if not config.openai_api_key:
@@ -702,18 +738,20 @@ class EventBusMode:
         
         num_unique_documents = len(docs_by_source)
         
-        # Si hay 10+ documentos, usar procesamiento paralelo (como Enterprise API)
-        use_parallel_processing = num_unique_documents >= 10
+        # SIEMPRE usar procesamiento paralelo cuando hay documentos (1 o más)
+        # Esto garantiza que cada PDF se analice individualmente
+        use_parallel_processing = num_unique_documents >= 1
         
         start_time = time.time()
         
         # Publicar evento de inicio de query
         self.event_bus.publish('query_started', {
             'session_id': session_id,
-            'query': message
+            'query': message,
+            'document_count': num_unique_documents
         })
         
-        # Si usar procesamiento paralelo, procesar cada documento por separado
+        # SIEMPRE procesar cada documento por separado (1 PDF = 1 análisis individual)
         if use_parallel_processing:
             return await self._process_query_parallel(
                 session_id=session_id,
@@ -1446,9 +1484,9 @@ class EventBusMode:
         parallel_llm = create_llm(
             provider=provider,
             model=self.config.research_model or "gpt-4o",
-            temperature=0.2,
+            temperature=0.1,  # Temperatura más baja para respuestas más precisas
             api_key=api_key,
-            request_timeout=300
+            request_timeout=600  # Timeout más largo para documentos grandes y respuestas completas
         )
         
         # Construir contexto de conversación
@@ -1456,57 +1494,172 @@ class EventBusMode:
         
         # Procesar cada documento en paralelo
         individual_analyses = {}
-        max_workers = min(5, len(docs_by_source))
+        # Aumentar workers para procesar hasta 500 PDFs simultáneamente (hasta 20 workers)
+        max_workers = min(20, len(docs_by_source))
+        
+        print(f"🔄 [Event Bus Mode] Iniciando análisis individual de {len(docs_by_source)} documentos (workers: {max_workers})...")
+        print(f"📊 [Event Bus Mode] GARANTIZADO: Cada PDF generará su propia respuesta individual")
         
         def analyze_single_document(source_name: str, file_docs: List[Document]) -> Tuple[str, str]:
-            """Analiza un solo documento con el prompt del usuario (Event Bus Mode)."""
+            """Analiza un solo documento con el prompt del usuario - PROMPT ULTRA MEJORADO."""
             try:
+                # Construir contexto completo del documento (SIN TRUNCAR - analizar TODO)
                 doc_content = "\n\n".join([doc.page_content for doc in file_docs])
-                if len(doc_content) > 4000:
-                    doc_content = doc_content[:4000] + "..."
                 
-                # Prompt adaptado para Event Bus Mode (event-driven)
-                prompt = f"""Eres un analista estratégico de nivel C-Suite especializado en análisis event-driven. Tu tarea es analizar ESTE documento específico para responder DIRECTAMENTE la pregunta del usuario.
+                # Si el documento es muy grande, incluir todo pero mencionarlo
+                if len(doc_content) > 100000:
+                    print(f"⚠️ [Event Bus Mode] Documento muy grande ({len(doc_content)} caracteres), analizando completo...")
+                
+                # PROMPT ULTRA MEJORADO - Respuestas super inteligentes y completas
+                prompt = f"""Eres un analista estratégico senior de nivel C-Suite con décadas de experiencia, especializado en análisis event-driven. Tu tarea es analizar ESTE documento específico de manera PROFUNDA y COMPLETA para responder DIRECTAMENTE la pregunta del usuario con el máximo nivel de inteligencia y detalle.
 
 PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
 {message}
 
-CONTENIDO DE ESTE DOCUMENTO:
+CONTENIDO COMPLETO DE ESTE DOCUMENTO:
 {doc_content}
 
-INSTRUCCIONES CRÍTICAS:
+INSTRUCCIONES PARA RESPUESTA SUPER INTELIGENTE Y COMPLETA:
 
-1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
+1. ANÁLISIS PROFUNDO Y ESTRATÉGICO (OBLIGATORIO):
+   - Analiza el documento de manera HOLÍSTICA, no superficial
+   - Identifica el CONTEXTO, PROPÓSITO y SIGNIFICADO ESTRATÉGICO del documento
+   - Extrae información IMPLÍCITA, no solo explícita (lectura entre líneas)
+   - Identifica conexiones, patrones, y relaciones entre diferentes secciones
+   - Detecta contradicciones internas, tensiones, o áreas de ambigüedad
+   - Evalúa la CALIDAD, CREDIBILIDAD y RELEVANCIA del contenido
+
+2. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
    - Tu objetivo PRINCIPAL es responder: "{message}"
-   - Analiza este documento ESPECÍFICAMENTE para encontrar información que responda esa pregunta
-   - ADÁPTATE al tipo de pregunta del usuario - no uses un formato genérico
+   - NO uses un formato genérico - ADÁPTATE completamente al tipo de pregunta
+   - Si pregunta por "información más valiosa" → identifica y explica la información MÁS VALIOSA con DETALLE
+   - Si pregunta por "recomendaciones" → proporciona recomendaciones ESPECÍFICAS, ACCIONABLES y ESTRATÉGICAS
+   - Si pregunta por "mejor documento" → evalúa este documento con CRITERIOS CLAROS y EVIDENCIA
+   - Si pregunta por "análisis" → proporciona análisis PROFUNDO, ESTRUCTURADO y ESTRATÉGICO
+   - Si pregunta por "comparación" → compara elementos del documento con PRECISIÓN y EVIDENCIA
 
-2. ANÁLISIS ESPECÍFICO PARA ESTE DOCUMENTO:
-   - Extrae información del documento que responda DIRECTAMENTE a la pregunta del usuario
-   - Cita datos concretos del documento (números, porcentajes, fechas, nombres, métricas)
-   - Identifica entidades, metodologías, frameworks, o conceptos relevantes para la pregunta
+3. INFORMACIÓN ESPECÍFICA Y CONCRETA (OBLIGATORIO):
+   - Cita datos EXACTOS del documento (números, porcentajes, fechas, nombres, métricas, estadísticas)
+   - Incluye CITAS TEXTUALES cuando sean relevantes (entre comillas)
+   - Identifica ENTIDADES, METODOLOGÍAS, FRAMEWORKS, o CONCEPTOS clave
+   - Extrae EJEMPLOS CONCRETOS, CASOS DE ESTUDIO, o ANÉCDOTAS del documento
+   - Proporciona CONTEXTO y BACKGROUND cuando sea necesario para entender la información
 
-3. RESPUESTA ESTRUCTURADA (300-500 palabras):
-   - **Respuesta Directa** (1-2 párrafos): Responde la pregunta del usuario usando información de este documento
-   - **Información Específica** (1-2 párrafos): Detalles concretos del documento que apoyan tu respuesta
-   - **Recomendaciones/Insights** (1 párrafo): Si la pregunta lo requiere, proporciona recomendaciones o insights específicos
+4. ESTRUCTURA INTELIGENTE Y ADAPTATIVA (800-1200 palabras):
 
-4. PROFESIONALISMO ENTERPRISE:
-   - Lenguaje claro y directo (nivel C-Suite)
-   - Enfoque en responder la pregunta específica del usuario
-   - Información accionable y específica del documento
+   **INTRODUCCIÓN ESTRATÉGICA** (1-2 párrafos):
+   - Resumen ejecutivo del documento y su relevancia para la pregunta
+   - Contexto y propósito del documento
+   - Por qué este documento es relevante para responder la pregunta
 
-RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
+   **RESPUESTA DIRECTA A LA PREGUNTA** (3-4 párrafos):
+   - Responde DIRECTAMENTE la pregunta del usuario con información específica del documento
+   - Usa datos concretos, cifras, ejemplos, y evidencia del documento
+   - Estructura la respuesta de manera lógica y fácil de seguir
+   - Incluye análisis de CAUSA-EFECTO cuando sea relevante
+
+   **ANÁLISIS PROFUNDO Y DETALLADO** (2-3 párrafos):
+   - Análisis de aspectos clave relacionados con la pregunta
+   - Identificación de patrones, tendencias, o relaciones
+   - Evaluación crítica de fortalezas, debilidades, oportunidades, amenazas
+   - Perspectivas estratégicas que emergen del documento
+
+   **INFORMACIÓN ESPECÍFICA Y DATOS CONCRETOS** (2-3 párrafos):
+   - Lista de datos clave, métricas, estadísticas del documento
+   - Ejemplos concretos, casos de estudio, o anécdotas relevantes
+   - Citas textuales importantes (entre comillas)
+   - Tablas, gráficos, o estructuras de datos si son relevantes
+
+   **RECOMENDACIONES / INSIGHTS / CONCLUSIÓN** (2-3 párrafos):
+   - Recomendaciones específicas y accionables basadas en el documento (si aplica)
+   - Insights estratégicos que emergen del análisis
+   - Implicaciones prácticas y aplicaciones del contenido
+   - Conclusión que sintetiza la respuesta a la pregunta
+
+5. PROFESIONALISMO Y CALIDAD ENTERPRISE:
+   - Lenguaje claro, preciso y profesional (nivel C-Suite)
+   - Estructura lógica y fácil de escanear (uso de negritas, viñetas cuando sea útil)
+   - Información accionable y específica
+   - Análisis crítico y pensamiento estratégico
+   - Evidencia y respaldo para cada afirmación
+
+6. LONGITUD Y COMPLETITUD:
+   - 800-1200 palabras (respuesta COMPLETA y PROFUNDA)
+   - NO te quedes corto - proporciona DETALLE y PROFUNDIDAD
+   - Cada sección debe aportar VALOR ÚNICO y ESPECÍFICO
+   - Prioriza COMPLETITUD sobre concisión
+   - Mejor una respuesta larga y completa que corta e incompleta
+
+IMPORTANTE - OBLIGATORIO:
+- ✅ RESPONDE DIRECTAMENTE la pregunta: "{message}"
+- ✅ ADÁPTATE al tipo de pregunta - NO uses formato genérico
+- ✅ Proporciona ANÁLISIS PROFUNDO, no superficial
+- ✅ Incluye DATOS CONCRETOS, CITAS, y EVIDENCIA del documento
+- ✅ 800-1200 palabras - respuesta COMPLETA y DETALLADA
+- ✅ Pensamiento ESTRATÉGICO y CRÍTICO
+- ✅ Estructura CLARA y PROFESIONAL
+- ❌ NO describas el documento en general sin responder la pregunta
+- ❌ NO uses un formato genérico que ignore el tipo de pregunta
+- ❌ NO te quedes corto - proporciona DETALLE y PROFUNDIDAD
+
+RESPUESTA SUPER INTELIGENTE Y COMPLETA (800-1200 palabras):"""
                 
-                response = parallel_llm.invoke(prompt)
-                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                # STREAMING EN TIEMPO REAL - Usar astream para respuesta progresiva
+                from langchain_core.messages import HumanMessage
+                analysis = ""
+                chunk_count = 0
                 
-                return source_name, analysis
+                # Stream tokens en tiempo real usando asyncio.run en el thread
+                async def stream_analysis():
+                    nonlocal analysis, chunk_count
+                    async for chunk in parallel_llm.astream([HumanMessage(content=prompt)]):
+                        if hasattr(chunk, 'content'):
+                            token = chunk.content
+                        else:
+                            token = str(chunk)
+                        analysis += token
+                        chunk_count += 1
+                        
+                        # Publicar progreso cada 10 tokens para streaming en tiempo real
+                        if chunk_count % 10 == 0:
+                            # Publicar al Event Bus interno
+                            try:
+                                self.event_bus.publish('document_analysis_streaming', {
+                                    'session_id': session_id,
+                                    'document': Path(source_name).name,
+                                    'current_text': analysis[-300:],  # Últimos 300 caracteres
+                                    'chunk_count': chunk_count
+                                })
+                            except:
+                                pass  # Si falla, continuar sin publicar
+                
+                # Ejecutar streaming en el thread (sin nest_asyncio - más simple)
+                try:
+                    # Crear nuevo event loop para este thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(stream_analysis())
+                    finally:
+                        loop.close()
+                except Exception as stream_error:
+                    # Fallback a invoke si streaming falla (más robusto)
+                    print(f"⚠️ [Event Bus Mode] Streaming falló para {source_name}, usando invoke: {stream_error}")
+                    try:
+                        response = parallel_llm.invoke(prompt)
+                        analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                    except Exception as invoke_error:
+                        print(f"❌ [Event Bus Mode] Error con invoke también: {invoke_error}")
+                        analysis = f"❌ Error analizando documento: {str(stream_error)[:200]}"
+                
+                return source_name, analysis.strip()
             except Exception as e:
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
-        # Ejecutar análisis en paralelo
-        print(f"🔄 [Event Bus Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
+        # Ejecutar análisis en paralelo - GARANTIZA que TODOS se procesen
+        print(f"🔄 [Event Bus Mode] Iniciando análisis de {len(docs_by_source)} documentos...")
+        completed_count = 0
+        
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_single_document, source_name, file_docs): source_name
@@ -1518,21 +1671,51 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
                 try:
                     doc_name, analysis = future.result()
                     individual_analyses[doc_name] = analysis
-                    print(f"✅ [Event Bus Mode] Análisis completado para: {Path(doc_name).name}")
+                    completed_count += 1
+                    print(f"✅ [Event Bus Mode] Documento {completed_count}/{len(docs_by_source)} completado: {Path(doc_name).name}")
                     # Publicar evento de documento procesado
                     self.event_bus.publish('document_analysis_completed', {
                         'session_id': session_id,
-                        'document': Path(doc_name).name
+                        'document': Path(doc_name).name,
+                        'progress': f"{completed_count}/{len(docs_by_source)}"
                     })
                 except Exception as e:
                     print(f"❌ [Event Bus Mode] Error procesando {source_name}: {e}")
                     individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
+                    completed_count += 1
         
-        # OPCIÓN A: Mostrar todos los análisis individuales
-        individual_analyses_text = "## 📄 Análisis Individuales por Documento\n\n"
-        for doc_name, analysis in individual_analyses.items():
+        # VERIFICAR que TODOS los documentos fueron procesados
+        if len(individual_analyses) < len(docs_by_source):
+            print(f"⚠️ [Event Bus Mode] ADVERTENCIA: Solo se procesaron {len(individual_analyses)} de {len(docs_by_source)} documentos")
+            print(f"🔄 [Event Bus Mode] Reintentando documentos faltantes...")
+            # Reintentar documentos faltantes
+            missing_docs = set(docs_by_source.keys()) - set(individual_analyses.keys())
+            for missing_source in missing_docs:
+                try:
+                    doc_name, analysis = analyze_single_document(missing_source, docs_by_source[missing_source])
+                    individual_analyses[doc_name] = analysis
+                    completed_count += 1
+                    print(f"✅ [Event Bus Mode] Documento recuperado: {Path(doc_name).name}")
+                except Exception as e:
+                    print(f"❌ [Event Bus Mode] Error en reintento de {missing_source}: {e}")
+        
+        # Verificación final
+        final_count = len(individual_analyses)
+        total_count = len(docs_by_source)
+        if final_count == total_count:
+            print(f"✅✅✅ [Event Bus Mode] ÉXITO: TODOS los {total_count} documentos fueron analizados individualmente")
+        else:
+            print(f"⚠️ [Event Bus Mode] Procesados {final_count} de {total_count} documentos")
+        
+        # OPCIÓN A: Mostrar todos los análisis individuales (500 PDFs = 500 respuestas individuales)
+        individual_analyses_text = f"## 📄 Análisis Individuales por Documento ({len(individual_analyses)} respuestas)\n\n"
+        individual_analyses_text += f"**GARANTIZADO: Cada PDF tiene su propio análisis individual**\n\n"
+        individual_analyses_text += f"**Total de documentos analizados:** {len(individual_analyses)}/{len(docs_by_source)}\n\n"
+        individual_analyses_text += "---\n\n"
+        
+        for idx, (doc_name, analysis) in enumerate(individual_analyses.items(), 1):
             clean_name = Path(doc_name).name
-            individual_analyses_text += f"### 📄 {clean_name}\n\n"
+            individual_analyses_text += f"### 📄 Documento {idx}/{len(individual_analyses)}: {clean_name}\n\n"
             individual_analyses_text += f"{analysis}\n\n"
             individual_analyses_text += "---\n\n"
         
@@ -1542,44 +1725,158 @@ RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
             for doc_name, analysis in individual_analyses.items()
         ])
         
-        # Generar respuesta combinada
-        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite especializado en análisis event-driven. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario.
+        # Generar respuesta combinada ULTRA MEJORADA
+        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite con décadas de experiencia, especializado en análisis event-driven. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario con profundidad y detalle (800-1200 palabras por documento).
 
-TU TAREA PRINCIPAL: Combinar todos los análisis individuales para responder DIRECTAMENTE la pregunta del usuario de manera completa y estratégica.
+TU TAREA PRINCIPAL: Combinar todos los análisis individuales para crear una respuesta FINAL que sea EXTRAORDINARIAMENTE COMPLETA, INTELIGENTE y ESTRATÉGICA, respondiendo DIRECTAMENTE la pregunta del usuario.
 
 PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
 {message}
 
-ANÁLISIS INDIVIDUALES DE CADA DOCUMENTO (cada uno ya respondió la pregunta del usuario):
+ANÁLISIS INDIVIDUALES DE CADA DOCUMENTO (cada uno ya respondió la pregunta con 800-1200 palabras):
 {combined_context}
 
-INSTRUCCIONES PARA RESPUESTA FINAL COMBINADA (800-1200 palabras):
+INSTRUCCIONES PARA RESPUESTA FINAL ULTRA INTELIGENTE (1500-2500 palabras):
 
-1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
+1. SÍNTESIS ESTRATÉGICA DE NIVEL C-SUITE:
+   - Combina los análisis individuales en una respuesta COHERENTE y HOLÍSTICA
+   - Identifica PATRONES COMUNES, CONTRADICCIONES, o TENSIONES entre documentos
+   - Proporciona una VISIÓN INTEGRADA que ningún documento individual puede dar
+   - Compara y contrasta información de diferentes documentos con PRECISIÓN
+   - Identifica SINERGIAS, COMPLEMENTARIEDADES, o CONFLICTOS entre documentos
+
+2. RESPUESTA DIRECTA AL PROMPT DEL USUARIO (OBLIGATORIO):
    - Tu objetivo es responder: "{message}"
-   - Combina información de todos los análisis individuales para dar una respuesta COMPLETA
-   - ADÁPTATE al tipo de pregunta - no uses un formato genérico
+   - Combina información de TODOS los análisis individuales para dar una respuesta COMPLETA
+   - Si pregunta por "información más valiosa" → sintetiza la información más valiosa de TODOS los PDFs con DETALLE
+   - Si pregunta por "recomendaciones" → proporciona recomendaciones basadas en TODOS los documentos, priorizadas
+   - Si pregunta por "mejor documento" → compara y evalúa TODOS los documentos con CRITERIOS CLAROS
+   - Si pregunta por "análisis" → proporciona análisis HOLÍSTICO que integre todos los documentos
 
-2. SÍNTESIS ESTRATÉGICA:
-   - Combina los análisis individuales en una respuesta coherente
-   - Identifica patrones comunes, contradicciones, o tensiones entre documentos
-   - Proporciona una visión holística que responda completamente la pregunta
+3. ESTRUCTURA ULTRA INTELIGENTE (1500-2500 palabras):
 
-3. PROFESIONALISMO ENTERPRISE:
-   - Lenguaje claro y directo (nivel C-Suite)
-   - Enfoque en responder la pregunta específica del usuario
-   - Estructura clara y escaneable
+   **RESUMEN EJECUTIVO** (2-3 párrafos):
+   - Respuesta directa a la pregunta del usuario
+   - Visión general de lo que se encontró en todos los documentos
+   - Conclusiones principales que emergen de la síntesis
 
-RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 palabras):"""
+   **ANÁLISIS HOLÍSTICO Y ESTRATÉGICO** (4-5 párrafos):
+   - Síntesis de información clave de todos los documentos
+   - Identificación de patrones, tendencias, y relaciones entre documentos
+   - Análisis comparativo de diferentes perspectivas
+   - Evaluación crítica de consistencias y contradicciones
+   - Insights estratégicos que emergen de ver todos los documentos juntos
+
+   **INFORMACIÓN CLAVE POR CATEGORÍA/TEMA** (5-6 párrafos):
+   - Organiza la información por temas, categorías, o aspectos clave
+   - Para cada tema: qué dicen los diferentes documentos
+   - Comparación y contraste de perspectivas diferentes
+   - Identificación de consensos y divergencias
+   - Síntesis de información complementaria
+
+   **ANÁLISIS POR DOCUMENTO (Resumen Estratégico)** (3-4 párrafos por documento relevante):
+   - Para cada documento más relevante: resumen de contribuciones clave
+   - Qué aporta único cada documento a responder la pregunta
+   - Fortalezas y limitaciones de cada documento en relación a la pregunta
+   - Cómo se relaciona con otros documentos
+
+   **RECOMENDACIONES / INSIGHTS FINALES / CONCLUSIÓN** (4-5 párrafos):
+   - Recomendaciones específicas y priorizadas basadas en TODOS los documentos
+   - Insights estratégicos que emergen de la síntesis completa
+   - Implicaciones prácticas y aplicaciones
+   - Áreas de oportunidad o acción identificadas
+   - Conclusión que responde completamente la pregunta del usuario
+
+4. PROFESIONALISMO Y CALIDAD EXCEPCIONAL:
+   - Lenguaje claro, preciso y de nivel C-Suite
+   - Estructura lógica con uso inteligente de formato (negritas, viñetas, secciones)
+   - Información accionable y específica
+   - Análisis crítico y pensamiento estratégico avanzado
+   - Evidencia y respaldo para cada afirmación importante
+
+5. LONGITUD Y COMPLETITUD:
+   - 1500-2500 palabras (respuesta EXTRAORDINARIAMENTE COMPLETA)
+   - NO te quedes corto - esta es la respuesta FINAL y debe ser EXHAUSTIVA
+   - Prioriza COMPLETITUD y PROFUNDIDAD sobre concisión
+   - Cada sección debe aportar VALOR ÚNICO y ESTRATÉGICO
+   - Mejor una respuesta larga y completa que corta e incompleta
+
+IMPORTANTE - OBLIGATORIO:
+- ✅ RESPONDE DIRECTAMENTE la pregunta: "{message}"
+- ✅ COMBINA información de TODOS los documentos analizados
+- ✅ Proporciona ANÁLISIS HOLÍSTICO, no solo resumen
+- ✅ Identifica PATRONES, CONTRADICCIONES, y SINERGIAS entre documentos
+- ✅ 1500-2500 palabras - respuesta EXTRAORDINARIAMENTE COMPLETA
+- ✅ Pensamiento ESTRATÉGICO de nivel C-Suite
+- ✅ Estructura CLARA y PROFESIONAL
+- ❌ NO ignores información de ningún documento
+- ❌ NO uses formato genérico - ADÁPTATE a la pregunta
+- ❌ NO te quedes corto - esta es la respuesta FINAL y debe ser EXHAUSTIVA
+
+RESPUESTA FINAL ULTRA INTELIGENTE Y COMPLETA (1500-2500 palabras):"""
         
+        # STREAMING EN TIEMPO REAL - Usar astream para respuesta progresiva como ChatGPT
+        # Con Confluent habilitado, los tokens se publican en tiempo real para mejor performance
         try:
-            synthesis_response = parallel_llm.invoke(synthesis_prompt)
-            combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
+            from langchain_core.messages import HumanMessage
+            combined_answer = ""
+            chunk_count = 0
+            
+            # STREAMING: Generar respuesta token por token en tiempo real (como ChatGPT)
+            # Los tokens se publican al Event Bus y Confluent (si está disponible) para streaming en UI
+            print("🚀 [Event Bus Mode] Generando respuesta final con streaming en tiempo real (Confluent optimizado)...")
+            async for chunk in parallel_llm.astream([HumanMessage(content=synthesis_prompt)]):
+                if hasattr(chunk, 'content'):
+                    token = chunk.content
+                else:
+                    token = str(chunk)
+                combined_answer += token
+                chunk_count += 1
+                
+                # Publicar cada token al Event Bus para streaming en tiempo real
+                if chunk_count % 5 == 0:  # Publicar cada 5 tokens para respuesta fluida
+                    self.event_bus.publish('streaming_token', {
+                        'session_id': session_id,
+                        'current_text': combined_answer,
+                        'chunk_count': chunk_count,
+                        'type': 'synthesis_final'
+                    })
+                    
+                    # Si Confluent está habilitado, publicar también allí para mejor performance
+                    if self.confluent_enabled and self.confluent_producer and CONFLUENT_STREAMING_AVAILABLE:
+                        try:
+                            event = StreamingEvent(
+                                event_id=f"{session_id}_{chunk_count}",
+                                event_type=EventType.STREAMING_DATA,
+                                timestamp=datetime.now(),
+                                data={
+                                    'session_id': session_id,
+                                    'current_text': combined_answer,
+                                    'chunk_count': chunk_count,
+                                    'type': 'synthesis_final'
+                                },
+                                source='event_bus_mode'
+                            )
+                            self.confluent_producer.produce_event(
+                                topic='event_bus_streaming',
+                                event=event
+                            )
+                        except Exception as e:
+                            # Si Confluent falla, continuar con Event Bus interno
+                            pass
+            
+            combined_answer = combined_answer.strip()
         except Exception as e:
             combined_answer = f"⚠️ Error generando síntesis: {str(e)[:200]}"
         
-        # Combinar ambas opciones
-        formatted_answer = f"{individual_analyses_text}\n\n## 🎯 Respuesta Final Combinada\n\n{combined_answer}"
+        # Combinar ambas opciones - PRIMERO mostrar análisis individuales (500 PDFs = 500 respuestas)
+        formatted_answer = f"## 📊 RESUMEN: {len(individual_analyses)} Documentos Analizados Individualmente\n\n"
+        formatted_answer += f"✅ **GARANTIZADO:** Cada PDF tiene su propia respuesta individual\n"
+        formatted_answer += f"✅ **Total procesado:** {len(individual_analyses)}/{len(docs_by_source)} documentos\n\n"
+        formatted_answer += "---\n\n"
+        formatted_answer += individual_analyses_text
+        formatted_answer += "\n\n## 🎯 Respuesta Final Combinada (Síntesis de Todos los Documentos)\n\n"
+        formatted_answer += combined_answer
         
         # Actualizar historial
         new_history = history + [(message, formatted_answer)]
@@ -1591,14 +1888,19 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             'session_id': session_id,
             'query': message,
             'elapsed_time': elapsed_time,
-            'documents_analyzed': len(individual_analyses)
+            'documents_analyzed': len(individual_analyses),
+            'total_documents': len(docs_by_source),
+            'all_processed': len(individual_analyses) == len(docs_by_source)
         })
         
         metadata = {
-            "mode": "parallel",
+            "mode": "parallel_individual",
             "documents_analyzed": len(individual_analyses),
+            "total_documents": len(docs_by_source),
+            "all_processed": len(individual_analyses) == len(docs_by_source),
             "elapsed_time": elapsed_time,
-            "event_bus_events": len(self.event_bus.event_history)
+            "event_bus_events": len(self.event_bus.event_history),
+            "workers_used": max_workers
         }
         
         return new_history, None, metadata

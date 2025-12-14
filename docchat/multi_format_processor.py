@@ -28,7 +28,13 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
-from docling.document_converter import DocumentConverter
+try:
+    from docling.document_converter import DocumentConverter
+    DOCLING_AVAILABLE = True
+except ImportError:
+    DOCLING_AVAILABLE = False
+    DocumentConverter = None
+
 from langchain_core.documents import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 
@@ -92,7 +98,11 @@ class MultiFormatProcessor:
     
     def __init__(self, config: AppConfig):
         self.config = config
-        self.converter = DocumentConverter()
+        if DOCLING_AVAILABLE:
+            self.converter = DocumentConverter()
+        else:
+            self.converter = None
+            print("⚠️ Docling no disponible. Algunas funcionalidades de procesamiento de documentos pueden estar limitadas.")
         self.splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=config.headers_to_split_on,
             strip_headers=False,
@@ -196,6 +206,8 @@ class MultiFormatProcessor:
             tmp_path = tmp.name
         
         try:
+            if not DOCLING_AVAILABLE or self.converter is None:
+                raise ValueError("Docling no está disponible. Instala con: pip install docling")
             print(f"   🔄 Convirtiendo con Docling...")
             start_time = time.time()
             result = self.converter.convert(tmp_path)
