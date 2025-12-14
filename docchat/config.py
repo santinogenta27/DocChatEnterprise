@@ -40,6 +40,8 @@ class AppConfig:
     verification_model: str = os.getenv("DOCCHAT_VERIFICATION_MODEL", "gpt-4o")  # gpt-4o tiene 128k context window
     embedding_model: str = os.getenv("DOCCHAT_EMBEDDING_MODEL", "text-embedding-3-small")  # Cambiado a small: más rápido, calidad similar
     agentic_model: str = os.getenv("DOCCHAT_AGENTIC_MODEL", "gpt-4o")  # gpt-4o tiene 128k context window
+    openai_model: str = os.getenv("DOCCHAT_OPENAI_MODEL", "gpt-4o")  # Modelo por defecto para OpenAI
+    anthropic_model: str = os.getenv("DOCCHAT_ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")  # Modelo por defecto para Anthropic
     temperature: float = float(os.getenv("DOCCHAT_TEMPERATURE", "0.15"))
     
     # Speed/Quality Modes
@@ -101,6 +103,15 @@ class AppConfig:
     postgres_url: str = os.getenv("POSTGRES_URL", "")
     mongodb_url: str = os.getenv("MONGODB_URL", "")
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+    # Confluent/Kafka Streaming (Real-Time Data Streaming)
+    enable_confluent_streaming: bool = os.getenv("ENABLE_CONFLUENT_STREAMING", "false").lower() == "true"
+    confluent_bootstrap_servers: str = os.getenv("CONFLUENT_BOOTSTRAP_SERVERS", "")
+    confluent_api_key: str = os.getenv("CONFLUENT_API_KEY", "")
+    confluent_api_secret: str = os.getenv("CONFLUENT_API_SECRET", "")
+    confluent_schema_registry_url: str = os.getenv("CONFLUENT_SCHEMA_REGISTRY_URL", "")
+    # Kafka legacy (para compatibilidad)
+    kafka_bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
 
     # Security
     enable_audit_logs: bool = os.getenv("DOCCHAT_ENABLE_AUDIT", "true").lower() == "true"

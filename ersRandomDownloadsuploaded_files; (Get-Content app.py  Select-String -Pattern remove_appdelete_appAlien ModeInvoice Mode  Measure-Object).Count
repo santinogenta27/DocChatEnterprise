@@ -1,0 +1,27 @@
+[33mcommit f1fb2542ec7a00daa064ec0cb69549c349fc901b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/eric-schmidt-optimizations[m[33m, [m[1;31morigin/feature/eric-schmidt-optimizations[m[33m)[m
+Author: DocChat User <docchat@local>
+Date:   Tue Dec 9 16:42:46 2025 -0600
+
+    feat: Mejoras críticas en Company Knowledge, eliminación de apps, y nuevos modos
+    
+    - Company Knowledge: Manejo mejorado de errores 401 (token expirado) con mensajes claros
+    - Company Knowledge: Límite de PDFs respetado correctamente (5, 10, 25, 50, 100, 250, 500)
+    - Company Knowledge: Funcionalidad para eliminar apps conectadas con UI interactiva
+    - Company Knowledge: Detección automática de conflictos y resolución con búsquedas adicionales
+    - Company Knowledge: Streaming en tiempo real para sidebar y respuestas
+    - Alien Mode: Nuevo modo con sistema multi-agente RAG completo (DocChat)
+    - Invoice Mode: Nuevo modo para procesamiento autónomo de facturas
+    - Accountability: Mejoras en procesamiento automático de documentos contables
+    - Workflow: Mejoras en mecanismo de auto-corrección
+    - Integraciones: Método remove_app para eliminar conexiones completamente
+
+ app.py                                    | 3609 [32m+++++++++++++++++++++++++++[m[31m--[m
+ docchat/__init__.py                       |   10 [32m+[m
+ docchat/accountability.py                 |  883 [32m+++++++[m
+ docchat/alien_mode.py                     |  915 [32m++++++++[m
+ docchat/company_knowledge.py              | 1006 [32m++++++[m[31m--[m
+ docchat/company_knowledge_integrations.py |  470 [32m+++[m[31m-[m
+ docchat/gmail_company_knowledge.py        |   28 [32m+[m[31m-[m
+ docchat/invoice.py                        | 3561 [32m++++++++++++++++++++++++++++[m
+ docchat/workflow.py                       |   55 [32m+[m[31m-[m
+ 9 files changed, 10106 insertions(+), 431 deletions(-)

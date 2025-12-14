@@ -14,6 +14,11 @@ from .audit import AuditLogger  # noqa: F401
 # AutonomousAgent ahora se importa desde la nueva implementación (línea 44)
 from .advanced_agent import AdvancedAutonomousAgent  # noqa: F401
 from .enterprise_api import EnterpriseAPIMode  # noqa: F401
+from .advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode  # noqa: F401
+# from .optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # noqa: F401 - ELIMINADO
+from .marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier  # noqa: F401
+from .optimus_prime_mode import OptimusPrimeMode, get_optimus_prime_mode, run_optimus_prime_mode  # noqa: F401
+from .situational_reasoning import SituationalReasoner, ReasoningType, SituationAssessment, SituationalInsight, StrategicRecommendation  # noqa: F401
 from .enterprise_agentic_ai import EnterpriseAgenticAI, IDPResult, AgenticTask  # noqa: F401
 from .customer_service_agent import CustomerServiceAgent, CustomerInquiry, ServiceResponse
 from .rpa_automation import RPAAutomationEngine, RPATask, RPAAutomation  # noqa: F401
@@ -73,16 +78,66 @@ from .goal_decomposition import GoalDecomposer, Goal, Subtask  # noqa: F401
 from .chat_conversational_2 import ChatConversational2, run_chat_conversational_2, get_chat_conversational_2  # noqa: F401
 # Alien Mode - Clonado de Chat Conversational 2 Enterprise
 from .alien_mode import AlienMode, run_alien_mode, get_alien_mode  # noqa: F401
+# Portal ADS - Clonado de Alien Mode
+from .portal_ads_mode import PortalADSMode, run_portal_ads_mode, get_portal_ads_mode  # noqa: F401
+# AD LLM - Clonado de Portal ADS
+from .ad_llm_mode import ADLLMMode, run_ad_llm_mode, get_ad_llm_mode  # noqa: F401
+# LLM Generated Ads - Papers Implementation
+from .llm_generated_ads import (  # noqa: F401
+    LLMGeneratedAdsSystem,
+    PersonalityTrait,
+    PersuasionPrinciple,
+    AdVariation,
+    CTRPrediction,
+    AdAnalysis,
+    PersonalityProfile
+)
+# SNIPE SHOT Mode - Clonado de Alien Mode
+from .snipe_shot_mode import SnipeShotMode, run_snipe_shot_mode, get_snipe_shot_mode  # noqa: F401
+# Agent Builder Studio - Plataforma No-Code para Crear AI Agents
+from .agent_builder_studio import (  # noqa: F401
+    AgentBuilderStudio,
+    ReActAgent,
+    AgentConfig,
+    AgentTool,
+    AgentToolkit,
+    AgentMemory,
+    AgentTemplate,
+    DeploymentChannel,
+    LLMProvider,
+    DeploymentConfig,
+    AgentAnalytics,
+    get_agent_builder_studio,
+    run_agent_builder_studio
+)
+# PRIME AGENTS - Clonado de Agent Builder Studio
+from .prime_agents_mode import (  # noqa: F401
+    PrimeAgentsMode,
+    get_prime_agents_mode,
+    run_prime_agents_mode
+)
+# AI Agent Factory - Plataforma No-Code para Crear AI Agents
+from .ai_agent_factory_mode import (  # noqa: F401
+    AIAgentFactory,
+    AgentConfig,
+    AgentCategory,
+    AgentTemplate,
+    AgentPersonality,
+    AgentValues,
+    AgentAnalytics,
+    MarketplaceAgent,
+    DeploymentChannel,
+    LLMProvider,
+    get_ai_agent_factory,
+    run_ai_agent_factory
+)
 # Judge Agent Mode - Clonado de Alien Mode
 from .judge_agent_mode import JudgeAgentMode, run_judge_agent_mode, get_judge_agent_mode  # noqa: F401
-# Memory LLM Mode - Clonado de Alien Mode
-from .memory_llm_mode import MemoryLLMMode, run_memory_llm_mode, get_memory_llm_mode  # noqa: F401
-# Advanced Retrieval Pipeline - Basado en paper de evaluación de embeddings
-from .advanced_retrieval_pipeline import AdvancedRetrievalPipeline, EmbeddingModel, ChunkingStrategy, RerankerModel  # noqa: F401
 # Banking Mode - Clonado de Alien Mode
 from .banking_mode import BankingMode, run_banking_mode, get_banking_mode  # noqa: F401
 # Event-driven modes
 from .event_bus_mode import EventBusMode, run_event_bus_mode, get_event_bus_mode, SimpleEventBus  # noqa: F401
+from .vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode  # noqa: F401
 from .event_horizon_mode import EventHorizonMode, run_event_horizon_mode, get_event_horizon_mode  # noqa: F401
 from .event_storage_mode import EventStorageMode, run_event_storage_mode, get_event_storage_mode  # noqa: F401
 from .extasis_mode import ExtasisMode, run_extasis_mode, get_extasis_mode  # noqa: F401
@@ -194,32 +249,6 @@ from .sql_agents import (  # noqa: F401
     SQLExecutionResult,
 )
 from .deep_research import DeepResearch, DeepResearchResult  # noqa: F401
-# Ads Optimization Engine - Motor completo de optimización de anuncios (Production-Ready)
-from .ads_optimization_engine import (  # noqa: F401
-    AdsOptimizationEngine,
-    CreativeAsset,
-    AdVariation,
-    Campaign,
-    PerformanceMetrics,
-    CreativeType,
-    CampaignObjective,
-    Platform,
-    CreativeAssetManager,
-    GenerativeAdVariationsEngine,
-    CTRPredictionModel,
-    CreativeSelector,
-    CampaignManager,
-    RLAutoOptimizer,
-    AutoScalingSystem
-)
-from .ads_optimization_mode import AdsOptimizationMode, get_ads_optimization_mode, run_ads_optimization_mode  # noqa: F401
-# Production Engine (recomendado para producción)
-from .ads_optimization.engine_production import ProductionAdsOptimizationEngine  # noqa: F401
-from .ads_optimization.models import ModelManager  # noqa: F401
-from .ads_optimization.database import DatabaseManager  # noqa: F401
-from .ads_optimization.tenant_manager import TenantManager  # noqa: F401
-from .ads_optimization.billing import BillingManager  # noqa: F401
-from .ads_optimization.auth import AuthManager  # noqa: F401
 
 __version__ = "2.1.0"
 __all__ = [
@@ -239,6 +268,26 @@ __all__ = [
     "AgentState",
     "AdvancedAutonomousAgent",
     "EnterpriseAPIMode",
+    "AdviceGodMode",
+    "get_advice_god_mode",
+    "run_advice_god_mode",
+    # "OptimusMode",  # ELIMINADO
+    # "get_optimus_mode",  # ELIMINADO
+    # "run_optimus_mode",  # ELIMINADO
+    "MarketplaceMode",
+    "get_marketplace_mode",
+    "run_marketplace_mode",
+    "PricingTier",
+    "AdStatus",
+    "CreatorTier",
+    "OptimusPrimeMode",
+    "get_optimus_prime_mode",
+    "run_optimus_prime_mode",
+    "SituationalReasoner",
+    "ReasoningType",
+    "SituationAssessment",
+    "SituationalInsight",
+    "StrategicRecommendation",
     "EnterpriseAgenticAI",
     "IDPResult",
     "AgenticTask",
@@ -375,6 +424,18 @@ __all__ = [
     "AlienMode",
     "run_alien_mode",
     "get_alien_mode",
+    # SNIPE SHOT Mode
+    "SnipeShotMode",
+    "run_snipe_shot_mode",
+    "get_snipe_shot_mode",
+    # Portal ADS Mode
+    "PortalADSMode",
+    "run_portal_ads_mode",
+    "get_portal_ads_mode",
+    # AD LLM Mode
+    "ADLLMMode",
+    "run_ad_llm_mode",
+    "get_ad_llm_mode",
     # Judge Agent Mode
     "JudgeAgentMode",
     "run_judge_agent_mode",

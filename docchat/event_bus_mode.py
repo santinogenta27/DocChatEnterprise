@@ -43,12 +43,6 @@ from .test_time_training import TestTimeTrainer
 from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
-from .advanced_retrieval_pipeline import (
-    AdvancedRetrievalPipeline,
-    EmbeddingModel,
-    ChunkingStrategy,
-    RerankerModel
-)
 
 
 class SimpleEventBus:
@@ -252,16 +246,6 @@ class EventBusMode:
         
         # Streaming de insights en tiempo real
         self.insight_streams: Dict[str, List[Any]] = defaultdict(list)
-        
-        # Advanced Retrieval Pipeline (basado en paper de evaluación)
-        self.advanced_retrieval = AdvancedRetrievalPipeline(
-            config=config,
-            embedding_model=EmbeddingModel.QWEN3_EMBED_8B,  # Mejor modelo según paper
-            chunking_strategy=ChunkingStrategy.RECURSIVE_512,  # Fine-grained según paper
-            reranker_model=RerankerModel.BGE_RERANKER_LARGE,  # Mejor reranker según paper
-            enable_reranking=True
-        )
-        print("✅ [Event Bus Mode] Advanced Retrieval Pipeline inicializado")
     
     def _setup_event_listeners(self):
         """Configura listeners para eventos comunes con procesamiento automático."""
@@ -445,13 +429,9 @@ class EventBusMode:
     def process_documents(
         self,
         session_id: str,
-        files: List[Any],
-        use_advanced_chunking: bool = True
+        files: List[Any]
     ) -> Dict[str, Any]:
-        """
-        Procesa documentos para una sesión - Optimizado para real-time streaming.
-        Integra Advanced Retrieval Pipeline con chunking optimizado según el paper.
-        """
+        """Procesa documentos para una sesión - Optimizado para real-time streaming."""
         session = self.initialize_session(session_id)
         
         # Procesar nuevos archivos
@@ -468,15 +448,6 @@ class EventBusMode:
                 "total_docs": len(session["docs"]),
                 "total_chunks": sum(len(doc.page_content) for doc in session["docs"])
             }
-        
-        # Usar Advanced Retrieval Pipeline para chunking optimizado
-        if use_advanced_chunking:
-            # Publicar evento de chunking avanzado
-            self.event_bus.publish('advanced_chunking_started', {
-                'session_id': session_id,
-                'strategy': self.advanced_retrieval.chunking_strategy.value,
-                'embedding_model': self.advanced_retrieval.embedding_model.value
-            })
         
         # Iniciar procesamiento asíncrono en background (non-blocking)
         try:
@@ -508,27 +479,16 @@ class EventBusMode:
     async def _process_documents_async(
         self,
         session_id: str,
-        new_files: List[Any],
-        use_advanced_chunking: bool = True
+        new_files: List[Any]
     ):
-        """
-        Procesa documentos de forma asíncrona con streaming de insights.
-        Integra Advanced Retrieval Pipeline con chunking y embeddings optimizados.
-        """
+        """Procesa documentos de forma asíncrona con streaming de insights."""
         try:
             print(f"📄 [Event Bus Mode] Procesando {len(new_files)} nuevos documentos en tiempo real...")
-            print(f"🔬 [Event Bus Mode] Usando Advanced Retrieval Pipeline:")
-            print(f"   - Embedding: {self.advanced_retrieval.embedding_model.value} ({self.advanced_retrieval.embedding_dimension}-dim)")
-            print(f"   - Chunking: {self.advanced_retrieval.chunking_strategy.value}")
-            print(f"   - Reranking: {self.advanced_retrieval.reranker_model.value if self.advanced_retrieval.enable_reranking else 'disabled'}")
             
             # Publicar evento de inicio
             self.event_bus.publish('document_processing_started', {
                 'session_id': session_id,
-                'file_count': len(new_files),
-                'advanced_retrieval': True,
-                'embedding_model': self.advanced_retrieval.embedding_model.value,
-                'chunking_strategy': self.advanced_retrieval.chunking_strategy.value
+                'file_count': len(new_files)
             })
             
             session = self.sessions[session_id]
@@ -539,12 +499,6 @@ class EventBusMode:
                 try:
                     # Procesar documento individual
                     file_docs = self.processor.process([file_obj])
-                    
-                    # Aplicar chunking avanzado según el paper
-                    if use_advanced_chunking:
-                        file_docs = self.advanced_retrieval.chunk_documents(file_docs)
-                        print(f"✅ [Event Bus Mode] Chunking avanzado aplicado: {len(file_docs)} chunks")
-                    
                     session["docs"].extend(file_docs)
                     processed_count += 1
                     
@@ -567,19 +521,8 @@ class EventBusMode:
                         await self._generate_realtime_insights(session_id, doc)
                     
                     # Actualizar retriever incrementalmente (más eficiente)
-                    # Usar embeddings avanzados si están disponibles
                     if session["docs"]:
-                        # Por ahora, usar retriever builder estándar
-                        # En producción, se podría usar el embedding model avanzado directamente
                         session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                        
-                        # Publicar evento de retriever actualizado con métricas
-                        self.event_bus.publish('retriever_updated', {
-                            'session_id': session_id,
-                            'total_chunks': len(session["docs"]),
-                            'embedding_model': self.advanced_retrieval.embedding_model.value,
-                            'chunking_strategy': self.advanced_retrieval.chunking_strategy.value
-                        })
                     
                 except Exception as e:
                     print(f"⚠️ [Event Bus Mode] Error procesando archivo: {e}")
@@ -875,33 +818,10 @@ class EventBusMode:
             if best_approach:
                 enriched_query += f"\n\n🛤️ ENFOQUE RECOMENDADO: {best_approach}"
             
-            # Usar Advanced Retrieval Pipeline para retrieval optimizado
-            # Primero, obtener documentos recuperados
-            retrieved_docs = session["retriever"].get_relevant_documents(message) if session["retriever"] else []
-            
-            # Aplicar reranking neural si está habilitado
-            if self.advanced_retrieval.enable_reranking and retrieved_docs:
-                print(f"🔄 [Event Bus Mode] Aplicando neural reranking con {self.advanced_retrieval.reranker_model.value}...")
-                retrieved_docs = self.advanced_retrieval.rerank_results(
-                    query=message,
-                    retrieved_docs=retrieved_docs,
-                    top_k=10  # Rerankear top-10 según el paper
-                )
-                print(f"✅ [Event Bus Mode] Reranking completado: {len(retrieved_docs)} documentos rerankeados")
-                
-                # Publicar evento de reranking
-                self.event_bus.publish('neural_reranking_completed', {
-                    'session_id': session_id,
-                    'query': message[:100],
-                    'reranked_count': len(retrieved_docs),
-                    'reranker_model': self.advanced_retrieval.reranker_model.value
-                })
-            
-            # Ejecutar workflow con documentos rerankeados
             result = temp_workflow.run(
                 enriched_query,
                 session["retriever"],
-                all_documents=retrieved_docs if retrieved_docs else session["docs"],
+                all_documents=session["docs"],
                 conversational_mode=True
             )
             
@@ -909,25 +829,6 @@ class EventBusMode:
             sources = result.get("sources", [])
             verification_report = result.get("verification_report", "")
             relevance_label = result.get("relevance", "UNKNOWN")
-            
-            # Evaluar retrieval si hay ground truth disponible
-            if self.advanced_retrieval.evaluation_pipeline_enabled:
-                # En producción, aquí se compararía con ground truth
-                # Por ahora, solo registramos métricas básicas
-                eval_result = self.advanced_retrieval.evaluate_retrieval(
-                    query=message,
-                    retrieved_docs=retrieved_docs[:10],  # Top-10 para evaluación
-                    ground_truth_docs=None,  # Se proporcionaría en producción
-                    k_values=[3, 5, 10]
-                )
-                
-                # Publicar evento de evaluación
-                self.event_bus.publish('retrieval_evaluated', {
-                    'session_id': session_id,
-                    'query': message[:100],
-                    'metrics': eval_result,
-                    'retrieved_count': len(retrieved_docs)
-                })
             
             # 8. Rastrear procedencia de la respuesta
             source_provenances = []
@@ -1032,11 +933,6 @@ class EventBusMode:
             formatted_answer += "- 🌳 **Reinforcement Learning & Planning:** Estrategias adaptativas\n"
             formatted_answer += "- 🔌 **MCP Powered:** Conexión a sistemas externos\n"
             formatted_answer += "- 📡 **Event Bus:** Arquitectura event-driven para procesamiento automático\n"
-            formatted_answer += "- 🔬 **Advanced Retrieval Pipeline:** Embeddings de alta dimensión + Neural Reranking\n"
-            formatted_answer += f"  - Embedding Model: {self.advanced_retrieval.embedding_model.value} ({self.advanced_retrieval.embedding_dimension}-dim)\n"
-            formatted_answer += f"  - Chunking Strategy: {self.advanced_retrieval.chunking_strategy.value}\n"
-            if self.advanced_retrieval.enable_reranking:
-                formatted_answer += f"  - Neural Reranker: {self.advanced_retrieval.reranker_model.value}\n"
             
             # Agregar advertencia si requiere aprobación
             if requires_approval and approval_id:
@@ -1505,8 +1401,7 @@ class EventBusMode:
                 "active_streams": len(self.insight_streams),
                 "total_insights": sum(len(insights) for insights in self.insight_streams.values()),
                 "streaming_enabled": True
-            },
-            "advanced_retrieval": self.advanced_retrieval.get_evaluation_summary()
+            }
         }
         
         if session_id and session_id in self.sessions:

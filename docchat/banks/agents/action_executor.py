@@ -49,18 +49,18 @@ class ActionExecutorAgent(BaseBanksAgent):
     def _load_salesforce_config(self) -> Dict[str, Any]:
         """Carga configuración de Salesforce."""
         return {
-            "username": self.config.__dict__.get("salesforce_username", ""),
-            "password": self.config.__dict__.get("salesforce_password", ""),
-            "security_token": self.config.__dict__.get("salesforce_security_token", ""),
-            "domain": self.config.__dict__.get("salesforce_domain", "login")
+            "username": getattr(self.config, "salesforce_username", ""),
+            "password": getattr(self.config, "salesforce_password", ""),
+            "security_token": getattr(self.config, "salesforce_security_token", ""),
+            "domain": getattr(self.config, "salesforce_domain", "login")
         }
     
     def _load_jira_config(self) -> Dict[str, Any]:
         """Carga configuración de Jira."""
         return {
-            "url": self.config.__dict__.get("jira_url", ""),
-            "username": self.config.__dict__.get("jira_username", ""),
-            "api_token": self.config.__dict__.get("jira_api_token", "")
+            "url": getattr(self.config, "jira_url", ""),
+            "username": getattr(self.config, "jira_username", ""),
+            "api_token": getattr(self.config, "jira_api_token", "")
         }
     
     def process(self, state: Dict[str, Any]) -> Dict[str, Any]:

@@ -227,7 +227,8 @@ class CompanyKnowledge:
         speed_mode: str = "balanced",
         provider: str = "openai",
         filters: Optional[Dict[str, Any]] = None,
-        urls_in_bullets: bool = False
+        urls_in_bullets: bool = False,
+        sidebar_callback: Optional[callable] = None
     ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
         """
         Procesa una consulta con todas las capacidades avanzadas.
@@ -238,234 +239,527 @@ class CompanyKnowledge:
         """
         session = self.initialize_session(session_id)
         
-        # NUEVO: Si hay apps conectadas, buscar en ellas primero
+        # OPTIMIZACIÓN 1: Búsqueda multi-fuente con streaming en tiempo real
         app_results = []
         app_context = ""
         connected_apps = []
+        search_status = []  # Para sidebar en tiempo real
+        results_by_app = {}  # Para tracking de resultados por app
+        
         if self.app_integrations:
             connected_apps = self.app_integrations.get_connected_apps()
             if connected_apps:
-                print(f"🔍 [Company Knowledge] Buscando en {len(connected_apps)} apps conectadas...")
+                print(f"🔍 [Company Knowledge] Buscando en {len(connected_apps)} apps conectadas con streaming en tiempo real...")
                 try:
-                    app_results = await self.app_integrations.search_across_apps(
+                    # OPTIMIZACIÓN CRÍTICA: Búsqueda con streaming para sidebar en tiempo real
+                    async for app_name, status, count, results in self.app_integrations.search_across_apps_streaming(
                         query=message,
                         filters=filters
-                    )
+                    ):
+                        if app_name == "all":
+                            # Resultado final con todos los resultados
+                            app_results = results
+                            break
+                        
+                        # Actualizar tracking por app
+                        if status == "completed":
+                            results_by_app[app_name] = count
+                            # Filtrar errores de token expirado SILENCIOSAMENTE (no mostrar en UI)
+                            # Simplemente omitir esos resultados y continuar
+                            error_results = [r for r in results if r.metadata.get("error") == "token_expired"]
+                            if error_results:
+                                # Filtrar resultados con error de token expirado (no agregar a search_status)
+                                # No mostrar ningún mensaje al usuario - continuar silenciosamente
+                                # Filtrar los resultados con error
+                                results = [r for r in results if r.metadata.get("error") != "token_expired"]
+                                count = len(results)  # Actualizar count después de filtrar
+                            
+                            # Agregar a search_status solo si hay resultados válidos
+                            if count > 0:
+                                search_status.append({
+                                    "app": app_name,
+                                    "source": f"{count} resultados encontrados",
+                                    "status": "completed"
+                                })
+                        elif status == "error":
+                            results_by_app[app_name] = 0
+                            search_status.append({
+                                "app": app_name,
+                                "source": "Error en búsqueda",
+                                "status": "error"
+                            })
+                        elif status == "searching":
+                            search_status.append({
+                                "app": app_name,
+                                "source": "Buscando...",
+                                "status": "searching"
+                            })
+                        
+                        # OPTIMIZACIÓN CRÍTICA: Callback para actualizar sidebar en tiempo real
+                        if sidebar_callback:
+                            sidebar_text = self._generate_realtime_sidebar_status(
+                                apps_searched=connected_apps,
+                                results_found=results_by_app,
+                                current_app=app_name if status == "searching" else None,
+                                is_searching=(status == "searching")
+                            )
+                            try:
+                                sidebar_callback(sidebar_text)
+                            except Exception as e:
+                                print(f"⚠️ [Company Knowledge] Error en callback de sidebar: {e}")
+                        
+                        # Log para debugging
+                        print(f"📊 [Company Knowledge] {app_name}: {status} ({count} resultados)")
                     
                     if app_results:
-                        # Preparar contexto de apps
+                        # OPTIMIZACIÓN 2: Ranking mejorado con filtros de fecha
                         ranked_results = self._rank_results_by_relevance_and_recency(
                             query=message,
                             results=app_results,
                             filters=filters
                         )
+                        
+                        # OPTIMIZACIÓN 3: Detectar conflictos entre fuentes con LLM (async)
+                        conflict_analysis = await self._detect_conflicts_between_sources(
+                            results=ranked_results,
+                            query=message
+                        )
+                        
+                        # OPTIMIZACIÓN CRÍTICA (9/10): Resolver conflictos automáticamente con búsquedas adicionales
+                        conflict_resolution = None
+                        if conflict_analysis.get("has_conflicts"):
+                            print(f"⚠️ [Company Knowledge] Detectados {len(conflict_analysis.get('conflicts', []))} conflictos - Iniciando resolución automática...")
+                            conflict_resolution = await self._resolve_conflicts_with_additional_searches(
+                                conflicts=conflict_analysis.get("conflicts", []),
+                                original_query=message,
+                                original_results=ranked_results,
+                                filters=filters
+                            )
+                            
+                            if conflict_resolution and conflict_resolution.get("resolved"):
+                                print(f"✅ [Company Knowledge] Conflictos resueltos: {len(conflict_resolution.get('resolved_conflicts', []))}")
+                                # Agregar resultados adicionales a ranked_results
+                                additional_results = conflict_resolution.get("additional_results", [])
+                                if additional_results:
+                                    ranked_results.extend(additional_results)
+                                    # Re-rankear con los nuevos resultados
+                                    ranked_results = self._rank_results_by_relevance_and_recency(
+                                        query=message,
+                                        results=ranked_results,
+                                        filters=filters
+                                    )
+                            else:
+                                print(f"⚠️ [Company Knowledge] No se pudieron resolver todos los conflictos")
+                        
+                        # Preparar contexto de apps (mejorado)
                         ctx_lines = []
-                        for r in ranked_results[:10]:  # Top 10 resultados de apps
-                            snippet = (r.snippet or r.content or "")[:400]
+                        for r in ranked_results[:15]:  # Aumentado a 15 para más contexto
+                            snippet = (r.snippet or r.content or "")[:500]  # Snippets más largos
                             if urls_in_bullets and r.url:
                                 ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url})")
                             else:
                                 ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
                         app_context = "\n\n📱 INFORMACIÓN DE APPS CONECTADAS:\n" + "\n".join(ctx_lines)
+                        
+                        # Agregar nota de conflictos y resolución si existen
+                        if conflict_analysis.get("has_conflicts"):
+                            if conflict_resolution and conflict_resolution.get("resolved"):
+                                app_context += f"\n\n✅ RESOLUCIÓN DE CONFLICTOS: {conflict_resolution.get('resolution', 'Conflictos resueltos mediante búsquedas adicionales.')}"
+                            else:
+                                app_context += "\n\n⚠️ NOTA: Se detectaron discrepancias entre fuentes. Se presentan perspectivas balanceadas."
+                        
                         print(f"✅ [Company Knowledge] Encontrados {len(app_results)} resultados en apps")
+                        if conflict_analysis.get("has_conflicts"):
+                            print(f"⚠️ [Company Knowledge] Detectados {len(conflict_analysis.get('conflicts', []))} conflictos entre fuentes")
                     else:
+                        # No hay resultados de apps (puede ser por tokens expirados o porque realmente no hay resultados)
+                        # No mostrar mensaje aquí - se manejará más abajo
                         print(f"⚠️ [Company Knowledge] No se encontraron resultados en las apps para la query: {message[:50]}...")
                 except Exception as e:
                     print(f"⚠️ [Company Knowledge] Error buscando en apps: {e}")
                     import traceback
                     traceback.print_exc()
         
-        # Si no hay documentos pero sí hay resultados de apps, usar solo apps
-        if not session["retriever"] and app_results:
-            print("📱 [Company Knowledge] Usando solo información de apps conectadas (no hay documentos)")
+        # PRIORIDAD: Si hay resultados de apps conectadas, SIEMPRE usarlos primero (incluso si hay documentos subidos)
+        # Las apps conectadas tienen prioridad sobre PDFs subidos localmente
+        if app_results:
+            print(f"📱 [Company Knowledge] PRIORIDAD: Usando información de apps conectadas ({len(app_results)} resultados encontrados)")
             # Generar respuesta basada solo en apps
             try:
+                # Inicializar metadata ANTES de usarlo
+                metadata = {}
+                
                 # Preparar contexto completo de apps
                 ranked_results = self._rank_results_by_relevance_and_recency(
                     query=message,
                     results=app_results,
                     filters=filters
                 )
+                
+                # Filtrar errores de token expirado SILENCIOSAMENTE (no mostrar error al usuario)
+                # Simplemente omitir esos resultados y continuar con los demás
+                ranked_results = [r for r in ranked_results if r.metadata.get("error") != "token_expired"]
+                
+                # Si después de filtrar no quedan resultados, NO generar mensaje de error
+                # Simplemente retornar sin respuesta (no mostrar nada al usuario)
+                if not ranked_results:
+                    print(f"⚠️ [Company Knowledge] No hay resultados válidos (todos los tokens expirados) - No mostrando mensaje al usuario")
+                    metadata = {
+                        "sources": [],
+                        "total_sources": 0,
+                        "apps_searched": len(connected_apps) if connected_apps else 0,
+                        "search_status": search_status,
+                        "no_results": True,
+                        "silent_fail": True  # Indicar que es un fallo silencioso (tokens expirados)
+                    }
+                    # Retornar sin mensaje de error - simplemente no mostrar nada
+                    yield (history, None, metadata)
+                    return
+                
                 ctx_lines = []
                 sources_list = []
-                # Procesar TODOS los resultados, sin límite (máxima calidad)
-                # Optimizado para aprovechar context windows grandes (128k OpenAI, 200k Claude)
+                # TRUNCAMIENTO INTELIGENTE: Limitar contexto para evitar errores 429 (tokens por minuto)
+                # Calcular límite seguro: ~20,000 tokens = ~80,000 caracteres (dejando margen para prompt y respuesta)
+                # Esto evita exceder el límite de TPM (tokens por minuto) de OpenAI
                 total_chars = 0
-                max_chars = 500000 if provider == "openai" else 800000  # Claude puede manejar más contexto
+                # Límite seguro: 80k chars para OpenAI (≈20k tokens), 120k para Claude (≈30k tokens)
+                # Dejamos margen para el prompt y la respuesta generada
+                max_chars = 80000 if provider == "openai" else 120000  # Límites seguros para evitar 429
                 
-                for r in ranked_results:
-                    # Para PDFs, usar contenido completo (hasta 80,000 caracteres por PDF como Enterprise API)
-                    # Para otros, usar snippet más largo
-                    if r.content and len(r.content) > 1000:
-                        # Es un PDF con contenido completo
-                        # Usar hasta 80,000 caracteres por PDF (como Enterprise API Supreme)
-                        content_to_use = r.content[:80000]
-                        if total_chars + len(content_to_use) <= max_chars:
-                            ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{content_to_use}\n")
-                            total_chars += len(content_to_use)
-                        else:
-                            # Si nos quedamos sin espacio, usar lo que quepa
-                            remaining = max_chars - total_chars
-                            if remaining > 1000:
-                                ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{content_to_use[:remaining]}\n")
-                                total_chars = max_chars
-                            break
+                # CRÍTICO: Procesar TODOS los resultados de apps (PDFs de Google Drive)
+                # Priorizar PDFs con contenido completo sobre snippets
+                pdf_results = [r for r in ranked_results if r.content and len(r.content) > 1000]
+                other_results = [r for r in ranked_results if not (r.content and len(r.content) > 1000)]
+                
+                # Primero procesar PDFs completos (prioridad máxima) con truncamiento inteligente
+                for r in pdf_results:
+                    # Es un PDF con contenido completo - truncar inteligentemente para evitar exceder límites
+                    # Priorizar: usar hasta 15,000 caracteres por PDF (equivalente a ~3,750 tokens)
+                    # Esto permite incluir múltiples PDFs sin exceder el límite total
+                    max_chars_per_pdf = 15000  # Límite por PDF para balancear cantidad vs profundidad
+                    content_to_use = r.content[:max_chars_per_pdf] if len(r.content) > max_chars_per_pdf else r.content
+                    
+                    if total_chars + len(content_to_use) <= max_chars:
+                        ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{content_to_use}\n")
+                        total_chars += len(content_to_use)
+                        if r.url:
+                            sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
                     else:
-                        # Usar snippet o contenido limitado (más largo para otros tipos)
-                        snippet = (r.snippet or r.content or "")[:5000]  # Aumentado a 5000 chars
-                        if total_chars + len(snippet) <= max_chars:
-                            ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
-                            total_chars += len(snippet)
-                        else:
-                            break
-                    if r.url:
-                        sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                        # Si nos quedamos sin espacio, usar lo que quepa (mínimo 5k chars para que valga la pena)
+                        remaining = max_chars - total_chars
+                        if remaining > 5000:  # Mínimo 5k chars para que valga la pena
+                            ctx_lines.append(f"=== [{r.app_name}] {r.source_name} ===\n{r.content[:remaining]}\n")
+                            total_chars = max_chars
+                            if r.url:
+                                sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                        break
+                
+                # Luego procesar otros resultados (snippets, etc.) si hay espacio
+                for r in other_results:
+                    # Usar snippet o contenido limitado (truncado para evitar exceder límites)
+                    max_snippet_chars = 5000  # Límite por snippet para balancear cantidad vs profundidad
+                    snippet = (r.snippet or r.content or "")[:max_snippet_chars]
+                    if total_chars + len(snippet) <= max_chars:
+                        ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
+                        total_chars += len(snippet)
+                        if r.url:
+                            sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                    else:
+                        break
                 
                 context_block = "\n".join(ctx_lines)
                 
-                # Generar respuesta con LLM - PROMPT ESTILO ENTERPRISE API SUPREME (máxima calidad)
-                prompt = f"""Eres un analista experto de documentos empresariales (nivel consultor senior C-level, estilo McKinsey/Deloitte). 
-Analiza en profundidad la información proporcionada y genera resúmenes ejecutivos EXTENSOS, PROFESIONALES y ALTAMENTE ÚTILES.
+                # Agregar nota si se truncó contenido para evitar exceder límites de tokens
+                if total_chars >= max_chars * 0.9:  # Si usamos más del 90% del límite
+                    truncated_count = len([r for r in pdf_results if r.content and len(r.content) > 15000])
+                    if truncated_count > 0:
+                        context_block += f"\n\n[NOTA: Se incluyeron los primeros {len(sources_list)} documentos más relevantes. Algunos documentos fueron truncados para evitar exceder límites de tokens. Para análisis completo de documentos específicos, realiza consultas más específicas.]"
+                
+                # Si no hay contexto después de procesar resultados, no llamar al LLM (evitar mensaje de error)
+                if not context_block or not context_block.strip():
+                    print(f"⚠️ [Company Knowledge] No hay contexto disponible (todos los tokens expirados) - No generando respuesta")
+                    metadata = {
+                        "sources": [],
+                        "total_sources": 0,
+                        "apps_searched": len(connected_apps) if connected_apps else 0,
+                        "search_status": search_status,
+                        "no_results": True,
+                        "silent_fail": True  # Indicar que es un fallo silencioso (tokens expirados)
+                    }
+                    # Retornar sin mensaje de error - simplemente no mostrar nada
+                    yield (history, None, metadata)
+                    return
+                
+                # Generar respuesta con LLM - PROMPT ESTILO ENTERPRISE API SUPREME GOLD (máxima calidad suprema)
+                prompt = f"""Eres un analista experto de documentos empresariales de NIVEL ALIEN GOD SUPER INTELIGENCIA (nivel consultor senior C-level, estilo McKinsey/Deloitte/Bain, con profundidad de análisis de nivel PhD).
+
+Tu misión es analizar en profundidad ABSOLUTA la información proporcionada y generar resúmenes ejecutivos EXTENSÍSIMOS, ULTRA PROFESIONALES y DE MÁXIMA CALIDAD SUPREMA.
 
 INFORMACIÓN DE APPS CONECTADAS:
 {context_block}
 
 PREGUNTA DEL USUARIO: {message}
 
-INSTRUCCIONES DETALLADAS (ESTILO ENTERPRISE API SUPREME):
+INSTRUCCIONES DETALLADÍSIMAS (ESTILO ENTERPRISE API SUPREME GOLD - NIVEL ALIEN GOD):
 
-1. **RESUMEN EJECUTIVO EXTENSO (6-10 párrafos por documento importante):**
-   - Contexto histórico y propósito del documento
-   - Ideas principales y argumentos centrales explicados con profundidad
-   - Conclusiones y recomendaciones clave con justificación
-   - Valor e importancia del contenido para diferentes audiencias
-   - Aplicaciones prácticas y relevancia empresarial específica
-   - Insights profundos y análisis crítico
-   - Conexiones con otros documentos si hay múltiples
-   - Implicaciones estratégicas y tácticas
+1. **RESUMEN EJECUTIVO ULTRA EXTENSO (10-20 párrafos por documento importante, mínimo 3000-5000 palabras por documento):**
+   - Contexto histórico completo y propósito profundo del documento
+   - Ideas principales y argumentos centrales explicados con MÁXIMA PROFUNDIDAD
+   - Conclusiones y recomendaciones clave con justificación detallada
+   - Valor e importancia del contenido para diferentes audiencias (ejecutivos, técnicos, estratégicos)
+   - Aplicaciones prácticas y relevancia empresarial específica con ejemplos concretos
+   - Insights profundos y análisis crítico exhaustivo
+   - Conexiones con otros documentos si hay múltiples (análisis comparativo)
+   - Implicaciones estratégicas y tácticas con roadmap de implementación
+   - Análisis de fortalezas, debilidades, oportunidades y amenazas (SWOT)
+   - Comparación con estándares de la industria y mejores prácticas
+   - Análisis de impacto potencial en diferentes escenarios
+   - Recomendaciones prioritizadas con justificación de ROI
 
-2. **PUNTOS CLAVE DETALLADOS (15-20 puntos por documento importante):**
-   - Conceptos fundamentales explicados con ejemplos concretos
-   - Hallazgos importantes con contexto y evidencia
-   - Recomendaciones específicas y accionables con pasos concretos
-   - Insights valiosos para el negocio con casos de uso
-   - Metodologías, frameworks o modelos presentados con explicación
-   - Ejemplos concretos, estudios de caso o datos mencionados
-   - Advertencias, limitaciones o consideraciones importantes
-   - Oportunidades de implementación y ROI potencial
+2. **PUNTOS CLAVE ULTRA DETALLADOS (25-40 puntos por documento importante):**
+   - Conceptos fundamentales explicados con ejemplos concretos y casos de uso
+   - Hallazgos importantes con contexto completo, evidencia y métricas
+   - Recomendaciones específicas y accionables con pasos concretos y timeline
+   - Insights valiosos para el negocio con casos de uso detallados y ROI estimado
+   - Metodologías, frameworks o modelos presentados con explicación completa y aplicación práctica
+   - Ejemplos concretos, estudios de caso o datos mencionados con análisis profundo
+   - Advertencias, limitaciones o consideraciones importantes con mitigación de riesgos
+   - Oportunidades de implementación y ROI potencial con cálculo estimado
+   - Lecciones aprendidas y mejores prácticas identificadas
+   - Patrones y tendencias detectadas con análisis de impacto
+   - Recomendaciones de integración con sistemas existentes
+   - Análisis de dependencias y requisitos previos
 
-3. **ANÁLISIS PROFESIONAL COMPLETO:**
+3. **ANÁLISIS PROFESIONAL COMPLETO Y EXHAUSTIVO:**
    - Tipo de documento y clasificación precisa (libro académico, whitepaper, informe ejecutivo, etc.)
-   - Entidades principales (autores con credenciales, organizaciones, empresas, instituciones)
-   - Temas y áreas de conocimiento cubiertas con profundidad
-   - Fechas/períodos relevantes y contexto histórico
-   - Valor para el negocio con métricas potenciales
-   - Aplicaciones prácticas por industria o función
-   - Nivel de complejidad y audiencia objetivo
+   - Entidades principales (autores con credenciales completas, organizaciones, empresas, instituciones)
+   - Temas y áreas de conocimiento cubiertas con profundidad académica
+   - Fechas/períodos relevantes y contexto histórico completo
+   - Valor para el negocio con métricas potenciales y KPIs sugeridos
+   - Aplicaciones prácticas por industria o función con roadmap
+   - Nivel de complejidad y audiencia objetivo con recomendaciones de capacitación
+   - Análisis de mercado y posicionamiento competitivo
+   - Análisis de riesgo y compliance
+   - Análisis de costos y beneficios (CBA)
 
-4. **ESTRUCTURA PROFESIONAL:**
-   - Organiza por documento cuando hay múltiples (cada uno con su sección completa)
-   - Usa títulos claros, subtítulos y secciones bien definidas
-   - Incluye referencias a las fuentes en cada punto (ej: "según [App] Nombre del Documento, página X")
-   - Usa formato markdown profesional con negritas, listas y citas
-   - Sé específico, detallado y evita generalidades
-   - Proporciona valor real para la toma de decisiones ejecutivas
+4. **ESTRUCTURA PROFESIONAL ULTRA DETALLADA:**
+   - Organiza por documento cuando hay múltiples (cada uno con su sección COMPLETA y EXTENSA)
+   - Usa títulos claros, subtítulos y secciones bien definidas con jerarquía profesional
+   - Incluye referencias a las fuentes en cada punto (ej: "según [App] Nombre del Documento, página X, sección Y")
+   - Usa formato markdown profesional con negritas, listas, citas, tablas y diagramas conceptuales
+   - Sé ESPECÍFICO, DETALLADO y evita generalidades COMPLETAMENTE
+   - Proporciona valor real para la toma de decisiones ejecutivas con análisis cuantitativo cuando sea posible
+   - Incluye secciones de "Próximos Pasos", "Recomendaciones Prioritarias", "Riesgos y Mitigación"
 
-5. **LONGITUD Y PROFUNDIDAD MÁXIMA:**
-   - Genera resúmenes EXTENSOS (mínimo 1000-2000 palabras por documento importante)
-   - Profundiza en los conceptos clave con explicaciones detalladas
-   - Explica el "por qué", el "cómo", el "cuándo" y el "dónde", no solo el "qué"
-   - Incluye análisis crítico, perspectivas múltiples y contraargumentos cuando sea relevante
-   - Proporciona contexto histórico, comparaciones y analogías cuando enriquezcan el análisis
-   - Incluye citas directas importantes del documento cuando sean relevantes
+5. **LONGITUD Y PROFUNDIDAD MÁXIMA ABSOLUTA (SIN LÍMITES):**
+   - Genera resúmenes ULTRA EXTENSOS (mínimo 3000-5000 palabras por documento importante, sin límite superior)
+   - Profundiza en los conceptos clave con explicaciones DETALLADÍSIMAS
+   - Explica el "por qué", el "cómo", el "cuándo", el "dónde", el "quién" y el "qué" con MÁXIMA PROFUNDIDAD
+   - Incluye análisis crítico exhaustivo, perspectivas múltiples y contraargumentos detallados
+   - Proporciona contexto histórico completo, comparaciones exhaustivas y analogías enriquecedoras
+   - Incluye citas directas importantes del documento cuando sean relevantes (con contexto)
+   - Analiza implicaciones a corto, medio y largo plazo
+   - Proporciona análisis de escenarios (best case, worst case, most likely)
+   - Incluye análisis de stakeholders y sus intereses
 
-6. **CALIDAD ENTERPRISE:**
-   - Nivel de detalle equivalente a un informe de consultoría estratégica
-   - Análisis que un CEO o C-level podría usar directamente para decisiones
-   - Profundidad que permite entender el documento sin leerlo completo
-   - Insights accionables con pasos concretos de implementación
-   - Consideración de múltiples perspectivas y escenarios
+6. **CALIDAD ENTERPRISE SUPREMA (NIVEL ALIEN GOD):**
+   - Nivel de detalle equivalente a un informe de consultoría estratégica de nivel C-suite
+   - Análisis que un CEO o C-level podría usar DIRECTAMENTE para decisiones críticas
+   - Profundidad que permite entender el documento COMPLETAMENTE sin leerlo
+   - Insights accionables con pasos concretos de implementación y timeline
+   - Consideración de múltiples perspectivas y escenarios con análisis de probabilidades
+   - Análisis de impacto en diferentes departamentos y funciones
+   - Recomendaciones con priorización y justificación estratégica
+   - Análisis de viabilidad técnica, financiera y organizacional
 
-IMPORTANTE:
-- Usa SOLO la información proporcionada de las apps
-- Sé específico y detallado - evita generalidades completamente
-- Proporciona valor real para la toma de decisiones ejecutivas
-- Usa lenguaje profesional pero claro (nivel C-level)
-- Si hay múltiples documentos, analiza CADA UNO en profundidad completa
-- No limites la longitud - genera el análisis más completo posible
-- Incluye todos los detalles importantes que encuentres en el contenido
+7. **ANÁLISIS ADICIONAL PROFESIONAL:**
+   - Si es un libro académico: análisis de metodología, contribuciones teóricas, aplicaciones prácticas
+   - Si es un whitepaper: análisis de propuesta de valor, diferenciación competitiva, roadmap de adopción
+   - Si es un informe ejecutivo: análisis de hallazgos, recomendaciones estratégicas, plan de acción
+   - Análisis de audiencia objetivo y personalización de mensajes
+   - Análisis de canales de distribución y estrategia de comunicación
+   - Análisis de métricas de éxito y KPIs relevantes
 
-Genera un análisis COMPLETO, EXTENSO y PROFESIONAL de máxima calidad:"""
+MANEJO DE CONFLICTOS Y DISCREPANCIAS:
+- Si detectas información contradictoria entre fuentes, PRESÉNTALA de forma balanceada
+- Muestra TODAS las perspectivas cuando hay desacuerdos
+- Indica claramente cuando diferentes fuentes tienen información conflictiva
+- Explica el contexto de cada perspectiva y por qué pueden diferir
+- NO tomes partido - presenta todas las versiones de forma objetiva
+- Si hay números o datos que no coinciden, menciona ambas versiones con sus fuentes
+- Sugiere próximos pasos para resolver discrepancias cuando sea apropiado
+
+IMPORTANTE CRÍTICO:
+- Usa SOLO la información proporcionada de las apps - NO inventes nada
+- Sé ESPECÍFICO y DETALLADO al máximo - evita generalidades COMPLETAMENTE
+- Proporciona valor REAL y ACCIONABLE para la toma de decisiones ejecutivas
+- Usa lenguaje profesional pero claro (nivel C-level, estilo consultoría estratégica)
+- Si hay múltiples documentos, analiza CADA UNO en profundidad COMPLETA y EXTENSA
+- NO limites la longitud - genera el análisis MÁS COMPLETO POSIBLE (mínimo 3000-5000 palabras por documento)
+- Incluye TODOS los detalles importantes que encuentres en el contenido
+- Profundiza en CADA concepto, idea y recomendación con explicaciones exhaustivas
+- Proporciona contexto histórico, comparaciones y análisis crítico en CADA sección
+- Incluye citas directas relevantes del documento con análisis de su importancia
+- Analiza implicaciones estratégicas, tácticas y operacionales en profundidad
+
+CALIDAD REQUERIDA: NIVEL ALIEN GOD SUPER INTELIGENCIA - MÁXIMA CALIDAD SUPREMA
+
+Genera un análisis COMPLETÍSIMO, ULTRA EXTENSO, PROFESIONALÍSIMO y DE MÁXIMA CALIDAD SUPREMA (mínimo 3000-5000 palabras por documento, sin límite superior):"""
                 
-                # Generar respuesta con streaming
+                # Generar respuesta con streaming (como Enterprise API y Chat Conversacional 2)
                 from langchain_core.messages import HumanMessage
                 full_response = ""
                 
+                # CRÍTICO: Stream tokens en tiempo real y yield actualizaciones parciales
+                # Esto permite que la respuesta aparezca en tiempo real en la UI (como ChatGPT)
+                print(f"🚀 [Company Knowledge] Generando respuesta con streaming (contexto: {len(context_block):,} caracteres, {len(ranked_results)} PDFs de apps)...")
+                
                 # Stream tokens en tiempo real
+                chunk_count = 0
                 async for chunk in self.llm.astream([HumanMessage(content=prompt)]):
                     if hasattr(chunk, 'content'):
                         token = chunk.content
                     else:
                         token = str(chunk)
                     full_response += token
+                    chunk_count += 1
+                    
+                    # Yield actualización parcial cada 5 chunks para streaming en tiempo real
+                    # Esto permite que la respuesta aparezca mientras se genera (como ChatGPT)
+                    if chunk_count % 5 == 0:
+                        temp_history = history + [(message, full_response)]
+                        temp_metadata = {
+                            "sources": sources_list,
+                            "total_sources": len(sources_list),
+                            "apps_searched": len(connected_apps) if connected_apps else 0,
+                            "search_status": search_status,
+                            "streaming": True  # Indicar que está en streaming
+                        }
+                        yield (temp_history, None, temp_metadata)
                 
-                # Agregar fuentes al final
+                # OPTIMIZACIÓN 4: Citas mejoradas con snippets exactos
                 if sources_list:
-                    sources_text = "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
-                    for i, src in enumerate(sources_list[:10], 1):
-                        app_name = src.get("app", "Unknown")
-                        source_name = src.get("source", "Unknown")
-                        url = src.get("url", "")
-                        if url:
-                            sources_text += f"{i}. **[{app_name}]** {source_name} - [🔗 Abrir]({url})\n"
-                        else:
-                            sources_text += f"{i}. **[{app_name}]** {source_name}\n"
-                    full_response += sources_text
+                    # Usar método mejorado de citas
+                    enhanced_citations = self._generate_enhanced_citations(
+                        results=ranked_results,
+                        max_citations=15
+                    )
+                    full_response += enhanced_citations
+                
+                # OPTIMIZACIÓN 5: Agregar nota de conflictos y resolución si existen (async)
+                conflict_analysis = await self._detect_conflicts_between_sources(
+                    results=ranked_results,
+                    query=message
+                )
+                
+                # OPTIMIZACIÓN CRÍTICA: Resolver conflictos automáticamente
+                conflict_resolution = None
+                if conflict_analysis.get("has_conflicts"):
+                    conflict_resolution = await self._resolve_conflicts_with_additional_searches(
+                        conflicts=conflict_analysis.get("conflicts", []),
+                        original_query=message,
+                        original_results=ranked_results,
+                        filters=filters
+                    )
+                    
+                    if conflict_resolution and conflict_resolution.get("resolved"):
+                        # Agregar resultados adicionales y re-rankear
+                        additional_results = conflict_resolution.get("additional_results", [])
+                        if additional_results:
+                            ranked_results.extend(additional_results)
+                            ranked_results = self._rank_results_by_relevance_and_recency(
+                                query=message,
+                                results=ranked_results,
+                                filters=filters
+                            )
+                
+                if conflict_analysis.get("has_conflicts"):
+                    conflicts_note = "\n\n---\n\n### ⚠️ Análisis de Consenso y Resolución\n\n"
+                    conflicts_note += f"**Nivel de consenso inicial:** {conflict_analysis.get('consensus_level', 0.0)*100:.0f}%\n\n"
+                    
+                    if conflict_resolution and conflict_resolution.get("resolved"):
+                        conflicts_note += "**✅ Conflictos Resueltos Automáticamente:**\n\n"
+                        conflicts_note += f"{conflict_resolution.get('resolution', 'Se realizaron búsquedas adicionales para resolver las discrepancias.')}\n\n"
+                        
+                        # Mostrar conflictos resueltos
+                        for resolved_conflict in conflict_resolution.get("resolved_conflicts", [])[:3]:
+                            conflict = resolved_conflict.get("conflict", {})
+                            if resolved_conflict.get("resolved"):
+                                conflicts_note += f"**✅ Resuelto:** {conflict.get('description', 'Conflicto')}\n"
+                                conflicts_note += f"   - {resolved_conflict.get('explanation', '')}\n\n"
+                    else:
+                        conflicts_note += "**Discrepancias detectadas:**\n\n"
+                        for conflict in conflict_analysis.get("conflicts", [])[:3]:
+                            conflicts_note += f"- {conflict.get('description', 'Conflicto detectado')}\n"
+                            conflicts_note += f"  - Fuente 1: [{conflict.get('source1', {}).get('app', 'Unknown')}] {conflict.get('source1', {}).get('name', 'Unknown')}\n"
+                            conflicts_note += f"  - Fuente 2: [{conflict.get('source2', {}).get('app', 'Unknown')}] {conflict.get('source2', {}).get('name', 'Unknown')}\n\n"
+                        conflicts_note += "\n*Se presentan perspectivas balanceadas basadas en todas las fuentes disponibles.*\n"
+                    
+                    full_response += conflicts_note
                 
                 new_history = history + [(message, full_response)]
-                return new_history, None, {
+                
+                # OPTIMIZACIÓN 6: Metadata mejorada con información de búsqueda
+                metadata = {
                     "sources": sources_list,
                     "total_sources": len(sources_list),
-                    "apps_searched": len(connected_apps) if connected_apps else 0
+                    "apps_searched": len(connected_apps) if connected_apps else 0,
+                    "search_status": search_status,
+                    "conflicts_detected": conflict_analysis.get("has_conflicts", False),
+                    "conflicts_resolved": conflict_resolution.get("resolved", False) if conflict_resolution else False,
+                    "consensus_level": conflict_analysis.get("consensus_level", 1.0),
+                    "results_by_app": results_by_app,
+                    "conflict_resolution": conflict_resolution
                 }
+                
+                # En un async generator, usar yield en lugar de return con valor
+                yield (new_history, None, metadata)
+                return
             except Exception as e:
-                return history, f"❌ Error generando respuesta: {str(e)}", {}
+                yield (history, f"❌ Error generando respuesta: {str(e)}", {})
+                return
         
-        # Si no hay documentos ni resultados de apps, mostrar mensaje apropiado
-        if not session["retriever"] and not app_results:
-            if connected_apps:
-                # Hay apps conectadas pero no se encontraron resultados para esta query
-                apps_names = ", ".join([app.app_name for app in connected_apps[:3]])
-                if len(connected_apps) > 3:
-                    apps_names += f" y {len(connected_apps) - 3} más"
-                
-                # Generar respuesta informativa aunque no haya resultados
-                informative_response = f"""No se encontraron resultados específicos en tus apps conectadas ({apps_names}) para esta pregunta.
-
-**💡 Sugerencias:**
-- Intenta reformular la pregunta con palabras clave diferentes
-- Verifica que la información que buscas esté disponible en esas apps
-- Prueba con una búsqueda más general
-- Asegúrate de que los permisos del token permitan acceder a los archivos que buscas
-
-**🔍 Apps conectadas:** {apps_names}
-
-Si crees que debería haber resultados, verifica:
-1. Que el token tenga los permisos necesarios (scopes)
-2. Que los archivos/documentos existan en las apps
-3. Que la búsqueda use términos que aparezcan en el contenido"""
-                
-                new_history = history + [(message, informative_response)]
-                return new_history, None, {
-                    "sources": [],
-                    "total_sources": 0,
-                    "apps_searched": len(connected_apps),
-                    "message": "No se encontraron resultados en apps conectadas"
-                }
-            elif self.app_integrations and self.app_integrations.get_connected_apps():
-                return history, "⚠️ No hay documentos procesados. Puedes cargar documentos o hacer preguntas sobre tus apps conectadas.", {}
+        # PRIORIDAD: Apps conectadas primero, luego documentos subidos
+        # Verificar si hay documentos disponibles en la sesión (para uso secundario)
+        has_documents = (
+            session.get("retriever") is not None or 
+            (session.get("docs") and len(session.get("docs", [])) > 0)
+        )
+        
+        # Si no hay resultados de apps, verificar si hay documentos subidos para usar como respaldo
+        if not app_results:
+            # Si hay documentos subidos, usarlos automáticamente (incluso si los tokens están expirados)
+            if has_documents:
+                print(f"✅ [Company Knowledge] No hay resultados de apps, pero hay documentos subidos - Usando documentos como respaldo")
+                # Continuar con el procesamiento normal usando documentos subidos
+                # El código continúa más abajo
             else:
-                return history, "⚠️ No hay documentos procesados. Carga documentos primero o conecta apps en 'Conectar Apps'.", {}
+                # No hay resultados de apps NI documentos subidos
+                # Verificar si es por tokens expirados (fallo silencioso)
+                if connected_apps:
+                    # Si hay apps conectadas pero no hay resultados, probablemente todos los tokens están expirados
+                    # Hacer silent_fail (no mostrar mensaje al usuario)
+                    print(f"⚠️ [Company Knowledge] No hay resultados de apps ni documentos subidos - Probablemente todos los tokens expirados (silent_fail)")
+                    metadata = {
+                        "sources": [],
+                        "total_sources": 0,
+                        "apps_searched": len(connected_apps),
+                        "no_results": True,
+                        "silent_fail": True  # Fallo silencioso - probablemente todos los tokens expirados
+                    }
+                    # Retornar sin mensaje de error - simplemente no mostrar nada
+                    yield (history, None, metadata)
+                    return
+                elif self.app_integrations and self.app_integrations.get_connected_apps():
+                    yield (history, "⚠️ No hay documentos procesados. Puedes cargar documentos o hacer preguntas sobre tus apps conectadas.", {})
+                    return
+                else:
+                    yield (history, "⚠️ No hay documentos procesados. Carga documentos primero o conecta apps en 'Conectar Apps'.", {})
+                    return
+        
+        # PRIORIDAD: Si hay resultados de apps, ya se procesaron arriba y se retornó
+        # Si llegamos aquí, significa que no hay resultados de apps, pero puede haber documentos subidos
+        # Continuar con procesamiento normal usando documentos subidos (si existen)
         
         start_time = time.time()
         
@@ -537,11 +831,15 @@ Si crees que debería haber resultados, verifica:
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
-        # 8. Buscar en apps conectadas si están disponibles (combinar con documentos)
-        if self.app_integrations and app_results:
-            # Ya tenemos resultados de apps de antes, agregarlos al contexto
+        # 8. PRIORIDAD: Si hay resultados de apps, usarlos como fuente principal
+        # Si hay documentos subidos, se combinan como fuente secundaria
+        if app_results:
+            # Ya tenemos resultados de apps de antes (prioridad), agregarlos al contexto
             conversation_context += app_context
-            print(f"✅ [Company Knowledge] Combinando {len(app_results)} resultados de apps con documentos")
+            if has_documents:
+                print(f"✅ [Company Knowledge] PRIORIDAD: {len(app_results)} resultados de apps + documentos subidos como complemento")
+            else:
+                print(f"✅ [Company Knowledge] PRIORIDAD: Usando {len(app_results)} resultados de apps conectadas")
         elif self.app_integrations:
             # Buscar en apps ahora si no lo hicimos antes
             connected_apps = self.app_integrations.get_connected_apps()
@@ -723,7 +1021,8 @@ Si crees que debería haber resultados, verifica:
                 "sources_count": len(sources)
             }
             
-            return history, None, metadata
+            yield (history, None, metadata)
+            return
             
         except Exception as e:
             error_msg = f"❌ Error en chat: {str(e)}"
@@ -758,7 +1057,8 @@ Si crees que debería haber resultados, verifica:
             
             history.append((message, error_msg))
             
-            return history, error_msg, {}
+            yield (history, error_msg, {})
+            return
     
     def _build_folded_context(
         self,
@@ -1189,6 +1489,340 @@ Fuentes:
         urls_in_bullets: bool = False
     ) -> Dict[str, Any]:
         """
+<<<<<<< HEAD
+=======
+        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
+        """
+        if not self.app_integrations:
+            return {"success": False, "error": "Sistema de integraciones no disponible"}
+        
+        if task_type == "prebrief":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando pre-brief: {e}"}
+
+        if task_type == "data_analysis":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
+
+        return await self.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            session_id=session_id,
+            context=context
+        )
+    
+    def _detect_apps_for_prebrief(self, task_description: str) -> List[IntegrationType]:
+        """Detecta apps relevantes para pre-brief según palabras clave en el prompt."""
+        desc = task_description.lower()
+        apps = []
+        if any(k in desc for k in ["slack", "mensaje", "canal"]):
+            apps.append(IntegrationType.SLACK)
+        if any(k in desc for k in ["drive", "documento", "google doc", "gdoc"]):
+            apps.append(IntegrationType.GOOGLE_DRIVE)
+        if any(k in desc for k in ["hubspot", "crm", "deal", "contacto", "lead"]):
+            apps.append(IntegrationType.HUBSPOT)
+        if any(k in desc for k in ["jira", "ticket", "issue", "bug"]):
+            apps.append(IntegrationType.JIRA)
+        if any(k in desc for k in ["confluence", "wiki", "doc interna"]):
+            apps.append(IntegrationType.CONFLUENCE)
+        # fallback si no se detecta nada
+        if not apps:
+            apps = [IntegrationType.SLACK, IntegrationType.GOOGLE_DRIVE, IntegrationType.HUBSPOT]
+        return apps
+    
+    async def execute_autonomous_task_v2(
+        self,
+        task_description: str,
+        task_type: str,
+        session_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
+        """
+        if not self.app_integrations:
+            return {"success": False, "error": "Sistema de integraciones no disponible"}
+        
+        if task_type == "prebrief":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando pre-brief: {e}"}
+
+        if task_type == "data_analysis":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
+        
+        return await self.app_integrations.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            context=context
+        )
+
+    async def execute_autonomous_task_v2(
+        self,
+        task_description: str,
+        task_type: str,
+        session_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Versión extendida con soporte de prebrief y análisis de datos/KPIs.
+        """
+        if not self.app_integrations:
+            return {"success": False, "error": "Sistema de integraciones no disponible"}
+        
+        if task_type == "prebrief":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:500]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista. Genera un pre-brief ejecutivo con la siguiente estructura:
+- Executive Summary (3-5 bullets concisos)
+- Métricas / Hechos clave (bullets)
+- Riesgos / Issues abiertos (si los hay)
+- Próximas acciones recomendadas (3-5 bullets)
+- Fuentes (lista con texto y URL cuando esté disponible)
+
+Usa SOLO la información proporcionada. No inventes datos.
+Fuentes (incluye siempre la URL si existe):
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "prebrief",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando pre-brief: {e}"}
+
+        if task_type == "data_analysis":
+            try:
+                search_results = await self.app_integrations.search_across_apps(
+                    query=task_description,
+                    filters=filters
+                )
+                if not search_results:
+                    return {"success": False, "error": "No se encontró información en las apps conectadas."}
+                ctx_lines = []
+                for r in search_results[:10]:
+                    snippet = (r.snippet or r.content or "")[:600]
+                    ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet} (URL: {r.url or 'N/A'})")
+                context_block = "\n".join(ctx_lines)
+                prompt = f"""
+Eres un analista senior de datos. Con la información conectada, entrega:
+- Resumen ejecutivo (3-5 bullets con URLs si existen).
+- Insights clave multi-año (tendencias, top/bottom periodos).
+- Outliers detectados (qué, cuándo, magnitud, posible causa, fuente con URL).
+- Plan de limpieza/normalización para Excel/CSV (pasos concretos).
+- Dashboard de KPIs propuesto: lista de KPIs, fórmula, periodicidad, segmentaciones, gráfico sugerido.
+- Próximas acciones priorizadas (impacto/urgencia).
+
+Usa SOLO la información proporcionada. No inventes datos. Incluye URL al final de cada bullet cuando exista.
+Fuentes:
+{context_block}
+"""
+                if urls_in_bullets:
+                    prompt += "\nInstrucción extra: Incluye la URL relevante en cada bullet cuando exista."
+                llm_summary = self.llm.predict(prompt)
+                return {
+                    "success": True,
+                    "task_type": "data_analysis",
+                    "summary": llm_summary,
+                    "sources": [
+                        {"app": r.app_name, "source": r.source_name, "url": r.url}
+                        for r in search_results[:10]
+                    ],
+                    "sources_count": len(search_results)
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Error generando análisis de datos: {e}"}
+
+        return await self.execute_autonomous_task(
+            task_description=task_description,
+            task_type=task_type,
+            session_id=session_id,
+            context=context
+        )
+
+    async def execute_autonomous_task_v2(
+        self,
+        task_description: str,
+        task_type: str,
+        filters: Optional[Dict[str, Any]] = None,
+        urls_in_bullets: bool = False
+    ) -> Dict[str, Any]:
+        """
+>>>>>>> 770f1d47fd471c4df7b72988637447c118a00e19
         Versión mejorada de execute_autonomous_task con:
         - Multi-source synthesis con resolución de conflictos
         - Ranking por recencia y calidad
@@ -1221,11 +1855,13 @@ Fuentes:
         conflict_analysis = self._detect_conflicts(ranked_results)
         
         # Preparar contexto para LLM con información de conflictos
-        # Usar contenido completo de PDFs (hasta 80k chars) para máxima calidad
+        # Usar TODO el contenido completo de PDFs SIN LÍMITES para máxima calidad suprema
         ctx_lines = []
         search_status = []  # Para sidebar en tiempo real
         total_chars = 0
-        max_chars = 500000 if hasattr(self, 'provider') and self.provider == "claude" else 500000
+        # Aumentar límite total: 1M para OpenAI, 1.5M para Claude (como Enterprise API Supreme)
+        provider_val = getattr(self, 'provider', 'openai')
+        max_chars = 1000000 if provider_val == "openai" else 1500000  # Límites mucho más altos
         
         for r in ranked_results:  # TODOS los resultados, sin límite
             app_display = f"[{r.app_name}]"
@@ -1235,9 +1871,9 @@ Fuentes:
                 "status": "found"
             })
             
-            # Para PDFs, usar contenido completo (hasta 80k chars)
+            # Para PDFs, usar TODO el contenido completo SIN LÍMITES
             if r.content and len(r.content) > 1000:
-                content_to_use = r.content[:80000]  # Hasta 80k chars por PDF
+                content_to_use = r.content  # SIN LÍMITE - usar todo el contenido
                 if total_chars + len(content_to_use) <= max_chars:
                     if urls_in_bullets and r.url:
                         ctx_lines.append(f"{app_display} {r.source_name} (URL: {r.url}):\n{content_to_use}\n")
@@ -1246,13 +1882,13 @@ Fuentes:
                     total_chars += len(content_to_use)
                 else:
                     remaining = max_chars - total_chars
-                    if remaining > 1000:
+                    if remaining > 10000:  # Mínimo 10k chars para que valga la pena
                         ctx_lines.append(f"{app_display} {r.source_name}:\n{r.content[:remaining]}\n")
                         total_chars = max_chars
                     break
             else:
                 # Para otros tipos, usar snippet más largo
-                snippet = (r.snippet or r.content or "")[:5000]
+                snippet = (r.snippet or r.content or "")[:10000]  # Aumentado a 10k chars
                 if total_chars + len(snippet) <= max_chars:
                     if urls_in_bullets and r.url:
                         ctx_lines.append(f"{app_display} {r.source_name} (URL: {r.url}): {snippet}")
@@ -1290,59 +1926,74 @@ Fuentes:
             ])
             
             prompt = f"""
-Eres un asistente experto en preparar pre-briefs ejecutivos estilo ChatGPT Enterprise Company Knowledge.
+Eres un asistente experto en preparar pre-briefs ejecutivos de NIVEL ALIEN GOD SUPER INTELIGENCIA (estilo ChatGPT Enterprise Company Knowledge con máxima calidad suprema).
 
-Genera un pre-brief profesional y detallado basado en la información de múltiples fuentes conectadas.
+Genera un pre-brief ULTRA PROFESIONAL, EXTENSÍSIMO y DETALLADÍSIMO basado en la información de múltiples fuentes conectadas.
 
-FORMATO REQUERIDO (EXACTAMENTE como ChatGPT Enterprise - ver ejemplo real abajo):
+FORMATO REQUERIDO (EXACTAMENTE como ChatGPT Enterprise - ver ejemplo real abajo, pero con MÁXIMA PROFUNDIDAD):
 
 ## Executive summary
 
-[Un párrafo fluido de 3-5 oraciones que resume los hallazgos más importantes. DEBE incluir métricas específicas cuando estén disponibles: porcentajes exactos (+42%), números concretos, fechas específicas, comparaciones temporales (vs September, vs Q3 baseline). 
+[Un párrafo fluido EXTENSO de 8-15 oraciones que resume los hallazgos más importantes con MÁXIMA PROFUNDIDAD. DEBE incluir métricas específicas cuando estén disponibles: porcentajes exactos (+42%), números concretos, fechas específicas, comparaciones temporales (vs September, vs Q3 baseline), análisis de causas, implicaciones estratégicas y recomendaciones de alto nivel.
 
-Ejemplo exacto del formato esperado:
-"The October campaign outperformed benchmarks for engagement and conversion, setting a strong baseline for Q4 growth initiatives. The campaign exceeded engagement targets, driving a +42% lift in new leads and a 3-point increase in feature adoption compared to September. Sentiment in customer channels shifted positive following the 10/24 patch release, while conversion metrics stabilized above the Q3 baseline."]
+Ejemplo exacto del formato esperado (pero MÁS EXTENSO):
+"The October campaign outperformed benchmarks for engagement and conversion, setting a strong baseline for Q4 growth initiatives. The campaign exceeded engagement targets, driving a +42% lift in new leads and a 3-point increase in feature adoption compared to September. Sentiment in customer channels shifted positive following the 10/24 patch release, while conversion metrics stabilized above the Q3 baseline. This performance indicates successful execution of the multi-channel strategy, with particular strength in organic search and email marketing channels. The data suggests that the product improvements implemented in Q3 are resonating with the target demographic, particularly in the 25-34 age segment which showed a 28% increase in engagement. However, the analysis reveals potential optimization opportunities in the paid advertising channels, where ROI decreased by 12% despite increased spend. Strategic recommendations include reallocating 15% of paid media budget to high-performing organic channels and implementing A/B testing on the top 3 landing pages to further improve conversion rates."]
 
 ## Key insights
 
-[Bullets con insights clave. Cada bullet DEBE:
+[Bullets EXTENSOS y DETALLADOS con insights clave. Cada bullet DEBE:
 - Incluir métricas específicas cuando estén disponibles (números exactos, porcentajes, fechas)
-- Contexto temporal (Week 2, month-over-month, compared to X)
+- Contexto temporal completo (Week 2, month-over-month, compared to X)
 - Referencias a eventos específicos (10/10 email, 10/24 patch release)
 - Impacto cuantificado cuando sea posible (+18% month-over-month)
+- Análisis de causas y efectos
+- Implicaciones estratégicas
+- Recomendaciones específicas cuando aplique
 
-Formato de ejemplo exacto:
-- Peak engagement: Week 2 (aligned with 10/10 email)
-- Retention impact: +18% month-over-month
-- Conversion metrics: 3-point increase vs September baseline
-- Feature adoption: +42% lift in new leads
+Formato de ejemplo exacto (pero MÁS DETALLADO):
+- Peak engagement: Week 2 (aligned with 10/10 email campaign launch) - This represents a 35% increase over baseline and indicates strong product-market fit for the new feature set. The timing correlation suggests that email marketing remains a highly effective channel for feature adoption, with an open rate of 42% and click-through rate of 18%, both above industry benchmarks.
+- Retention impact: +18% month-over-month improvement in 30-day retention, driven primarily by improvements in onboarding flow completion rates (from 45% to 62%). This improvement is particularly notable in the enterprise segment, where retention increased by 24%, suggesting that the new enterprise features are delivering significant value.
+- Conversion metrics: 3-point increase vs September baseline, with the most significant gains in the mobile channel (+5.2 points) and the freemium-to-paid conversion funnel (+4.8 points). Analysis indicates that the mobile improvements implemented in late September are driving this uplift, with mobile conversion rates now matching desktop for the first time.
+- Feature adoption: +42% lift in new leads attributed to the new analytics dashboard feature, which has become the primary differentiator in competitive evaluations. The feature has a 78% activation rate among new users and a 65% 7-day retention rate, indicating strong product-market fit.
 
-Agrega más bullets con insights clave encontrados en las fuentes, siempre con métricas específicas cuando estén disponibles.]
+Agrega 20-30 bullets EXTENSOS con insights clave encontrados en las fuentes, siempre con métricas específicas, análisis profundo e implicaciones cuando estén disponibles.]
 
 ## Risks / Issues (si aplica)
 
-[Si hay riesgos o issues identificados en las fuentes, listarlos aquí con detalles específicos. Si no hay, OMITIR completamente esta sección]
+[Si hay riesgos o issues identificados en las fuentes, listarlos aquí con detalles ESPECÍFICOS, análisis de impacto, probabilidad de ocurrencia, y recomendaciones de mitigación. Si no hay, OMITIR completamente esta sección]
 
 ## Next actions
 
-[3-5 acciones recomendadas basadas en los insights. Cada acción debe ser específica, accionable y con contexto temporal cuando aplique]
+[8-12 acciones recomendadas basadas en los insights. Cada acción debe ser ESPECÍFICA, ACCIONABLE, con contexto temporal, responsable asignado sugerido, timeline estimado, y ROI potencial cuando sea posible]
+
+## Strategic implications
+
+[Análisis de implicaciones estratégicas a corto, medio y largo plazo basado en los hallazgos]
+
+## Recommendations for deeper analysis
+
+[Recomendaciones para análisis adicionales que podrían proporcionar más insights valiosos]
 
 ---
 
 **Fuentes consultadas:** {len(ranked_results)} fuentes de {len(sources_by_app)} apps
 {sources_summary}
 
-INSTRUCCIONES CRÍTICAS:
+INSTRUCCIONES CRÍTICAS (NIVEL ALIEN GOD):
 1. USA SOLO la información proporcionada en las fuentes. NO inventes datos ni métricas.
 2. Incluye métricas específicas (números exactos, porcentajes, fechas) SOLO cuando estén disponibles en las fuentes.
-3. Si encuentras información contradictoria, presenta ambas perspectivas de forma balanceada.
-4. Si no hay una respuesta clara, explica la ambigüedad y qué información falta.
-5. Prioriza información más reciente cuando sea relevante.
+3. Si encuentras información contradictoria, presenta ambas perspectivas de forma balanceada con análisis de por qué pueden existir discrepancias.
+4. Si no hay una respuesta clara, explica la ambigüedad y qué información falta, y sugiere cómo obtenerla.
+5. Prioriza información más reciente cuando sea relevante, pero proporciona contexto histórico cuando enriquezca el análisis.
 6. Formatea las métricas de forma destacada (ej: "+42% lift", "+18% MoM", "3-point increase", "Week 2").
-7. Incluye referencias a las fuentes cuando sea relevante (ej: "según [App] Source Name").
-8. El Executive Summary debe ser un párrafo fluido y continuo, NO bullets.
-9. Los Key Insights deben ser bullets concisos con métricas específicas.
+7. Incluye referencias a las fuentes cuando sea relevante (ej: "según [App] Source Name, página X").
+8. El Executive Summary debe ser un párrafo fluido y continuo EXTENSO (8-15 oraciones), NO bullets.
+9. Los Key Insights deben ser bullets EXTENSOS (2-4 oraciones cada uno) con métricas específicas, análisis y recomendaciones.
 10. Si la tarea menciona "campaign results", "customer feedback", "company performance", busca métricas de rendimiento, KPIs, y datos cuantitativos en las fuentes.
+11. Profundiza en CADA insight con análisis de causas, efectos, implicaciones y recomendaciones.
+12. Proporciona contexto histórico, comparaciones con benchmarks de la industria, y análisis de tendencias cuando sea relevante.
+13. Incluye análisis de segmentación (por canal, producto, región, demografía, etc.) cuando los datos lo permitan.
+14. Genera un pre-brief de MÁXIMA CALIDAD SUPREMA (mínimo 2000-3000 palabras, sin límite superior).
 
 {conflict_context}
 
@@ -1351,7 +2002,7 @@ Información de las apps conectadas:
 
 Tarea original: {task_description}
 
-Genera el pre-brief ahora siguiendo EXACTAMENTE el formato especificado arriba.
+Genera el pre-brief ahora siguiendo EXACTAMENTE el formato especificado arriba, con MÁXIMA PROFUNDIDAD y CALIDAD SUPREMA.
 """
             from langchain_core.messages import HumanMessage
             response_obj = self.llm.invoke([HumanMessage(content=prompt)])
@@ -1403,55 +2054,80 @@ Genera el pre-brief ahora siguiendo EXACTAMENTE el formato especificado arriba.
             }
         elif task_type == "data_analysis":
             prompt = f"""
-            Eres un analista de Business Intelligence experto. Tu tarea es analizar los datos proporcionados
-            de múltiples fuentes conectadas y generar un reporte profesional con insights clave, detección de KPIs,
+            Eres un analista de Business Intelligence experto de NIVEL ALIEN GOD SUPER INTELIGENCIA (nivel consultor senior de BI, estilo McKinsey/Deloitte Analytics). Tu tarea es analizar los datos proporcionados
+            de múltiples fuentes conectadas y generar un reporte ULTRA PROFESIONAL, EXTENSÍSIMO y DETALLADÍSIMO con insights clave, detección de KPIs,
             análisis de tendencias y outliers, y recomendaciones accionables.
             
-            INSTRUCCIONES ESPECIALES:
-            1. Si encuentras datos contradictorios, identifica las discrepancias y explica posibles causas.
-            2. Prioriza datos más recientes para análisis de tendencias.
-            3. Si no hay suficiente información para un análisis completo, indica qué datos faltan.
+            INSTRUCCIONES ESPECIALES (NIVEL ALIEN GOD):
+            1. Si encuentras datos contradictorios, identifica las discrepancias, explica posibles causas, y proporciona recomendaciones para resolverlas.
+            2. Prioriza datos más recientes para análisis de tendencias, pero proporciona contexto histórico completo.
+            3. Si no hay suficiente información para un análisis completo, indica qué datos faltan, por qué son importantes, y cómo obtenerlos.
             4. Incluye URLs de las fuentes en los bullets cuando aplique.
+            5. Profundiza en CADA KPI, tendencia y outlier con análisis exhaustivo de causas, efectos e implicaciones.
+            6. Proporciona análisis de segmentación (por canal, producto, región, cliente, período, etc.) cuando los datos lo permitan.
+            7. Incluye comparaciones con benchmarks de la industria cuando sea relevante.
+            8. Proporciona análisis de escenarios (best case, worst case, most likely) cuando sea apropiado.
+            9. Genera un reporte de MÁXIMA CALIDAD SUPREMA (mínimo 3000-5000 palabras, sin límite superior).
             
             {conflict_context}
             
-            Estructura tu respuesta de la siguiente manera:
+            Estructura tu respuesta de la siguiente manera (con MÁXIMA PROFUNDIDAD):
 
-            ## 📊 Reporte de Análisis de Datos y KPIs
+            ## 📊 Reporte de Análisis de Datos y KPIs (NIVEL ALIEN GOD)
 
-            ### 📝 Resumen Ejecutivo
-            [Un resumen conciso de los hallazgos más importantes.]
+            ### 📝 Resumen Ejecutivo EXTENSO
+            [Un resumen EXTENSO de 10-20 párrafos de los hallazgos más importantes, con análisis profundo de causas, efectos, implicaciones estratégicas, y recomendaciones de alto nivel. Incluye métricas específicas, tendencias identificadas, riesgos detectados, y oportunidades identificadas.]
 
-            ### 📈 KPIs Clave Identificados y Análisis
-            [Lista de KPIs relevantes detectados automáticamente en los datos, con su valor, tendencia y una breve explicación.
-            Ej: "MRR: $X (↑ 8.2% en 30 días) - Impulsado por nuevas ventas orgánicas."]
+            ### 📈 KPIs Clave Identificados y Análisis EXHAUSTIVO
+            [Lista EXTENSA de KPIs relevantes detectados automáticamente en los datos, con su valor, tendencia, análisis exhaustivo de causas, comparación con benchmarks, segmentación cuando aplique, y recomendaciones específicas.
+            Ej: "MRR: $X (↑ 8.2% en 30 días) - Impulsado por nuevas ventas orgánicas. Análisis detallado: El crecimiento se concentra en el segmento enterprise (↑ 15.3%), mientras que el segmento SMB muestra crecimiento moderado (↑ 4.1%). La región EMEA lidera el crecimiento (↑ 12.5%), seguida de APAC (↑ 9.8%) y Americas (↑ 6.2%). El análisis de cohortes muestra que los clientes adquiridos en Q3 tienen una tasa de retención del 94% a los 90 días, comparado con el 87% de los clientes de Q2, indicando mejoras en la calidad de adquisición. Recomendación: Escalar estrategias de adquisición que replican el éxito del segmento enterprise en EMEA, con un presupuesto adicional estimado de $500K que podría generar $2.5M en MRR adicional en 6 meses."]
 
-            ### 📉 Tendencias, Patrones y Outliers
+            ### 📉 Tendencias, Patrones y Outliers - ANÁLISIS PROFUNDO
             [Identifica tendencias significativas (crecimiento, decrecimiento), patrones recurrentes y cualquier anomalía o "outlier"
-            inesperado en los datos, explicando su posible causa o implicación.
-            Ej: "Las cancelaciones subieron 12% en el último mes, lo que podría indicar un problema de onboarding reciente."]
+            inesperado en los datos, explicando su posible causa o implicación con ANÁLISIS EXHAUSTIVO.
+            Ej: "Las cancelaciones subieron 12% en el último mes, lo que podría indicar un problema de onboarding reciente. Análisis detallado: El aumento se concentra en clientes con menos de 30 días de antigüedad (↑ 28%), particularmente en el segmento SMB (↑ 35%). El análisis de feedback muestra que el 67% de los clientes que cancelan mencionan dificultades en el onboarding. Comparación con períodos anteriores: Las cancelaciones en el mismo período del año pasado fueron del 8%, indicando un problema nuevo. Análisis de causas raíz: Los cambios en el proceso de onboarding implementados en septiembre (simplificación de pasos de 7 a 4) parecen haber reducido la comprensión del producto. Recomendación: Implementar un programa de onboarding mejorado con sesiones de capacitación personalizadas, con un objetivo de reducir cancelaciones en un 40% en 60 días."]
 
             ### 🛠️ Plan de Limpieza y Normalización de Datos (si aplica)
-            [Si se detectan inconsistencias o problemas de calidad de datos, propone un plan para limpiarlos y normalizarlos.]
+            [Si se detectan inconsistencias o problemas de calidad de datos, propone un plan DETALLADO para limpiarlos y normalizarlos, con pasos específicos, timeline, responsables sugeridos, y ROI estimado.]
 
-            ### 💡 Propuesta de Dashboard de KPIs
-            [Sugiere un dashboard con los KPIs más críticos, incluyendo:
+            ### 💡 Propuesta de Dashboard de KPIs DETALLADA
+            [Sugiere un dashboard COMPLETO con los KPIs más críticos, incluyendo:
             - Métrica: [Nombre del KPI]
-            - Fórmula: [Cómo se calcula]
-            - Periodicidad: [Diario/Semanal/Mensual/Trimestral]
-            - Segmentación sugerida: [Por producto, región, cliente, etc.]
-            - Gráfico sugerido: [Líneas, barras, pastel, etc.]
+            - Fórmula: [Cómo se calcula con ejemplos]
+            - Periodicidad: [Diario/Semanal/Mensual/Trimestral] con justificación
+            - Segmentación sugerida: [Por producto, región, cliente, etc.] con análisis de valor
+            - Gráfico sugerido: [Líneas, barras, pastel, etc.] con justificación
+            - Alertas y umbrales: [Cuándo alertar y a quién]
+            - Integración con sistemas: [Cómo integrar con sistemas existentes]
             ]
 
-            ### 🚀 Próximas Acciones y Recomendaciones Estratégicas
-            [Recomendaciones de negocio concretas y accionables, estilo consultor, para mejorar los resultados basados en el análisis.
+            ### 🚀 Próximas Acciones y Recomendaciones Estratégicas EXTENSAS
+            [Recomendaciones de negocio concretas y accionables, estilo consultor, para mejorar los resultados basados en el análisis. Cada recomendación debe incluir:
+            - Descripción detallada de la acción
+            - Justificación basada en datos
+            - Timeline estimado
+            - Responsable sugerido
+            - ROI estimado cuando sea posible
+            - Riesgos y mitigación
+            - Métricas de éxito
             Ej: "Basado en los datos de tráfico y conversiones, la estrategia más rentable es escalar Google Ads un 20%
-            mientras optimizas la landing page X con un test A/B."]
+            mientras optimizas la landing page X con un test A/B. Análisis detallado: Los datos muestran que Google Ads tiene un ROI de 4.2x, comparado con 2.8x de Facebook Ads y 3.1x de LinkedIn Ads. El análisis de conversión por landing page muestra que la landing page X tiene una tasa de conversión del 8.5%, comparado con el promedio de 5.2%, pero solo recibe el 12% del tráfico. Un aumento del 20% en el presupuesto de Google Ads ($50K adicionales) podría generar $210K en ingresos adicionales, con un ROI neto de 3.2x. El test A/B en la landing page X podría mejorar la tasa de conversión del 8.5% al 11% (basado en mejores prácticas de la industria), generando $85K adicionales en ingresos con una inversión de $15K en desarrollo y testing. Timeline: 30 días para implementar el aumento de presupuesto, 45 días para completar el test A/B. Responsable: Equipo de Marketing Digital. Métricas de éxito: Aumento del 20% en conversiones de Google Ads, mejora del 30% en tasa de conversión de landing page X."]
+
+            ### 📊 Análisis de Segmentación Profundo
+            [Análisis detallado de los datos segmentados por diferentes dimensiones (canal, producto, región, cliente, período, etc.) cuando los datos lo permitan, con insights específicos por segmento.]
+
+            ### 🔍 Análisis de Correlaciones y Causalidad
+            [Identifica correlaciones significativas entre diferentes métricas y proporciona análisis de causalidad cuando sea posible, con recomendaciones basadas en estas relaciones.]
+
+            ### 📈 Proyecciones y Forecasting
+            [Proyecciones de tendencias futuras basadas en los datos históricos, con diferentes escenarios (best case, worst case, most likely) y recomendaciones para cada escenario.]
 
             Información de las apps conectadas:
             {context_block}
 
             Tarea original: {task_description}
+
+            Genera un reporte de análisis de datos de MÁXIMA CALIDAD SUPREMA (mínimo 3000-5000 palabras, sin límite superior), con análisis exhaustivo, insights profundos, y recomendaciones accionables detalladas.
             """
             from langchain_core.messages import HumanMessage
             response_obj = self.llm.invoke([HumanMessage(content=prompt)])
@@ -1743,6 +2419,454 @@ RESPUESTA:"""
             ]
             message_lower = message.lower()
             return any(keyword in message_lower for keyword in company_keywords)
+    
+    async def _detect_conflicts_between_sources(
+        self,
+        results: List[Any],
+        query: str
+    ) -> Dict[str, Any]:
+        """
+        Detecta conflictos y discrepancias entre diferentes fuentes usando LLM.
+        
+        OPTIMIZACIÓN CRÍTICA: Usa LLM para detectar contradicciones semánticas,
+        no solo keywords simples.
+        
+        Returns:
+            Dict con:
+            - has_conflicts: bool
+            - conflicts: List[Dict] con detalles de conflictos
+            - consensus_level: float (0-1, 1 = total consenso)
+        """
+        if len(results) < 2:
+            return {
+                "has_conflicts": False,
+                "conflicts": [],
+                "consensus_level": 1.0
+            }
+        
+        # OPTIMIZACIÓN: Usar LLM para detectar conflictos semánticos
+        try:
+            # Preparar contexto de resultados para análisis
+            sources_text = ""
+            for i, result in enumerate(results[:10], 1):  # Limitar a top 10 para eficiencia
+                app_name = result.app_name
+                source_name = result.source_name
+                content = (result.snippet or result.content or "")[:1000]  # Primeros 1000 chars
+                sources_text += f"\n--- Fuente {i} ---\n"
+                sources_text += f"App: {app_name}\n"
+                sources_text += f"Documento: {source_name}\n"
+                sources_text += f"Contenido: {content}\n"
+            
+            # Prompt para LLM de detección de conflictos
+            conflict_prompt = f"""Eres un analista experto en detectar contradicciones y discrepancias entre fuentes de información.
+
+QUERY DEL USUARIO: {query}
+
+FUENTES ENCONTRADAS:
+{sources_text}
+
+INSTRUCCIONES:
+1. Analiza si hay CONTRADICCIONES, DISCREPANCIAS o INFORMACIÓN CONFLICTIVA entre las fuentes.
+2. Busca:
+   - Información que se contradice directamente (ej: "X aumentó" vs "X disminuyó")
+   - Números o datos que no coinciden
+   - Conclusiones opuestas sobre el mismo tema
+   - Información que una fuente afirma y otra niega
+3. NO consideres diferencias menores de redacción o perspectivas complementarias como conflictos.
+
+RESPONDE EN FORMATO JSON:
+{{
+    "has_conflicts": true/false,
+    "conflicts": [
+        {{
+            "type": "contradiction" | "discrepancy" | "opposing_views",
+            "description": "Descripción clara del conflicto",
+            "source1_index": 1,
+            "source2_index": 2,
+            "source1_claim": "Lo que dice la fuente 1",
+            "source2_claim": "Lo que dice la fuente 2"
+        }}
+    ],
+    "consensus_level": 0.0-1.0 (1.0 = total consenso, 0.0 = conflicto total)
+}}
+
+IMPORTANTE: Responde SOLO con JSON válido, sin texto adicional."""
+            
+            from langchain_core.messages import HumanMessage
+            response_obj = self.llm.invoke([HumanMessage(content=conflict_prompt)])
+            response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+            
+            # Extraer JSON de la respuesta
+            import json
+            import re
+            
+            # Buscar JSON en la respuesta (puede tener texto antes/después)
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                conflict_data = json.loads(json_str)
+                
+                # Mapear índices a fuentes reales
+                conflicts_detailed = []
+                for conflict in conflict_data.get("conflicts", [])[:5]:  # Limitar a top 5
+                    idx1 = conflict.get("source1_index", 1) - 1
+                    idx2 = conflict.get("source2_index", 2) - 1
+                    
+                    if 0 <= idx1 < len(results) and 0 <= idx2 < len(results):
+                        result1 = results[idx1]
+                        result2 = results[idx2]
+                        
+                        conflicts_detailed.append({
+                            "type": conflict.get("type", "contradiction"),
+                            "description": conflict.get("description", "Conflicto detectado"),
+                            "source1": {
+                                "app": result1.app_name,
+                                "name": result1.source_name,
+                                "claim": conflict.get("source1_claim", "")
+                            },
+                            "source2": {
+                                "app": result2.app_name,
+                                "name": result2.source_name,
+                                "claim": conflict.get("source2_claim", "")
+                            }
+                        })
+                
+                return {
+                    "has_conflicts": conflict_data.get("has_conflicts", False),
+                    "conflicts": conflicts_detailed,
+                    "consensus_level": float(conflict_data.get("consensus_level", 1.0))
+                }
+            else:
+                # Fallback si no se puede parsear JSON
+                raise ValueError("No se pudo extraer JSON de la respuesta del LLM")
+                
+        except Exception as e:
+            print(f"⚠️ [Company Knowledge] Error en detección de conflictos con LLM: {e}")
+            # Fallback a detección básica con keywords
+            return self._detect_conflicts_basic(results, query)
+    
+    async def _resolve_conflicts_with_additional_searches(
+        self,
+        conflicts: List[Dict[str, Any]],
+        original_query: str,
+        original_results: List[Any],
+        filters: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        OPTIMIZACIÓN CRÍTICA (9/10): Resuelve conflictos automáticamente haciendo
+        búsquedas adicionales para encontrar información que aclare las discrepancias.
+        
+        Similar a ChatGPT Enterprise: "can run multiple searches to resolve conflicting details"
+        
+        Returns:
+            Dict con:
+            - resolved: bool (si se pudo resolver)
+            - resolution: str (explicación de la resolución)
+            - additional_results: List[AppSearchResult] (resultados de búsquedas adicionales)
+            - resolved_conflicts: List[Dict] (conflictos resueltos)
+        """
+        if not conflicts or not self.app_integrations:
+            return {
+                "resolved": False,
+                "resolution": "",
+                "additional_results": [],
+                "resolved_conflicts": []
+            }
+        
+        print(f"🔍 [Company Knowledge] Resolviendo {len(conflicts)} conflictos con búsquedas adicionales...")
+        
+        # Generar queries específicas para cada conflicto
+        resolution_queries = []
+        for conflict in conflicts[:3]:  # Limitar a top 3 conflictos para eficiencia
+            description = conflict.get("description", "")
+            source1_claim = conflict.get("source1", {}).get("claim", "")
+            source2_claim = conflict.get("source2", {}).get("claim", "")
+            
+            # Generar queries específicas usando LLM
+            query_generation_prompt = f"""Se detectó un conflicto entre fuentes:
+
+CONFLICTO: {description}
+Fuente 1 dice: {source1_claim}
+Fuente 2 dice: {source2_claim}
+
+QUERY ORIGINAL: {original_query}
+
+Genera 2-3 queries de búsqueda específicas que ayudarían a resolver este conflicto.
+Las queries deben buscar información oficial, reportes, o fuentes autoritativas que puedan aclarar la discrepancia.
+
+RESPONDE EN FORMATO JSON:
+{{
+    "queries": [
+        "query 1 específica",
+        "query 2 específica",
+        "query 3 específica"
+    ]
+}}
+
+IMPORTANTE: Responde SOLO con JSON válido."""
+            
+            try:
+                from langchain_core.messages import HumanMessage
+                response_obj = self.llm.invoke([HumanMessage(content=query_generation_prompt)])
+                response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+                
+                import json
+                import re
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    query_data = json.loads(json_match.group(0))
+                    queries = query_data.get("queries", [])
+                    resolution_queries.extend(queries)
+            except Exception as e:
+                print(f"⚠️ [Company Knowledge] Error generando queries de resolución: {e}")
+                # Fallback: generar queries básicas
+                resolution_queries.append(f"{original_query} reporte oficial")
+                resolution_queries.append(f"{original_query} datos confirmados")
+        
+        if not resolution_queries:
+            return {
+                "resolved": False,
+                "resolution": "No se pudieron generar queries de resolución.",
+                "additional_results": [],
+                "resolved_conflicts": []
+            }
+        
+        # Ejecutar búsquedas adicionales
+        additional_results = []
+        print(f"🔍 [Company Knowledge] Ejecutando {len(resolution_queries)} búsquedas adicionales...")
+        
+        for resolution_query in resolution_queries[:5]:  # Limitar a 5 queries
+            try:
+                results = await self.app_integrations.search_across_apps(
+                    query=resolution_query,
+                    filters=filters
+                )
+                additional_results.extend(results)
+                print(f"✅ [Company Knowledge] Búsqueda adicional: '{resolution_query}' → {len(results)} resultados")
+            except Exception as e:
+                print(f"⚠️ [Company Knowledge] Error en búsqueda adicional: {e}")
+                continue
+        
+        if not additional_results:
+            return {
+                "resolved": False,
+                "resolution": "No se encontraron resultados adicionales para resolver el conflicto.",
+                "additional_results": [],
+                "resolved_conflicts": []
+            }
+        
+        # Analizar resultados adicionales para resolver conflictos
+        print(f"🔍 [Company Knowledge] Analizando {len(additional_results)} resultados adicionales para resolver conflictos...")
+        
+        # Preparar contexto para análisis de resolución
+        conflicts_text = ""
+        for i, conflict in enumerate(conflicts[:3], 1):
+            conflicts_text += f"\n--- Conflicto {i} ---\n"
+            conflicts_text += f"Descripción: {conflict.get('description', '')}\n"
+            conflicts_text += f"Fuente 1: {conflict.get('source1', {}).get('claim', '')}\n"
+            conflicts_text += f"Fuente 2: {conflict.get('source2', {}).get('claim', '')}\n"
+        
+        additional_sources_text = ""
+        for i, result in enumerate(additional_results[:10], 1):
+            app_name = result.app_name
+            source_name = result.source_name
+            content = (result.snippet or result.content or "")[:800]
+            additional_sources_text += f"\n--- Fuente Adicional {i} ---\n"
+            additional_sources_text += f"App: {app_name}\n"
+            additional_sources_text += f"Documento: {source_name}\n"
+            additional_sources_text += f"Contenido: {content}\n"
+        
+        # Prompt para LLM de resolución de conflictos
+        resolution_prompt = f"""Eres un analista experto en resolver conflictos entre fuentes de información usando información adicional.
+
+QUERY ORIGINAL: {original_query}
+
+CONFLICTOS DETECTADOS:
+{conflicts_text}
+
+FUENTES ADICIONALES ENCONTRADAS (para resolver conflictos):
+{additional_sources_text}
+
+INSTRUCCIONES:
+1. Analiza las fuentes adicionales para determinar cuál versión de cada conflicto es correcta.
+2. Si las fuentes adicionales confirman una versión, indícalo claramente.
+3. Si las fuentes adicionales muestran que ambas versiones pueden ser correctas en diferentes contextos, explícalo.
+4. Si no hay suficiente información para resolver, indícalo.
+
+RESPONDE EN FORMATO JSON:
+{{
+    "resolved": true/false,
+    "resolution": "Explicación clara de cómo se resolvió el conflicto o por qué no se pudo resolver",
+    "resolved_conflicts": [
+        {{
+            "conflict_index": 1,
+            "resolved": true/false,
+            "correct_source": 1 o 2 o "both" o "unclear",
+            "explanation": "Explicación de la resolución"
+        }}
+    ]
+}}
+
+IMPORTANTE: Responde SOLO con JSON válido, sin texto adicional."""
+        
+        try:
+            from langchain_core.messages import HumanMessage
+            response_obj = self.llm.invoke([HumanMessage(content=resolution_prompt)])
+            response = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+            
+            import json
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                resolution_data = json.loads(json_match.group(0))
+                
+                resolved_conflicts = []
+                for resolved_conflict in resolution_data.get("resolved_conflicts", []):
+                    conflict_idx = resolved_conflict.get("conflict_index", 1) - 1
+                    if 0 <= conflict_idx < len(conflicts):
+                        resolved_conflicts.append({
+                            "conflict": conflicts[conflict_idx],
+                            "resolved": resolved_conflict.get("resolved", False),
+                            "correct_source": resolved_conflict.get("correct_source", "unclear"),
+                            "explanation": resolved_conflict.get("explanation", "")
+                        })
+                
+                return {
+                    "resolved": resolution_data.get("resolved", False),
+                    "resolution": resolution_data.get("resolution", ""),
+                    "additional_results": additional_results,
+                    "resolved_conflicts": resolved_conflicts
+                }
+            else:
+                return {
+                    "resolved": False,
+                    "resolution": "No se pudo analizar la resolución de conflictos.",
+                    "additional_results": additional_results,
+                    "resolved_conflicts": []
+                }
+        except Exception as e:
+            print(f"⚠️ [Company Knowledge] Error analizando resolución de conflictos: {e}")
+            return {
+                "resolved": False,
+                "resolution": f"Error al analizar resolución: {str(e)}",
+                "additional_results": additional_results,
+                "resolved_conflicts": []
+            }
+    
+    def _detect_conflicts_basic(
+        self,
+        results: List[Any],
+        query: str
+    ) -> Dict[str, Any]:
+        """
+        Detección básica de conflictos (fallback si LLM falla).
+        """
+        conflicts = []
+        
+        for i, result1 in enumerate(results[:10]):
+            content1 = (result1.snippet or result1.content or "").lower()
+            for j, result2 in enumerate(results[i+1:10], start=i+1):
+                content2 = (result2.snippet or result2.content or "").lower()
+                
+                contradiction_keywords = [
+                    ("increase", "decrease"), ("up", "down"), ("yes", "no"),
+                    ("approved", "rejected"), ("success", "failure"),
+                    ("high", "low"), ("more", "less"), ("better", "worse")
+                ]
+                
+                for pos, neg in contradiction_keywords:
+                    if pos in content1 and neg in content2:
+                        conflicts.append({
+                            "type": "contradiction",
+                            "source1": {"app": result1.app_name, "name": result1.source_name},
+                            "source2": {"app": result2.app_name, "name": result2.source_name},
+                            "issue": f"Conflicting information: '{pos}' vs '{neg}'"
+                        })
+        
+        has_conflicts = len(conflicts) > 0
+        consensus_level = max(0.0, 1.0 - (len(conflicts) * 0.2))
+        
+        return {
+            "has_conflicts": has_conflicts,
+            "conflicts": conflicts[:5],
+            "consensus_level": consensus_level
+        }
+    
+    def _generate_enhanced_citations(
+        self,
+        results: List[Any],
+        max_citations: int = 15
+    ) -> str:
+        """
+        Genera citas mejoradas con snippets exactos y links clickeables.
+        
+        Returns:
+            Markdown formateado con citas mejoradas
+        """
+        if not results:
+            return ""
+        
+        citations_text = "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
+        citations_text += f"**Total:** {len(results)} fuentes encontradas\n\n"
+        
+        for i, result in enumerate(results[:max_citations], 1):
+            app_name = result.app_name
+            source_name = result.source_name
+            url = result.url or ""
+            snippet = (result.snippet or result.content or "")[:300]  # Snippet de 300 chars
+            
+            citations_text += f"#### {i}. **[{app_name}]** {source_name}\n\n"
+            
+            if snippet:
+                citations_text += f"> *{snippet}...*\n\n"
+            
+            if url:
+                citations_text += f"🔗 [Abrir fuente original]({url})\n\n"
+            else:
+                citations_text += f"*Fuente: {source_name}*\n\n"
+            
+            citations_text += "---\n\n"
+        
+        if len(results) > max_citations:
+            citations_text += f"\n*... y {len(results) - max_citations} fuentes adicionales*\n"
+        
+        return citations_text
+    
+    def _generate_realtime_sidebar_status(
+        self,
+        apps_searched: List[Any],
+        results_found: Dict[str, int],
+        current_app: Optional[str] = None,
+        is_searching: bool = True
+    ) -> str:
+        """
+        Genera estado del sidebar en tiempo real.
+        
+        Returns:
+            Markdown formateado para el sidebar
+        """
+        status_text = "**🔍 Búsqueda en Tiempo Real**\n\n"
+        
+        if is_searching:
+            status_text += "⏳ *Buscando en apps conectadas...*\n\n"
+        
+        if current_app:
+            status_text += f"**Buscando ahora:** {current_app}\n\n"
+        
+        status_text += "**📱 Apps consultadas:**\n\n"
+        
+        for app in apps_searched:
+            app_name = app.app_name if hasattr(app, 'app_name') else str(app)
+            count = results_found.get(app_name, 0)
+            status_icon = "✅" if count > 0 else "⏳"
+            status_text += f"{status_icon} **{app_name}** ({count} resultados)\n"
+        
+        total_results = sum(results_found.values())
+        status_text += f"\n**Total:** {total_results} resultados encontrados"
+        
+        return status_text
+        
+        return status_text
     
     def _rank_results_by_relevance_and_recency(
         self,

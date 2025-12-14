@@ -1,0 +1,52 @@
+[33mcommit b2ec30e62f262278cd20cf0d7c5201df3cf4274d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/eric-schmidt-optimizations[m[33m)[m
+Author: Santino Genta <lovesosa272727@gmail.com>
+Date:   Fri Dec 12 17:01:34 2025 -0600
+
+    Actualización: correcciones de configuración, estilos Event Bus Mode y mejoras generales
+
+ ADS_OPTIMIZATION_ENGINE_README.md                  |  252 [32m+[m
+ API_DOCUMENTATION.md                               |  353 [32m+[m
+ DEPLOYMENT_GUIDE.md                                |  294 [32m+[m
+ PRODUCTION_COMPLETE_SUMMARY.md                     |  396 [32m+[m
+ PRODUCTION_FINAL_REPORT.md                         |  436 [32m+[m
+ PRODUCTION_IMPROVEMENTS_SUMMARY.md                 |  157 [32m+[m
+ PRODUCTION_READINESS_CHECKLIST.md                  |  175 [32m+[m
+ app.py                                             | 8932 [32m+++++++++++++++++[m[31m---[m
+ docchat/__init__.py                                |  112 [32m+[m
+ docchat/ads_optimization/__init__.py               |   57 [32m+[m
+ docchat/ads_optimization/auth.py                   |  305 [32m+[m
+ docchat/ads_optimization/billing.py                |  267 [32m+[m
+ docchat/ads_optimization/caching.py                |  213 [32m+[m
+ docchat/ads_optimization/creative_generator.py     |  413 [32m+[m
+ docchat/ads_optimization/database.py               |  344 [32m+[m
+ docchat/ads_optimization/engine_production.py      |  754 [32m++[m
+ docchat/ads_optimization/google_ads_integration.py |  260 [32m+[m
+ docchat/ads_optimization/logging_config.py         |  162 [32m+[m
+ docchat/ads_optimization/models.py                 |  364 [32m+[m
+ docchat/ads_optimization/monitoring.py             |  296 [32m+[m
+ docchat/ads_optimization/rate_limiter.py           |  205 [32m+[m
+ docchat/ads_optimization/retry_logic.py            |  228 [32m+[m
+ docchat/ads_optimization/tenant_manager.py         |  220 [32m+[m
+ docchat/ads_optimization_engine.py                 | 1182 [32m+++[m
+ docchat/ads_optimization_mode.py                   |  529 [32m++[m
+ docchat/advanced_retrieval_pipeline.py             |  410 [32m+[m
+ docchat/agent_builder/orchestrator.py              |  489 [32m++[m
+ docchat/agent_builder/workflow_builder.py          |  124 [32m+[m
+ docchat/agent_builder_mode.py                      |  216 [32m+[m
+ docchat/banking_mode.py                            | 1881 [32m+++++[m
+ docchat/banks/agents/steering_manager.py           |    1 [32m+[m
+ docchat/company_knowledge.py                       |  339 [31m-[m
+ docchat/company_knowledge_integrations.py          |    5 [32m+[m[31m-[m
+ docchat/data_point_mode.py                         | 1914 [32m+++++[m
+ docchat/event_bus_mode.py                          | 1786 [32m++++[m
+ docchat/event_horizon_mode.py                      | 1697 [32m++++[m
+ docchat/event_storage_mode.py                      | 1981 [32m+++++[m
+ docchat/extasis_mode.py                            | 1790 [32m++++[m
+ docchat/extraction_x_mode.py                       | 2114 [32m+++++[m
+ docchat/gmail_company_knowledge.py                 |   28 [32m+[m[31m-[m
+ docchat/judge_agent_mode.py                        | 2007 [32m+++++[m
+ docchat/kafka_bridge.py                            |   70 [32m+[m
+ docchat/memory_llm_mode.py                         | 2008 [32m+++++[m
+ requirements.txt                                   |   10 [32m+[m
+ tests/test_ads_optimization.py                     |  309 [32m+[m
+ 45 files changed, 34576 insertions(+), 1509 deletions(-)
