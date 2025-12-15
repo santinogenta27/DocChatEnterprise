@@ -166,6 +166,7 @@ from docchat.advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advi
 # from docchat.optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # ELIMINADO
 from docchat.marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier
 from docchat.optimus_prime_mode import OptimusPrimeMode, get_optimus_prime_mode, run_optimus_prime_mode
+from docchat.extasis_mode import ExtasisMode, get_extasis_mode, run_extasis_mode
 from docchat.enterprise_api_stargate import StargatePDFMode
 from docchat.enterprise_api_data_sight import DataSightMode
 from docchat.data_sight_integrations import DataSightIntegrations
@@ -362,6 +363,7 @@ advice_god = AdviceGodMode(config, provider="openai")  # Default: OpenAI
 # optimus = OptimusMode(config, provider="openai")  # ELIMINADO
 marketplace = MarketplaceMode(config, provider="openai")  # Default: OpenAI
 optimus_prime = OptimusPrimeMode(config, processor, retriever_builder, context_manager)
+extasis = ExtasisMode(config, provider="openai")  # Default: OpenAI
 # Stargate PDF - clon del Enterprise API original
 stargate_pdf = StargatePDFMode(config, provider="openai")
 # Data Sight - clon del Enterprise API para análisis de datos e insights
@@ -10029,6 +10031,182 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 )
             
             opt_output = gr.Markdown(label="📊 Resultados Optimus")
+
+            # ==================== SECCIÓN: EXPORT AUDIT LOGS (COMPLIANCE) ====================
+            gr.Markdown("""
+            ---
+            ### 🧾 Export Audit Logs (Compliance / Governance)
+
+            Exporta logs de Optimus Prime para auditoría (por tenant, usuario, documento y rango de fechas).
+            Los logs incluyen: acción, timestamp, query, respuesta y referencias a PDFs.
+            """)
+
+            with gr.Row():
+                with gr.Column():
+                    opt_audit_tenant = gr.Textbox(
+                        label="🏢 Tenant ID (opcional)",
+                        placeholder="Si se deja vacío, se usa DOCCHAT_TENANT_ID o 'default_tenant'",
+                        lines=1,
+                    )
+                    opt_audit_user = gr.Textbox(
+                        label="👤 User ID (opcional)",
+                        placeholder="Si se deja vacío, se usa DOCCHAT_USER_ID o 'local_user'",
+                        lines=1,
+                    )
+                with gr.Column():
+                    opt_audit_document = gr.Textbox(
+                        label="📄 Document ID / Source (opcional)",
+                        placeholder="Nombre de archivo o source exacto (coincidencia exacta en logs)",
+                        lines=1,
+                    )
+                    opt_audit_date_start = gr.Textbox(
+                        label="📅 Fecha desde (ISO, opcional)",
+                        placeholder="Ej: 2025-12-14T00:00:00",
+                        lines=1,
+                    )
+                    opt_audit_date_end = gr.Textbox(
+                        label="📅 Fecha hasta (ISO, opcional)",
+                        placeholder="Ej: 2025-12-14T23:59:59",
+                        lines=1,
+                    )
+
+            with gr.Row():
+                opt_audit_limit = gr.Slider(
+                    label="🔢 Máximo de eventos",
+                    minimum=10,
+                    maximum=5000,
+                    value=1000,
+                    step=10,
+                )
+                opt_audit_export_btn = gr.Button(
+                    "⬇️ Export Audit Logs (CSV)",
+                    variant="secondary",
+                )
+
+            opt_audit_status = gr.Markdown("ℹ️ No se ha exportado ningún log todavía.")
+            opt_audit_file = gr.File(
+                label="📁 Archivo CSV de Auditoría",
+                visible=False,
+            )
+
+            def export_optimus_audit_logs(
+                tenant_id: str,
+                user_id: str,
+                document_id: str,
+                start_ts: str,
+                end_ts: str,
+                limit: int,
+            ):
+                """
+                Exporta logs de Optimus Prime a un archivo CSV y lo devuelve para descarga.
+                """
+                from docchat.optimus_prime_mode import get_optimus_prime_mode
+
+                # Obtener instancia de Optimus Prime
+                optimus_prime_mode = get_optimus_prime_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager,
+                )
+
+                audit_logger = getattr(optimus_prime_mode, "audit_logger", None)
+                if not audit_logger:
+                    return (
+                        "❌ Audit logging no está habilitado para Optimus Prime.",
+                        gr.update(visible=False, value=None),
+                    )
+
+                # Normalizar filtros (vacío = None)
+                tenant_id = tenant_id.strip() or None
+                user_id = user_id.strip() or None
+                document_id = document_id.strip() or None
+                start_ts = start_ts.strip() or None
+                end_ts = end_ts.strip() or None
+
+                try:
+                    events = audit_logger.export_events(
+                        tenant_id=tenant_id,
+                        user_id=user_id,
+                        document_id=document_id,
+                        start_ts=start_ts,
+                        end_ts=end_ts,
+                        limit=int(limit),
+                    )
+                except Exception as e:
+                    return (
+                        f"❌ Error exportando logs: {str(e)}",
+                        gr.update(visible=False, value=None),
+                    )
+
+                if not events:
+                    return (
+                        "📭 No se encontraron eventos para los filtros especificados.",
+                        gr.update(visible=False, value=None),
+                    )
+
+                # Construir CSV en el directorio de audit
+                import csv
+                from datetime import datetime as _dt
+
+                csv_dir = config.audit_log_dir / "exports"
+                csv_dir.mkdir(parents=True, exist_ok=True)
+                ts_str = _dt.utcnow().strftime("%Y%m%dT%H%M%S")
+                csv_path = csv_dir / f"optimus_audit_{ts_str}.csv"
+
+                # Determinar columnas (keys unificados)
+                field_names = [
+                    "id",
+                    "tenant_id",
+                    "user_id",
+                    "session_id",
+                    "document_id",
+                    "action",
+                    "timestamp",
+                    "query",
+                    "response",
+                    "sources",
+                    "metadata",
+                ]
+
+                with csv_path.open("w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=field_names)
+                    writer.writeheader()
+                    for ev in events:
+                        row = {
+                            "id": ev.get("id"),
+                            "tenant_id": ev.get("tenant_id"),
+                            "user_id": ev.get("user_id"),
+                            "session_id": ev.get("session_id"),
+                            "document_id": ev.get("document_id"),
+                            "action": ev.get("action"),
+                            "timestamp": ev.get("timestamp"),
+                            "query": ev.get("query"),
+                            "response": ev.get("response"),
+                            # Serializar sources y metadata como JSON compacto
+                            "sources": json.dumps(ev.get("sources", []), ensure_ascii=False),
+                            "metadata": json.dumps(ev.get("metadata", {}), ensure_ascii=False),
+                        }
+                        writer.writerow(row)
+
+                status = f"✅ Exportados {len(events)} eventos a `{csv_path.name}`"
+                return (
+                    status,
+                    gr.update(visible=True, value=str(csv_path)),
+                )
+
+            opt_audit_export_btn.click(
+                fn=export_optimus_audit_logs,
+                inputs=[
+                    opt_audit_tenant,
+                    opt_audit_user,
+                    opt_audit_document,
+                    opt_audit_date_start,
+                    opt_audit_date_end,
+                    opt_audit_limit,
+                ],
+                outputs=[opt_audit_status, opt_audit_file],
+            )
             
             def opt_run_optimus_mode_streaming(files, auto_detect, rules_json, provider):
                 """Ejecuta Optimus Mode con streaming - ELIMINADO."""
@@ -17965,6 +18143,34 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
             - Decisiones que requieren aprobación humana
             """)
             
+            # Identidad Enterprise (Tenant / User) para Optimus Prime (usado por Audit / Compliance)
+            gr.Markdown("""
+            ---
+            ### 🏢 Enterprise Identity (Tenant / User)
+
+            Estos valores se usan para los **audit logs** de Optimus Prime:
+            - `tenant_id`: Identifica a la empresa / cliente.
+            - `user_id`: Identifica al usuario interno que ejecuta las consultas.
+            """)
+
+            with gr.Row():
+                optimus_prime_tenant_input = gr.Textbox(
+                    label="🏢 Tenant ID",
+                    placeholder="Ej: acme_corp (si se deja vacío se usa DOCCHAT_TENANT_ID o 'default_tenant')",
+                    value=os.getenv("DOCCHAT_TENANT_ID", ""),
+                    lines=1,
+                )
+                optimus_prime_user_input = gr.Textbox(
+                    label="👤 User ID",
+                    placeholder="Ej: john.doe (si se deja vacío se usa DOCCHAT_USER_ID o 'local_user')",
+                    value=os.getenv("DOCCHAT_USER_ID", ""),
+                    lines=1,
+                )
+
+            optimus_prime_identity_status = gr.Markdown(
+                value="ℹ️ Identity: usando valores actuales de entorno / configuración.",
+            )
+
             # Generar session_id único
             optimus_prime_session_id = gr.State(value=str(uuid.uuid4()))
             
@@ -18007,6 +18213,40 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     scale=4,
                 )
                 optimus_prime_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+
+            # Automation Flows & Risk (encima del mismo motor Optimus Prime)
+            gr.Markdown("""
+            ---
+            ### ⚙️ Automation Flows & Risk Scanning (Optimus Prime)
+
+            Usa Optimus Prime como **empleado enterprise** para:
+            - Automatizar análisis por dominio (RRHH, Legal, Finanzas, Soporte)
+            - Escanear documentos en busca de **riesgos** (cláusulas, KYC, políticas)
+
+            Todo reutiliza el mismo motor de Optimus (Multi-Agente RAG + Compliance + Audit).
+            """)
+
+            with gr.Row():
+                optimus_prime_flow_domain = gr.Dropdown(
+                    label="🏗 Automation Flow Domain",
+                    choices=[
+                        ("👥 HR / RRHH", "hr"),
+                        ("⚖️ Legal / Contratos", "legal"),
+                        ("💰 Finanzas / Contabilidad", "finance"),
+                        ("🛟 Soporte / Customer Support", "support"),
+                    ],
+                    value="legal",
+                )
+                optimus_prime_run_flow_btn = gr.Button(
+                    "⚡ Run Automation Flow on Current Documents",
+                    variant="secondary",
+                )
+
+            with gr.Row():
+                optimus_prime_run_risk_btn = gr.Button(
+                    "🚨 Run Document Risk Scan (Contratos / KYC / Políticas)",
+                    variant="secondary",
+                )
             
             with gr.Row():
                 clear_optimus_prime_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
@@ -18017,6 +18257,33 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
             optimus_prime_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
             
             # Event handlers
+            def optimus_prime_set_identity(tenant_id, user_id):
+                """
+                Actualiza DOCCHAT_TENANT_ID y DOCCHAT_USER_ID en el entorno del proceso,
+                para que Optimus Prime los use en los audit logs.
+                """
+                import os as _os
+
+                tenant_id_clean = (tenant_id or "").strip()
+                user_id_clean = (user_id or "").strip()
+
+                if tenant_id_clean:
+                    _os.environ["DOCCHAT_TENANT_ID"] = tenant_id_clean
+                else:
+                    # Si se deja vacío, limpiar para que Optimus use 'default_tenant'
+                    _os.environ.pop("DOCCHAT_TENANT_ID", None)
+
+                if user_id_clean:
+                    _os.environ["DOCCHAT_USER_ID"] = user_id_clean
+                else:
+                    # Si se deja vacío, limpiar para que Optimus use 'local_user'
+                    _os.environ.pop("DOCCHAT_USER_ID", None)
+
+                effective_tenant = tenant_id_clean or "default_tenant"
+                effective_user = user_id_clean or "local_user"
+                status = f"✅ Identity actualizada: **tenant_id = `{effective_tenant}`**, **user_id = `{effective_user}`**"
+                return status
+
             def optimus_prime_submit(message, history, files, session_id, speed_mode, provider):
                 if not message.strip():
                     return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
@@ -18036,6 +18303,124 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     context_manager=context_manager
                 )
                 status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def optimus_prime_run_flow(history, files, session_id, speed_mode, provider, flow_domain):
+                """
+                Ejecuta un flujo de automatización sobre los documentos actuales,
+                usando Optimus Prime por encima del mismo motor (sin tocar el core).
+                """
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                # Mensaje especializado según dominio
+                domain_map = {
+                    "hr": "Recursos Humanos (RRHH)",
+                    "legal": "Legal / Contratos",
+                    "finance": "Finanzas / Contabilidad",
+                    "support": "Soporte / Customer Support",
+                }
+                domain_name = domain_map.get(flow_domain, "Legal / Contratos")
+
+                flow_message = f"""
+Estás actuando como un sistema enterprise de **Automation & Compliance** para el dominio: **{domain_name}**.
+
+Tienes acceso a 1 o más documentos (hasta 500 PDFs / DOCX / TXT) que ya han sido cargados en Optimus Prime.
+
+Tu tarea es ejecutar un **FLOW DE AUTOMATIZACIÓN ENTERPRISE** y devolver SIEMPRE la siguiente estructura:
+
+1. ✅ **Checklist detallado**
+   - Lista de puntos que el equipo debe revisar o verificar en relación a estos documentos.
+   - Enfocado en procesos internos del dominio {domain_name}.
+
+2. 📝 **Resumen Ejecutivo (multi-documento)**
+   - Síntesis clara de la información más importante contenida en TODOS los documentos.
+   - Enfocado en lo que un ejecutivo C-Suite necesita saber.
+
+3. 🚨 **Alertas y Riesgos Potenciales**
+   - Lista de posibles riesgos, problemas o inconsistencias detectadas.
+   - Cada alerta debe referenciar explícitamente el documento (por nombre) y, si es posible, la sección / página.
+
+4. 🎯 **Recomendaciones Accionables**
+   - Qué acciones concretas debería tomar la empresa a partir de esta información.
+   - Prioriza por impacto (Alta / Media / Baja).
+
+REGLAS CRÍTICAS:
+- NO inventes información: usa solo lo que está en los documentos.
+- Siempre estructura la salida con los cuatro bloques anteriores.
+- Piensa en este output como algo que se puede usar en un workflow enterprise real.
+"""
+                new_history, error = run_optimus_prime_mode(
+                    message=flow_message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager,
+                )
+                status = f"✅ Automation Flow ejecutado ({len(new_history)} mensajes en la conversación)"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+
+            def optimus_prime_run_risk_scan(history, files, session_id, speed_mode, provider):
+                """
+                Ejecuta un escaneo de riesgo documental (contratos, KYC, políticas, etc.)
+                sobre los documentos cargados en Optimus Prime.
+                """
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+
+                risk_message = """
+Actúas como un sistema enterprise de **Risk & Compliance** especializado en documentos:
+- Contratos (laborales, comerciales, SaaS, confidencialidad)
+- Políticas internas (seguridad, privacidad, uso aceptable, HR)
+- Documentación KYC / AML básica (identidades, formularios, declaraciones)
+
+Tu tarea es hacer un **DOCUMENT RISK SCAN** y devolver SIEMPRE esta estructura:
+
+1. 🧩 **Resumen General de Riesgos**
+   - Visión general de los principales riesgos detectados en TODOS los documentos.
+
+2. 📄 **Riesgos por Documento**
+   Para cada documento relevante:
+   - Nombre del documento
+   - `risk_flag`: LOW / MEDIUM / HIGH
+   - Descripción clara del riesgo
+   - Referencia exacta (texto relevante + si es posible página / sección)
+
+3. 📋 **Checklist de Revisión Manual**
+   - Lista de puntos que un abogado / compliance officer debería revisar manualmente.
+
+4. ✅ / ❌ **Mapa de Cumplimiento Básico**
+   - Marcar si el documento parece:
+     - Cumplir estándares básicos de claridad y coherencia (sí/no)
+     - Presentar cláusulas peligrosas o asimetrías fuertes (sí/no)
+
+REGLAS:
+- NO tomes decisiones finales: solo marcas riesgos y banderas.
+- NO asumas normativa específica de un país; describe el riesgo de forma neutral.
+- NO inventes información que no esté en los documentos.
+"""
+                new_history, error = run_optimus_prime_mode(
+                    message=risk_message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager,
+                )
+                status = f"✅ Risk Scan ejecutado ({len(new_history)} mensajes en la conversación)"
                 if error:
                     status = error
                 return new_history, new_history, status, gr.Markdown(visible=False)
@@ -18158,6 +18543,863 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 fn=show_optimus_prime_stats,
                 inputs=[optimus_prime_session_id],
                 outputs=[optimus_prime_stats_output],
+            )
+
+            # Botón para actualizar identidad enterprise de Optimus Prime
+            optimus_prime_set_identity_btn = gr.Button(
+                "💾 Set Enterprise Identity (Tenant / User)",
+                variant="secondary",
+            )
+            optimus_prime_set_identity_btn.click(
+                fn=optimus_prime_set_identity,
+                inputs=[optimus_prime_tenant_input, optimus_prime_user_input],
+                outputs=[optimus_prime_identity_status],
+            )
+
+            # Conectar Automation Flows & Risk Scan
+            optimus_prime_run_flow_btn.click(
+                fn=optimus_prime_run_flow,
+                inputs=[
+                    optimus_prime_bot,
+                    optimus_prime_files,
+                    optimus_prime_session_id,
+                    optimus_prime_speed_mode,
+                    optimus_prime_provider_toggle,
+                    optimus_prime_flow_domain,
+                ],
+                outputs=[
+                    optimus_prime_bot,
+                    optimus_prime_bot,
+                    optimus_prime_status,
+                    optimus_prime_stats_output,
+                ],
+            )
+
+            optimus_prime_run_risk_btn.click(
+                fn=optimus_prime_run_risk_scan,
+                inputs=[
+                    optimus_prime_bot,
+                    optimus_prime_files,
+                    optimus_prime_session_id,
+                    optimus_prime_speed_mode,
+                    optimus_prime_provider_toggle,
+                ],
+                outputs=[
+                    optimus_prime_bot,
+                    optimus_prime_bot,
+                    optimus_prime_status,
+                    optimus_prime_stats_output,
+                ],
+            )
+        
+        # Tab: 🌀 ÉXTASIS - Agente Autónomo Empresarial
+        with gr.Tab("🌀 ÉXTASIS"):
+            gr.Markdown("### 🌀 ÉXTASIS - Agente Autónomo Empresarial con Toma de Decisiones")
+            gr.Markdown("""
+            **🤖 Agente Autónomo que Toma Decisiones y Ejecuta Acciones en Sistemas Empresariales**
+            
+            **🌟 CARACTERÍSTICAS:**
+            - 🧠 **Razonamiento Autónomo (ReAct + CrewAI)**: Analiza situaciones y toma decisiones de forma independiente
+            - 🔗 **Integración Empresarial Real**: Se conecta y ejecuta acciones en sistemas reales
+            - 📋 **Workflows Especializados**: Workflows listos para usar para casos de uso empresariales
+            - ⚡ **Ejecución Real**: Ejecuta acciones reales en sistemas empresariales (tickets, email, Slack, S3, ERP, CRM)
+            - 🧪 **Modo Simulación**: Prueba workflows sin ejecutar acciones reales
+            - 📊 **Trazabilidad Completa**: Documenta todas las decisiones y acciones
+            
+            **🎯 WORKFLOWS PREMIUM DISPONIBLES:**
+            
+            1️⃣ **Auditoría automática de contratos (Contract Intelligence)**
+               - Detecta cláusulas críticas, riesgos legales y oportunidades
+               - Genera alertas y tickets automáticos
+            
+            2️⃣ **Revisión autónoma de facturas / AP Automation**
+               - Analiza facturas y automatiza aprobaciones
+               - Detecta duplicados y errores
+               - Aprueba pagos automáticamente según políticas
+            
+            💰 **Detección de fraude en facturas/pagos**
+               - Identifica patrones sospechosos y anomalías
+               - Bloquea transacciones fraudulentas automáticamente
+               - Envía alertas críticas
+            
+            3️⃣ **Compliance normativo con reportes legales**
+               - Verifica cumplimiento de regulaciones (GDPR, SOX, HIPAA, etc.)
+               - Genera reportes PDF profesionales
+               - Distribuye reportes automáticamente
+            
+            4️⃣ **Flujos de riesgo y alertas críticas**
+               - Detecta riesgos en documentos
+               - Crea tickets y envía notificaciones
+            
+            5️⃣ **Conciliación de datos entre sistemas**
+               - Compara y sincroniza datos entre ERP, CRM, billing
+               - Corrige inconsistencias automáticamente
+            
+            🌐 **Workflow inter-sistemas**
+               - Combina tickets, ERP, CRM, email, Slack, S3, PDF
+               - Workflows complejos cross-system
+            
+            **🏢 SISTEMAS SOPORTADOS (CONEXIONES REALES):**
+            
+            **Tickets:**
+            - Jira, ServiceNow, Zendesk (REST API)
+            - Acciones: Crear tickets, actualizar estados, asignar responsables
+            
+            **Email:**
+            - SMTP (Gmail, Outlook, etc.)
+            - Acciones: Enviar alertas, notificaciones, reportes
+            
+            **Slack:**
+            - Webhooks y API
+            - Acciones: Enviar mensajes, alertas, notificaciones
+            
+            **S3 (AWS):**
+            - boto3 SDK
+            - Acciones: Subir reportes PDF, documentos, backups
+            
+            **CRM:**
+            - Salesforce, HubSpot, Zoho, Pipedrive
+            - Acciones: Aprobar reembolsos, asignar leads, crear contactos, actualizar deals
+            
+            **ERP:**
+            - SAP, Oracle ERP Cloud, Microsoft Dynamics 365
+            - Acciones: Ajustar inventario, crear órdenes de compra, análisis financiero
+            
+            **SCM:**
+            - SAP Ariba, Oracle SCM Cloud
+            - Acciones: Reruteo de envíos, optimización de demanda, gestión de inventario
+            
+            **ITSM:**
+            - ServiceNow, Jira Service Management
+            - Acciones: Resolver incidentes, gestionar tickets, detectar vulnerabilidades
+            
+            **💼 Perfecto para:**
+            - Automatización de procesos empresariales complejos
+            - Toma de decisiones autónoma en sistemas críticos
+            - Integración cross-system (CRM ↔ ERP ↔ SCM)
+            - Optimización de operaciones en tiempo real
+            - Compliance y auditoría automática
+            - Detección y respuesta a fraudes
+            
+            **⚙️ CONFIGURACIÓN:**
+            Configura las credenciales de tus servicios directamente desde esta UI.
+            No es necesario editar archivos `.env` manualmente.
+            """)
+            
+            # ==================== SECCIÓN: CONFIGURACIÓN DE SERVICIOS ====================
+            with gr.Accordion("⚙️ Configurar Servicios Empresariales", open=False):
+                gr.Markdown("""
+                ### 🔐 Configuración de Credenciales
+                
+                Configura las credenciales de tus servicios empresariales directamente desde aquí.
+                Las credenciales se guardan de forma segura y se aplican automáticamente a los workflows.
+                """)
+                
+                # Jira
+                with gr.Accordion("📋 Jira (Tickets)", open=False):
+                    extasis_jira_url = gr.Textbox(
+                        label="Jira API URL",
+                        placeholder="https://tu-empresa.atlassian.net",
+                        type="password" if False else "text",
+                    )
+                    extasis_jira_email = gr.Textbox(
+                        label="Jira Email",
+                        placeholder="tu-email@empresa.com",
+                    )
+                    extasis_jira_token = gr.Textbox(
+                        label="Jira API Token",
+                        placeholder="tu-api-token",
+                        type="password",
+                    )
+                
+                # ServiceNow
+                with gr.Accordion("🔧 ServiceNow (Tickets)", open=False):
+                    extasis_servicenow_url = gr.Textbox(
+                        label="ServiceNow API URL",
+                        placeholder="https://tu-instancia.service-now.com",
+                    )
+                    extasis_servicenow_user = gr.Textbox(
+                        label="ServiceNow Usuario",
+                        placeholder="tu-usuario",
+                    )
+                    extasis_servicenow_password = gr.Textbox(
+                        label="ServiceNow Contraseña",
+                        placeholder="tu-password",
+                        type="password",
+                    )
+                
+                # Email (SMTP)
+                with gr.Accordion("📧 Email (SMTP)", open=False):
+                    extasis_smtp_host = gr.Textbox(
+                        label="SMTP Host",
+                        placeholder="smtp.gmail.com",
+                        value="smtp.gmail.com",
+                    )
+                    extasis_smtp_port = gr.Textbox(
+                        label="SMTP Port",
+                        placeholder="587",
+                        value="587",
+                    )
+                    extasis_smtp_user = gr.Textbox(
+                        label="SMTP Usuario/Email",
+                        placeholder="tu-email@gmail.com",
+                    )
+                    extasis_smtp_password = gr.Textbox(
+                        label="SMTP Contraseña",
+                        placeholder="tu-app-password",
+                        type="password",
+                    )
+                
+                # Slack
+                with gr.Accordion("💬 Slack", open=False):
+                    extasis_slack_webhook = gr.Textbox(
+                        label="Slack Webhook URL",
+                        placeholder="https://hooks.slack.com/services/TU/WEBHOOK/URL",
+                        type="password",
+                    )
+                    extasis_slack_bot_token = gr.Textbox(
+                        label="Slack Bot Token (alternativa a Webhook)",
+                        placeholder="xoxb-tu-bot-token",
+                        type="password",
+                    )
+                
+                # AWS S3
+                with gr.Accordion("☁️ AWS S3", open=False):
+                    extasis_s3_access_key = gr.Textbox(
+                        label="AWS Access Key ID",
+                        placeholder="tu-access-key-id",
+                        type="password",
+                    )
+                    extasis_s3_secret_key = gr.Textbox(
+                        label="AWS Secret Access Key",
+                        placeholder="tu-secret-access-key",
+                        type="password",
+                    )
+                    extasis_s3_region = gr.Textbox(
+                        label="AWS Region",
+                        placeholder="us-east-1",
+                        value="us-east-1",
+                    )
+                
+                # Salesforce
+                with gr.Accordion("💼 Salesforce (CRM)", open=False):
+                    extasis_sf_instance_url = gr.Textbox(
+                        label="Salesforce Instance URL",
+                        placeholder="https://tu-instancia.salesforce.com",
+                    )
+                    extasis_sf_access_token = gr.Textbox(
+                        label="Salesforce Access Token",
+                        placeholder="tu-access-token",
+                        type="password",
+                    )
+                    gr.Markdown("*O usar Username/Password Flow:*")
+                    extasis_sf_username = gr.Textbox(
+                        label="Salesforce Username",
+                        placeholder="tu-usuario",
+                    )
+                    extasis_sf_password = gr.Textbox(
+                        label="Salesforce Password",
+                        placeholder="tu-password",
+                        type="password",
+                    )
+                    extasis_sf_security_token = gr.Textbox(
+                        label="Salesforce Security Token",
+                        placeholder="tu-security-token",
+                        type="password",
+                    )
+                
+                # SAP
+                with gr.Accordion("🏭 SAP (ERP)", open=False):
+                    extasis_sap_odata_url = gr.Textbox(
+                        label="SAP OData URL",
+                        placeholder="https://tu-sap.com/sap/opu/odata",
+                    )
+                    extasis_sap_user = gr.Textbox(
+                        label="SAP Usuario",
+                        placeholder="tu-usuario",
+                    )
+                    extasis_sap_password = gr.Textbox(
+                        label="SAP Contraseña",
+                        placeholder="tu-password",
+                        type="password",
+                    )
+                
+                # Oracle ERP
+                with gr.Accordion("🗄️ Oracle ERP Cloud", open=False):
+                    extasis_oracle_erp_url = gr.Textbox(
+                        label="Oracle ERP URL",
+                        placeholder="https://tu-instancia.oraclecloud.com",
+                    )
+                    extasis_oracle_erp_token = gr.Textbox(
+                        label="Oracle ERP Token",
+                        placeholder="tu-oauth-token",
+                        type="password",
+                    )
+                
+                # Dynamics 365
+                with gr.Accordion("⚡ Microsoft Dynamics 365", open=False):
+                    extasis_dynamics_url = gr.Textbox(
+                        label="Dynamics 365 API URL",
+                        placeholder="https://tu-instancia.crm.dynamics.com",
+                    )
+                    extasis_dynamics_token = gr.Textbox(
+                        label="Dynamics 365 Access Token",
+                        placeholder="tu-access-token",
+                        type="password",
+                    )
+                
+                # Botón para guardar y cargar configuración
+                with gr.Row():
+                    extasis_save_config_btn = gr.Button("💾 Guardar Configuración de Servicios", variant="primary")
+                    extasis_load_config_btn = gr.Button("🔄 Cargar Configuración Guardada", variant="secondary")
+                    extasis_test_connections_btn = gr.Button("🔌 Probar Conexiones", variant="secondary")
+                
+                def extasis_test_connections():
+                    """Prueba las conexiones a servicios configurados."""
+                    results = []
+                    try:
+                        from docchat.extasis_config import get_extasis_config_manager
+                        config_manager = get_extasis_config_manager()
+                        config_manager.apply_config_to_environment()
+                        
+                        # Probar cada servicio configurado
+                        services = config_manager._config.get("services", {})
+                        
+                        if "jira" in services:
+                            try:
+                                import requests
+                                jira_url = services["jira"].get("url")
+                                jira_email = services["jira"].get("email")
+                                jira_token = services["jira"].get("api_token")
+                                if jira_url and jira_email and jira_token:
+                                    response = requests.get(
+                                        f"{jira_url}/rest/api/3/myself",
+                                        auth=(jira_email, jira_token),
+                                        timeout=5
+                                    )
+                                    if response.status_code == 200:
+                                        results.append("✅ Jira: Conectado correctamente")
+                                    else:
+                                        results.append(f"❌ Jira: Error {response.status_code}")
+                                else:
+                                    results.append("⚠️ Jira: Credenciales incompletas")
+                            except Exception as e:
+                                results.append(f"❌ Jira: Error - {str(e)[:50]}")
+                        
+                        if "email" in services:
+                            smtp_config = services["email"]
+                            if smtp_config.get("host") and smtp_config.get("user") and smtp_config.get("password"):
+                                results.append("✅ Email (SMTP): Configurado (no se prueba la conexión por seguridad)")
+                            else:
+                                results.append("⚠️ Email (SMTP): Credenciales incompletas")
+                        
+                        if "slack" in services:
+                            slack_config = services["slack"]
+                            if slack_config.get("webhook_url") or slack_config.get("bot_token"):
+                                results.append("✅ Slack: Configurado (no se prueba la conexión por seguridad)")
+                            else:
+                                results.append("⚠️ Slack: Credenciales incompletas")
+                        
+                        if "s3" in services:
+                            s3_config = services["s3"]
+                            if s3_config.get("access_key_id") and s3_config.get("secret_access_key"):
+                                results.append("✅ AWS S3: Configurado (no se prueba la conexión por seguridad)")
+                            else:
+                                results.append("⚠️ AWS S3: Credenciales incompletas")
+                        
+                        if "salesforce" in services:
+                            sf_config = services["salesforce"]
+                            if sf_config.get("instance_url") and (sf_config.get("access_token") or sf_config.get("username")):
+                                results.append("✅ Salesforce: Configurado (no se prueba la conexión por seguridad)")
+                            else:
+                                results.append("⚠️ Salesforce: Credenciales incompletas")
+                        
+                        if "servicenow" in services:
+                            sn_config = services["servicenow"]
+                            if sn_config.get("url") and sn_config.get("user") and sn_config.get("password"):
+                                results.append("✅ ServiceNow: Configurado (no se prueba la conexión por seguridad)")
+                            else:
+                                results.append("⚠️ ServiceNow: Credenciales incompletas")
+                        
+                        if not results:
+                            return "ℹ️ No hay servicios configurados. Configura las credenciales y guarda."
+                        
+                        return "### 🔌 Resultados de Pruebas de Conexión\n\n" + "\n".join(f"- {r}" for r in results)
+                    
+                    except Exception as e:
+                        return f"❌ Error probando conexiones: {str(e)}"
+                
+                extasis_test_connections_btn.click(
+                    fn=extasis_test_connections,
+                    inputs=[],
+                    outputs=[extasis_config_status]
+                )
+                
+                extasis_config_status = gr.Markdown(
+                    value="ℹ️ Configura las credenciales de tus servicios y haz clic en 'Guardar' para aplicar. Usa 'Cargar' para ver la configuración guardada.",
+                )
+            
+            # ==================== FIN CONFIGURACIÓN DE SERVICIOS ====================
+            
+            with gr.Row():
+                extasis_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "anthropic")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            with gr.Row():
+                extasis_files = gr.Files(
+                    label="📂 Documentos Empresariales (PDF, DOCX, etc.)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                extasis_workflow_type = gr.Dropdown(
+                    label="🎯 Tipo de Workflow Premium",
+                    choices=[
+                        ("General / personalizado", "general"),
+                        ("1️⃣ Auditoría automática de contratos (Contract Intelligence)", "contract_audit"),
+                        ("2️⃣ Revisión autónoma de facturas / AP Automation", "invoice_review"),
+                        ("💰 Detección de fraude en facturas/pagos", "fraud_detection"),
+                        ("3️⃣ Compliance normativo con reportes legales", "compliance_report"),
+                        ("4️⃣ Flujos de riesgo y alertas críticas", "risk_alerts"),
+                        ("5️⃣ Conciliación de datos entre sistemas", "data_reconciliation"),
+                        ("🌐 Workflow inter-sistemas (tickets, ERP, CRM, email, Slack, S3, PDF)", "inter_system_workflow"),
+                    ],
+                    value="general",
+                    info="Selecciona un workflow específico o 'General' para tareas personalizadas"
+                )
+            
+            with gr.Row():
+                # Cargar modo simulación guardado
+                try:
+                    from docchat.extasis_config import get_extasis_config_manager
+                    config_manager = get_extasis_config_manager()
+                    saved_sim_mode = config_manager.get_simulation_mode()
+                except:
+                    saved_sim_mode = False
+                
+                extasis_simulation_mode = gr.Checkbox(
+                    label="🧪 Simulation Mode (no ejecuta acciones reales, solo muestra lo que haría)",
+                    value=saved_sim_mode,
+                    info="Activa el modo simulación para probar sin ejecutar acciones reales"
+                )
+                
+                def update_simulation_mode(simulation_mode):
+                    """Actualiza el modo simulación cuando cambia el checkbox."""
+                    try:
+                        from docchat.extasis_config import get_extasis_config_manager
+                        config_manager = get_extasis_config_manager()
+                        config_manager.set_simulation_mode(simulation_mode)
+                        return f"✅ Modo simulación {'activado' if simulation_mode else 'desactivado'}"
+                    except:
+                        os.environ["EXTASIS_SIMULATION_MODE"] = "true" if simulation_mode else "false"
+                        return f"✅ Modo simulación {'activado' if simulation_mode else 'desactivado'} (usando variable de entorno)"
+                
+                extasis_simulation_status = gr.Markdown(visible=False)
+                
+                extasis_simulation_mode.change(
+                    fn=update_simulation_mode,
+                    inputs=[extasis_simulation_mode],
+                    outputs=[extasis_simulation_status]
+                )
+            
+            with gr.Row():
+                extasis_task_input = gr.Textbox(
+                    label="📋 Tarea Autónoma (si seleccionaste 'General')",
+                    placeholder="Ejemplo: Aprobar reembolso de $500 para el cliente ABC Corp en Salesforce y crear orden de compra en SAP",
+                    lines=3,
+                    scale=4,
+                )
+                extasis_submit_btn = gr.Button("🚀 Ejecutar", variant="primary", scale=1)
+            
+            with gr.Row():
+                extasis_context_input = gr.Textbox(
+                    label="🔧 Contexto Adicional (JSON opcional)",
+                    placeholder='{"systems": ["salesforce", "sap"], "max_auto_approval_amount": 1000, "regulation_type": "GDPR"}',
+                    lines=2,
+                )
+            
+            extasis_output = gr.Markdown(
+                label="📊 Resultado",
+                value="*Ingresa una tarea y haz clic en 'Ejecutar Tarea Autónoma' para comenzar.*"
+            )
+            
+            with gr.Accordion("📋 Decisiones Tomadas", open=False):
+                extasis_decisions = gr.JSON(
+                    label="Decisiones",
+                    value=[]
+                )
+            
+            with gr.Accordion("⚡ Acciones Ejecutadas", open=False):
+                extasis_actions = gr.JSON(
+                    label="Acciones",
+                    value=[]
+                )
+            
+            extasis_status = gr.Markdown(label="ℹ️ Estado")
+            
+            # Funciones para configuración
+            def extasis_save_service_config(
+                jira_url, jira_email, jira_token,
+                servicenow_url, servicenow_user, servicenow_password,
+                smtp_host, smtp_port, smtp_user, smtp_password,
+                slack_webhook, slack_bot_token,
+                s3_access_key, s3_secret_key, s3_region,
+                sf_instance_url, sf_access_token, sf_username, sf_password, sf_security_token,
+                sap_odata_url, sap_user, sap_password,
+                oracle_erp_url, oracle_erp_token,
+                dynamics_url, dynamics_token
+            ):
+                """Guarda la configuración de servicios."""
+                try:
+                    from docchat.extasis_config import get_extasis_config_manager
+                    config_manager = get_extasis_config_manager()
+                    
+                    # Guardar configuración de cada servicio
+                    configs_saved = []
+                    
+                    # Jira
+                    if jira_url or jira_email or jira_token:
+                        config_manager.set_service_config("jira", {
+                            "url": jira_url or "",
+                            "email": jira_email or "",
+                            "api_token": jira_token or ""
+                        })
+                        configs_saved.append("Jira")
+                    
+                    # ServiceNow
+                    if servicenow_url or servicenow_user or servicenow_password:
+                        config_manager.set_service_config("servicenow", {
+                            "url": servicenow_url or "",
+                            "user": servicenow_user or "",
+                            "password": servicenow_password or ""
+                        })
+                        configs_saved.append("ServiceNow")
+                    
+                    # Email
+                    if smtp_host or smtp_user or smtp_password:
+                        config_manager.set_service_config("email", {
+                            "host": smtp_host or "smtp.gmail.com",
+                            "port": smtp_port or "587",
+                            "user": smtp_user or "",
+                            "password": smtp_password or ""
+                        })
+                        configs_saved.append("Email (SMTP)")
+                    
+                    # Slack
+                    if slack_webhook or slack_bot_token:
+                        config_manager.set_service_config("slack", {
+                            "webhook_url": slack_webhook or "",
+                            "bot_token": slack_bot_token or ""
+                        })
+                        configs_saved.append("Slack")
+                    
+                    # S3
+                    if s3_access_key or s3_secret_key:
+                        config_manager.set_service_config("s3", {
+                            "access_key_id": s3_access_key or "",
+                            "secret_access_key": s3_secret_key or "",
+                            "region": s3_region or "us-east-1"
+                        })
+                        configs_saved.append("AWS S3")
+                    
+                    # Salesforce
+                    if sf_instance_url or sf_access_token or sf_username:
+                        config_manager.set_service_config("salesforce", {
+                            "instance_url": sf_instance_url or "",
+                            "access_token": sf_access_token or "",
+                            "username": sf_username or "",
+                            "password": sf_password or "",
+                            "security_token": sf_security_token or ""
+                        })
+                        configs_saved.append("Salesforce")
+                    
+                    # SAP
+                    if sap_odata_url or sap_user or sap_password:
+                        config_manager.set_service_config("sap", {
+                            "odata_url": sap_odata_url or "",
+                            "user": sap_user or "",
+                            "password": sap_password or ""
+                        })
+                        configs_saved.append("SAP")
+                    
+                    # Oracle ERP
+                    if oracle_erp_url or oracle_erp_token:
+                        config_manager.set_service_config("oracle_erp", {
+                            "url": oracle_erp_url or "",
+                            "token": oracle_erp_token or ""
+                        })
+                        configs_saved.append("Oracle ERP")
+                    
+                    # Dynamics
+                    if dynamics_url or dynamics_token:
+                        config_manager.set_service_config("dynamics", {
+                            "api_url": dynamics_url or "",
+                            "access_token": dynamics_token or ""
+                        })
+                        configs_saved.append("Dynamics 365")
+                    
+                    # Aplicar configuración a variables de entorno
+                    config_manager.apply_config_to_environment()
+                    
+                    if configs_saved:
+                        return f"✅ Configuración guardada para: {', '.join(configs_saved)}\n\nLas credenciales están listas para usar en los workflows."
+                    else:
+                        return "⚠️ No se proporcionaron credenciales para guardar."
+                
+                except Exception as e:
+                    import traceback
+                    return f"❌ Error guardando configuración: {str(e)}\n\n{traceback.format_exc()}"
+            
+            def extasis_load_service_config():
+                """Carga la configuración guardada de servicios."""
+                try:
+                    from docchat.extasis_config import get_extasis_config_manager
+                    config_manager = get_extasis_config_manager()
+                    
+                    config = config_manager.get_all_config()
+                    services = config.get("services", {})
+                    
+                    # Cargar valores (con contraseñas ocultas ya aplicadas por get_all_config)
+                    jira_config = services.get("jira", {})
+                    servicenow_config = services.get("servicenow", {})
+                    email_config = services.get("email", {})
+                    slack_config = services.get("slack", {})
+                    s3_config = services.get("s3", {})
+                    sf_config = services.get("salesforce", {})
+                    sap_config = services.get("sap", {})
+                    oracle_config = services.get("oracle_erp", {})
+                    dynamics_config = services.get("dynamics", {})
+                    
+                    return (
+                        jira_config.get("url", ""),
+                        jira_config.get("email", ""),
+                        jira_config.get("api_token", ""),
+                        servicenow_config.get("url", ""),
+                        servicenow_config.get("user", ""),
+                        servicenow_config.get("password", ""),
+                        email_config.get("host", "smtp.gmail.com"),
+                        email_config.get("port", "587"),
+                        email_config.get("user", ""),
+                        email_config.get("password", ""),
+                        slack_config.get("webhook_url", ""),
+                        slack_config.get("bot_token", ""),
+                        s3_config.get("access_key_id", ""),
+                        s3_config.get("secret_access_key", ""),
+                        s3_config.get("region", "us-east-1"),
+                        sf_config.get("instance_url", ""),
+                        sf_config.get("access_token", ""),
+                        sf_config.get("username", ""),
+                        sf_config.get("password", ""),
+                        sf_config.get("security_token", ""),
+                        sap_config.get("odata_url", ""),
+                        sap_config.get("user", ""),
+                        sap_config.get("password", ""),
+                        oracle_config.get("url", ""),
+                        oracle_config.get("token", ""),
+                        dynamics_config.get("api_url", ""),
+                        dynamics_config.get("access_token", "")
+                    )
+                except Exception as e:
+                    return tuple([""] * 26)  # Retornar tupla vacía si hay error
+            
+            def extasis_execute_task(task, context_str, provider, workflow_type, files, simulation_mode):
+                """Ejecuta una tarea autónoma o workflow en ÉXTASIS."""
+                try:
+                    # El modo simulación ya está configurado por el checkbox
+                    # Aplicar configuración guardada antes de ejecutar
+                    try:
+                        from docchat.extasis_config import get_extasis_config_manager
+                        config_manager = get_extasis_config_manager()
+                        config_manager.apply_config_to_environment()
+                    except:
+                        pass
+                    
+                    # Si hay workflow específico, usar workflow
+                    if workflow_type and workflow_type != "general":
+                        if not files:
+                            return (
+                                "⚠️ Sube documentos para ejecutar el workflow.",
+                                [],
+                                [],
+                                "⚠️ Documentos requeridos."
+                            )
+                        
+                        # Obtener rutas de archivos
+                        document_paths = [f.name for f in files] if files else []
+                        
+                        # Parsear contexto
+                        context = {}
+                        if context_str and context_str.strip():
+                            try:
+                                context = json.loads(context_str)
+                            except:
+                                context = {"note": "Contexto no válido JSON, ignorado"}
+                        
+                        # Ejecutar workflow
+                        from docchat.extasis_mode import get_extasis_mode
+                        extasis = get_extasis_mode(config=config, provider=provider)
+                        result = extasis.execute_workflow(
+                            workflow_type=workflow_type,
+                            documents=document_paths,
+                            context=context
+                        )
+                        
+                        if result.get("status") == "completed":
+                            workflow_result = result.get("result", {})
+                            output = f"""## ✅ Workflow Completado
+
+**Workflow:** {workflow_type}
+**Modo:** {"🧪 Simulación" if simulation_mode else "⚡ Producción"}
+
+**Resultado:** {str(workflow_result)[:1000]}...
+
+### 📊 Estado
+✅ Workflow ejecutado exitosamente
+**Timestamp:** {result.get('timestamp')}
+"""
+                            return output, [], [], "✅ Workflow completado exitosamente."
+                        else:
+                            error = result.get("error", "Error desconocido")
+                            return (
+                                f"## ❌ Error en Workflow\n\n**Error:** {error}",
+                                [],
+                                [],
+                                f"❌ Error: {error}"
+                            )
+                    
+                    # Si no hay workflow, ejecutar tarea general
+                    if not task.strip():
+                        return (
+                            "⚠️ Ingresa una tarea o selecciona un workflow.",
+                            [],
+                            [],
+                            "⚠️ Tarea o workflow requerido."
+                        )
+                    
+                    # Parsear contexto si existe
+                    context = {}
+                    if context_str and context_str.strip():
+                        try:
+                            context = json.loads(context_str)
+                        except:
+                            context = {"note": "Contexto no válido JSON, ignorado"}
+                    
+                    # Ejecutar tarea
+                    result = run_extasis_mode(
+                        task=task,
+                        context=context,
+                        config=config,
+                        provider=provider
+                    )
+                    
+                    if result.get("status") == "completed":
+                        decisions = result.get("decisions_made", [])
+                        actions = result.get("actions_executed", [])
+                        
+                        # Formatear output
+                        output = f"""## ✅ Tarea Completada
+
+**Tarea:** {task}
+**Modo:** {"🧪 Simulación" if simulation_mode else "⚡ Producción"}
+
+**Estado:** {result.get('status')}
+
+### 📊 Resumen
+- **Decisiones tomadas:** {len(decisions)}
+- **Acciones ejecutadas:** {len(actions)}
+- **Timestamp:** {result.get('timestamp')}
+
+### 🧠 Proceso de Razonamiento
+El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecutó las acciones necesarias en los sistemas empresariales.
+
+"""
+                        
+                        if decisions:
+                            output += "\n### 📋 Decisiones Tomadas\n"
+                            for i, decision in enumerate(decisions, 1):
+                                output += f"{i}. {decision.get('content', 'N/A')[:200]}...\n"
+                        
+                        if actions:
+                            output += "\n### ⚡ Acciones Ejecutadas\n"
+                            for i, action in enumerate(actions, 1):
+                                tool = action.get('tool', 'unknown')
+                                result_text = action.get('result', 'N/A')
+                                output += f"{i}. **{tool}**: {str(result_text)[:150]}...\n"
+                        
+                        return output, decisions, actions, "✅ Tarea completada exitosamente."
+                    else:
+                        error = result.get("error", "Error desconocido")
+                        return (
+                            f"## ❌ Error\n\n**Error:** {error}",
+                            [],
+                            [],
+                            f"❌ Error: {error}"
+                        )
+                
+                except Exception as e:
+                    import traceback
+                    error_msg = f"Error ejecutando tarea: {str(e)}\n\n{traceback.format_exc()}"
+                    return (
+                        f"## ❌ Error\n\n{error_msg}",
+                        [],
+                        [],
+                        f"❌ Error: {str(e)}"
+                    )
+            
+            # Event handlers para configuración
+            extasis_save_config_btn.click(
+                fn=extasis_save_service_config,
+                inputs=[
+                    extasis_jira_url, extasis_jira_email, extasis_jira_token,
+                    extasis_servicenow_url, extasis_servicenow_user, extasis_servicenow_password,
+                    extasis_smtp_host, extasis_smtp_port, extasis_smtp_user, extasis_smtp_password,
+                    extasis_slack_webhook, extasis_slack_bot_token,
+                    extasis_s3_access_key, extasis_s3_secret_key, extasis_s3_region,
+                    extasis_sf_instance_url, extasis_sf_access_token, extasis_sf_username, extasis_sf_password, extasis_sf_security_token,
+                    extasis_sap_odata_url, extasis_sap_user, extasis_sap_password,
+                    extasis_oracle_erp_url, extasis_oracle_erp_token,
+                    extasis_dynamics_url, extasis_dynamics_token
+                ],
+                outputs=[extasis_config_status]
+            )
+            
+            # Aplicar configuración guardada automáticamente al iniciar
+            try:
+                from docchat.extasis_config import get_extasis_config_manager
+                config_manager = get_extasis_config_manager()
+                config_manager.apply_config_to_environment()
+            except:
+                pass
+            
+            extasis_submit_btn.click(
+                fn=extasis_execute_task,
+                inputs=[
+                    extasis_task_input,
+                    extasis_context_input,
+                    extasis_provider_toggle,
+                    extasis_workflow_type,
+                    extasis_files,
+                    extasis_simulation_mode
+                ],
+                outputs=[extasis_output, extasis_decisions, extasis_actions, extasis_status]
+            )
+            
+            extasis_task_input.submit(
+                fn=extasis_execute_task,
+                inputs=[
+                    extasis_task_input,
+                    extasis_context_input,
+                    extasis_provider_toggle,
+                    extasis_workflow_type,
+                    extasis_files,
+                    extasis_simulation_mode
+                ],
+                outputs=[extasis_output, extasis_decisions, extasis_actions, extasis_status]
             )
         
         # Tab 4.5.5.5.5: Portal ADS - Clon de Alien Mode

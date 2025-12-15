@@ -15,6 +15,8 @@ from .audit import AuditLogger  # noqa: F401
 from .advanced_agent import AdvancedAutonomousAgent  # noqa: F401
 from .enterprise_api import EnterpriseAPIMode  # noqa: F401
 from .advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode  # noqa: F401
+from .extasis_mode import ExtasisMode, get_extasis_mode, run_extasis_mode  # noqa: F401
+from .extasis_config import ExtasisConfigManager, get_extasis_config_manager  # noqa: F401
 # from .optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # noqa: F401 - ELIMINADO
 from .marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier  # noqa: F401
 from .optimus_prime_mode import OptimusPrimeMode, get_optimus_prime_mode, run_optimus_prime_mode  # noqa: F401

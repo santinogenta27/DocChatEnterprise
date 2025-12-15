@@ -23,6 +23,7 @@ CAPACIDADES AVANZADAS ADICIONALES:
 from __future__ import annotations
 
 import json
+import os
 import time
 import asyncio
 from typing import List, Dict, Optional, Any, Tuple, Iterator
@@ -48,6 +49,7 @@ from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
 from .situational_reasoning import SituationalReasoner, ReasoningType
+from .optimus_audit import OptimusAuditLogger
 
 
 class OptimusPrimeMode:
@@ -149,9 +151,98 @@ class OptimusPrimeMode:
             llm=self.llm,
             config=config
         )
+
+        # Audit logger específico para Optimus Prime (Compliance / Governance / Audit)
+        self.audit_logger: Optional[OptimusAuditLogger] = None
+        if getattr(self.config, "enable_audit_logs", True):
+            try:
+                audit_db_path = self.config.audit_log_dir / "optimus_audit.db"
+                self.audit_logger = OptimusAuditLogger(audit_db_path)
+                print(f"✅ [Optimus Prime Mode] Audit logging habilitado en: {audit_db_path}")
+            except Exception as e:
+                # No bloquear el modo si falla el logger, solo avisar
+                print(f"⚠️ [Optimus Prime Mode] No se pudo inicializar audit logger: {e}")
         
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
+
+    # ------------------------------------------------------------------
+    # Helpers internos para AUDIT / COMPLIANCE (no tocan el core RAG)
+    # ------------------------------------------------------------------
+
+    def _get_audit_identity(self) -> Tuple[str, str]:
+        """
+        Obtiene tenant_id y user_id para logging.
+        
+        En esta versión:
+        - Se leen de variables de entorno si existen:
+          DOCCHAT_TENANT_ID, DOCCHAT_USER_ID
+        - Si no, se usan valores por defecto aptos para entorno local.
+        """
+        tenant_id = os.getenv("DOCCHAT_TENANT_ID", "default_tenant")
+        user_id = os.getenv("DOCCHAT_USER_ID", "local_user")
+        return tenant_id, user_id
+
+    def _audit_log_document_ingest(
+        self,
+        session_id: str,
+        doc: Document,
+    ) -> None:
+        """Registra la ingesta de un documento en Optimus Prime."""
+        if not self.audit_logger or not getattr(self.config, "enable_audit_logs", True):
+            return
+
+        tenant_id, user_id = self._get_audit_identity()
+
+        document_id = str(doc.metadata.get("source", "")) or str(
+            doc.metadata.get("file_path", "")
+        )
+
+        meta: Dict[str, Any] = {
+            "metadata": dict(doc.metadata or {}),
+            "ingest_type": "optimus_prime_process_documents",
+        }
+
+        self.audit_logger.log_event(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            session_id=session_id,
+            action="document_ingested",
+            document_id=document_id,
+            query=None,
+            response=None,
+            sources=None,
+            metadata=meta,
+        )
+
+    def _audit_log_query(
+        self,
+        session_id: str,
+        message: str,
+        answer: str,
+        provenance_record_id: Optional[str],
+        source_provenances: List[Any],
+        extra_metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Registra una consulta con procedencia (Compliance / Governance / Audit)."""
+        if not self.audit_logger or not getattr(self.config, "enable_audit_logs", True):
+            return
+
+        tenant_id, user_id = self._get_audit_identity()
+
+        meta: Dict[str, Any] = dict(extra_metadata or {})
+        # provenance_record_id ya se añade dentro del helper
+
+        self.audit_logger.log_query_with_provenance(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            session_id=session_id,
+            query=message,
+            response=answer,
+            provenance_record_id=provenance_record_id,
+            source_provenances=source_provenances,
+            metadata=meta,
+        )
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
         """Inicializa una nueva sesión."""
@@ -209,6 +300,9 @@ class OptimusPrimeMode:
                 if "provenances" not in session:
                     session["provenances"] = []
                 session["provenances"].append(provenance)
+
+                # AUDIT: registrar ingesta de documento
+                self._audit_log_document_ingest(session_id=session_id, doc=doc)
             
             # Reconstruir retriever
             if session["docs"]:
@@ -578,6 +672,21 @@ class OptimusPrimeMode:
                 "execution_time": execution_time,
                 "sources_count": len(sources)
             }
+
+            # AUDIT: registrar query con procedencia
+            self._audit_log_query(
+                session_id=session_id,
+                message=message,
+                answer=answer,
+                provenance_record_id=str(record_id) if record_id is not None else None,
+                source_provenances=source_provenances,
+                extra_metadata={
+                    "mode": "optimus_prime_mode",
+                    "processing_mode": "sequential",
+                    "relevance_label": relevance_label,
+                    "sources_count": len(sources),
+                },
+            )
             
             return history, None, metadata
             
@@ -1260,6 +1369,20 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             "documents_analyzed": len(individual_analyses),
             "processing_mode": "parallel"
         }
+
+        # AUDIT: registrar query paralela (resumen multi-documento)
+        self._audit_log_query(
+            session_id=session_id,
+            message=message,
+            answer=formatted_answer,
+            provenance_record_id=None,
+            source_provenances=[],
+            extra_metadata={
+                "mode": "optimus_prime_mode",
+                "processing_mode": "parallel",
+                "documents_analyzed": len(individual_analyses),
+            },
+        )
         
         # Convertir historial a formato tuples para Gradio
         tuple_history = []
@@ -1349,6 +1472,21 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
                 "recommendations_count": len(assessment.recommendations),
                 "processing_mode": "situational_reasoning"
             }
+
+            # AUDIT: registrar query estratégica (situational reasoning)
+            self._audit_log_query(
+                session_id=session_id,
+                message=message,
+                answer=formatted_answer,
+                provenance_record_id=None,
+                source_provenances=[],
+                extra_metadata={
+                    "mode": "optimus_prime_mode",
+                    "processing_mode": "situational_reasoning",
+                    "reasoning_type": reasoning_type.value,
+                    "confidence_score": assessment.confidence_score,
+                },
+            )
             
             # Convertir historial a formato tuples para Gradio
             tuple_history = []

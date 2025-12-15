@@ -10,10 +10,12 @@ if TYPE_CHECKING:
 from datetime import datetime
 from pathlib import Path
 import json
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
 from .config import AppConfig
@@ -29,13 +31,22 @@ from .workflow import AgentWorkflow
 from .memory import MemoryStore, ContextManager
 from .advanced_agent import AdvancedAutonomousAgent
 from .tools import (
-    EmailTool, ReportTool, DatabaseTool, PresentationTool,
-    IntegrationTool, TableAnalysisTool, SchedulerTool
+    EmailTool,
+    ReportTool,
+    DatabaseTool,
+    PresentationTool,
+    IntegrationTool,
+    TableAnalysisTool,
+    SchedulerTool,
 )
 
-# Importar sistema de workflows agentic
 from .advice_god.orchestrator import DecisionOrchestrator
 from .advice_god.actions import ActionLayer
+from .advice_god_schemas import (
+    validate_data_for_type,
+    build_success_result,
+    build_error_result,
+)
 
 
 class AdviceGodMode:
@@ -57,254 +68,177 @@ class AdviceGodMode:
         self.workflow = AgentWorkflow(config)
         self.advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
         
-        # Memoria y contexto
+        # Memoria y contexto (no se usa en el nuevo modo PDF -> JSON,
+        # pero se mantiene para compatibilidad con otras partes del sistema)
         self.memory_store = MemoryStore(config.memory_dir, config.memory_retention_days) if config.enable_memory else None
         self.context_manager = ContextManager(self.memory_store, config) if self.memory_store else None
         
-        # LLM para detección automática - SIN LÍMITE DE TOKENS (la API decide)
+        # LLM pequeño (SLM) para clasificación + extracción estructurada desde PDFs.
+        # Reglas: temperature 0, max_tokens limitado, salida JSON ONLY vía prompt.
         from docchat.utils.llm_factory import create_llm
-        self.llm = create_llm(
+        slm_model = "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
+        self.slm_llm = create_llm(
             provider=provider,
-            model=config.agentic_model,
-            temperature=0.2,
+            model=slm_model,
+            temperature=0.0,
             api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
-            # max_tokens REMOVIDO - dejar que la API decida la longitud de respuesta
-            request_timeout=300  # Timeout más largo para respuestas largas
+            max_tokens=512,
+            request_timeout=60,
+            max_retries=2,
         )
-        
-        # LLM rápido para tareas simples (detección, insights)
-        # ACTUALIZADO: Usar Claude Haiku 4.5 (más rápido y económico)
-        fast_model = "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
-        self.fast_llm = create_llm(
-            provider=provider,
-            model=fast_model,
-            temperature=0.2,
-            api_key=config.openai_api_key if provider == "openai" else config.anthropic_api_key,
-            # max_tokens REMOVIDO - dejar que la API decida la longitud de respuesta
-            request_timeout=180  # Timeout más largo para respuestas largas
-        )
-        
-        # Herramientas Agentic AI avanzadas
-        self.tools = {
-            "email": EmailTool(config),
-            "report": ReportTool(config),
-            "database": DatabaseTool(config),
-            "presentation": PresentationTool(config),
-            "integration": IntegrationTool(config),
-            "table_analysis": TableAnalysisTool(config),
-            "scheduler": SchedulerTool(config),
-        }
-        
-        # Sistema de workflows agentic ADVICE GOD
-        self.action_layer = ActionLayer(config, dry_run=False)
-        self.orchestrator = DecisionOrchestrator(
-            config=config,
-            llm=self.llm,
-            action_layer=self.action_layer
-        )
+
+        # NOTA IMPORTANTE:
+        # Ya NO usamos workflows agentic, RAG, memoria ni multi-agents para ADVICE GOD.
+        # Este modo se convierte en un servicio backend determinista: PDF -> JSON.
     
     def process_enterprise_documents_streaming(
         self,
         files: List,
-        auto_detect: bool = True,
-        rules: Optional[List[Dict]] = None,
-        use_workflows: bool = True,
-        dry_run: bool = False
+        auto_detect: bool = True,  # legacy, ignorado
+        rules: Optional[List[Dict]] = None,  # legacy, ignorado
+        use_workflows: bool = True,  # legacy, ignorado
+        dry_run: bool = False,  # legacy, ignorado
     ) -> Iterator[str]:
         """
-        Procesa documentos con streaming de resultados (generador).
-        
-        Args:
-            files: Lista de archivos
-            auto_detect: Detección automática (legacy)
-            rules: Reglas (legacy)
-            use_workflows: Si True, usa el sistema de workflows agentic (por defecto: True)
-            dry_run: Si True, simula acciones sin ejecutarlas
+        NUEVA LÓGICA: Servicio PDF -> JSON estructurado, determinista y listo para producción.
+
+        - NO chatea
+        - NO usa RAG
+        - NO usa multi-agents
+        - NO usa LLM grande
+
+        Solo:
+        PDF → extracción de texto → chunking → SLM → JSON validado → output.
         """
-        yield "## 🚀 Procesamiento ADVICE GOD Iniciado\n\n"
-        
-        # Si se solicita usar workflows, usar el nuevo sistema
-        if use_workflows:
-            yield "🤖 **Modo Agentic Workflows Activado**\n\n"
-            yield "📄 Procesando documentos...\n\n"
-            
-            try:
-                # Procesar con workflows
-                result = self.process_documents_with_workflows(files, dry_run=dry_run)
-                
-                # Stream resultados
-                yield f"### ✅ Procesamiento Completado\n\n"
-                yield f"**Total documentos:** {result.get('total_documents', 0)}\n"
-                yield f"**Exitosos:** {result.get('successful', 0)}\n"
-                yield f"**Fallidos:** {result.get('failed', 0)}\n"
-                yield f"**Confianza promedio:** {result.get('average_confidence', 0):.2%}\n\n"
-                
-                yield "### 📊 Resultados por Workflow\n\n"
-                for workflow_result in result.get('workflow_results', []):
-                    yield f"#### {workflow_result.get('workflow_name', 'N/A')}\n"
-                    yield f"- **Tipo:** {workflow_result.get('document_type', 'N/A')}\n"
-                    yield f"- **Estado:** {'✅ Exitoso' if workflow_result.get('success') else '❌ Fallido'}\n"
-                    yield f"- **Confianza:** {workflow_result.get('confidence', 0):.2%}\n"
-                    yield f"- **Resumen:** {workflow_result.get('summary', 'N/A')}\n\n"
-                    
-                    # Mostrar campos extraídos
-                    extracted = workflow_result.get('extracted_fields', {})
-                    if extracted:
-                        yield "**Campos extraídos:**\n"
-                        for key, value in list(extracted.items())[:5]:
-                            if isinstance(value, (str, int, float)):
-                                yield f"- {key}: {value}\n"
-                        yield "\n"
-                    
-                    # Mostrar acciones
-                    actions = workflow_result.get('actions_performed', [])
-                    if actions:
-                        yield f"**Acciones ejecutadas:** {len(actions)}\n"
-                        for action in actions[:3]:
-                            action_type = action.get('action_type', 'N/A')
-                            success = action.get('success', False)
-                            yield f"- {action_type}: {'✅' if success else '❌'}\n"
-                        yield "\n"
-                    
-                    yield "---\n\n"
-                
-                # Mostrar errores si hay
-                errors = result.get('errors', [])
-                if errors:
-                    yield "### ⚠️ Errores\n\n"
-                    for error in errors[:10]:
-                        yield f"- {error}\n"
-                    yield "\n"
-                
-                yield "\n✅ **Procesamiento completado exitosamente!**\n"
-                
-            except Exception as e:
-                import traceback
-                yield f"\n❌ **Error**: {str(e)}\n"
-                yield f"```\n{traceback.format_exc()}\n```\n"
-            
+        yield "## 🤖 ADVICE GOD - PDF → JSON Structured Extraction\n\n"
+
+        if not files:
+            yield json.dumps(
+                build_error_result("other", "No files provided for processing."),
+                ensure_ascii=False,
+            )
             return
         
-        # Modo legacy (sin workflows)
-        yield "📄 Procesando documentos (modo legacy)...\n\n"
-        
         try:
-            # 1. Procesar documentos
+            # 1. Extracción de texto usando el DocumentProcessor existente
             docs = self.processor.process(files)
-            yield f"✅ **Documentos procesados**: {len(files)}\n"
-            yield f"✅ **Chunks generados**: {len(docs)}\n\n"
-            
-            # 2. Generar resúmenes automáticos con streaming
-            yield "### 📄 Generando Resúmenes Automáticos...\n\n"
-            import uuid
-            session_namespace = f"advice_god_{uuid.uuid4().hex[:8]}"
-            retriever = self.retriever_builder.build_hybrid_retriever(docs, namespace=session_namespace)
-            
-            # Agrupar documentos por archivo (código similar al método original)
-            from collections import defaultdict
-            docs_by_file = defaultdict(list)
-            file_key_to_original_name = {}
-            
+            if not docs:
+                yield json.dumps(
+                    build_error_result(
+                        "other",
+                        "No se pudieron extraer textos de los PDFs. El archivo puede estar encriptado o corrupto.",
+                    ),
+                    ensure_ascii=False,
+                )
+                return
+
+            # 2. Agrupar por archivo de origen
+            docs_by_file: Dict[str, List[Document]] = defaultdict(list)
             for doc in docs:
-                source = doc.metadata.get("source", "")
-                if source:
-                    doc_hash = doc.metadata.get("hash", "")
-                    if doc_hash:
-                        file_key = f"hash_{doc_hash}"
-                    else:
-                        source_path = Path(source)
-                        file_key = source_path.name
-                    docs_by_file[file_key].append(doc)
-                    if file_key not in file_key_to_original_name:
-                        file_key_to_original_name[file_key] = source
-            
-            # Generar resúmenes en paralelo y emitir mientras se completan
-            processed_clean_names = set()
-            summary_tasks = []
-            for file_key, file_docs_list in docs_by_file.items():
-                original_file_name = file_key_to_original_name.get(file_key, file_docs_list[0].metadata.get("source", ""))
-                clean_file_name = Path(original_file_name).name
-                if clean_file_name in processed_clean_names:
+                source = doc.metadata.get("source", "") or getattr(doc, "source", "")
+                if not source:
+                    source = "unknown"
+                docs_by_file[source].append(doc)
+
+            # 3. Procesar cada archivo de forma independiente
+            results: Dict[str, Dict[str, Any]] = {}
+
+            for source, file_docs in docs_by_file.items():
+                file_name = Path(source).name
+
+                # 3.1 Chunking: máx. 2 páginas por chunk (aprox. por documento)
+                sorted_docs = sorted(
+                    file_docs,
+                    key=lambda d: d.metadata.get("page", d.metadata.get("page_number", 0)),
+                )
+                chunks: List[str] = []
+                for i in range(0, len(sorted_docs), 2):
+                    sub_docs = sorted_docs[i : i + 2]
+                    chunk_text = "\n\n".join(d.page_content for d in sub_docs if d.page_content)
+                    if chunk_text.strip():
+                        chunks.append(chunk_text)
+
+                if not chunks:
+                    results[file_name] = build_error_result(
+                        "other",
+                        "No se encontró texto legible en el documento.",
+                    )
                     continue
-                processed_clean_names.add(clean_file_name)
-                summary_tasks.append((original_file_name, file_docs_list, clean_file_name))
-            
-            summaries = {}
-            max_workers = min(3, len(summary_tasks))
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_file = {
-                    executor.submit(self._generate_automatic_summary, original_file_name, file_docs_list, retriever): 
-                    (original_file_name, clean_file_name) 
-                    for original_file_name, file_docs_list, clean_file_name in summary_tasks
-                }
-                
-                for future in as_completed(future_to_file):
-                    original_file_name, clean_file_name = future_to_file[future]
+
+                # 3.2 Clasificación del documento (usando el primer chunk)
+                classification = self._classify_document(chunks[0])
+                document_type = classification.get("document_type", "other")
+                doc_confidence = classification.get("confidence", 0.0)
+
+                # 3.3 Extracción estructurada según schema (con posible retry si la validación falla)
+                extraction_result = self._extract_structured_data(
+                    document_type=document_type,
+                    chunks=chunks,
+                )
+
+                final_result: Dict[str, Any]
+                if extraction_result.get("status") == "success":
+                    extraction_conf = float(extraction_result.get("confidence", 0.0))
+                    combined_conf = max(0.0, min(1.0, (float(doc_confidence) + extraction_conf) / 2.0))
+                    data = extraction_result.get("data", {})
+
+                    # Primer intento de validación Pydantic
                     try:
-                        summary = future.result()
-                        summaries[original_file_name] = summary
-                        # Emitir resumen inmediatamente
-                        yield f"#### {clean_file_name}\n\n"
-                        yield f"**Tipo de Documento**: {summary.get('document_type', 'N/A')}\n\n"
-                        yield f"**Resumen Ejecutivo**:\n{summary.get('summary', 'N/A')}\n\n"
-                        if summary.get('key_points'):
-                            yield f"**Puntos Clave** ({len(summary['key_points'])}):\n"
-                            for i, point in enumerate(summary['key_points'][:10], 1):
-                                yield f"{i}. {point}\n"
-                            yield "\n"
-                        if summary.get('topics'):
-                            yield f"**Temas**: {', '.join(summary['topics'][:5])}\n\n"
-                        if summary.get('business_value'):
-                            yield f"**Valor para el Negocio**: {summary.get('business_value')}\n\n"
-                        if summary.get('entities'):
-                            yield f"**Entidades Principales**: {', '.join(summary['entities'][:5])}\n\n"
-                        yield "---\n\n"
-                    except Exception as e:
-                        yield f"❌ Error en {clean_file_name}: {str(e)[:100]}\n\n"
-            
-            # 3. Detección automática (si está habilitada)
-            detection_results = {"problems": [], "opportunities": [], "patterns": []}
-            if auto_detect:
-                yield "### 🔍 Detectando Problemas, Oportunidades y Patrones...\n\n"
-                detection_results = self._auto_detect_issues_opportunities(docs, retriever)
-                
-                if detection_results.get('problems'):
-                    yield "### ⚠️ Problemas Detectados\n\n"
-                    for problem in detection_results['problems']:
-                        yield f"- **{problem.get('type', 'Unknown')}** ({problem.get('severity', 'N/A')}): {problem.get('description', 'N/A')}\n"
-                    yield "\n"
-                
-                if detection_results.get('opportunities'):
-                    yield "### 💡 Oportunidades Detectadas\n\n"
-                    for opp in detection_results['opportunities']:
-                        yield f"- **{opp.get('type', 'Unknown')}** ({opp.get('impact', 'N/A')}): {opp.get('description', 'N/A')}\n"
-                    yield "\n"
-                
-                if detection_results.get('patterns'):
-                    yield "### 🔍 Patrones Encontrados\n\n"
-                    for pattern in detection_results['patterns']:
-                        yield f"- **{pattern.get('type', 'Unknown')}**: {pattern.get('description', 'N/A')}\n"
-                    yield "\n"
-            
-            # 4. Insights generales
-            yield "### 💡 Insights Generales\n\n"
-            insights = self._generate_insights(docs, retriever, {
-                "documents_processed": len(files),
-                "chunks_generated": len(docs),
-                "problems_detected": detection_results.get('problems', []),
-                "opportunities_detected": detection_results.get('opportunities', []),
-                "patterns_found": detection_results.get('patterns', []),
-                "summaries": summaries
-            })
-            
-            for insight in insights:
-                yield f"#### {insight.get('title', 'Insight')}\n"
-                yield f"{insight.get('content', 'N/A')}\n\n"
-            
-            yield "\n✅ **Procesamiento completado exitosamente!**\n"
+                        validated_data = validate_data_for_type(document_type, data)
+                        final_result = build_success_result(
+                            document_type=document_type,
+                            data=validated_data,
+                            confidence=combined_conf,
+                        )
+                    except Exception as ve:
+                        # Retry ÚNICO: informar al modelo que el JSON no coincide con el schema
+                        retry_extraction = self._extract_structured_data(
+                            document_type=document_type,
+                            chunks=chunks,
+                            retry_error=str(ve),
+                        )
+                        if retry_extraction.get("status") == "success":
+                            try:
+                                retry_data = retry_extraction.get("data", {})
+                                validated_retry_data = validate_data_for_type(document_type, retry_data)
+                                final_result = build_success_result(
+                                    document_type=document_type,
+                                    data=validated_retry_data,
+                                    confidence=combined_conf,
+                                )
+                            except Exception as ve2:
+                                final_result = build_error_result(
+                                    document_type,
+                                    f"validation_error: {str(ve2)}",
+                                )
+                        else:
+                            final_result = build_error_result(
+                                document_type,
+                                extraction_result.get("data", {}).get("error", "Unknown extraction error."),
+                            )
+                else:
+                    final_result = build_error_result(
+                        document_type,
+                        extraction_result.get("data", {}).get("error", "Unknown extraction error."),
+                    )
+
+                results[file_name] = final_result
+
+                # Emitir resultado por archivo como JSON puro
+                yield f"### 📄 {file_name}\n\n"
+                yield "```json\n"
+                yield json.dumps(final_result, ensure_ascii=False, indent=2)
+                yield "\n```\n\n"
+
+            # 4. Resumen global en JSON (útil si se usa como servicio backend)
+            yield "### 🧾 Global Result (all files)\n\n"
+            yield "```json\n"
+            yield json.dumps(results, ensure_ascii=False, indent=2)
+            yield "\n```\n"
             
         except Exception as e:
-            yield f"\n❌ **Error**: {str(e)}\n"
+            error_payload = build_error_result("other", f"Unexpected error: {str(e)}")
+            yield json.dumps(error_payload, ensure_ascii=False)
     
     def process_documents_with_workflows(
         self,
@@ -312,20 +246,8 @@ class AdviceGodMode:
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
-        Procesa documentos usando el sistema de workflows agentic.
-        
-        Flujo completo:
-        1. SENSE: Extrae texto de PDFs (ya implementado)
-        2. THINK: Clasifica y decide workflow
-        3. ACT: Ejecuta workflow automáticamente
-        4. REPORT: Devuelve resultados estructurados
-        
-        Args:
-            files: Lista de archivos PDF
-            dry_run: Si True, simula acciones sin ejecutarlas
-            
-        Returns:
-            Diccionario con resultados completos
+        [LEGACY] Sistema de workflows agentic.
+        Ya no se usa en el nuevo modo PDF -> JSON; se mantiene solo por compatibilidad.
         """
         try:
             # 1. Procesar documentos (extraer texto)
@@ -356,7 +278,337 @@ class AdviceGodMode:
                 "timestamp": datetime.now().isoformat()
             }
     
+    # ------------------------------------------------------------------
+    # NUEVOS HELPERS: CLASIFICACIÓN + EXTRACCIÓN ESTRUCTURADA (SLM)
+    # ------------------------------------------------------------------
+
+    def _classify_document(self, text_chunk: str) -> Dict[str, Any]:
+        """
+        Clasifica el documento en uno de los tipos soportados usando el SLM.
+        Prompt EXACTO (system + user) y salida JSON ONLY.
+        """
+        system_prompt = (
+            "You are a document classification system.\n\n"
+            "You must classify the document into ONE of the following types:\n"
+            "- contract\n"
+            "- invoice\n"
+            "- resume\n"
+            "- report\n"
+            "- policy\n"
+            "- legal_notice\n"
+            "- other\n\n"
+            "Return ONLY valid JSON.\n"
+            "Do not explain.\n"
+            "Do not add extra text.\n"
+        )
+
+        user_prompt = (
+            "Classify the following document text.\n\n"
+            "Return JSON in this exact format:\n"
+            "{\n"
+            '  "document_type": "one_of_the_allowed_types",\n'
+            '  "confidence": number_between_0_and_1\n'
+            "}\n\n"
+            "Document text:\n"
+            "<<<\n"
+            f"{text_chunk}\n"
+            ">>>\n"
+        )
+
+        try:
+            response = self.slm_llm.invoke(
+                [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            )
+            raw = response.content if hasattr(response, "content") else str(response)
+            raw = raw.strip()
+            # Intentar limpiar code fences si las hubiera
+            if raw.startswith("```"):
+                raw = raw.strip("`")
+                # Quitar posible "json" al inicio
+                if raw.lower().startswith("json"):
+                    raw = raw[4:].lstrip()
+            data = json.loads(raw)
+        except Exception:
+            # Fallback seguro
+            return {"document_type": "other", "confidence": 0.0}
+
+        doc_type = str(data.get("document_type", "other")).strip()
+        allowed = {
+            "contract",
+            "invoice",
+            "resume",
+            "report",
+            "policy",
+            "legal_notice",
+            "other",
+        }
+        if doc_type not in allowed:
+            doc_type = "other"
+
+        try:
+            conf = float(data.get("confidence", 0.0))
+        except Exception:
+            conf = 0.0
+        conf = max(0.0, min(1.0, conf))
+
+        return {"document_type": doc_type, "confidence": conf}
+
+    def _extract_structured_data(
+        self,
+        document_type: str,
+        chunks: List[str],
+        retry_error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Extrae datos estructurados para un tipo de documento dado.
+        - Procesa chunk por chunk con el SLM.
+        - Fusiona resultados en código.
+        - No realiza validación Pydantic (se hace fuera); pero soporta un mensaje
+          adicional `retry_error` para el retry cuando falle la validación externa.
+        """
+        # Seleccionar schema textual según tipo
+        if document_type == "contract":
+            schema_text = (
+                '{\n'
+                '  "parties": ["string"],\n'
+                '  "start_date": "YYYY-MM-DD | null",\n'
+                '  "end_date": "YYYY-MM-DD | null",\n'
+                '  "payment_terms": "string | null",\n'
+                '  "termination_clause": "boolean",\n'
+                '  "jurisdiction": "string | null"\n'
+                "}\n"
+            )
+        elif document_type == "invoice":
+            schema_text = (
+                '{\n'
+                '  "invoice_number": "string",\n'
+                '  "issuer": "string",\n'
+                '  "recipient": "string",\n'
+                '  "total_amount": "number",\n'
+                '  "currency": "string",\n'
+                '  "due_date": "YYYY-MM-DD | null"\n'
+                "}\n"
+            )
+        elif document_type == "resume":
+            schema_text = (
+                '{\n'
+                '  "name": "string",\n'
+                '  "email": "string | null",\n'
+                '  "skills": ["string"],\n'
+                '  "years_experience": "number | null"\n'
+                "}\n"
+            )
+        else:
+            # Para otros tipos, devolvemos data vacía (schema genérico)
+            return {
+                "status": "success",
+                "data": {},
+                "confidence": 0.0,
+            }
+
+        system_prompt = (
+            "You are an information extraction system.\n\n"
+            "Return ONLY valid JSON.\n"
+            "Do not explain.\n"
+            "Do not infer missing information.\n"
+            "If a field is not explicitly present in the text, use null.\n"
+            "Follow the schema EXACTLY.\n"
+        )
+
+        if retry_error:
+            # Mensaje adicional para el retry
+            system_prompt += (
+                "\nThe previous JSON did not match the schema.\n"
+                "Fix the JSON.\n"
+                "Return ONLY valid JSON.\n"
+            )
+
+        merged: Dict[str, Any] = {}
+
+        for chunk_text in chunks:
+            if not chunk_text.strip():
+                continue
+
+            user_prompt = (
+                f"Extract structured data for a document of type: {document_type}.\n\n"
+                "Use this schema:\n"
+                f"{schema_text}\n\n"
+                "Text:\n"
+                "<<<\n"
+                f"{chunk_text}\n"
+                ">>>\n"
+            )
+
+            try:
+                response = self.slm_llm.invoke(
+                    [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+                )
+                raw = response.content if hasattr(response, "content") else str(response)
+                raw = raw.strip()
+                if raw.startswith("```"):
+                    raw = raw.strip("`")
+                    if raw.lower().startswith("json"):
+                        raw = raw[4:].lstrip()
+                partial = json.loads(raw)
+            except Exception as e:
+                # Si falla un chunk, continuar con los que sí funcionen
+                continue
+
+            # Fusionar resultados (listas se unen, strings/números se rellenan si están vacíos)
+            for key, value in partial.items():
+                if key not in merged or merged.get(key) in (None, "", [], {}):
+                    merged[key] = value
+                    else:
+                    # Si ambos son listas -> concatenar y deduplicar
+                    if isinstance(merged[key], list) and isinstance(value, list):
+                        merged[key] = list({*merged[key], *value})
+                    # Si es boolean -> OR lógico
+                    elif isinstance(merged[key], bool) and isinstance(value, bool):
+                        merged[key] = merged[key] or value
+                    # Si es número y el existente es None o 0 -> reemplazar
+                    elif isinstance(merged[key], (int, float)) and isinstance(value, (int, float)):
+                        if merged[key] == 0 and value != 0:
+                            merged[key] = value
+                    # Para strings ya presentes, mantenemos el primero (no sobrescribir)
+                        else:
+                        continue
+
+        # Si no pudimos extraer nada, devolver error controlado
+        if not merged:
+            return {
+                "status": "error",
+                "data": {"error": "No se pudo extraer información estructurada del documento."},
+                "confidence": 0.0,
+            }
+
+        return {
+            "status": "success",
+            "data": merged,
+            "confidence": 1.0,
+        }
+
+    # ------------------------------------------------------------------
+    # VERSIÓN NO STREAMING: PDF -> JSON POR ARCHIVO (BACKEND / API)
+    # ------------------------------------------------------------------
+
     def process_enterprise_documents(
+        self,
+        files: List,
+        auto_detect: bool = True,
+        rules: Optional[List[Dict]] = None,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Versión NO streaming del servicio PDF → JSON.
+        Devuelve un diccionario por archivo, listo para API / webhooks / DB.
+
+        Formato:
+        {
+          "file_1.pdf": { ... },
+          "file_2.pdf": { ... }
+        }
+        """
+        backend_results: Dict[str, Any] = {}
+
+        # 1. Procesar documentos (extracción de texto)
+        docs = self.processor.process(files)
+        if not docs:
+            return {
+                "status": "error",
+                "reason": "no_text_extracted",
+            }
+
+        # 2. Agrupar por archivo de origen
+        docs_by_file: Dict[str, List[Document]] = defaultdict(list)
+        for doc in docs:
+            source = doc.metadata.get("source", "") or getattr(doc, "source", "")
+            if not source:
+                source = "unknown"
+            docs_by_file[source].append(doc)
+
+        # 3. Procesar cada archivo de forma independiente
+        for source, file_docs in docs_by_file.items():
+            file_name = Path(source).name
+
+            # Chunking 2 páginas
+            sorted_docs = sorted(
+                file_docs,
+                key=lambda d: d.metadata.get("page", d.metadata.get("page_number", 0)),
+            )
+            chunks: List[str] = []
+            for i in range(0, len(sorted_docs), 2):
+                sub_docs = sorted_docs[i : i + 2]
+                chunk_text = "\n\n".join(d.page_content for d in sub_docs if d.page_content)
+                if chunk_text.strip():
+                    chunks.append(chunk_text)
+
+            if not chunks:
+                backend_results[file_name] = build_error_result(
+                    "other",
+                    "No se encontró texto legible en el documento.",
+                )
+                continue
+
+            # Clasificación
+            classification = self._classify_document(chunks[0])
+            document_type = classification.get("document_type", "other")
+            doc_confidence = classification.get("confidence", 0.0)
+
+            # Extracción estructurada + validación (mismo flujo que streaming)
+            extraction_result = self._extract_structured_data(
+                document_type=document_type,
+                chunks=chunks,
+            )
+
+            if extraction_result.get("status") == "success":
+                extraction_conf = float(extraction_result.get("confidence", 0.0))
+                combined_conf = max(0.0, min(1.0, (float(doc_confidence) + extraction_conf) / 2.0))
+                data = extraction_result.get("data", {})
+
+                try:
+                    validated_data = validate_data_for_type(document_type, data)
+                    final_result = build_success_result(
+                        document_type=document_type,
+                        data=validated_data,
+                        confidence=combined_conf,
+                    )
+                except Exception as ve:
+                    # Retry único con mensaje de error para el modelo
+                    retry_extraction = self._extract_structured_data(
+                        document_type=document_type,
+                        chunks=chunks,
+                        retry_error=str(ve),
+                    )
+                    if retry_extraction.get("status") == "success":
+                        try:
+                            retry_data = retry_extraction.get("data", {})
+                            validated_retry_data = validate_data_for_type(document_type, retry_data)
+                            final_result = build_success_result(
+                                document_type=document_type,
+                                data=validated_retry_data,
+                                confidence=combined_conf,
+                            )
+                        except Exception as ve2:
+                            final_result = build_error_result(
+                                document_type,
+                                f"validation_error: {str(ve2)}",
+                            )
+                    else:
+                        final_result = build_error_result(
+                            document_type,
+                            extraction_result.get("data", {}).get("error", "Unknown extraction error."),
+                        )
+            else:
+                final_result = build_error_result(
+                    document_type,
+                    extraction_result.get("data", {}).get("error", "Unknown extraction error."),
+                )
+
+            backend_results[file_name] = final_result
+
+        return backend_results
+    
+    def process_enterprise_documents_api(
         self,
         files: List,
         auto_detect: bool = True,
@@ -364,336 +616,19 @@ class AdviceGodMode:
         stream: bool = False
     ) -> Dict[str, Any]:
         """
-        Procesa documentos empresariales con detección automática.
+        Función pública de API que procesa documentos y devuelve JSON puro.
+        Simplemente llama a process_enterprise_documents y devuelve el resultado tal cual.
         
         Args:
             files: Lista de archivos a procesar
-            auto_detect: Si True, detecta problemas/oportunidades automáticamente
-            rules: Lista de reglas/automatizaciones a aplicar
+            auto_detect: Ignorado (mantenido para compatibilidad)
+            rules: Ignorado (mantenido para compatibilidad)
+            stream: Ignorado (mantenido para compatibilidad)
         
         Returns:
-            Dict con resultados completos del procesamiento
+            Dict con formato: { "file.pdf": { "status": "...", "document_type": "...", "data": {...}, "confidence": 0.0-1.0 } }
         """
-        results = {
-            "status": "processing",
-            "timestamp": datetime.now().isoformat(),
-            "documents_processed": 0,
-            "chunks_generated": 0,
-            "insights": [],
-            "problems_detected": [],
-            "opportunities_detected": [],
-            "patterns_found": [],
-            "actions_taken": [],
-            "summaries": {}
-        }
-        
-        try:
-            # 1. Procesar documentos
-            print("Procesando documentos empresariales...")
-            docs = self.processor.process(files)
-            results["documents_processed"] = len(files)
-            results["chunks_generated"] = len(docs)
-            
-            # Si no se generaron chunks, intentar procesar directamente con MultiFormatProcessor como último recurso
-            if not docs or len(docs) == 0:
-                print("⚠️ El procesador estándar no generó chunks.")
-                print("   💡 Posibles causas: PDF encriptado, formato no soportado, o error en procesamiento.")
-                print("   🔄 Intentando procesamiento directo con MultiFormatProcessor (Docling)...")
-                try:
-                    from docchat.multi_format_processor import MultiFormatProcessor
-                    direct_processor = MultiFormatProcessor(self.config)
-                    # Procesar archivos directamente
-                    direct_docs = direct_processor.process(files)
-                    if direct_docs and len(direct_docs) > 0:
-                        docs = direct_docs
-                        results["chunks_generated"] = len(docs)
-                        print(f"   ✅ Procesamiento directo exitoso: {len(docs)} chunks generados")
-                        results["status"] = "success"  # Actualizar estado a success si el fallback funcionó
-                    else:
-                        print("   ⚠️ Procesamiento directo tampoco generó chunks")
-                except Exception as e:
-                    print(f"   ⚠️ Error en procesamiento directo: {str(e)[:200]}")
-                    import traceback
-                    traceback.print_exc()
-            
-            # 2. Generar resúmenes automáticos
-            if not docs or len(docs) == 0:
-                results["status"] = "error"
-                results["error"] = "No se pudieron procesar los documentos. El PDF puede estar encriptado o corrupto."
-                print("ERROR en procesamiento advice god: No hay documentos procesados para indexar.")
-                return results
-            
-            print("Generando resumenes automaticos...")
-            # Usar un namespace único para esta sesión para evitar mezclar con documentos previos
-            import uuid
-            session_namespace = f"advice_god_{uuid.uuid4().hex[:8]}"
-            retriever = self.retriever_builder.build_hybrid_retriever(docs, namespace=session_namespace)
-            
-            # Obtener todos los archivos únicos procesados desde los documentos
-            from pathlib import Path
-            from collections import defaultdict
-            
-            # Función para normalizar nombres de archivo (remover variaciones como "- copia", " - copy", etc.)
-            def normalize_filename(name):
-                """Normaliza el nombre del archivo removiendo variaciones comunes de duplicados."""
-                name_lower = name.lower()
-                # Remover variaciones comunes de "copia"
-                variations = [" - copia", "- copia", " - copy", "- copy", " (copia)", "(copia)", " (copy)", "(copy)", " - copia.pdf", "- copia.pdf"]
-                for variation in variations:
-                    if name_lower.endswith(variation):
-                        # Remover la variación pero mantener la extensión
-                        base = name[:-len(variation)]
-                        ext = Path(name).suffix
-                        return base + ext
-                return name
-            
-            # Crear mapeo de archivos: hash -> nombre original preferido
-            # Esto permite detectar archivos duplicados con diferentes nombres
-            file_hash_to_original_name = {}
-            normalized_name_to_original = {}  # Mapeo de nombre normalizado a nombre original preferido
-            
-            for file_obj in files:
-                # Obtener nombre original de Google Drive si está disponible
-                original_name = getattr(file_obj, "original_name", None)
-                if not original_name:
-                    original_name = getattr(file_obj, "name", "documento")
-                
-                # Normalizar el nombre
-                normalized = normalize_filename(Path(original_name).name)
-                
-                # Guardar mapeo de nombre normalizado a original (preferir nombres sin "- copia")
-                if normalized not in normalized_name_to_original:
-                    normalized_name_to_original[normalized] = original_name
-                else:
-                    # Preferir nombres sin variaciones de "copia" o "copy"
-                    existing = normalized_name_to_original[normalized]
-                    existing_lower = existing.lower()
-                    original_lower = original_name.lower()
-                    if ("copia" in existing_lower or "copy" in existing_lower) and ("copia" not in original_lower and "copy" not in original_lower):
-                        normalized_name_to_original[normalized] = original_name
-                    elif "drive_" in existing and "drive_" not in original_name:
-                        normalized_name_to_original[normalized] = original_name
-                
-                # Intentar obtener hash del archivo para detectar duplicados
-                try:
-                    from docchat.utils import read_bytes, sha256_bytes
-                    data = read_bytes(file_obj)
-                    file_hash = sha256_bytes(data)
-                    # Siempre preferir el nombre original sobre el temporal
-                    if file_hash not in file_hash_to_original_name:
-                        file_hash_to_original_name[file_hash] = original_name
-                    else:
-                        # Si ya existe, mantener el que tiene nombre más descriptivo (no drive_xxx, sin "- copia")
-                        existing = file_hash_to_original_name[file_hash]
-                        existing_lower = existing.lower()
-                        original_lower = original_name.lower()
-                        if ("copia" in existing_lower or "copy" in existing_lower) and ("copia" not in original_lower and "copy" not in original_lower):
-                            file_hash_to_original_name[file_hash] = original_name
-                        elif "drive_" in existing and "drive_" not in original_name:
-                            file_hash_to_original_name[file_hash] = original_name
-                except:
-                    pass
-            
-            # Agrupar documentos por hash del archivo (mejor) o por nombre (fallback)
-            docs_by_file = defaultdict(list)
-            file_key_to_original_name = {}  # Mapeo de clave de agrupación a nombre original
-            
-            for doc in docs:
-                source = doc.metadata.get("source", "")
-                if source:
-                    source_path = Path(source)
-                    source_name = source_path.name
-                    
-                    # Intentar usar hash primero para detectar duplicados
-                    doc_hash = doc.metadata.get("hash", "")
-                    if doc_hash and doc_hash in file_hash_to_original_name:
-                        # Agrupar por hash para detectar archivos duplicados
-                        file_key = f"hash_{doc_hash}"
-                        original_name = file_hash_to_original_name[doc_hash]
-                    else:
-                        # Fallback: agrupar por nombre normalizado del archivo
-                        normalized_source = normalize_filename(source_name)
-                        file_key = f"normalized_{normalized_source}"
-                        
-                        # Buscar nombre original en el mapeo de nombres normalizados
-                        if normalized_source in normalized_name_to_original:
-                            original_name = normalized_name_to_original[normalized_source]
-                        else:
-                            # Buscar en los archivos originales
-                            original_name = None
-                            for file_obj in files:
-                                temp_name = getattr(file_obj, "name", "")
-                                temp_normalized = normalize_filename(Path(temp_name).name)
-                                if temp_normalized == normalized_source:
-                                    original_name = getattr(file_obj, "original_name", None) or temp_name
-                                    break
-                            if not original_name:
-                                original_name = source
-                            # Guardar en el mapeo
-                            normalized_name_to_original[normalized_source] = original_name
-                    
-                    docs_by_file[file_key].append(doc)
-                    # Guardar el nombre original preferido para esta clave
-                    if file_key not in file_key_to_original_name:
-                        file_key_to_original_name[file_key] = original_name
-                    else:
-                        # Preferir nombres descriptivos sobre nombres temporales (drive_xxx) y sin "- copia"
-                        existing = file_key_to_original_name[file_key]
-                        existing_lower = existing.lower()
-                        original_lower = original_name.lower()
-                        if ("copia" in existing_lower or "copy" in existing_lower) and ("copia" not in original_lower and "copy" not in original_lower):
-                            file_key_to_original_name[file_key] = original_name
-                        elif "drive_" in existing and "drive_" not in original_name:
-                            file_key_to_original_name[file_key] = original_name
-            
-            # Generar resumen para CADA archivo único encontrado en los documentos
-            print(f"   Encontrados {len(docs_by_file)} archivos únicos en los documentos procesados")
-            
-            # Track de archivos ya procesados por nombre limpio para evitar duplicados
-            processed_clean_names = set()
-            
-            # Preparar lista de tareas para paralelización
-            summary_tasks = []
-            for file_key, file_docs_list in docs_by_file.items():
-                # Obtener nombre original preferido para este archivo
-                original_file_name = file_key_to_original_name.get(file_key, file_docs_list[0].metadata.get("source", ""))
-                clean_file_name = Path(original_file_name).name
-                
-                # Evitar duplicados: si ya procesamos este archivo por nombre limpio, saltarlo
-                if clean_file_name in processed_clean_names:
-                    print(f"   ⚠️ Saltando {clean_file_name} (ya procesado como duplicado)")
-                    continue
-                processed_clean_names.add(clean_file_name)
-                
-                summary_tasks.append((original_file_name, file_docs_list, clean_file_name))
-            
-            # Paralelizar generación de resúmenes para mayor velocidad
-            max_workers = min(3, len(summary_tasks))  # Máximo 3 workers para no sobrecargar API
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_file = {
-                    executor.submit(self._generate_automatic_summary, original_file_name, file_docs_list, retriever): 
-                    (original_file_name, clean_file_name) 
-                    for original_file_name, file_docs_list, clean_file_name in summary_tasks
-                }
-                
-                for future in as_completed(future_to_file):
-                    original_file_name, clean_file_name = future_to_file[future]
-                    try:
-                        summary = future.result()
-                        results["summaries"][original_file_name] = summary
-                        print(f"   ✅ Resumen completado: {clean_file_name}")
-                    except Exception as e:
-                        print(f"   ❌ Error generando resumen para {clean_file_name}: {str(e)[:100]}")
-                        results["summaries"][original_file_name] = {
-                            "summary": f"Error generando resumen: {str(e)[:200]}",
-                            "key_points": [],
-                            "document_type": "unknown",
-                            "relevant_date": "N/A",
-                            "entities": [],
-                            "topics": [],
-                            "business_value": "N/A"
-                        }
-            
-            # Verificar que todos los archivos subidos tengan resumen
-            missing_summaries = []
-            for file_obj in files:
-                # Obtener nombre original de Google Drive si está disponible
-                original_name = getattr(file_obj, "original_name", None)
-                file_name = original_name if original_name else getattr(file_obj, "name", "documento")
-                clean_name = Path(file_name).name
-                
-                # También obtener el nombre temporal (puede ser diferente del original)
-                temp_name = getattr(file_obj, "name", "")
-                temp_clean_name = Path(temp_name).name if temp_name else None
-                
-                # Verificar si ya tenemos un resumen para este archivo (por nombre limpio)
-                found = False
-                if clean_name in processed_clean_names:
-                    found = True
-                else:
-                    # Verificar también en los resúmenes ya generados
-                    for summary_file_name in results["summaries"].keys():
-                        if Path(summary_file_name).name == clean_name:
-                            found = True
-                            processed_clean_names.add(clean_name)
-                            break
-                
-                if not found:
-                    missing_summaries.append(file_name)
-                    # Intentar encontrar documentos por nombre limpio (original)
-                    file_docs = [d for d in docs if Path(d.metadata.get("source", "")).name == clean_name]
-                    
-                    # Si no se encuentra por nombre original, intentar por nombre temporal
-                    if not file_docs and temp_clean_name and temp_clean_name != clean_name:
-                        file_docs = [d for d in docs if Path(d.metadata.get("source", "")).name == temp_clean_name]
-                    
-                    # También buscar por cualquier variación del nombre (sin espacios, con/sin extensiones)
-                    if not file_docs:
-                        # Buscar por hash del archivo si está disponible
-                        try:
-                            from docchat.utils import read_bytes, sha256_bytes
-                            data = read_bytes(file_obj)
-                            file_hash = sha256_bytes(data)
-                            file_docs = [d for d in docs if d.metadata.get("hash", "") == file_hash]
-                        except:
-                            pass
-                    
-                    if file_docs:
-                        print(f"   Generando resumen tardío para: {clean_name} ({len(file_docs)} chunks)")
-                        summary = self._generate_automatic_summary(file_name, file_docs, retriever)
-                        results["summaries"][file_name] = summary
-                    else:
-                        # Si no hay documentos, crear resumen básico
-                        print(f"   ADVERTENCIA: No se encontraron chunks para {clean_name}")
-                        results["summaries"][file_name] = {
-                            "summary": f"Documento '{clean_name}' procesado pero no se encontraron chunks para análisis detallado. Puede ser un archivo vacío o con formato no soportado.",
-                            "key_points": [],
-                            "document_type": "unknown",
-                            "relevant_date": "N/A",
-                            "entities": [],
-                            "topics": [],
-                            "business_value": "Documento procesado pero sin contenido extraíble"
-                        }
-            
-            print(f"   ✅ Resúmenes generados: {len(results['summaries'])}/{len(files)} archivos")
-            
-            # 3. Detección automática (si está habilitada)
-            if auto_detect:
-                print("Detectando problemas, oportunidades y patrones...")
-                detection_results = self._auto_detect_issues_opportunities(docs, retriever)
-                results["problems_detected"] = detection_results.get("problems", [])
-                results["opportunities_detected"] = detection_results.get("opportunities", [])
-                results["patterns_found"] = detection_results.get("patterns", [])
-            
-            # 4. Aplicar reglas/automatizaciones
-            if rules:
-                print("Ejecutando reglas y automatizaciones...")
-                actions = self._apply_rules(docs, retriever, rules, results)
-                results["actions_taken"] = actions
-            
-            # 5. Generar insights generales
-            print("Generando insights generales...")
-            insights = self._generate_insights(docs, retriever, results)
-            results["insights"] = insights
-            
-            # 6. Guardar en memoria para aprendizaje continuo
-            if self.context_manager:
-                self._save_to_memory(docs, results)
-            
-            results["status"] = "completed"
-            print("✅ Procesamiento ADVICE GOD completado exitosamente!")
-            print(f"   - Documentos: {results.get('documents_processed', 0)}")
-            print(f"   - Chunks: {results.get('chunks_generated', 0)}")
-            print(f"   - Problemas detectados: {len(results.get('problems_detected', []))}")
-            print(f"   - Oportunidades detectadas: {len(results.get('opportunities_detected', []))}")
-            print(f"   - Patrones encontrados: {len(results.get('patterns_found', []))}")
-            
-        except Exception as e:
-            results["status"] = "error"
-            results["error"] = str(e)
-            print(f"ERROR en procesamiento advice god: {e}")
-        
-        return results
+        return self.process_enterprise_documents(files=files, auto_detect=auto_detect, rules=rules, stream=stream)
     
     def _generate_automatic_summary(
         self,
