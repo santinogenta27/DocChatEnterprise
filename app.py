@@ -214,7 +214,7 @@ from docchat.enterprise_connectors import EnterpriseConnectorManager, ConnectorC
 from docchat.event_bus_mode import run_event_bus_mode, get_event_bus_mode
 # Vision Alpha - manejo condicional si no tiene configuraciones
 try:
-from docchat.vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode
+    from docchat.vision_alpha import VisionAlphaMode, get_vision_alpha_mode, run_vision_alpha_mode
 except (ImportError, Exception):
     VisionAlphaMode = None
     get_vision_alpha_mode = None
