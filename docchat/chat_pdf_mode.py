@@ -1351,7 +1351,7 @@ RESPUESTA SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA (800-1200 palabras, basa
                                     time.sleep(wait_time)
                                 
                                 response = parallel_llm.invoke(prompt, max_tokens=4000)
-                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
                                 print(f"✅ [ChatPDF Mode] Análisis completado después de {retry + 1} intentos")
                                 break
                             except Exception as retry_error:
@@ -1400,20 +1400,20 @@ RESPUESTA SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA (800-1200 palabras, basa
             print(f"📦 [ChatPDF Mode] Procesando lote {batch_num}/{total_batches} ({len(batch)} documentos)...")
             
             with ThreadPoolExecutor(max_workers=min(max_workers, len(batch))) as executor:
-            futures = {
-                executor.submit(analyze_single_document, source_name, file_docs): source_name
+                futures = {
+                    executor.submit(analyze_single_document, source_name, file_docs): source_name
                     for source_name, file_docs in batch
-            }
+                }
             
-            for future in as_completed(futures):
-                source_name = futures[future]
-                try:
-                    doc_name, analysis = future.result()
-                    individual_analyses[doc_name] = analysis
+                for future in as_completed(futures):
+                    source_name = futures[future]
+                    try:
+                        doc_name, analysis = future.result()
+                        individual_analyses[doc_name] = analysis
                         print(f"✅ [ChatPDF Mode] Análisis completado para: {Path(doc_name).name}")
-                except Exception as e:
+                    except Exception as e:
                         print(f"❌ [ChatPDF Mode] Error procesando {source_name}: {e}")
-                    individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
+                        individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
         
             # RATE LIMITING: Esperar entre lotes para evitar exceder límites de tokens por minuto
             # OpenAI tiene límite de 30,000 TPM, así que esperamos un poco entre lotes
@@ -1758,8 +1758,8 @@ RESPUESTA FINAL SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA QUE RESPONDE DIREC
                             print(f"⏳ [ChatPDF Mode] Reintentando síntesis en {wait_time}s (intento {retry + 1}/{max_retries})...")
                             time.sleep(wait_time)
                         
-            synthesis_response = parallel_llm.invoke(synthesis_prompt)
-            combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
+                        synthesis_response = parallel_llm.invoke(synthesis_prompt)
+                        combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
                         print(f"✅ [ChatPDF Mode] Síntesis completada después de {retry + 1} intentos")
                         break
                     except Exception as retry_error:
@@ -1957,7 +1957,7 @@ def run_chat_pdf_mode(
                     async for update in async_gen:
                         update_queue.put(('update', update))
                     update_queue.put(('done', None))
-    except Exception as e:
+                except Exception as e:
                     update_queue.put(('error', str(e)))
                     streaming_error[0] = e
             

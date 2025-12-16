@@ -79,8 +79,19 @@ class ReActAgent:
             )
         
         # Herramientas
-        self.tools = tools or []
-        self.tools_by_name = {tool.name: tool for tool in self.tools}
+        self.raw_tools = tools or []
+        # Convertir BaseTool a funciones LangChain
+        self.tools = self._convert_tools_to_langchain(self.raw_tools)
+        # Crear diccionario de herramientas LangChain por nombre
+        self.tools_by_name = {}
+        for tool in self.tools:
+            if hasattr(tool, 'name'):
+                self.tools_by_name[tool.name] = tool
+        # También mantener referencia a herramientas originales por si acaso
+        self.raw_tools_by_name = {}
+        for tool in self.raw_tools:
+            if hasattr(tool, 'name'):
+                self.raw_tools_by_name[tool.name] = tool
         
         # System prompt
         self.system_prompt = system_prompt or """
@@ -113,6 +124,61 @@ Always explain your thinking process to help users understand your approach.
         # Compilar grafo
         self.graph = self._build_graph()
     
+    def _convert_tools_to_langchain(self, tools: List[Any]) -> List[Any]:
+        """
+        Convierte instancias de BaseTool a funciones LangChain compatibles.
+        
+        Args:
+            tools: Lista de herramientas (pueden ser BaseTool o funciones LangChain)
+        
+        Returns:
+            Lista de herramientas en formato LangChain
+        """
+        langchain_tools = []
+        
+        for tool_obj in tools:
+            # Si ya es una herramienta LangChain, usarla directamente
+            if hasattr(tool_obj, 'name') and hasattr(tool_obj, 'invoke'):
+                # Ya es una herramienta LangChain
+                langchain_tools.append(tool_obj)
+                continue
+            
+            # Si es una instancia de BaseTool, convertirla
+            if hasattr(tool_obj, 'get_name') and hasattr(tool_obj, 'execute'):
+                tool_name = tool_obj.get_name()
+                tool_description = tool_obj.get_description()
+                
+                # Crear función wrapper con closure correcto
+                def tool_func(**kwargs):
+                    """Tool function wrapper."""
+                    try:
+                        result = tool_obj.execute(**kwargs)
+                        # Convertir ToolResult a string/dict
+                        if hasattr(result, 'success'):
+                            if result.success:
+                                return result.data if result.data else result.message
+                            else:
+                                return f"Error: {result.message}"
+                        return str(result)
+                    except Exception as e:
+                        return f"Error ejecutando herramienta: {str(e)}"
+                
+                # Usar StructuredTool para crear la herramienta con nombre y descripción
+                from langchain_core.tools import StructuredTool
+                langchain_tool = StructuredTool.from_function(
+                    func=tool_func,
+                    name=tool_name,
+                    description=tool_description
+                )
+                
+                langchain_tools.append(langchain_tool)
+            else:
+                # Si no es BaseTool ni LangChain tool, intentar usarlo directamente
+                # (puede ser una función ya decorada)
+                langchain_tools.append(tool_obj)
+        
+        return langchain_tools
+    
     def _build_graph(self) -> StateGraph:
         """Construye el grafo de LangGraph para ReAct."""
         
@@ -132,7 +198,22 @@ Always explain your thinking process to help users understand your approach.
             if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
                 for tool_call in last_message.tool_calls:
                     try:
-                        tool_result = self.tools_by_name[tool_call["name"]].invoke(tool_call["args"])
+                        tool_name = tool_call["name"]
+                        tool_args = tool_call.get("args", {})
+                        
+                        # Buscar herramienta LangChain
+                        if tool_name in self.tools_by_name:
+                            langchain_tool = self.tools_by_name[tool_name]
+                            tool_result = langchain_tool.invoke(tool_args)
+                        else:
+                            # Fallback: usar herramienta original si existe
+                            if tool_name in self.raw_tools_by_name:
+                                raw_tool = self.raw_tools_by_name[tool_name]
+                                result = raw_tool.execute(**tool_args)
+                                tool_result = result.data if hasattr(result, 'data') and result.success else result.message
+                            else:
+                                tool_result = f"Error: Herramienta '{tool_name}' no encontrada"
+                        
                         outputs.append(
                             ToolMessage(
                                 content=json.dumps(tool_result) if not isinstance(tool_result, str) else tool_result,

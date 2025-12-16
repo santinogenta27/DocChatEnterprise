@@ -364,6 +364,31 @@ advice_god = AdviceGodMode(config, provider="openai")  # Default: OpenAI
 marketplace = MarketplaceMode(config, provider="openai")  # Default: OpenAI
 optimus_prime = OptimusPrimeMode(config, processor, retriever_builder, context_manager)
 extasis = ExtasisMode(config, provider="openai")  # Default: OpenAI
+# Enterprise Ads Manager - Sistema Autónomo de Gestión de Anuncios (Meta Vision 2026)
+from docchat.enterprise_ads_manager_mode import EnterpriseAdsManagerMode
+enterprise_ads_manager = EnterpriseAdsManagerMode(
+    config=config,
+    processor=processor,
+    retriever_builder=retriever_builder,
+    context_manager=context_manager,
+    provider="openai"
+)
+
+# AI Agent Builder Enterprise - Constructor de Agentes AI sin Código
+try:
+    from docchat.ai_agent_builder_mode import AIAgentBuilderMode
+    ai_agent_builder = AIAgentBuilderMode(config=config)
+    AI_AGENT_BUILDER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ AI Agent Builder no disponible: {e}")
+    ai_agent_builder = None
+    AI_AGENT_BUILDER_AVAILABLE = False
+    config=config,
+    processor=processor,
+    retriever_builder=retriever_builder,
+    context_manager=context_manager,
+    provider="openai"
+)
 # Stargate PDF - clon del Enterprise API original
 stargate_pdf = StargatePDFMode(config, provider="openai")
 # Data Sight - clon del Enterprise API para análisis de datos e insights
@@ -4614,7 +4639,7 @@ with gr.Blocks(title="Enterprise Data AI", theme=gr.themes.Soft(primary_hue="blu
         with gr.Column(scale=4):
             gr.Markdown(
                 """
-                # 🚀 Enterprise Data AI · Multi-Agent RAG con Agentes Autónomos
+                # 🚀 Enterprise Data AI
                 
                 Sistema avanzado de análisis de documentos con agentes autónomos, memoria persistente y procesamiento masivo.
                 """
@@ -18929,14 +18954,14 @@ REGLAS:
                     except Exception as e:
                         return f"❌ Error probando conexiones: {str(e)}"
                 
+                extasis_config_status = gr.Markdown(
+                    value="ℹ️ Configura las credenciales de tus servicios y haz clic en 'Guardar' para aplicar. Usa 'Cargar' para ver la configuración guardada.",
+                )
+
                 extasis_test_connections_btn.click(
                     fn=extasis_test_connections,
                     inputs=[],
                     outputs=[extasis_config_status]
-                )
-                
-                extasis_config_status = gr.Markdown(
-                    value="ℹ️ Configura las credenciales de tus servicios y haz clic en 'Guardar' para aplicar. Usa 'Cargar' para ver la configuración guardada.",
                 )
             
             # ==================== FIN CONFIGURACIÓN DE SERVICIOS ====================
@@ -24396,6 +24421,752 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
             ).then(
                 lambda: "", None, extasis_input
             )
+        
+        # Tab: Enterprise Ads Manager - Sistema Autónomo de Gestión de Anuncios (Meta Vision 2026)
+        with gr.Tab("📢 Enterprise Ads Manager"):
+            gr.Markdown("### 📢 Enterprise Ads Manager - Sistema Autónomo de Gestión de Anuncios")
+            gr.Markdown("""
+            **🚀 Meta Vision 2026: Solo necesitas imagen de producto y presupuesto**
+            
+            **Sistema completamente autónomo que:**
+            - 🎯 **AdsStrategistAgent**: Define estrategia, audiencias y KPIs automáticamente
+            - 🎨 **CreativeDirectorAgent**: Genera creativos persuasivos (copy + imagen/video)
+            - 📢 **MediaBuyerAgent**: Publica campañas automáticamente vía Meta Ads API
+            - 📊 **PerformanceAnalystAgent**: Monitorea y optimiza continuamente sin intervención humana
+            
+            **✨ Características:**
+            - Generación automática de múltiples variantes de creativos
+            - Publicación automática en Meta Ads (Facebook, Instagram, Threads)
+            - Optimización continua: pausar, escalar, regenerar creativos automáticamente
+            - Sistema RAG para contexto y memoria de campañas históricas
+            - Closed-loop optimization: aprende y mejora continuamente
+            
+            **💼 Perfecto para:**
+            - Empresas que quieren automatizar completamente sus campañas publicitarias
+            - Marcas que necesitan escalar creativos rápidamente
+            - Negocios que buscan optimización continua sin intervención manual
+            - Agencias que quieren ofrecer servicios de gestión autónoma de anuncios
+            """)
+            
+            # ==================== CONFIGURACIÓN DE API KEYS ====================
+            with gr.Accordion("⚙️ Configurar API Keys (Requerido para Funcionalidad Completa)", open=False):
+                gr.Markdown("""
+                ### 🔑 Configuración de APIs
+                
+                **Configura tus API keys para habilitar todas las funcionalidades:**
+                - ✅ **OpenAI**: Para generación de imágenes (DALL-E 3) y LLM
+                - ✅ **Meta Ads API**: Para publicar campañas reales
+                - ✅ **Runway/Pika**: Para generación de videos
+                - ✅ **PostgreSQL**: Para persistencia de datos (opcional - usa SQLite si no configuras)
+                - ✅ **Sentry**: Para error tracking (opcional)
+                """)
+                
+                with gr.Tabs():
+                    # Tab 1: APIs Principales
+                    with gr.Tab("🔑 APIs Principales"):
+                        ads_openai_key = gr.Textbox(
+                            label="🟢 OpenAI API Key",
+                            placeholder="sk-...",
+                            type="password",
+                            info="Requerido para: Generación de imágenes (DALL-E 3), LLM, y videos Sora"
+                        )
+                        
+                        ads_meta_access_token = gr.Textbox(
+                            label="🔵 Meta Ads Access Token",
+                            placeholder="EAA...",
+                            type="password",
+                            info="Token de acceso de Meta Ads API. Obtén en: https://developers.facebook.com/"
+                        )
+                        
+                        ads_meta_app_id = gr.Textbox(
+                            label="🔵 Meta Ads App ID",
+                            placeholder="123456789",
+                            type="password",
+                            info="App ID de tu aplicación de Meta"
+                        )
+                        
+                        ads_meta_app_secret = gr.Textbox(
+                            label="🔵 Meta Ads App Secret",
+                            placeholder="abc123...",
+                            type="password",
+                            info="App Secret de tu aplicación de Meta"
+                        )
+                        
+                        ads_meta_account_id = gr.Textbox(
+                            label="🔵 Meta Ads Account ID",
+                            placeholder="act_123456789",
+                            type="text",
+                            info="ID de tu cuenta de anuncios (formato: act_XXXXX)"
+                        )
+                        
+                        ads_meta_page_id = gr.Textbox(
+                            label="🔵 Meta Ads Page ID",
+                            placeholder="123456789",
+                            type="text",
+                            info="ID de tu página de Facebook (opcional)"
+                        )
+                        
+                        ads_meta_landing_page = gr.Textbox(
+                            label="🔵 Landing Page URL",
+                            placeholder="https://tu-sitio.com/producto",
+                            type="text",
+                            info="URL de destino para los anuncios"
+                        )
+                    
+                    # Tab 2: Generación de Videos
+                    with gr.Tab("🎥 Generación de Videos"):
+                        ads_runway_api_key = gr.Textbox(
+                            label="🎬 Runway API Key",
+                            placeholder="rw-...",
+                            type="password",
+                            info="Para generación de videos con Runway Gen-2. Obtén en: https://runwayml.com/"
+                        )
+                        
+                        ads_pika_api_key = gr.Textbox(
+                            label="🎬 Pika API Key",
+                            placeholder="pk-...",
+                            type="password",
+                            info="Para generación de videos con Pika. Obtén en: https://pika.art/"
+                        )
+                        
+                        ads_video_provider = gr.Dropdown(
+                            label="🎬 Proveedor de Video Preferido",
+                            choices=[
+                                ("Runway Gen-2 (Recomendado)", "runway"),
+                                ("Pika", "pika"),
+                                ("OpenAI Sora (cuando esté disponible)", "sora")
+                            ],
+                            value="runway",
+                            info="Selecciona el proveedor de video que quieres usar"
+                        )
+                    
+                    # Tab 3: Base de Datos y Monitoring
+                    with gr.Tab("💾 Base de Datos y Monitoring"):
+                        ads_database_url = gr.Textbox(
+                            label="🐘 PostgreSQL Database URL",
+                            placeholder="postgresql://user:pass@localhost:5432/ads_db",
+                            type="password",
+                            info="URL de conexión a PostgreSQL. Si no configuras, se usará SQLite automáticamente"
+                        )
+                        
+                        ads_sentry_dsn = gr.Textbox(
+                            label="🔔 Sentry DSN (Opcional)",
+                            placeholder="https://...@sentry.io/...",
+                            type="password",
+                            info="Para error tracking y monitoring. Opcional"
+                        )
+                
+                # Botón para guardar configuración
+                save_ads_config_btn = gr.Button("💾 Guardar Configuración de API Keys", variant="primary", size="lg")
+                ads_config_status = gr.Markdown("*Configura tus API keys y haz clic en 'Guardar'*")
+                
+                # ==================== PERSISTENCIA DE CONFIGURACIÓN ADS ====================
+                ADS_CONFIG_FILE = Path(config.memory_dir) / "enterprise_ads_config.json"
+                
+                def save_ads_config(
+                    openai_key: str,
+                    meta_access_token: str,
+                    meta_app_id: str,
+                    meta_app_secret: str,
+                    meta_account_id: str,
+                    meta_page_id: str,
+                    meta_landing_page: str,
+                    runway_api_key: str,
+                    pika_api_key: str,
+                    video_provider: str,
+                    database_url: str,
+                    sentry_dsn: str
+                ):
+                    """Guarda la configuración de API keys de Enterprise Ads Manager."""
+                    try:
+                        ADS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        config_data = {
+                            "openai_key": openai_key.strip() if openai_key else "",
+                            "meta_access_token": meta_access_token.strip() if meta_access_token else "",
+                            "meta_app_id": meta_app_id.strip() if meta_app_id else "",
+                            "meta_app_secret": meta_app_secret.strip() if meta_app_secret else "",
+                            "meta_account_id": meta_account_id.strip() if meta_account_id else "",
+                            "meta_page_id": meta_page_id.strip() if meta_page_id else "",
+                            "meta_landing_page": meta_landing_page.strip() if meta_landing_page else "",
+                            "runway_api_key": runway_api_key.strip() if runway_api_key else "",
+                            "pika_api_key": pika_api_key.strip() if pika_api_key else "",
+                            "video_provider": video_provider,
+                            "database_url": database_url.strip() if database_url else "",
+                            "sentry_dsn": sentry_dsn.strip() if sentry_dsn else "",
+                            "saved_at": datetime.now().isoformat()
+                        }
+                        
+                        with open(ADS_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                            json.dump(config_data, f, indent=2, ensure_ascii=False)
+                        
+                        # Actualizar variables de entorno
+                        status_parts = []
+                        
+                        if config_data["openai_key"]:
+                            os.environ["OPENAI_API_KEY"] = config_data["openai_key"]
+                            config.openai_api_key = config_data["openai_key"]
+                            status_parts.append("✅ **OpenAI**: Configurada")
+                        
+                        if config_data["meta_access_token"]:
+                            os.environ["META_ADS_ACCESS_TOKEN"] = config_data["meta_access_token"]
+                            status_parts.append("✅ **Meta Ads Access Token**: Configurada")
+                        
+                        if config_data["meta_app_id"]:
+                            os.environ["META_ADS_APP_ID"] = config_data["meta_app_id"]
+                            status_parts.append("✅ **Meta Ads App ID**: Configurada")
+                        
+                        if config_data["meta_app_secret"]:
+                            os.environ["META_ADS_APP_SECRET"] = config_data["meta_app_secret"]
+                            status_parts.append("✅ **Meta Ads App Secret**: Configurada")
+                        
+                        if config_data["meta_account_id"]:
+                            os.environ["META_ADS_ACCOUNT_ID"] = config_data["meta_account_id"]
+                            status_parts.append("✅ **Meta Ads Account ID**: Configurada")
+                        
+                        if config_data["meta_page_id"]:
+                            os.environ["META_ADS_PAGE_ID"] = config_data["meta_page_id"]
+                            status_parts.append("✅ **Meta Ads Page ID**: Configurada")
+                        
+                        if config_data["meta_landing_page"]:
+                            os.environ["META_ADS_LANDING_PAGE"] = config_data["meta_landing_page"]
+                            status_parts.append("✅ **Meta Ads Landing Page**: Configurada")
+                        
+                        if config_data["runway_api_key"]:
+                            os.environ["RUNWAY_API_KEY"] = config_data["runway_api_key"]
+                            status_parts.append("✅ **Runway API Key**: Configurada")
+                        
+                        if config_data["pika_api_key"]:
+                            os.environ["PIKA_API_KEY"] = config_data["pika_api_key"]
+                            status_parts.append("✅ **Pika API Key**: Configurada")
+                        
+                        if config_data["video_provider"]:
+                            os.environ["VIDEO_GENERATION_PROVIDER"] = config_data["video_provider"]
+                            status_parts.append(f"✅ **Video Provider**: {config_data['video_provider']}")
+                        
+                        if config_data["database_url"]:
+                            os.environ["ADS_DATABASE_URL"] = config_data["database_url"]
+                            status_parts.append("✅ **PostgreSQL**: Configurada")
+                        else:
+                            status_parts.append("ℹ️ **Base de Datos**: Usando SQLite (fallback automático)")
+                        
+                        if config_data["sentry_dsn"]:
+                            os.environ["SENTRY_DSN"] = config_data["sentry_dsn"]
+                            status_parts.append("✅ **Sentry**: Configurada")
+                        
+                        # Reinicializar Enterprise Ads Manager con nuevas configuraciones
+                        try:
+                            global enterprise_ads_manager
+                            from docchat.enterprise_ads_manager_mode import EnterpriseAdsManagerMode
+                            enterprise_ads_manager = EnterpriseAdsManagerMode(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager,
+                                provider="openai"
+                            )
+                            status_parts.append("\n🔄 **Enterprise Ads Manager reinicializado con nueva configuración**")
+                        except Exception as e:
+                            status_parts.append(f"\n⚠️ **Error reinicializando**: {str(e)}")
+                        
+                        status_text = "\n".join(status_parts) if status_parts else "⚠️ No se configuraron API keys"
+                        status_text += f"\n\n💾 **Configuración guardada en:** `{ADS_CONFIG_FILE}`"
+                        
+                        print(f"[Ads Config] ✅ Configuración guardada en {ADS_CONFIG_FILE}")
+                        return status_text
+                        
+                    except Exception as e:
+                        error_msg = f"❌ Error guardando configuración: {str(e)}"
+                        print(f"[Ads Config] {error_msg}")
+                        return error_msg
+                
+                # Cargar configuración guardada al inicio
+                saved_ads_config = load_ads_config()
+                
+                # Actualizar valores iniciales
+                if saved_ads_config["openai_key"]:
+                    ads_openai_key.value = saved_ads_config["openai_key"]
+                if saved_ads_config["meta_access_token"]:
+                    ads_meta_access_token.value = saved_ads_config["meta_access_token"]
+                if saved_ads_config["meta_app_id"]:
+                    ads_meta_app_id.value = saved_ads_config["meta_app_id"]
+                if saved_ads_config["meta_app_secret"]:
+                    ads_meta_app_secret.value = saved_ads_config["meta_app_secret"]
+                if saved_ads_config["meta_account_id"]:
+                    ads_meta_account_id.value = saved_ads_config["meta_account_id"]
+                if saved_ads_config["meta_page_id"]:
+                    ads_meta_page_id.value = saved_ads_config["meta_page_id"]
+                if saved_ads_config["meta_landing_page"]:
+                    ads_meta_landing_page.value = saved_ads_config["meta_landing_page"]
+                if saved_ads_config["runway_api_key"]:
+                    ads_runway_api_key.value = saved_ads_config["runway_api_key"]
+                if saved_ads_config["pika_api_key"]:
+                    ads_pika_api_key.value = saved_ads_config["pika_api_key"]
+                if saved_ads_config["video_provider"]:
+                    ads_video_provider.value = saved_ads_config["video_provider"]
+                if saved_ads_config["database_url"]:
+                    ads_database_url.value = saved_ads_config["database_url"]
+                if saved_ads_config["sentry_dsn"]:
+                    ads_sentry_dsn.value = saved_ads_config["sentry_dsn"]
+                
+                # Mostrar estado inicial
+                initial_status = []
+                if saved_ads_config["openai_key"]:
+                    initial_status.append("✅ **OpenAI**: Cargada")
+                if saved_ads_config["meta_access_token"]:
+                    initial_status.append("✅ **Meta Ads**: Configurada")
+                if saved_ads_config["runway_api_key"] or saved_ads_config["pika_api_key"]:
+                    initial_status.append("✅ **Videos**: Configurado")
+                if saved_ads_config["database_url"]:
+                    initial_status.append("✅ **PostgreSQL**: Configurada")
+                
+                if initial_status:
+                    ads_config_status.value = "💾 **Configuración cargada automáticamente:**\n\n" + "\n".join(initial_status)
+                else:
+                    ads_config_status.value = "⚠️ **No hay configuración guardada. Configura tus API keys arriba.**"
+                
+                # Conectar botón de guardar
+                save_ads_config_btn.click(
+                    fn=save_ads_config,
+                    inputs=[
+                        ads_openai_key,
+                        ads_meta_access_token,
+                        ads_meta_app_id,
+                        ads_meta_app_secret,
+                        ads_meta_account_id,
+                        ads_meta_page_id,
+                        ads_meta_landing_page,
+                        ads_runway_api_key,
+                        ads_pika_api_key,
+                        ads_video_provider,
+                        ads_database_url,
+                        ads_sentry_dsn
+                    ],
+                    outputs=[ads_config_status]
+                )
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📥 Input de Campaña")
+                    
+                    ads_product_image = gr.File(
+                        label="🖼️ Imagen del Producto",
+                        file_types=["image"],
+                        type="filepath"
+                    )
+                    
+                    ads_product_video = gr.File(
+                        label="🎥 Video del Producto (Opcional)",
+                        file_types=["video"],
+                        type="filepath"
+                    )
+                    
+                    ads_product_description = gr.Textbox(
+                        label="📝 Descripción del Producto/Servicio",
+                        placeholder="Describe tu producto, sus beneficios y características principales...",
+                        lines=5
+                    )
+                    
+                    ads_campaign_objective = gr.Dropdown(
+                        label="🎯 Objetivo de Campaña",
+                        choices=[
+                            ("Ventas", "sales"),
+                            ("Leads", "leads"),
+                            ("Tráfico", "traffic"),
+                            ("Awareness", "awareness"),
+                            ("Engagement", "engagement")
+                        ],
+                        value="sales"
+                    )
+                    
+                    with gr.Row():
+                        ads_daily_budget = gr.Number(
+                            label="💰 Presupuesto Diario (USD)",
+                            value=50.0,
+                            minimum=1.0
+                        )
+                        ads_monthly_budget = gr.Number(
+                            label="💰 Presupuesto Mensual (USD) - Opcional",
+                            value=None,
+                            minimum=1.0
+                        )
+                    
+                    ads_platform = gr.Dropdown(
+                        label="🌐 Plataforma",
+                        choices=[("Meta Ads (Facebook/Instagram)", "meta_ads")],
+                        value="meta_ads"
+                    )
+                    
+                    ads_provider_toggle = gr.Radio(
+                        label="🤖 AI Engine",
+                        choices=[("OpenAI GPT-4o (Recommended)", "openai"), ("Anthropic Claude", "anthropic")],
+                        value="openai"
+                    )
+                    
+                    create_campaign_btn = gr.Button(
+                        "🚀 Crear Campaña Autónoma",
+                        variant="primary",
+                        size="lg"
+                    )
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("### 📊 Resultados")
+                    
+                    ads_campaign_output = gr.Markdown(
+                        label="📢 Estado de la Campaña",
+                        value="Esperando creación de campaña..."
+                    )
+                    
+                    ads_campaign_details = gr.JSON(
+                        label="📋 Detalles de la Campaña",
+                        visible=False
+                    )
+                    
+                    with gr.Accordion("📈 Métricas de Performance", open=False):
+                        ads_campaign_id_input = gr.Textbox(
+                            label="Campaign ID",
+                            placeholder="Ingresa el Campaign ID (ej: CAMP-ABC123)",
+                            value=""
+                        )
+                        ads_metrics_output = gr.Markdown(
+                            label="Métricas",
+                            value="Ingresa un Campaign ID y haz clic en 'Actualizar Métricas'"
+                        )
+                        refresh_metrics_btn = gr.Button("🔄 Actualizar Métricas", variant="secondary")
+                    
+                    with gr.Accordion("⚙️ Optimización", open=False):
+                        ads_optimize_campaign_id = gr.Textbox(
+                            label="Campaign ID",
+                            placeholder="Ingresa el Campaign ID para optimizar",
+                            value=""
+                        )
+                        optimize_campaign_btn = gr.Button("🔄 Optimizar Campaña Ahora", variant="primary")
+                        ads_optimization_output = gr.Markdown(
+                            label="Resultados de Optimización",
+                            value=""
+                        )
+            
+            with gr.Accordion("📚 Campañas Activas", open=False):
+                list_campaigns_btn = gr.Button("📋 Listar Todas las Campañas", variant="secondary")
+                campaigns_list = gr.Markdown(
+                    label="Campañas",
+                    value=""
+                )
+            
+            ads_status = gr.Markdown(label="ℹ️ Estado")
+            
+            # Función para cargar configuración (definida PRIMERO)
+            def load_ads_config():
+                """Carga la configuración guardada de Enterprise Ads Manager."""
+                if ADS_CONFIG_FILE.exists():
+                    try:
+                        with open(ADS_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                            saved_config = json.load(f)
+                            return {
+                                "openai_key": saved_config.get("openai_key", ""),
+                                "meta_access_token": saved_config.get("meta_access_token", ""),
+                                "meta_app_id": saved_config.get("meta_app_id", ""),
+                                "meta_app_secret": saved_config.get("meta_app_secret", ""),
+                                "meta_account_id": saved_config.get("meta_account_id", ""),
+                                "meta_page_id": saved_config.get("meta_page_id", ""),
+                                "meta_landing_page": saved_config.get("meta_landing_page", ""),
+                                "runway_api_key": saved_config.get("runway_api_key", ""),
+                                "pika_api_key": saved_config.get("pika_api_key", ""),
+                                "video_provider": saved_config.get("video_provider", "runway"),
+                                "database_url": saved_config.get("database_url", ""),
+                                "sentry_dsn": saved_config.get("sentry_dsn", "")
+                            }
+                    except Exception as e:
+                        print(f"[Ads Config] Error cargando config: {e}")
+                return {
+                    "openai_key": "",
+                    "meta_access_token": "",
+                    "meta_app_id": "",
+                    "meta_app_secret": "",
+                    "meta_account_id": "",
+                    "meta_page_id": "",
+                    "meta_landing_page": "",
+                    "runway_api_key": "",
+                    "pika_api_key": "",
+                    "video_provider": "runway",
+                    "database_url": "",
+                    "sentry_dsn": ""
+                }
+            
+            # Mostrar estado de configuración al inicio
+            def get_ads_config_status():
+                """Muestra el estado actual de la configuración."""
+                saved_config = load_ads_config()
+                status_lines = ["## 📊 Estado de Configuración\n"]
+                
+                # OpenAI
+                if saved_config["openai_key"] or os.getenv("OPENAI_API_KEY"):
+                    status_lines.append("✅ **OpenAI**: Configurada (imágenes + LLM)")
+                else:
+                    status_lines.append("⚠️ **OpenAI**: No configurada (requerida para imágenes)")
+                
+                # Meta Ads
+                meta_configured = (
+                    (saved_config["meta_access_token"] or os.getenv("META_ADS_ACCESS_TOKEN")) and
+                    (saved_config["meta_app_id"] or os.getenv("META_ADS_APP_ID")) and
+                    (saved_config["meta_app_secret"] or os.getenv("META_ADS_APP_SECRET")) and
+                    (saved_config["meta_account_id"] or os.getenv("META_ADS_ACCOUNT_ID"))
+                )
+                if meta_configured:
+                    status_lines.append("✅ **Meta Ads API**: Configurada (publicación real)")
+                else:
+                    status_lines.append("⚠️ **Meta Ads API**: No configurada (modo simulación)")
+                
+                # Videos
+                video_configured = (
+                    (saved_config["runway_api_key"] or os.getenv("RUNWAY_API_KEY")) or
+                    (saved_config["pika_api_key"] or os.getenv("PIKA_API_KEY"))
+                )
+                if video_configured:
+                    provider = saved_config.get("video_provider", os.getenv("VIDEO_GENERATION_PROVIDER", "runway"))
+                    status_lines.append(f"✅ **Videos**: Configurado ({provider})")
+                else:
+                    status_lines.append("⚠️ **Videos**: No configurado (solo imágenes disponibles)")
+                
+                # Base de datos
+                if saved_config["database_url"] or os.getenv("ADS_DATABASE_URL"):
+                    status_lines.append("✅ **PostgreSQL**: Configurada")
+                else:
+                    status_lines.append("ℹ️ **Base de Datos**: SQLite (fallback automático)")
+                
+                # Sentry
+                if saved_config["sentry_dsn"] or os.getenv("SENTRY_DSN"):
+                    status_lines.append("✅ **Sentry**: Configurado (error tracking)")
+                else:
+                    status_lines.append("ℹ️ **Sentry**: No configurado (opcional)")
+                
+                return "\n".join(status_lines)
+            
+            # Mostrar estado inicial
+            try:
+                ads_status.value = get_ads_config_status()
+            except Exception as e:
+                ads_status.value = f"## 📊 Estado de Configuración\n\n⚠️ Error cargando configuración: {str(e)}"
+            
+            def create_autonomous_campaign_ui(
+                product_image,
+                product_video,
+                product_description,
+                campaign_objective,
+                daily_budget,
+                monthly_budget,
+                platform,
+                provider
+            ):
+                """Crea una campaña autónoma desde la UI."""
+                try:
+                    from docchat.enterprise_ads_manager_mode import CampaignInput, CampaignObjective
+                    import asyncio
+                    
+                    # Preparar input
+                    image_url = None
+                    if product_image:
+                        if hasattr(product_image, 'name'):
+                            image_url = product_image.name
+                        elif isinstance(product_image, str):
+                            image_url = product_image
+                    
+                    video_url = None
+                    if product_video:
+                        if hasattr(product_video, 'name'):
+                            video_url = product_video.name
+                        elif isinstance(product_video, str):
+                            video_url = product_video
+                    
+                    campaign_input = CampaignInput(
+                        product_image_url=image_url,
+                        product_video_url=video_url,
+                        product_description=product_description or "",
+                        campaign_objective=CampaignObjective(campaign_objective),
+                        daily_budget=float(daily_budget) if daily_budget else 50.0,
+                        monthly_budget=float(monthly_budget) if monthly_budget else None,
+                        platform=platform
+                    )
+                    
+                    # Crear campaña (ahora es síncrono internamente)
+                    result = enterprise_ads_manager.create_autonomous_campaign(
+                        campaign_input=campaign_input
+                    )
+                    
+                    if result.get("success"):
+                        campaign_data = result.get("campaign_data", {})
+                        campaign_id = campaign_data.get("campaign_id", "N/A")
+                        
+                        output = f"""## ✅ Campaña Creada Exitosamente
+
+**🎯 Campaign ID:** `{campaign_id}`
+
+**💡 Usa este ID para:**
+- Ver métricas: copia el ID y úsalo en la sección "Métricas de Performance"
+- Optimizar: copia el ID y úsalo en la sección "Optimización"
+
+### 📊 Estrategia Definida
+- **Funnel Stage:** {campaign_data.get('strategy', {}).get('funnel_stage', 'N/A')}
+- **Objetivo:** {campaign_data.get('strategy', {}).get('campaign_objective', 'N/A')}
+- **KPIs Objetivo:** {json.dumps(campaign_data.get('strategy', {}).get('kpi_targets', {}), indent=2)}
+
+### 🎨 Creativos Generados
+- **Total de creativos:** {len(campaign_data.get('creatives', []))}
+- **Status:** {campaign_data.get('status', 'N/A')}
+
+### 📢 Publicación
+- **Status:** {campaign_data.get('published_campaign', {}).get('status', 'N/A')}
+- **Meta Campaign ID:** {campaign_data.get('published_campaign', {}).get('meta_campaign_id', 'N/A (simulación - configura Meta Ads API para publicación real)')}
+
+### 🔄 Optimización
+- **Optimización continua:** {'✅ ACTIVA' if campaign_data.get('optimization_active') else '❌ INACTIVA'}
+
+**🎉 Tu campaña está funcionando de forma autónoma. El sistema optimizará automáticamente basándose en performance.**
+"""
+                        
+                        # Actualizar los inputs de campaign_id automáticamente
+                        return (
+                            gr.Markdown(output),
+                            campaign_data,
+                            f"✅ Campaña {campaign_id} creada exitosamente. Usa este ID para métricas y optimización.",
+                            gr.JSON(visible=True),
+                            campaign_id,  # Para ads_campaign_id_input
+                            campaign_id   # Para ads_optimize_campaign_id
+                        )
+                    else:
+                        error_msg = result.get("error", "Error desconocido")
+                        return (
+                            gr.Markdown(f"## ❌ Error\n\n{error_msg}"),
+                            {},
+                            f"❌ Error: {error_msg}",
+                            gr.JSON(visible=False)
+                        )
+                except Exception as e:
+                    return (
+                        gr.Markdown(f"## ❌ Error\n\n{str(e)}"),
+                        {},
+                        f"❌ Error: {str(e)}",
+                        gr.JSON(visible=False)
+                    )
+            
+            def refresh_campaign_metrics_ui(campaign_id_input):
+                """Actualiza métricas de una campaña."""
+                try:
+                    if not campaign_id_input:
+                        return gr.Markdown("⚠️ Ingresa un Campaign ID")
+                    
+                    metrics = enterprise_ads_manager.get_campaign_metrics(campaign_id_input)
+                    
+                    output = f"""## 📈 Métricas de Campaña {campaign_id_input}
+
+- **Impresiones:** {metrics.get('impressions', 0):,}
+- **Clics:** {metrics.get('clicks', 0):,}
+- **Conversiones:** {metrics.get('conversions', 0):,}
+- **Gasto:** ${metrics.get('spend', 0):.2f}
+- **CTR:** {metrics.get('ctr', 0):.2f}%
+- **CPC:** ${metrics.get('cpc', 0):.2f}
+- **CPA:** ${metrics.get('cpa', 0):.2f}
+- **ROAS:** {metrics.get('roas', 0):.2f}x
+
+**Última actualización:** {metrics.get('timestamp', 'N/A')}
+"""
+                    return gr.Markdown(output)
+                except Exception as e:
+                    return gr.Markdown(f"❌ Error: {str(e)}")
+            
+            def optimize_campaign_ui(campaign_id_input):
+                """Optimiza una campaña."""
+                try:
+                    if not campaign_id_input:
+                        return gr.Markdown("⚠️ Ingresa un Campaign ID")
+                    
+                    result = enterprise_ads_manager.optimize_campaign(campaign_id_input)
+                    
+                    if result.get("success"):
+                        actions = result.get("actions_taken", [])
+                        output = f"""## 🔄 Optimización Completada
+
+**Campaña:** {campaign_id_input}
+
+### Acciones Ejecutadas:
+"""
+                        for action in actions:
+                            output += f"- **{action.get('action_type', 'N/A')}**: {action.get('reason', 'N/A')}\n"
+                        
+                        return gr.Markdown(output)
+                    else:
+                        return gr.Markdown(f"❌ Error: {result.get('error', 'Desconocido')}")
+                except Exception as e:
+                    return gr.Markdown(f"❌ Error: {str(e)}")
+            
+            def list_all_campaigns_ui():
+                """Lista todas las campañas."""
+                try:
+                    campaigns = enterprise_ads_manager.list_campaigns()
+                    
+                    if not campaigns:
+                        return gr.Markdown("📭 No hay campañas activas")
+                    
+                    output = "## 📚 Campañas Activas\n\n"
+                    for campaign in campaigns:
+                        campaign_id = campaign.get("campaign_id", "N/A")
+                        status = campaign.get("status", "N/A")
+                        created_at = campaign.get("created_at", "N/A")
+                        output += f"### {campaign_id}\n"
+                        output += f"- **Status:** {status}\n"
+                        output += f"- **Creada:** {created_at}\n"
+                        output += f"- **Creativos:** {len(campaign.get('creatives', []))}\n\n"
+                    
+                    return gr.Markdown(output)
+                except Exception as e:
+                    return gr.Markdown(f"❌ Error: {str(e)}")
+            
+            # Conectar botones
+            create_campaign_btn.click(
+                fn=create_autonomous_campaign_ui,
+                inputs=[
+                    ads_product_image,
+                    ads_product_video,
+                    ads_product_description,
+                    ads_campaign_objective,
+                    ads_daily_budget,
+                    ads_monthly_budget,
+                    ads_platform,
+                    ads_provider_toggle
+                ],
+                outputs=[
+                    ads_campaign_output,
+                    ads_campaign_details,
+                    ads_status,
+                    ads_campaign_details,
+                    ads_campaign_id_input,
+                    ads_optimize_campaign_id
+                ]
+            )
+            
+            refresh_metrics_btn.click(
+                fn=refresh_campaign_metrics_ui,
+                inputs=[ads_campaign_id_input],
+                outputs=[ads_metrics_output]
+            )
+            
+            optimize_campaign_btn.click(
+                fn=optimize_campaign_ui,
+                inputs=[ads_optimize_campaign_id],
+                outputs=[ads_optimization_output]
+            )
+            
+            list_campaigns_btn.click(
+                fn=list_all_campaigns_ui,
+                outputs=[campaigns_list]
+            )
+            
+            # Botón para actualizar estado de configuración
+            refresh_config_btn = gr.Button("🔄 Actualizar Estado de Configuración", variant="secondary", visible=False)
+            refresh_config_btn.click(
+                fn=get_ads_config_status,
+                outputs=[ads_status]
+            )
 
             clear_extasis_btn.click(
                 fn=clear_extasis,
@@ -24709,7 +25480,819 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                 inputs=[extraction_x_session_id],
                 outputs=[extraction_x_recommendations_output],
             )
-        
+
+        # Tab: AI Agent Builder Enterprise - Constructor de Agentes AI sin Código
+        with gr.Tab("🤖 AI Agent Builder Enterprise"):
+            gr.Markdown("### 🤖 AI Agent Builder Enterprise - Constructor de Agentes AI sin Código")
+            gr.Markdown("""
+            **🚀 Producto Estrella: Combina RAG, Multimodal AI, y Agentic AI**
+            
+            **Sistema completo que permite crear agentes AI personalizados sin escribir código:**
+            - 🎯 **Templates Pre-construidos**: 8 templates listos para usar
+            - 🔧 **Constructor Visual**: Crea agentes arrastrando y soltando
+            - 📚 **RAG Avanzado**: Múltiples bases vectoriales, retrievers híbridos, re-ranking
+            - 🎨 **Multimodal**: Procesa texto, imágenes, audio, y video
+            - 🤝 **Frameworks Agentic**: LangChain, LangGraph, CrewAI, AG2, BAI Framework
+            - 🎛️ **Multi-Model Orchestration**: Selección automática del mejor modelo
+            - 📊 **Evaluación y Benchmarking**: Métricas de performance, costo, y calidad
+            
+            **✨ Características:**
+            - Sin código: Todo se configura desde la UI
+            - Templates profesionales: Customer Support, Data Analyst, Content Generator, etc.
+            - RAG avanzado: Chroma, FAISS, Pinecone con retrievers híbridos
+            - Multimodal completo: Whisper, DALL-E, análisis de video
+            - Workflows stateful: LangGraph para procesos complejos
+            - Multi-agente: CrewAI para colaboración entre agentes
+            - Evaluación continua: Benchmarking automático de agentes
+            
+            **💼 Perfecto para:**
+            - Empresas que quieren agentes AI personalizados sin desarrollo
+            - Desarrolladores que quieren acelerar creación de agentes
+            - Equipos que necesitan múltiples agentes especializados
+            - Organizaciones que buscan automatización inteligente
+            """)
+            
+            if not AI_AGENT_BUILDER_AVAILABLE:
+                gr.Markdown("""
+                ⚠️ **AI Agent Builder no está disponible**
+                
+                Instala las dependencias requeridas:
+                ```bash
+                pip install langchain langchain-core langchain-community langgraph crewai chromadb faiss-cpu
+                ```
+                """)
+            else:
+                with gr.Tabs():
+                    # Tab 1: Templates y Creación Rápida
+                    with gr.Tab("📋 Templates y Creación Rápida"):
+                        gr.Markdown("### 🚀 Crea un Agente desde un Template")
+                        gr.Markdown("Selecciona un template pre-construido y personalízalo según tus necesidades")
+                        
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                agent_template_select = gr.Dropdown(
+                                    label="📋 Seleccionar Template",
+                                    choices=[],
+                                    value=None,
+                                    info="Elige un template pre-construido"
+                                )
+                                
+                                template_info = gr.Markdown("")
+                                
+                                agent_name_input = gr.Textbox(
+                                    label="📝 Nombre del Agente",
+                                    placeholder="Mi Agente Personalizado",
+                                    value=""
+                                )
+                                
+                                agent_description_input = gr.Textbox(
+                                    label="📄 Descripción",
+                                    placeholder="Describe qué hará tu agente...",
+                                    lines=3
+                                )
+                                
+                                create_from_template_btn = gr.Button(
+                                    "✨ Crear Agente desde Template",
+                                    variant="primary",
+                                    size="lg"
+                                )
+                            
+                            with gr.Column(scale=1):
+                                agent_creation_output = gr.Markdown(
+                                    label="📊 Resultado",
+                                    value="Selecciona un template y personaliza tu agente"
+                                )
+                                
+                                created_agent_id = gr.Textbox(
+                                    label="🆔 Agent ID",
+                                    visible=False
+                                )
+                        
+                        # Cargar templates disponibles
+                        def load_templates():
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return [], ""
+                            try:
+                                templates = ai_agent_builder.get_available_templates()
+                                choices = [(f"{t['name']} - {t['category']}", t['template_id']) for t in templates]
+                                return choices, ""
+                            except Exception as e:
+                                return [], f"Error cargando templates: {str(e)}"
+                        
+                        def update_template_info(template_id):
+                            if not template_id or not AI_AGENT_BUILDER_AVAILABLE:
+                                return ""
+                            try:
+                                template = ai_agent_builder.template_library.get_template(template_id)
+                                info = f"""
+### {template.name}
+
+**Categoría:** {template.category}  
+**Complejidad:** {template.complexity_level}  
+**Costo estimado:** ${template.estimated_cost_per_1k_requests:.2f} por 1k requests
+
+**Descripción:**  
+{template.description}
+
+**Casos de Uso:**
+"""
+                                for use_case in template.use_cases:
+                                    info += f"- {use_case}\n"
+                                
+                                return info
+                            except Exception as e:
+                                return f"Error: {str(e)}"
+                        
+                        def create_agent_from_template_ui(template_id, name, description):
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible", ""
+                            
+                            if not template_id:
+                                return "⚠️ Selecciona un template primero", ""
+                            
+                            if not name:
+                                return "⚠️ Ingresa un nombre para el agente", ""
+                            
+                            try:
+                                customizations = {}
+                                if description:
+                                    customizations["description"] = description
+                                if name:
+                                    customizations["name"] = name
+                                
+                                agent_id = ai_agent_builder.create_agent_from_template(
+                                    template_id,
+                                    customizations=customizations if customizations else None
+                                )
+                                
+                                output = f"""
+## ✅ Agente Creado Exitosamente
+
+**🆔 Agent ID:** `{agent_id}`  
+**📝 Nombre:** {name}  
+**📋 Template:** {template_id}
+
+### 🎯 Próximos Pasos:
+
+1. **Configurar RAG** (si el template lo requiere):
+   - Ve al tab "🔧 Configuración Avanzada"
+   - Configura bases vectoriales
+   - Agrega documentos
+
+2. **Probar el Agente**:
+   - Ve al tab "▶️ Ejecutar Agente"
+   - Ingresa un input de prueba
+   - Ejecuta y revisa resultados
+
+3. **Evaluar Performance**:
+   - Ve al tab "📊 Evaluación"
+   - Ejecuta benchmarks
+   - Revisa métricas
+
+**🎉 Tu agente está listo para usar!**
+"""
+                                return output, agent_id
+                            except Exception as e:
+                                return f"❌ Error creando agente: {str(e)}", ""
+                        
+                        # Cargar templates al inicio
+                        template_choices, _ = load_templates()
+                        agent_template_select.choices = template_choices
+                        
+                        # Conectar eventos
+                        agent_template_select.change(
+                            fn=update_template_info,
+                            inputs=[agent_template_select],
+                            outputs=[template_info]
+                        )
+                        
+                        def create_and_refresh(template_id, name, description):
+                            """Crea agente y actualiza dropdowns"""
+                            output, agent_id = create_agent_from_template_ui(template_id, name, description)
+                            if agent_id:
+                                # Actualizar dropdowns
+                                choices = load_agents_for_execution()
+                                return (
+                                    output,  # agent_creation_output
+                                    agent_id,  # created_agent_id
+                                    gr.Dropdown(choices=choices),  # execute_agent_select
+                                    gr.Dropdown(choices=choices),  # eval_agent_select
+                                    list_all_agents_ui()  # agents_list_output
+                                )
+                            return output, agent_id, gr.Dropdown(), gr.Dropdown(), ""
+                        
+                        create_from_template_btn.click(
+                            fn=create_and_refresh,
+                            inputs=[agent_template_select, agent_name_input, agent_description_input],
+                            outputs=[
+                                agent_creation_output,
+                                created_agent_id,
+                                execute_agent_select,
+                                eval_agent_select,
+                                agents_list_output
+                            ]
+                        )
+                    
+                    # Tab 2: Constructor Personalizado
+                    with gr.Tab("🔧 Constructor Personalizado"):
+                        gr.Markdown("### 🛠️ Crea un Agente desde Cero")
+                        gr.Markdown("Configura todas las características de tu agente personalizado")
+                        
+                        with gr.Accordion("📝 Información Básica", open=True):
+                            custom_agent_name = gr.Textbox(
+                                label="Nombre del Agente",
+                                placeholder="Mi Agente Personalizado"
+                            )
+                            custom_agent_description = gr.Textbox(
+                                label="Descripción",
+                                placeholder="Describe qué hará tu agente...",
+                                lines=3
+                            )
+                            custom_agent_type = gr.Dropdown(
+                                label="Tipo de Agente",
+                                choices=[
+                                    ("Simple", "simple"),
+                                    ("RAG", "rag"),
+                                    ("Multimodal", "multimodal"),
+                                    ("Agentic", "agentic"),
+                                    ("Híbrido", "hybrid")
+                                ],
+                                value="simple"
+                            )
+                        
+                        with gr.Accordion("🧠 Prompt Engineering", open=False):
+                            custom_system_prompt = gr.Textbox(
+                                label="System Prompt",
+                                placeholder="Eres un asistente experto que...",
+                                lines=5
+                            )
+                            custom_use_cot = gr.Checkbox(
+                                label="Usar Chain-of-Thought",
+                                value=False
+                            )
+                            custom_use_self_consistency = gr.Checkbox(
+                                label="Usar Self-Consistency",
+                                value=False
+                            )
+                        
+                        with gr.Accordion("📚 RAG Configuration", open=False):
+                            custom_rag_enabled = gr.Checkbox(
+                                label="Habilitar RAG",
+                                value=False
+                            )
+                            custom_vector_dbs = gr.CheckboxGroup(
+                                label="Bases de Datos Vectoriales",
+                                choices=["Chroma", "FAISS", "Pinecone"],
+                                value=[]
+                            )
+                            custom_retriever_type = gr.Dropdown(
+                                label="Tipo de Retriever",
+                                choices=["Semantic", "Keyword", "Hybrid"],
+                                value="Hybrid"
+                            )
+                            custom_top_k = gr.Slider(
+                                label="Top K",
+                                minimum=1,
+                                maximum=20,
+                                value=5,
+                                step=1
+                            )
+                        
+                        with gr.Accordion("🎨 Multimodal Configuration", open=False):
+                            custom_multimodal_enabled = gr.Checkbox(
+                                label="Habilitar Multimodal",
+                                value=False
+                            )
+                            custom_media_types = gr.CheckboxGroup(
+                                label="Tipos de Media Soportados",
+                                choices=["Texto", "Imagen", "Audio", "Video"],
+                                value=["Texto"]
+                            )
+                        
+                        with gr.Accordion("🤝 Agentic Framework", open=False):
+                            custom_framework = gr.Dropdown(
+                                label="Framework",
+                                choices=["LangChain", "LangGraph", "CrewAI", "AG2", "BAI"],
+                                value="LangChain"
+                            )
+                        
+                        with gr.Accordion("🎛️ Model Configuration", open=False):
+                            custom_primary_model = gr.Dropdown(
+                                label="Modelo Principal",
+                                choices=["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "claude-3-5-sonnet", "claude-3-opus"],
+                                value="gpt-4o"
+                            )
+                            custom_temperature = gr.Slider(
+                                label="Temperature",
+                                minimum=0.0,
+                                maximum=2.0,
+                                value=0.7,
+                                step=0.1
+                            )
+                        
+                        create_custom_agent_btn = gr.Button(
+                            "🚀 Crear Agente Personalizado",
+                            variant="primary",
+                            size="lg"
+                        )
+                        custom_agent_output = gr.Markdown("")
+                        
+                        def create_custom_agent_ui(
+                            name, description, agent_type, system_prompt,
+                            use_cot, use_self_consistency,
+                            rag_enabled, vector_dbs, retriever_type, top_k,
+                            multimodal_enabled, media_types,
+                            framework, primary_model, temperature
+                        ):
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible"
+                            
+                            if not name:
+                                return "⚠️ Ingresa un nombre para el agente"
+                            
+                            if not system_prompt:
+                                return "⚠️ Ingresa un system prompt"
+                            
+                            try:
+                                # Mapear capacidades
+                                capabilities = ["text_processing"]
+                                if multimodal_enabled:
+                                    if "Imagen" in media_types:
+                                        capabilities.append("image_processing")
+                                    if "Audio" in media_types:
+                                        capabilities.append("audio_processing")
+                                    if "Video" in media_types:
+                                        capabilities.append("video_processing")
+                                if rag_enabled:
+                                    capabilities.append("document_retrieval")
+                                
+                                # Configurar RAG
+                                rag_config = {}
+                                if rag_enabled:
+                                    rag_config = {
+                                        "rag_enabled": True,
+                                        "vector_databases": [db.lower() for db in vector_dbs],
+                                        "retriever_type": retriever_type.lower(),
+                                        "top_k": top_k
+                                    }
+                                
+                                # Configurar multimodal
+                                multimodal_config = {}
+                                if multimodal_enabled:
+                                    multimodal_config = {
+                                        "multimodal_enabled": True,
+                                        "supported_media_types": [m.lower() for m in media_types]
+                                    }
+                                
+                                # Crear agente
+                                agent_id = ai_agent_builder.create_custom_agent(
+                                    name=name,
+                                    description=description or "",
+                                    agent_type=agent_type,
+                                    capabilities=capabilities,
+                                    system_prompt=system_prompt,
+                                    use_chain_of_thought=use_cot,
+                                    use_self_consistency=use_self_consistency,
+                                    framework=framework.lower(),
+                                    primary_model=primary_model,
+                                    temperature=temperature,
+                                    **rag_config,
+                                    **multimodal_config
+                                )
+                                
+                                return f"""
+## ✅ Agente Personalizado Creado
+
+**🆔 Agent ID:** `{agent_id}`  
+**📝 Nombre:** {name}  
+**🔧 Tipo:** {agent_type}
+
+### Configuración Aplicada:
+- **RAG:** {'✅ Habilitado' if rag_enabled else '❌ Deshabilitado'}
+- **Multimodal:** {'✅ Habilitado' if multimodal_enabled else '❌ Deshabilitado'}
+- **Framework:** {framework}
+- **Modelo:** {primary_model}
+
+**🎉 Tu agente está listo para usar!**
+"""
+                            except Exception as e:
+                                return f"❌ Error creando agente: {str(e)}"
+                        
+                        def create_custom_and_refresh(
+                            name, description, agent_type, system_prompt,
+                            use_cot, use_self_consistency,
+                            rag_enabled, vector_dbs, retriever_type, top_k,
+                            multimodal_enabled, media_types,
+                            framework, primary_model, temperature
+                        ):
+                            """Crea agente personalizado y actualiza dropdowns"""
+                            output = create_custom_agent_ui(
+                                name, description, agent_type, system_prompt,
+                                use_cot, use_self_consistency,
+                                rag_enabled, vector_dbs, retriever_type, top_k,
+                                multimodal_enabled, media_types,
+                                framework, primary_model, temperature
+                            )
+                            if "✅" in output and "Agent ID:" in output:
+                                # Extraer agent_id del output
+                                import re
+                                match = re.search(r'`([^`]+)`', output)
+                                if match:
+                                    # Actualizar dropdowns
+                                    choices = load_agents_for_execution()
+                                    return (
+                                        output,  # custom_agent_output
+                                        gr.Dropdown(choices=choices),  # execute_agent_select
+                                        gr.Dropdown(choices=choices),  # eval_agent_select
+                                        list_all_agents_ui()  # agents_list_output
+                                    )
+                            return output, gr.Dropdown(), gr.Dropdown(), ""
+                        
+                        create_custom_agent_btn.click(
+                            fn=create_custom_and_refresh,
+                            inputs=[
+                                custom_agent_name, custom_agent_description, custom_agent_type,
+                                custom_system_prompt, custom_use_cot, custom_use_self_consistency,
+                                custom_rag_enabled, custom_vector_dbs, custom_retriever_type, custom_top_k,
+                                custom_multimodal_enabled, custom_media_types,
+                                custom_framework, custom_primary_model, custom_temperature
+                            ],
+                            outputs=[
+                                custom_agent_output,
+                                execute_agent_select,
+                                eval_agent_select,
+                                agents_list_output
+                            ]
+                        )
+                    
+                    # Tab 3: Ejecutar Agente
+                    with gr.Tab("▶️ Ejecutar Agente"):
+                        gr.Markdown("### ▶️ Ejecuta y Prueba tus Agentes")
+                        
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                execute_agent_select = gr.Dropdown(
+                                    label="🤖 Seleccionar Agente",
+                                    choices=[],
+                                    value=None
+                                )
+                                
+                                execute_agent_input = gr.Textbox(
+                                    label="📝 Input",
+                                    placeholder="Escribe tu pregunta o instrucción...",
+                                    lines=5
+                                )
+                                
+                                execute_agent_btn = gr.Button(
+                                    "▶️ Ejecutar Agente",
+                                    variant="primary",
+                                    size="lg"
+                                )
+                            
+                            with gr.Column(scale=1):
+                                execute_agent_output = gr.Markdown(
+                                    label="📊 Resultado",
+                                    value="Selecciona un agente e ingresa tu input"
+                                )
+                        
+                        def load_agents_for_execution():
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return []
+                            try:
+                                agents = ai_agent_builder.list_agents()
+                                choices = [(f"{a['name']} ({a['agent_id']})", a['agent_id']) for a in agents]
+                                # Actualizar también el dropdown de evaluación
+                                return choices
+                            except Exception as e:
+                                print(f"⚠️ Error cargando agentes: {e}")
+                                return []
+                        
+                        # Función para actualizar dropdowns cuando se crea un agente
+                        def refresh_agent_dropdowns():
+                            """Actualiza todos los dropdowns de agentes"""
+                            choices = load_agents_for_execution()
+                            return [
+                                gr.Dropdown(choices=choices),  # execute_agent_select
+                                gr.Dropdown(choices=choices),  # eval_agent_select
+                                list_all_agents_ui()  # agents_list_output
+                            ]
+                        
+                        def execute_agent_ui(agent_id, input_text):
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible"
+                            
+                            if not agent_id:
+                                return "⚠️ Selecciona un agente primero"
+                            
+                            if not input_text:
+                                return "⚠️ Ingresa un input"
+                            
+                            try:
+                                result = ai_agent_builder.execute_agent(agent_id, input_text)
+                                
+                                output = f"""
+## ✅ Resultado de Ejecución
+
+**🤖 Agente:** {agent_id}  
+**📝 Input:** {input_text}
+
+### 📊 Respuesta:
+
+{result}
+
+---
+*Ejecutado exitosamente*
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error ejecutando agente: {str(e)}"
+                        
+                        # Cargar agentes al inicio
+                        agent_choices = load_agents_for_execution()
+                        execute_agent_select.choices = agent_choices
+                        
+                        execute_agent_btn.click(
+                            fn=execute_agent_ui,
+                            inputs=[execute_agent_select, execute_agent_input],
+                            outputs=[execute_agent_output]
+                        )
+                    
+                    # Tab 4: Evaluación y Benchmarking
+                    with gr.Tab("📊 Evaluación"):
+                        gr.Markdown("### 📊 Evalúa y Compara tus Agentes")
+                        
+                        eval_agent_select = gr.Dropdown(
+                            label="🤖 Seleccionar Agente para Evaluar",
+                            choices=[],
+                            value=None
+                        )
+                        
+                        eval_test_select = gr.CheckboxGroup(
+                            label="📋 Tests a Ejecutar",
+                            choices=["Basic Accuracy", "Latency", "Cost"],
+                            value=["Basic Accuracy"]
+                        )
+                        
+                        run_evaluation_btn = gr.Button(
+                            "📊 Ejecutar Evaluación",
+                            variant="primary"
+                        )
+                        
+                        eval_results_output = gr.Markdown("")
+                        
+                        def run_evaluation_ui(agent_id, test_names):
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible"
+                            
+                            if not agent_id:
+                                return "⚠️ Selecciona un agente primero"
+                            
+                            try:
+                                # Mapear nombres de tests a IDs
+                                test_id_map = {
+                                    "Basic Accuracy": "accuracy_basic",
+                                    "Latency": "latency",
+                                    "Cost": "cost"
+                                }
+                                test_ids = [test_id_map.get(name) for name in test_names if name in test_id_map]
+                                
+                                results = ai_agent_builder.evaluate_agent(agent_id, test_ids=test_ids)
+                                
+                                output = f"""
+## 📊 Resultados de Evaluación
+
+**🤖 Agente:** {agent_id}
+
+### Métricas:
+
+"""
+                                for test_id, metrics in results.items():
+                                    output += f"""
+#### Test: {test_id}
+
+- **Accuracy:** {metrics.accuracy:.2%}
+- **Latency:** {metrics.latency_ms:.2f} ms
+- **Costo por 1k requests:** ${metrics.cost_per_1k_requests:.4f}
+- **Error Rate:** {metrics.error_rate:.2%}
+- **Token Usage:** {metrics.token_usage:,}
+
+"""
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error en evaluación: {str(e)}"
+                        
+                        # Cargar agentes para evaluación
+                        eval_agent_choices = load_agents_for_execution()
+                        eval_agent_select.choices = eval_agent_choices
+                        
+                        run_evaluation_btn.click(
+                            fn=run_evaluation_ui,
+                            inputs=[eval_agent_select, eval_test_select],
+                            outputs=[eval_results_output]
+                        )
+                    
+                    # Tab 5: Gestión de Agentes
+                    with gr.Tab("📚 Mis Agentes"):
+                        gr.Markdown("### 📚 Gestiona tus Agentes")
+                        
+                        list_agents_btn = gr.Button(
+                            "🔄 Actualizar Lista",
+                            variant="secondary"
+                        )
+                        
+                        agents_list_output = gr.Markdown("")
+                        
+                        def list_all_agents_ui():
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible"
+                            
+                            try:
+                                agents = ai_agent_builder.list_agents()
+                                
+                                if not agents:
+                                    return "📭 No hay agentes creados aún"
+                                
+                                output = "## 📚 Agentes Creados\n\n"
+                                for agent in agents:
+                                    output += f"""
+### {agent['name']}
+
+- **ID:** `{agent['agent_id']}`
+- **Tipo:** {agent['agent_type']}
+- **Capacidades:** {', '.join(agent['capabilities'])}
+- **Creado:** {agent['created_at']}
+- **Actualizado:** {agent['updated_at']}
+
+---
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        list_agents_btn.click(
+                            fn=list_all_agents_ui,
+                            outputs=[agents_list_output]
+                        )
+                        
+                        # Cargar lista inicial
+                        agents_list_output.value = list_all_agents_ui()
+                    
+                    # Tab 6: Documentos RAG - Gestión de Bases Vectoriales
+                    with gr.Tab("📚 Documentos RAG"):
+                        gr.Markdown("### 📚 Gestiona Documentos y Bases Vectoriales para RAG")
+                        gr.Markdown("""
+                        **Sube documentos para que tus agentes con RAG puedan usarlos:**
+                        - 📄 PDF, DOCX, TXT, MD
+                        - 🔍 Indexación automática en bases vectoriales
+                        - 🗄️ Gestión de bases de datos por agente
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                rag_agent_select = gr.Dropdown(
+                                    label="🤖 Seleccionar Agente (con RAG habilitado)",
+                                    choices=[],
+                                    value=None,
+                                    info="Solo agentes con RAG habilitado"
+                                )
+                                
+                                rag_files = gr.Files(
+                                    label="📂 Subir Documentos",
+                                    file_count="multiple",
+                                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                                    height=150
+                                )
+                                
+                                rag_db_name = gr.Textbox(
+                                    label="🗄️ Nombre de Base de Datos (opcional)",
+                                    placeholder="Dejar vacío para usar nombre automático",
+                                    info="Si no especificas, se usará el nombre del agente"
+                                )
+                                
+                                upload_documents_btn = gr.Button(
+                                    "📤 Indexar Documentos",
+                                    variant="primary"
+                                )
+                            
+                            with gr.Column(scale=1):
+                                rag_upload_output = gr.Markdown(
+                                    label="📊 Resultado",
+                                    value="Selecciona un agente y sube documentos"
+                                )
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                rag_list_databases_btn = gr.Button(
+                                    "📋 Ver Bases de Datos del Agente",
+                                    variant="secondary"
+                                )
+                                
+                                rag_databases_output = gr.Markdown("")
+                        
+                        def filter_rag_agents():
+                            """Filtra solo agentes con RAG habilitado"""
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return []
+                            try:
+                                agents = ai_agent_builder.list_agents()
+                                rag_agents = [
+                                    (f"{a['name']} ({a['agent_id']})", a['agent_id'])
+                                    for a in agents
+                                    if a.get('rag_enabled', False)
+                                ]
+                                return rag_agents
+                            except Exception as e:
+                                print(f"⚠️ Error filtrando agentes RAG: {e}")
+                                return []
+                        
+                        def upload_documents_ui(agent_id, files, db_name):
+                            """Sube e indexa documentos para un agente"""
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible"
+                            
+                            if not agent_id:
+                                return "⚠️ Selecciona un agente primero"
+                            
+                            if not files:
+                                return "⚠️ Sube al menos un documento"
+                            
+                            try:
+                                result = ai_agent_builder.add_documents_to_agent(
+                                    agent_id=agent_id,
+                                    files=files,
+                                    db_name=db_name if db_name else None
+                                )
+                                
+                                if result["success"]:
+                                    output = f"""
+## ✅ Documentos Indexados Exitosamente
+
+**📊 Resultado:**
+- **Documentos procesados:** {result.get('documents_count', 0)}
+- **Base de datos:** `{result.get('db_name', 'N/A')}`
+- **Mensaje:** {result.get('message', '')}
+
+**🎉 Tus documentos están listos para ser usados por el agente en consultas RAG.**
+
+---
+*Los documentos han sido indexados y el agente puede ahora recuperarlos en sus respuestas.*
+"""
+                                    return output
+                                else:
+                                    return f"❌ {result.get('message', 'Error desconocido')}"
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def list_agent_databases_ui(agent_id):
+                            """Lista las bases de datos de un agente"""
+                            if not AI_AGENT_BUILDER_AVAILABLE:
+                                return "❌ AI Agent Builder no disponible"
+                            
+                            if not agent_id:
+                                return "⚠️ Selecciona un agente primero"
+                            
+                            try:
+                                databases = ai_agent_builder.list_agent_databases(agent_id)
+                                
+                                if not databases:
+                                    return "📭 Este agente no tiene bases de datos configuradas aún"
+                                
+                                output = f"## 🗄️ Bases de Datos del Agente\n\n"
+                                for db in databases:
+                                    output += f"""
+### {db['name']}
+
+- **Tipo:** {db['type']}
+- **Documentos:** {db.get('documents_count', 0)}
+
+---
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        # Cargar agentes RAG al inicio
+                        rag_agent_choices = filter_rag_agents()
+                        rag_agent_select.choices = rag_agent_choices
+                        
+                        upload_documents_btn.click(
+                            fn=upload_documents_ui,
+                            inputs=[rag_agent_select, rag_files, rag_db_name],
+                            outputs=[rag_upload_output]
+                        )
+                        
+                        rag_list_databases_btn.click(
+                            fn=list_agent_databases_ui,
+                            inputs=[rag_agent_select],
+                            outputs=[rag_databases_output]
+                        )
+                        
+                        # Actualizar dropdown cuando se crea un agente con RAG
+                        def refresh_rag_agent_select():
+                            choices = filter_rag_agents()
+                            return gr.Dropdown(choices=choices)
+
         # Tab 4.5.5.11: Data Point Mode - Clon de Event Horizon
         with gr.Tab("📊 Data Point"):
             gr.Markdown("### 📊 Data Point Mode - Event-Driven + Streaming en Tiempo Real")
@@ -34547,10 +36130,8 @@ if __name__ == "__main__":
     
     # Para ejecución local, Gradio usa el puerto 7860 por defecto
     # Para Cloud Run, usa la variable PORT
-    port = int(os.environ.get("PORT", 7860))
+    base_port = int(os.environ.get("PORT", 7860))
     server_name = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
-    
-    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port}")
     
     # Deshabilitar API info para evitar el bug de TypeError
     try:
@@ -34558,12 +36139,56 @@ if __name__ == "__main__":
     except:
         pass
     
-    demo.launch(
-        show_error=True,
-        quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
-        server_name=server_name,
-        server_port=port,
-        share=False,
-        inbrowser=True,
-        show_api=False  # Deshabilitar API info completamente
-    )
+    # Intentar encontrar un puerto disponible
+    import socket
+    port = None
+    # Usar "0.0.0.0" para verificar puertos en Windows
+    check_host = "0.0.0.0" if server_name == "127.0.0.1" else server_name
+    
+    for attempt_port in range(base_port, base_port + 10):
+        try:
+            # Verificar si el puerto está disponible
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((check_host, attempt_port))
+                port = attempt_port
+                break
+        except (OSError, socket.error):
+            # Puerto ocupado, intentar el siguiente
+            continue
+    
+    if port is None:
+        # Si no encontramos puerto, usar el predeterminado y dejar que Gradio maneje el error
+        port = base_port
+        print(f"⚠️ No se encontró puerto disponible en rango {base_port}-{base_port+9}, intentando {port}")
+    else:
+        if port != base_port:
+            print(f"⚠️ Puerto {base_port} ocupado, usando puerto alternativo: {port}")
+    
+    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port}")
+    
+    try:
+        demo.launch(
+            show_error=True,
+            quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
+            server_name=server_name,
+            server_port=port,
+            share=False,
+            inbrowser=True,
+            show_api=False  # Deshabilitar API info completamente
+        )
+    except OSError as e:
+        if "Cannot find empty port" in str(e):
+            # Si aún falla, intentar con el siguiente puerto
+            print(f"⚠️ Error al iniciar en puerto {port}, intentando puerto {port + 1}...")
+            demo.launch(
+                show_error=True,
+                quiet=True,
+                server_name=server_name,
+                server_port=port + 1,
+                share=False,
+                inbrowser=True,
+                show_api=False
+            )
+        else:
+            raise

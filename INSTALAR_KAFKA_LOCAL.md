@@ -231,3 +231,4 @@ Una vez configurado Kafka local:
 
 ¡Disfruta del streaming en tiempo real! 🎉
 
+

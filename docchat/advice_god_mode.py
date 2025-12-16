@@ -458,7 +458,7 @@ class AdviceGodMode:
             for key, value in partial.items():
                 if key not in merged or merged.get(key) in (None, "", [], {}):
                     merged[key] = value
-                    else:
+                else:
                     # Si ambos son listas -> concatenar y deduplicar
                     if isinstance(merged[key], list) and isinstance(value, list):
                         merged[key] = list({*merged[key], *value})
@@ -470,8 +470,6 @@ class AdviceGodMode:
                         if merged[key] == 0 and value != 0:
                             merged[key] = value
                     # Para strings ya presentes, mantenemos el primero (no sobrescribir)
-                        else:
-                        continue
 
         # Si no pudimos extraer nada, devolver error controlado
         if not merged:

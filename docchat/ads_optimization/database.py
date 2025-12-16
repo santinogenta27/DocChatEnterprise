@@ -140,11 +140,26 @@ class DatabaseManager:
             self.use_fallback = True
             return
         
-        # Obtener connection string
-        db_url = os.getenv(
-            "ADS_DATABASE_URL",
-            f"sqlite:///{Path(config.memory_dir if config.memory_dir else 'data') / 'ads_optimization.db'}"
-        )
+        # Obtener connection string (desde archivo guardado o env)
+        db_url = None
+        
+        # Intentar cargar desde archivo de configuración
+        config_file = Path(config.memory_dir) / "enterprise_ads_config.json" if config.memory_dir else Path("data/enterprise_ads_config.json")
+        if config_file.exists():
+            try:
+                import json
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    saved_config = json.load(f)
+                    db_url = saved_config.get("database_url") or os.getenv("ADS_DATABASE_URL")
+            except Exception as e:
+                print(f"⚠️ Error cargando configuración de DB: {e}")
+        
+        # Fallback a variable de entorno o SQLite
+        if not db_url:
+            db_url = os.getenv(
+                "ADS_DATABASE_URL",
+                f"sqlite:///{Path(config.memory_dir if config.memory_dir else 'data') / 'ads_optimization.db'}"
+            )
         
         # Si no hay PostgreSQL, usar SQLite como fallback
         if "postgresql" not in db_url and "postgres" not in db_url:

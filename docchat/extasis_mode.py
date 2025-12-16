@@ -574,7 +574,7 @@ Explain your reasoning process and document all decisions and actions."""
                 actions.append({
                     "tool": msg.name if hasattr(msg, "name") else "unknown",
                     "result": msg.content if hasattr(msg, "content") else str(msg),
-                    "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat()
                 })
         return actions
     
@@ -591,7 +591,7 @@ Explain your reasoning process and document all decisions and actions."""
             workflow_type: Tipo de workflow (contract_audit, invoice_review, fraud_detection, etc.)
             documents: Lista de documentos a procesar
             context: Contexto adicional
-        
+            
         Returns:
             Dict con resultado del workflow
         """

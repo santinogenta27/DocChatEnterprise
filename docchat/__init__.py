@@ -98,6 +98,19 @@ from .llm_generated_ads import (  # noqa: F401
     AdAnalysis,
     PersonalityProfile
 )
+# Enterprise Ads Manager - Sistema Autónomo de Gestión de Anuncios (Meta Vision 2026)
+from .enterprise_ads_manager_mode import (  # noqa: F401
+    EnterpriseAdsManagerMode,
+    get_enterprise_ads_manager_mode,
+    run_enterprise_ads_manager_mode,
+    CampaignInput,
+    CampaignObjective,
+    CampaignStatus,
+    CampaignStrategy,
+    AdCreative,
+    CampaignMetrics,
+    OptimizationAction
+)
 # SNIPE SHOT Mode - Clonado de Alien Mode
 from .snipe_shot_mode import SnipeShotMode, run_snipe_shot_mode, get_snipe_shot_mode  # noqa: F401
 # Agent Builder Studio - Plataforma No-Code para Crear AI Agents
@@ -456,6 +469,17 @@ __all__ = [
     "ADLLMMode",
     "run_ad_llm_mode",
     "get_ad_llm_mode",
+    # Enterprise Ads Manager Mode
+    "EnterpriseAdsManagerMode",
+    "get_enterprise_ads_manager_mode",
+    "run_enterprise_ads_manager_mode",
+    "CampaignInput",
+    "CampaignObjective",
+    "CampaignStatus",
+    "CampaignStrategy",
+    "AdCreative",
+    "CampaignMetrics",
+    "OptimizationAction",
     # Judge Agent Mode
     "JudgeAgentMode",
     "run_judge_agent_mode",

@@ -49,3 +49,4 @@ networks:
   kafka-network:
     driver: bridge
 
+

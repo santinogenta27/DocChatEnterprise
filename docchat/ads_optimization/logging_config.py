@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -61,7 +62,8 @@ def setup_logging(
     log_level: str = "INFO",
     log_file: Optional[Path] = None,
     enable_sentry: bool = False,
-    sentry_dsn: Optional[str] = None
+    sentry_dsn: Optional[str] = None,
+    config: Optional[Any] = None
 ) -> logging.Logger:
     """Configura logging estructurado"""
     
@@ -91,6 +93,23 @@ def setup_logging(
         logger.addHandler(file_handler)
     
     # Integración con Sentry si está disponible
+    # Intentar cargar DSN desde archivo de configuración si no se proporciona
+    if not sentry_dsn and config:
+        try:
+            from pathlib import Path
+            import json
+            config_file = Path(config.memory_dir) / "enterprise_ads_config.json" if hasattr(config, 'memory_dir') and config.memory_dir else Path("data/enterprise_ads_config.json")
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    saved_config = json.load(f)
+                    sentry_dsn = saved_config.get("sentry_dsn") or os.getenv("SENTRY_DSN")
+        except Exception:
+            pass
+    
+    # Fallback a variable de entorno
+    if not sentry_dsn:
+        sentry_dsn = os.getenv("SENTRY_DSN")
+    
     if enable_sentry and SENTRY_AVAILABLE and sentry_dsn:
         sentry_logging = LoggingIntegration(
             level=logging.INFO,

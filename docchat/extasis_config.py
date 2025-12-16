@@ -192,3 +192,4 @@ def get_extasis_config_manager() -> ExtasisConfigManager:
         _config_manager.apply_config_to_environment()
     return _config_manager
 
+
