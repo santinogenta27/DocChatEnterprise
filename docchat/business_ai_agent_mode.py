@@ -170,7 +170,7 @@ class Lead:
     email: Optional[str] = None
     intent: Optional[IntentType] = None
     status: LeadStatus = LeadStatus.NEW
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    meta_data: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -259,7 +259,7 @@ if SQLALCHEMY_AVAILABLE:
         email = Column(String)
         intent = Column(String)
         status = Column(String, default="new")
-        metadata = Column(JSON, default=dict)
+        meta_data = Column(JSON, default=dict)
         created_at = Column(DateTime, default=datetime.utcnow)
         
         company = relationship("Company", back_populates="leads")
@@ -278,7 +278,7 @@ if SQLALCHEMY_AVAILABLE:
         date = Column(DateTime, default=datetime.utcnow)
         metric_type = Column(String, nullable=False)  # conversation, lead, escalation, etc.
         metric_value = Column(Integer, default=0)
-        metadata = Column(JSON, default=dict)
+        meta_data = Column(JSON, default=dict)
         
         __table_args__ = (
             Index('idx_analytics_company_date', 'company_id', 'date'),
