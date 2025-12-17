@@ -139,3 +139,5 @@ class CompetitorAnalysisStub:
             "seasonality": "high" if random.random() > 0.5 else "low",
         }
 
+
+

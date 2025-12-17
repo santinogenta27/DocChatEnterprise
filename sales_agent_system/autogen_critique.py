@@ -315,3 +315,5 @@ Cuando estén satisfechos, el validador debe responder "APPROVED - Listo para pr
             "approved": "APPROVED" in result.summary.upper() if result.summary else False
         }
 
+
+

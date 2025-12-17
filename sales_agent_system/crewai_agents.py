@@ -265,3 +265,5 @@ CPA: ${camp.get('cpa', 0):.2f}
             "campaign_data": campaign_data
         }
 
+
+

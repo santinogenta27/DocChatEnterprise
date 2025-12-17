@@ -1291,9 +1291,13 @@ class EnterpriseSalesManagerMode:
         # Nodos del workflow
         self.workflow_nodes = SalesWorkflowNodes(config, self.llm, self.crm, self.ads, self.email)
         
-        # AutoGen para debate
-        llm_config = LLMConfig(api_type="openai", model="gpt-4o-mini")
-        self.autogen_debate = AutoGenSalesDebate(config, llm_config)
+        # AutoGen para debate (solo si está disponible)
+        if AUTOGEN_AVAILABLE:
+            from autogen.llm_config import LLMConfig
+            llm_config = LLMConfig(api_type="openai", model="gpt-4o-mini")
+            self.autogen_debate = AutoGenSalesDebate(config, llm_config)
+        else:
+            self.autogen_debate = None
         
         # BeeAI
         self.beeai_tools = BeeAISalesTools(config)
@@ -1477,7 +1481,7 @@ class EnterpriseSalesManagerMode:
             final_state = self.workflow.invoke(initial_state)
             
             # Aplicar debate AutoGen si está habilitado y hay estrategia
-            if use_autogen_debate and final_state.get("strategy") and AUTOGEN_AVAILABLE:
+            if use_autogen_debate and final_state.get("strategy") and AUTOGEN_AVAILABLE and self.autogen_debate is not None:
                 logger.info("Aplicando debate AutoGen para mejorar estrategia...")
                 try:
                     improved_strategy = self.autogen_debate.debate_strategy(
