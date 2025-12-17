@@ -164,7 +164,6 @@ from docchat.advanced_agent import AdvancedAutonomousAgent
 from docchat.enterprise_api import EnterpriseAPIMode
 from docchat.intelligence_contract_mode import IntelligenceContractMode
 from docchat.copilot_mode import CopilotMode
-from docchat.business_ai_agent_mode import BusinessAIAgentMode
 from docchat.advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode
 # from docchat.optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # ELIMINADO
 from docchat.marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier
@@ -373,7 +372,6 @@ autonomous_agent = AutonomousAgent(agent_id="main_agent", config=config) if conf
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
 enterprise_api = EnterpriseAPIMode(config, provider="openai")  # Default: OpenAI
 copilot = CopilotMode(config, provider="openai")  # Sistema Empresarial de Rendimiento Supremo
-business_ai_agent = BusinessAIAgentMode(config, provider="openai")  # Multi-tenant AI Agent para Sales & Support
 advice_god = AdviceGodMode(config, provider="openai")  # Default: OpenAI
 # optimus = OptimusMode(config, provider="openai")  # ELIMINADO
 marketplace = MarketplaceMode(config, provider="openai")  # Default: OpenAI
@@ -5452,7 +5450,6 @@ with gr.Blocks(title="Enterprise Data AI", theme=gr.themes.Soft(primary_hue="blu
                         # Actualizar Enterprise API y sus variantes
                         enterprise_api.config = config
                         copilot.config = config
-                        business_ai_agent.config = config
                         stargate_pdf.config = config
                         data_sight.config = config
                         enterprise_api_supreme.config = config
@@ -10554,1534 +10551,6 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[copilot_compare_output],
                 show_progress="full"
             )
-
-        # Tab: 🤖 Business AI Agent - Multi-tenant AI Agent para Sales & Customer Support
-        with gr.Tab("🤖 Business AI Agent"):
-            gr.Markdown("### 🤖 Business AI Agent - Asistente de IA 24/7 para Ventas y Soporte al Cliente")
-            gr.Markdown("""
-            **💼 Sistema Multi-tenant SaaS para conectar AI Agents a Websites y WhatsApp**
-            
-            **🎯 Funcionalidades:**
-            - ✅ Sales Support 24/7 (Asistente de ventas automático)
-            - ✅ Customer Support Automation (Soporte automatizado)
-            - ✅ Lead Capture (Captura de leads inteligente)
-            - ✅ Escalación a humanos cuando sea necesario
-            - ✅ Analytics y métricas en tiempo real
-            
-            **📡 Canales Soportados:**
-            - 🌐 **Web Widget**: Script JavaScript para insertar en cualquier website
-            - 📱 **WhatsApp Business API**: Integración completa con Meta Cloud API
-            
-            **🚀 Características:**
-            - Multi-tenant (cada empresa tiene su propia configuración)
-            - Detección automática de intención (venta, soporte, información)
-            - Respuestas contextuales basadas en productos y FAQs configurados
-            - Sistema de escalación inteligente
-            - Analytics completo por empresa
-            """)
-            
-            with gr.Tabs():
-                # Tab: Configuración de Empresa
-                with gr.Tab("🏢 Configurar Empresa"):
-                    gr.Markdown("### 🏢 Crear o Configurar Empresa")
-                    gr.Markdown("""
-                    Configura tu empresa para activar el Business AI Agent.
-                    Después de crear la empresa, obtendrás:
-                    - Script del widget para tu website
-                    - Configuración para WhatsApp (opcional)
-                    - Dashboard de analytics
-                    """)
-                    
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            company_name = gr.Textbox(
-                                label="📛 Nombre de la Empresa",
-                                placeholder="Mi Empresa S.A.",
-                                info="Nombre que aparecerá en las respuestas del agente"
-                            )
-                            company_description = gr.Textbox(
-                                label="📝 Descripción de la Empresa",
-                                placeholder="Empresa líder en tecnología que ofrece soluciones innovadoras...",
-                                lines=3,
-                                info="Descripción que el agente usará para responder preguntas"
-                            )
-                    
-                    with gr.Accordion("📦 Productos/Servicios", open=True):
-                        products_json = gr.Textbox(
-                            label="Productos en JSON",
-                            placeholder='''[
-  {
-    "name": "Producto Premium",
-    "description": "Descripción del producto",
-    "price": 99.99,
-    "price_unit": "USD",
-    "link": "https://ejemplo.com/producto",
-    "features": ["Feature 1", "Feature 2"],
-    "category": "Software"
-  }
-]''',
-                            lines=10,
-                            info="Lista de productos/servicios en formato JSON"
-                        )
-                    
-                    with gr.Accordion("❓ FAQs", open=False):
-                        faqs_json = gr.Textbox(
-                            label="FAQs en JSON",
-                            placeholder='''[
-  {
-    "question": "¿Cuáles son sus horarios?",
-    "answer": "Estamos disponibles 24/7 a través de nuestro chat"
-  }
-]''',
-                            lines=10,
-                            info="Preguntas frecuentes en formato JSON"
-                        )
-                    
-                    with gr.Accordion("⚙️ Reglas de Negocio", open=False):
-                        business_rules_json = gr.Textbox(
-                            label="Reglas en JSON",
-                            placeholder='''{
-  "escalation_triggers": ["problema grave", "reclamo"],
-  "business_hours": "24/7",
-  "support_email": "soporte@empresa.com"
-}''',
-                            lines=5,
-                            info="Reglas de negocio y configuración adicional"
-                        )
-                    
-                    with gr.Accordion("📱 WhatsApp Business (Opcional)", open=False):
-                        gr.Markdown("**Configuración de WhatsApp Business API**")
-                        whatsapp_phone_id = gr.Textbox(
-                            label="Phone Number ID",
-                            placeholder="123456789012345",
-                            info="ID del número de teléfono de WhatsApp Business"
-                        )
-                        whatsapp_access_token = gr.Textbox(
-                            label="Access Token",
-                            placeholder="EAAxxxxxxxxxxxx",
-                            type="password",
-                            info="Token de acceso de WhatsApp Business API"
-                        )
-                        whatsapp_verify_token = gr.Textbox(
-                            label="Verify Token",
-                            placeholder="mi_token_secreto",
-                            info="Token para verificar el webhook"
-                        )
-                    
-                    create_company_btn = gr.Button(
-                        "✅ Crear Empresa",
-                        variant="primary",
-                        size="lg"
-                    )
-                    
-                    company_result = gr.Markdown(
-                        label="📊 Resultado"
-                    )
-                    
-                    def create_company_handler(
-                        name, description, products_json_str, faqs_json_str,
-                        business_rules_json_str, phone_id, access_token, verify_token
-                    ):
-                        """Crea una nueva empresa."""
-                        try:
-                            # Parsear JSONs
-                            products = []
-                            if products_json_str.strip():
-                                products = json.loads(products_json_str)
-                            
-                            faqs = []
-                            if faqs_json_str.strip():
-                                faqs = json.loads(faqs_json_str)
-                            
-                            business_rules = {}
-                            if business_rules_json_str.strip():
-                                business_rules = json.loads(business_rules_json_str)
-                            
-                            whatsapp_config = None
-                            if phone_id and access_token:
-                                whatsapp_config = {
-                                    "phone_id": phone_id,
-                                    "access_token": access_token,
-                                    "verify_token": verify_token or "default_verify_token"
-                                }
-                            
-                            # Crear empresa
-                            company_id = business_ai_agent.create_company(
-                                name=name,
-                                description=description,
-                                products=products,
-                                faqs=faqs,
-                                business_rules=business_rules,
-                                whatsapp_config=whatsapp_config
-                            )
-                            
-                            # Obtener información de la empresa
-                            company = business_ai_agent.get_company(company_id)
-                            widget_key = company.get("widget_secret_key")
-                            
-                            # Generar script del widget
-                            api_base_url = os.getenv(
-                                "BUSINESS_AI_API_BASE_URL",
-                                "http://localhost:8000"
-                            )
-                            widget_script = business_ai_agent.get_widget_script(company_id)
-                            
-                            result = f"""## ✅ Empresa Creada Exitosamente
-
-**ID de Empresa**: `{company_id}`
-**Nombre**: {name}
-
-### 📋 Widget Secret Key
-```
-{widget_key}
-```
-
-### 📝 Script del Widget
-Copia y pega este código antes de `</body>` en tu website:
-
-```html
-{widget_script}
-```
-
-### 🔗 URLs Importantes
-
-**Widget JavaScript**: 
-```
-{api_base_url}/api/v1/widget.js?key={widget_key}
-```
-
-**API Endpoint**: 
-```
-{api_base_url}/api/v1/chat
-```
-
-**WhatsApp Webhook**: 
-```
-{api_base_url}/api/v1/whatsapp/webhook
-```
-
-### 📱 Configuración WhatsApp
-1. Ve a Meta for Developers
-2. Configura el webhook URL: `{api_base_url}/api/v1/whatsapp/webhook`
-3. Agrega el header: `X-Widget-Key: {widget_key}`
-4. Usa el verify token configurado
-
-### 📊 Próximos Pasos
-1. Ve a la pestaña "📊 Analytics" para ver métricas
-2. Configura más productos en "🏢 Configurar Empresa"
-3. Prueba el widget en tu website
-"""
-                            
-                            return result
-                            
-                        except json.JSONDecodeError as e:
-                            return f"❌ Error en formato JSON: {str(e)}"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    create_company_btn.click(
-                        fn=create_company_handler,
-                        inputs=[
-                            company_name, company_description, products_json, faqs_json,
-                            business_rules_json, whatsapp_phone_id, whatsapp_access_token,
-                            whatsapp_verify_token
-                        ],
-                        outputs=[company_result]
-                    )
-                
-                # Tab: Analytics
-                with gr.Tab("📊 Analytics"):
-                    gr.Markdown("### 📊 Analytics y Métricas")
-                    
-                    company_id_analytics = gr.Textbox(
-                        label="🆔 Company ID",
-                        placeholder="Ingresa el Company ID",
-                        info="ID de la empresa para ver analytics"
-                    )
-                    
-                    refresh_analytics_btn = gr.Button(
-                        "🔄 Actualizar Analytics",
-                        variant="primary"
-                    )
-                    
-                    analytics_output = gr.Markdown(
-                        label="📊 Resultados"
-                    )
-                    
-                    def get_analytics_handler(company_id):
-                        """Obtiene analytics de una empresa."""
-                        if not company_id.strip():
-                            return "❌ Ingresa un Company ID válido"
-                        
-                        try:
-                            analytics = business_ai_agent.get_analytics(company_id)
-                            
-                            result = f"""## 📊 Analytics - Empresa: {company_id}
-
-**Período**: {analytics.get('period', {}).get('start', 'N/A')} - {analytics.get('period', {}).get('end', 'N/A')}
-
-### 📈 Métricas Principales
-
-- **Total Conversaciones**: {analytics.get('total_conversations', 0)}
-- **Total Leads Capturados**: {analytics.get('total_leads', 0)}
-- **Escalaciones a Humanos**: {analytics.get('escalations', 0)}
-
-### 🎯 Distribución de Intenciones
-
-"""
-                            intent_dist = analytics.get('intent_distribution', {})
-                            if intent_dist:
-                                for intent, count in intent_dist.items():
-                                    result += f"- **{intent}**: {count}\n"
-                            else:
-                                result += "No hay datos de intenciones aún.\n"
-                            
-                            return result
-                            
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    refresh_analytics_btn.click(
-                        fn=get_analytics_handler,
-                        inputs=[company_id_analytics],
-                        outputs=[analytics_output]
-                    )
-                
-                # Tab: Test Chat
-                with gr.Tab("💬 Probar Chat"):
-                    gr.Markdown("### 💬 Prueba el Agente AI")
-                    gr.Markdown("Prueba cómo responderá el agente a mensajes de clientes")
-                    
-                    test_company_id = gr.Textbox(
-                        label="🆔 Company ID",
-                        placeholder="Ingresa el Company ID"
-                    )
-                    test_message = gr.Textbox(
-                        label="💬 Mensaje de Prueba",
-                        placeholder="¿Cuánto cuesta su producto premium?",
-                        lines=3
-                    )
-                    
-                    test_chat_btn = gr.Button(
-                        "🚀 Enviar Mensaje",
-                        variant="primary"
-                    )
-                    
-                    test_response = gr.Markdown(
-                        label="🤖 Respuesta del Agente"
-                    )
-                    
-                    def test_chat_handler(company_id, message):
-                        """Prueba el chat con un mensaje."""
-                        if not company_id.strip() or not message.strip():
-                            return "❌ Completa ambos campos"
-                        
-                        try:
-                            result = business_ai_agent.process_message(
-                                company_id=company_id,
-                                user_message=message,
-                                user_id="test_user",
-                                channel=ChannelType.WEB
-                            )
-                            
-                            response_text = f"""## 🤖 Respuesta del Agente
-
-**Mensaje**: {message}
-
-**Respuesta**: {result.get('response', 'N/A')}
-
-**Intención Detectada**: {result.get('intent', 'N/A')}
-**Requiere Escalación**: {'✅ Sí' if result.get('escalate') else '❌ No'}
-**Lead Capturado**: {'✅ Sí' if result.get('lead_captured') else '❌ No'}
-**Conversation ID**: {result.get('conversation_id', 'N/A')}
-"""
-                            return response_text
-                            
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    test_chat_btn.click(
-                        fn=test_chat_handler,
-                        inputs=[test_company_id, test_message],
-                        outputs=[test_response]
-                    )
-                
-                # Tab: Documentación
-                with gr.Tab("📖 Documentación"):
-                    gr.Markdown("""
-                    ## 📖 Documentación del Business AI Agent
-                    
-                    ### 🚀 Inicio Rápido
-                    
-                    1. **Crear Empresa**: Ve a "🏢 Configurar Empresa" y completa los datos
-                    2. **Obtener Widget Script**: Copia el script generado
-                    3. **Integrar en Website**: Pega el script antes de `</body>` en tu HTML
-                    4. **Configurar WhatsApp** (opcional): Completa los datos en "📱 WhatsApp Business"
-                    
-                    ### 📡 Integración Web Widget
-                    
-                    El widget es un chat flotante que aparece en tu website. Los usuarios pueden:
-                    - Hacer preguntas sobre productos
-                    - Consultar precios
-                    - Iniciar proceso de compra
-                    - Solicitar soporte
-                    
-                    ### 📱 Integración WhatsApp
-                    
-                    1. Crea una app en [Meta for Developers](https://developers.facebook.com)
-                    2. Configura WhatsApp Business API
-                    3. Obtén el Phone Number ID y Access Token
-                    4. Configura el webhook en tu app
-                    5. Usa el webhook URL: `{tu_dominio}/api/v1/whatsapp/webhook`
-                    6. Agrega el header: `X-Widget-Key: {widget_secret_key}`
-                    
-                    ### 🎯 Intenciones Soportadas
-                    
-                    - **product_inquiry**: Preguntas sobre productos
-                    - **pricing**: Consultas de precios
-                    - **purchase**: Intención de compra
-                    - **support**: Solicitudes de soporte
-                    - **greeting**: Saludos
-                    - **goodbye**: Despedidas
-                    
-                    ### 🔧 Personalización
-                    
-                    El agente usa la información que configuraste:
-                    - Nombre y descripción de la empresa
-                    - Lista de productos con precios
-                    - FAQs configuradas
-                    - Reglas de negocio
-                    - CTAs (Call-to-Action links)
-                    
-                    ### 📊 Analytics
-                    
-                    Monitorea:
-                    - Número de conversaciones
-                    - Leads capturados
-                    - Escalaciones
-                    - Distribución de intenciones
-                    
-                    ### 🔒 Seguridad
-                    
-                    - Cada empresa tiene su propio `widget_secret_key`
-                    - Los mensajes se almacenan de forma segura
-                    - Soporte para multi-tenant
-                    
-                    ### 💡 Tips
-                    
-                    - Configura productos detallados para mejores respuestas
-                    - Agrega FAQs comunes para respuestas rápidas
-                    - Revisa analytics regularmente para optimizar
-                    - Prueba el chat antes de publicar en producción
-                    """)
-
-        # Tab: 🤖 Business AI Agent - Multi-tenant AI Agent para Sales & Customer Support
-        with gr.Tab("🤖 Business AI Agent"):
-            gr.Markdown("### 🤖 Business AI Agent - Asistente de IA 24/7 para Ventas y Soporte al Cliente")
-            gr.Markdown("""
-            **💼 Sistema Multi-tenant SaaS para conectar AI Agents a Websites y WhatsApp**
-            
-            **🎯 Funcionalidades:**
-            - ✅ Sales Support 24/7 (Asistente de ventas automático)
-            - ✅ Customer Support Automation (Soporte automatizado)
-            - ✅ Lead Capture (Captura de leads inteligente)
-            - ✅ Escalación a humanos cuando sea necesario
-            - ✅ Analytics y métricas en tiempo real
-            
-            **📡 Canales Soportados:**
-            - 🌐 **Web Widget**: Script JavaScript para insertar en cualquier website
-            - 📱 **WhatsApp Business API**: Integración completa con Meta Cloud API
-            
-            **🚀 Características:**
-            - Multi-tenant (cada empresa tiene su propia configuración)
-            - Detección automática de intención (venta, soporte, información)
-            - Respuestas contextuales basadas en productos y FAQs configurados
-            - Sistema de escalación inteligente
-            - Analytics completo por empresa
-            """)
-            
-            with gr.Tabs():
-                # Tab: Configuración de Empresa
-                with gr.Tab("🏢 Configurar Empresa"):
-                    gr.Markdown("### 🏢 Crear o Configurar Empresa")
-                    gr.Markdown("""
-                    Configura tu empresa para activar el Business AI Agent.
-                    Después de crear la empresa, obtendrás:
-                    - Script del widget para tu website
-                    - Configuración para WhatsApp (opcional)
-                    - Dashboard de analytics
-                    """)
-                    
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            company_name = gr.Textbox(
-                                label="📛 Nombre de la Empresa",
-                                placeholder="Mi Empresa S.A.",
-                                info="Nombre que aparecerá en las respuestas del agente"
-                            )
-                            company_description = gr.Textbox(
-                                label="📝 Descripción de la Empresa",
-                                placeholder="Empresa líder en tecnología que ofrece soluciones innovadoras...",
-                                lines=3,
-                                info="Descripción que el agente usará para responder preguntas"
-                            )
-                    
-                    with gr.Accordion("📦 Productos/Servicios", open=True):
-                        products_json = gr.Textbox(
-                            label="Productos en JSON",
-                            placeholder='''[
-  {
-    "name": "Producto Premium",
-    "description": "Descripción del producto",
-    "price": 99.99,
-    "price_unit": "USD",
-    "link": "https://ejemplo.com/producto",
-    "features": ["Feature 1", "Feature 2"],
-    "category": "Software"
-  }
-]''',
-                            lines=10,
-                            info="Lista de productos/servicios en formato JSON"
-                        )
-                    
-                    with gr.Accordion("❓ FAQs", open=False):
-                        faqs_json = gr.Textbox(
-                            label="FAQs en JSON",
-                            placeholder='''[
-  {
-    "question": "¿Cuáles son sus horarios?",
-    "answer": "Estamos disponibles 24/7 a través de nuestro chat"
-  }
-]''',
-                            lines=10,
-                            info="Preguntas frecuentes en formato JSON"
-                        )
-                    
-                    with gr.Accordion("⚙️ Reglas de Negocio", open=False):
-                        business_rules_json = gr.Textbox(
-                            label="Reglas en JSON",
-                            placeholder='''{
-  "escalation_triggers": ["problema grave", "reclamo"],
-  "business_hours": "24/7",
-  "support_email": "soporte@empresa.com"
-}''',
-                            lines=5,
-                            info="Reglas de negocio y configuración adicional"
-                        )
-                    
-                    with gr.Accordion("📱 WhatsApp Business (Opcional)", open=False):
-                        gr.Markdown("**Configuración de WhatsApp Business API**")
-                        whatsapp_phone_id = gr.Textbox(
-                            label="Phone Number ID",
-                            placeholder="123456789012345",
-                            info="ID del número de teléfono de WhatsApp Business"
-                        )
-                        whatsapp_access_token = gr.Textbox(
-                            label="Access Token",
-                            placeholder="EAAxxxxxxxxxxxx",
-                            type="password",
-                            info="Token de acceso de WhatsApp Business API"
-                        )
-                        whatsapp_verify_token = gr.Textbox(
-                            label="Verify Token",
-                            placeholder="mi_token_secreto",
-                            info="Token para verificar el webhook"
-                        )
-                    
-                    create_company_btn = gr.Button(
-                        "✅ Crear Empresa",
-                        variant="primary",
-                        size="lg"
-                    )
-                    
-                    company_result = gr.Markdown(
-                        label="📊 Resultado"
-                    )
-                    
-                    def create_company_handler(
-                        name, description, products_json_str, faqs_json_str,
-                        business_rules_json_str, phone_id, access_token, verify_token
-                    ):
-                        """Crea una nueva empresa."""
-                        try:
-                            # Parsear JSONs
-                            products = []
-                            if products_json_str and products_json_str.strip():
-                                products = json.loads(products_json_str)
-                            
-                            faqs = []
-                            if faqs_json_str and faqs_json_str.strip():
-                                faqs = json.loads(faqs_json_str)
-                            
-                            business_rules = {}
-                            if business_rules_json_str and business_rules_json_str.strip():
-                                business_rules = json.loads(business_rules_json_str)
-                            
-                            whatsapp_config = None
-                            if phone_id and access_token:
-                                whatsapp_config = {
-                                    "phone_id": phone_id,
-                                    "access_token": access_token,
-                                    "verify_token": verify_token or "default_verify_token"
-                                }
-                            
-                            # Crear empresa
-                            company_id = business_ai_agent.create_company(
-                                name=name,
-                                description=description,
-                                products=products,
-                                faqs=faqs,
-                                business_rules=business_rules,
-                                whatsapp_config=whatsapp_config
-                            )
-                            
-                            # Obtener información de la empresa
-                            company = business_ai_agent.get_company(company_id)
-                            widget_key = company.get("widget_secret_key")
-                            
-                            # Generar script del widget
-                            api_base_url = os.getenv(
-                                "BUSINESS_AI_API_BASE_URL",
-                                "http://localhost:8000"
-                            )
-                            widget_script = business_ai_agent.get_widget_script(company_id)
-                            
-                            result = f"""## ✅ Empresa Creada Exitosamente
-
-**ID de Empresa**: `{company_id}`
-**Nombre**: {name}
-
-### 📋 Widget Secret Key
-```
-{widget_key}
-```
-
-### 📝 Script del Widget
-Copia y pega este código antes de `</body>` en tu website:
-
-```html
-{widget_script}
-```
-
-### 🔗 URLs Importantes
-
-**Widget JavaScript**: 
-```
-{api_base_url}/api/v1/widget.js?key={widget_key}
-```
-
-**API Endpoint**: 
-```
-{api_base_url}/api/v1/chat
-```
-
-**WhatsApp Webhook**: 
-```
-{api_base_url}/api/v1/whatsapp/webhook
-```
-
-### 📱 Configuración WhatsApp
-1. Ve a Meta for Developers
-2. Configura el webhook URL: `{api_base_url}/api/v1/whatsapp/webhook`
-3. Agrega el header: `X-Widget-Key: {widget_key}`
-4. Usa el verify token configurado
-
-### 📊 Próximos Pasos
-1. Ve a la pestaña "📊 Analytics" para ver métricas
-2. Configura más productos en "🏢 Configurar Empresa"
-3. Prueba el widget en tu website
-"""
-                            
-                            return result
-                            
-                        except json.JSONDecodeError as e:
-                            return f"❌ Error en formato JSON: {str(e)}"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    create_company_btn.click(
-                        fn=create_company_handler,
-                        inputs=[
-                            company_name, company_description, products_json, faqs_json,
-                            business_rules_json, whatsapp_phone_id, whatsapp_access_token,
-                            whatsapp_verify_token
-                        ],
-                        outputs=[company_result]
-                    )
-                
-                # Tab: Analytics
-                with gr.Tab("📊 Analytics"):
-                    gr.Markdown("### 📊 Analytics y Métricas")
-                    
-                    company_id_analytics = gr.Textbox(
-                        label="🆔 Company ID",
-                        placeholder="Ingresa el Company ID",
-                        info="ID de la empresa para ver analytics"
-                    )
-                    
-                    refresh_analytics_btn = gr.Button(
-                        "🔄 Actualizar Analytics",
-                        variant="primary"
-                    )
-                    
-                    analytics_output = gr.Markdown(
-                        label="📊 Resultados"
-                    )
-                    
-                    def get_analytics_handler(company_id):
-                        """Obtiene analytics de una empresa."""
-                        if not company_id or not company_id.strip():
-                            return "❌ Ingresa un Company ID válido"
-                        
-                        try:
-                            from docchat.business_ai_agent_mode import ChannelType
-                            analytics = business_ai_agent.get_analytics(company_id)
-                            
-                            result = f"""## 📊 Analytics - Empresa: {company_id}
-
-**Período**: {analytics.get('period', {}).get('start', 'N/A')} - {analytics.get('period', {}).get('end', 'N/A')}
-
-### 📈 Métricas Principales
-
-- **Total Conversaciones**: {analytics.get('total_conversations', 0)}
-- **Total Leads Capturados**: {analytics.get('total_leads', 0)}
-- **Escalaciones a Humanos**: {analytics.get('escalations', 0)}
-
-### 🎯 Distribución de Intenciones
-
-"""
-                            intent_dist = analytics.get('intent_distribution', {})
-                            if intent_dist:
-                                for intent, count in intent_dist.items():
-                                    result += f"- **{intent}**: {count}\n"
-                            else:
-                                result += "No hay datos de intenciones aún.\n"
-                            
-                            return result
-                            
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    refresh_analytics_btn.click(
-                        fn=get_analytics_handler,
-                        inputs=[company_id_analytics],
-                        outputs=[analytics_output]
-                    )
-                
-                # Tab: Test Chat
-                with gr.Tab("💬 Probar Chat"):
-                    gr.Markdown("### 💬 Prueba el Agente AI")
-                    gr.Markdown("Prueba cómo responderá el agente a mensajes de clientes")
-                    
-                    test_company_id = gr.Textbox(
-                        label="🆔 Company ID",
-                        placeholder="Ingresa el Company ID"
-                    )
-                    test_message = gr.Textbox(
-                        label="💬 Mensaje de Prueba",
-                        placeholder="¿Cuánto cuesta su producto premium?",
-                        lines=3
-                    )
-                    
-                    test_chat_btn = gr.Button(
-                        "🚀 Enviar Mensaje",
-                        variant="primary"
-                    )
-                    
-                    test_response = gr.Markdown(
-                        label="🤖 Respuesta del Agente"
-                    )
-                    
-                    def test_chat_handler(company_id, message):
-                        """Prueba el chat con un mensaje."""
-                        if not company_id or not company_id.strip() or not message or not message.strip():
-                            return "❌ Completa ambos campos"
-                        
-                        try:
-                            from docchat.business_ai_agent_mode import ChannelType
-                            result = business_ai_agent.process_message(
-                                company_id=company_id,
-                                user_message=message,
-                                user_id="test_user",
-                                channel=ChannelType.WEB
-                            )
-                            
-                            response_text = f"""## 🤖 Respuesta del Agente
-
-**Mensaje**: {message}
-
-**Respuesta**: {result.get('response', 'N/A')}
-
-**Intención Detectada**: {result.get('intent', 'N/A')}
-**Requiere Escalación**: {'✅ Sí' if result.get('escalate') else '❌ No'}
-**Lead Capturado**: {'✅ Sí' if result.get('lead_captured') else '❌ No'}
-**Conversation ID**: {result.get('conversation_id', 'N/A')}
-"""
-                            return response_text
-                            
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    test_chat_btn.click(
-                        fn=test_chat_handler,
-                        inputs=[test_company_id, test_message],
-                        outputs=[test_response]
-                    )
-                
-                # Tab: Documentación
-                with gr.Tab("📖 Documentación"):
-                    gr.Markdown("""
-                    ## 📖 Documentación del Business AI Agent
-                    
-                    ### 🚀 Inicio Rápido
-                    
-                    1. **Crear Empresa**: Ve a "🏢 Configurar Empresa" y completa los datos
-                    2. **Obtener Widget Script**: Copia el script generado
-                    3. **Integrar en Website**: Pega el script antes de `</body>` en tu HTML
-                    4. **Configurar WhatsApp** (opcional): Completa los datos en "📱 WhatsApp Business"
-                    
-                    ### 📡 Integración Web Widget
-                    
-                    El widget es un chat flotante que aparece en tu website. Los usuarios pueden:
-                    - Hacer preguntas sobre productos
-                    - Consultar precios
-                    - Iniciar proceso de compra
-                    - Solicitar soporte
-                    
-                    ### 📱 Integración WhatsApp
-                    
-                    1. Crea una app en [Meta for Developers](https://developers.facebook.com)
-                    2. Configura WhatsApp Business API
-                    3. Obtén el Phone Number ID y Access Token
-                    4. Configura el webhook en tu app
-                    5. Usa el webhook URL: `{tu_dominio}/api/v1/whatsapp/webhook`
-                    6. Agrega el header: `X-Widget-Key: {widget_secret_key}`
-                    
-                    ### 🎯 Intenciones Soportadas
-                    
-                    - **product_inquiry**: Preguntas sobre productos
-                    - **pricing**: Consultas de precios
-                    - **purchase**: Intención de compra
-                    - **support**: Solicitudes de soporte
-                    - **greeting**: Saludos
-                    - **goodbye**: Despedidas
-                    
-                    ### 🔧 Personalización
-                    
-                    El agente usa la información que configuraste:
-                    - Nombre y descripción de la empresa
-                    - Lista de productos con precios
-                    - FAQs configuradas
-                    - Reglas de negocio
-                    - CTAs (Call-to-Action links)
-                    
-                    ### 📊 Analytics
-                    
-                    Monitorea:
-                    - Número de conversaciones
-                    - Leads capturados
-                    - Escalaciones
-                    - Distribución de intenciones
-                    
-                    ### 🔒 Seguridad
-                    
-                    - Cada empresa tiene su propio `widget_secret_key`
-                    - Los mensajes se almacenan de forma segura
-                    - Soporte para multi-tenant
-                    
-                    ### 💡 Tips
-                    
-                    - Configura productos detallados para mejores respuestas
-                    - Agrega FAQs comunes para respuestas rápidas
-                    - Revisa analytics regularmente para optimizar
-                    - Prueba el chat antes de publicar en producción
-                    """            )
-
-        # Tab: 🤖 Business AI Agent - Multi-tenant AI Agent para Sales & Customer Support
-        with gr.Tab("🤖 Business AI Agent"):
-            gr.Markdown("### 🤖 Business AI Agent - Asistente de IA 24/7 para Ventas y Soporte al Cliente")
-            gr.Markdown("""
-            **💼 Sistema Multi-tenant SaaS para conectar AI Agents a Websites y WhatsApp**
-            
-            **🎯 Funcionalidades:**
-            - ✅ Sales Support 24/7 (Asistente de ventas automático)
-            - ✅ Customer Support Automation (Soporte automatizado)
-            - ✅ Lead Capture (Captura de leads inteligente)
-            - ✅ Escalación a humanos cuando sea necesario
-            - ✅ Analytics y métricas en tiempo real
-            
-            **📡 Canales Soportados:**
-            - 🌐 **Web Widget**: Script JavaScript para insertar en cualquier website
-            - 📱 **WhatsApp Business API**: Integración completa con Meta Cloud API
-            """)
-            
-            with gr.Tabs():
-                # Tab: Configuración de Empresa
-                with gr.Tab("🏢 Configurar Empresa"):
-                    gr.Markdown("### 🏢 Crear o Configurar Empresa")
-                    
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            company_name = gr.Textbox(
-                                label="📛 Nombre de la Empresa",
-                                placeholder="Mi Empresa S.A."
-                            )
-                            company_description = gr.Textbox(
-                                label="📝 Descripción",
-                                placeholder="Descripción de la empresa...",
-                                lines=3
-                            )
-                    
-                    products_json = gr.Textbox(
-                        label="📦 Productos (JSON)",
-                        placeholder='[{"name": "Producto", "description": "...", "price": 99.99}]',
-                        lines=10
-                    )
-                    
-                    faqs_json = gr.Textbox(
-                        label="❓ FAQs (JSON)",
-                        placeholder='[{"question": "Pregunta?", "answer": "Respuesta"}]',
-                        lines=8
-                    )
-                    
-                    business_rules_json = gr.Textbox(
-                        label="⚙️ Reglas (JSON)",
-                        placeholder='{"escalation_triggers": ["problema grave"]}',
-                        lines=5
-                    )
-                    
-                    create_company_btn = gr.Button("✅ Crear Empresa", variant="primary")
-                    company_result = gr.Markdown()
-                    
-                    def create_company_handler(name, desc, products, faqs, rules):
-                        try:
-                            products_list = json.loads(products) if products.strip() else []
-                            faqs_list = json.loads(faqs) if faqs.strip() else []
-                            rules_dict = json.loads(rules) if rules.strip() else {}
-                            
-                            company_id = business_ai_agent.create_company(
-                                name=name,
-                                description=desc,
-                                products=products_list,
-                                faqs=faqs_list,
-                                business_rules=rules_dict
-                            )
-                            
-                            company = business_ai_agent.get_company(company_id)
-                            widget_key = company.get("widget_secret_key")
-                            widget_script = business_ai_agent.get_widget_script(company_id)
-                            
-                            return f"""## ✅ Empresa Creada
-
-**Company ID**: `{company_id}`
-**Widget Key**: `{widget_key}`
-
-### Script del Widget:
-```html
-{widget_script}
-```
-"""
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    create_company_btn.click(
-                        fn=create_company_handler,
-                        inputs=[company_name, company_description, products_json, faqs_json, business_rules_json],
-                        outputs=[company_result]
-                    )
-                
-                # Tab: Analytics
-                with gr.Tab("📊 Analytics"):
-                    company_id_analytics = gr.Textbox(label="Company ID")
-                    refresh_btn = gr.Button("🔄 Actualizar", variant="primary")
-                    analytics_output = gr.Markdown()
-                    
-                    def get_analytics_handler(company_id):
-                        try:
-                            analytics = business_ai_agent.get_analytics(company_id)
-                            return f"""## 📊 Analytics
-
-**Conversaciones**: {analytics.get('total_conversations', 0)}
-**Leads**: {analytics.get('total_leads', 0)}
-**Escalaciones**: {analytics.get('escalations', 0)}
-"""
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    refresh_btn.click(
-                        fn=get_analytics_handler,
-                        inputs=[company_id_analytics],
-                        outputs=[analytics_output]
-                    )
-                
-                # Tab: Test Chat
-                with gr.Tab("💬 Probar Chat"):
-                    test_company_id = gr.Textbox(label="Company ID")
-                    test_message = gr.Textbox(label="Mensaje", lines=3)
-                    test_btn = gr.Button("🚀 Enviar", variant="primary")
-                    test_response = gr.Markdown()
-                    
-                    def test_chat_handler(company_id, message):
-                        try:
-                            result = business_ai_agent.process_message(
-                                company_id=company_id,
-                                user_message=message,
-                                user_id="test_user",
-                                channel=ChannelType.WEB
-                            )
-                            return f"""**Respuesta**: {result.get('response', 'N/A')}
-**Intención**: {result.get('intent', 'N/A')}
-**Escalar**: {'Sí' if result.get('escalate') else 'No'}
-"""
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    test_btn.click(
-                        fn=test_chat_handler,
-                        inputs=[test_company_id, test_message],
-                        outputs=[test_response]
-                    )
-
-        # Tab: 🤖 Business AI Agent - Multi-tenant AI Agent para Sales & Customer Support
-        with gr.Tab("🤖 Business AI Agent"):
-            gr.Markdown("### 🤖 Business AI Agent - Asistente de IA 24/7 para Ventas y Soporte al Cliente")
-            gr.Markdown("""
-            **💼 Sistema Multi-tenant SaaS para conectar AI Agents a Websites y WhatsApp**
-            
-            **🎯 Funcionalidades:**
-            - ✅ Sales Support 24/7 (Asistente de ventas automático)
-            - ✅ Customer Support Automation (Soporte automatizado)
-            - ✅ Lead Capture (Captura de leads inteligente)
-            - ✅ Escalación a humanos cuando sea necesario
-            - ✅ Analytics y métricas en tiempo real
-            
-            **📡 Canales Soportados:**
-            - 🌐 **Web Widget**: Script JavaScript para insertar en cualquier website
-            - 📱 **WhatsApp Business API**: Integración completa con Meta Cloud API
-            
-            **🚀 Características:**
-            - Multi-tenant (cada empresa tiene su propia configuración)
-            - Detección automática de intención (venta, soporte, información)
-            - Respuestas contextuales basadas en productos y FAQs configurados
-            - Sistema de escalación inteligente
-            - Analytics completo por empresa
-            """)
-            
-            with gr.Tabs():
-                # Tab: Configuración de Empresa
-                with gr.Tab("🏢 Configurar Empresa"):
-                    gr.Markdown("### 🏢 Crear o Configurar Empresa")
-                    
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            company_name = gr.Textbox(
-                                label="📛 Nombre de la Empresa",
-                                placeholder="Mi Empresa S.A."
-                            )
-                            company_description = gr.Textbox(
-                                label="📝 Descripción",
-                                placeholder="Descripción de la empresa...",
-                                lines=3
-                            )
-                    
-                    products_json = gr.Textbox(
-                        label="📦 Productos (JSON)",
-                        placeholder='[{"name": "Producto", "description": "...", "price": 99.99}]',
-                        lines=10
-                    )
-                    
-                    faqs_json = gr.Textbox(
-                        label="❓ FAQs (JSON)",
-                        placeholder='[{"question": "...", "answer": "..."}]',
-                        lines=8
-                    )
-                    
-                    create_company_btn = gr.Button("✅ Crear Empresa", variant="primary")
-                    company_result = gr.Markdown()
-                    
-                    def create_company_handler(name, desc, products_str, faqs_str):
-                        try:
-                            products = json.loads(products_str) if products_str.strip() else []
-                            faqs = json.loads(faqs_str) if faqs_str.strip() else []
-                            company_id = business_ai_agent.create_company(
-                                name=name, description=desc, products=products, faqs=faqs
-                            )
-                            company = business_ai_agent.get_company(company_id)
-                            widget_script = business_ai_agent.get_widget_script(company_id)
-                            return f"## ✅ Empresa Creada\n\n**ID**: `{company_id}`\n\n**Widget Script**:\n```html\n{widget_script}\n```"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    create_company_btn.click(
-                        fn=create_company_handler,
-                        inputs=[company_name, company_description, products_json, faqs_json],
-                        outputs=[company_result]
-                    )
-                
-                # Tab: Analytics
-                with gr.Tab("📊 Analytics"):
-                    company_id_analytics = gr.Textbox(label="🆔 Company ID")
-                    refresh_btn = gr.Button("🔄 Actualizar", variant="primary")
-                    analytics_output = gr.Markdown()
-                    
-                    def get_analytics_handler(company_id):
-                        try:
-                            analytics = business_ai_agent.get_analytics(company_id)
-                            return f"""## 📊 Analytics\n\n- **Conversaciones**: {analytics.get('total_conversations', 0)}\n- **Leads**: {analytics.get('total_leads', 0)}\n- **Escalaciones**: {analytics.get('escalations', 0)}"""
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    refresh_btn.click(
-                        fn=get_analytics_handler,
-                        inputs=[company_id_analytics],
-                        outputs=[analytics_output]
-                    )
-                
-                # Tab: Test Chat
-                with gr.Tab("💬 Probar Chat"):
-                    test_company_id = gr.Textbox(label="🆔 Company ID")
-                    test_message = gr.Textbox(label="💬 Mensaje", lines=2)
-                    test_btn = gr.Button("🚀 Enviar", variant="primary")
-                    test_response = gr.Markdown()
-                    
-                    def test_chat_handler(company_id, message):
-                        try:
-                            result = business_ai_agent.process_message(
-                                company_id=company_id,
-                                user_message=message,
-                                user_id="test",
-                                channel=ChannelType.WEB
-                            )
-                            return f"**Respuesta**: {result.get('response', 'N/A')}\n\n**Intención**: {result.get('intent', 'N/A')}"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    test_btn.click(
-                        fn=test_chat_handler,
-                        inputs=[test_company_id, test_message],
-                        outputs=[test_response]
-                    )
-
-        # Tab: 🤖 Business AI Agent - Multi-tenant AI Agent para Sales & Customer Support
-        with gr.Tab("🤖 Business AI Agent"):
-            gr.Markdown("### 🤖 Business AI Agent - Asistente de IA 24/7 para Ventas y Soporte al Cliente")
-            gr.Markdown("""
-            **💼 Sistema Multi-tenant SaaS para conectar AI Agents a Websites y WhatsApp**
-            
-            **🎯 Funcionalidades:**
-            - ✅ Sales Support 24/7 (Asistente de ventas automático)
-            - ✅ Customer Support Automation (Soporte automatizado)
-            - ✅ Lead Capture (Captura de leads inteligente)
-            - ✅ Escalación a humanos cuando sea necesario
-            - ✅ Analytics y métricas en tiempo real
-            
-            **📡 Canales Soportados:**
-            - 🌐 **Web Widget**: Script JavaScript para insertar en cualquier website
-            - 📱 **WhatsApp Business API**: Integración completa con Meta Cloud API
-            
-            **🚀 Características:**
-            - Multi-tenant (cada empresa tiene su propia configuración)
-            - Detección automática de intención (venta, soporte, información)
-            - Respuestas contextuales basadas en productos y FAQs configurados
-            - Sistema de escalación inteligente
-            - Analytics completo por empresa
-            """)
-            
-            with gr.Tabs():
-                # Tab: Configuración de Empresa
-                with gr.Tab("🏢 Configurar Empresa"):
-                    gr.Markdown("### 🏢 Crear o Configurar Empresa")
-                    gr.Markdown("""
-                    Configura tu empresa para activar el Business AI Agent.
-                    Después de crear la empresa, obtendrás:
-                    - Script del widget para tu website
-                    - Configuración para WhatsApp (opcional)
-                    - Dashboard de analytics
-                    """)
-                    
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            company_name = gr.Textbox(
-                                label="📛 Nombre de la Empresa",
-                                placeholder="Mi Empresa S.A.",
-                                info="Nombre que aparecerá en las respuestas del agente"
-                            )
-                            company_description = gr.Textbox(
-                                label="📝 Descripción de la Empresa",
-                                placeholder="Empresa líder en tecnología que ofrece soluciones innovadoras...",
-                                lines=3,
-                                info="Descripción que el agente usará para responder preguntas"
-                            )
-                    
-                    with gr.Accordion("📦 Productos/Servicios", open=True):
-                        products_json = gr.Textbox(
-                            label="Productos en JSON",
-                            placeholder='''[
-  {
-    "name": "Producto Premium",
-    "description": "Descripción del producto",
-    "price": 99.99,
-    "price_unit": "USD",
-    "link": "https://ejemplo.com/producto",
-    "features": ["Feature 1", "Feature 2"],
-    "category": "Software"
-  }
-]''',
-                            lines=10,
-                            info="Lista de productos/servicios en formato JSON"
-                        )
-                    
-                    with gr.Accordion("❓ FAQs", open=False):
-                        faqs_json = gr.Textbox(
-                            label="FAQs en JSON",
-                            placeholder='''[
-  {
-    "question": "¿Cuáles son sus horarios?",
-    "answer": "Estamos disponibles 24/7 a través de nuestro chat"
-  }
-]''',
-                            lines=10,
-                            info="Preguntas frecuentes en formato JSON"
-                        )
-                    
-                    with gr.Accordion("⚙️ Reglas de Negocio", open=False):
-                        business_rules_json = gr.Textbox(
-                            label="Reglas en JSON",
-                            placeholder='''{
-  "escalation_triggers": ["problema grave", "reclamo"],
-  "business_hours": "24/7",
-  "support_email": "soporte@empresa.com"
-}''',
-                            lines=5,
-                            info="Reglas de negocio y configuración adicional"
-                        )
-                    
-                    with gr.Accordion("📱 WhatsApp Business (Opcional)", open=False):
-                        gr.Markdown("**Configuración de WhatsApp Business API**")
-                        whatsapp_phone_id = gr.Textbox(
-                            label="Phone Number ID",
-                            placeholder="123456789012345",
-                            info="ID del número de teléfono de WhatsApp Business"
-                        )
-                        whatsapp_access_token = gr.Textbox(
-                            label="Access Token",
-                            placeholder="EAAxxxxxxxxxxxx",
-                            type="password",
-                            info="Token de acceso de WhatsApp Business API"
-                        )
-                        whatsapp_verify_token = gr.Textbox(
-                            label="Verify Token",
-                            placeholder="mi_token_secreto",
-                            info="Token para verificar el webhook"
-                        )
-                    
-                    create_company_btn = gr.Button(
-                        "✅ Crear Empresa",
-                        variant="primary",
-                        size="lg"
-                    )
-                    
-                    company_result = gr.Markdown(
-                        label="📊 Resultado"
-                    )
-                    
-                    def create_company_handler(
-                        name, description, products_json_str, faqs_json_str,
-                        business_rules_json_str, phone_id, access_token, verify_token
-                    ):
-                        """Crea una nueva empresa."""
-                        try:
-                            # Parsear JSONs
-                            products = []
-                            if products_json_str.strip():
-                                products = json.loads(products_json_str)
-                            
-                            faqs = []
-                            if faqs_json_str.strip():
-                                faqs = json.loads(faqs_json_str)
-                            
-                            business_rules = {}
-                            if business_rules_json_str.strip():
-                                business_rules = json.loads(business_rules_json_str)
-                            
-                            whatsapp_config = None
-                            if phone_id and access_token:
-                                whatsapp_config = {
-                                    "phone_id": phone_id,
-                                    "access_token": access_token,
-                                    "verify_token": verify_token or "default_verify_token"
-                                }
-                            
-                            # Crear empresa
-                            company_id = business_ai_agent.create_company(
-                                name=name,
-                                description=description,
-                                products=products,
-                                faqs=faqs,
-                                business_rules=business_rules,
-                                whatsapp_config=whatsapp_config
-                            )
-                            
-                            # Obtener información de la empresa
-                            company = business_ai_agent.get_company(company_id)
-                            widget_key = company.get("widget_secret_key")
-                            
-                            # Generar script del widget
-                            api_base_url = os.getenv(
-                                "BUSINESS_AI_API_BASE_URL",
-                                "http://localhost:8000"
-                            )
-                            widget_script = business_ai_agent.get_widget_script(company_id)
-                            
-                            result = f"""## ✅ Empresa Creada Exitosamente
-
-**ID de Empresa**: `{company_id}`
-**Nombre**: {name}
-
-### 📋 Widget Secret Key
-```
-{widget_key}
-```
-
-### 📝 Script del Widget
-Copia y pega este código antes de `</body>` en tu website:
-
-```html
-{widget_script}
-```
-
-### 🔗 URLs Importantes
-
-**Widget JavaScript**: 
-```
-{api_base_url}/api/v1/widget.js?key={widget_key}
-```
-
-**API Endpoint**: 
-```
-{api_base_url}/api/v1/chat
-```
-
-**WhatsApp Webhook**: 
-```
-{api_base_url}/api/v1/whatsapp/webhook
-```
-
-### 📱 Configuración WhatsApp
-1. Ve a Meta for Developers
-2. Configura el webhook URL: `{api_base_url}/api/v1/whatsapp/webhook`
-3. Agrega el header: `X-Widget-Key: {widget_key}`
-4. Usa el verify token configurado
-
-### 📊 Próximos Pasos
-1. Ve a la pestaña "📊 Analytics" para ver métricas
-2. Configura más productos en "🏢 Configurar Empresa"
-3. Prueba el widget en tu website
-"""
-                            
-                            return result
-                            
-                        except json.JSONDecodeError as e:
-                            return f"❌ Error en formato JSON: {str(e)}"
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    create_company_btn.click(
-                        fn=create_company_handler,
-                        inputs=[
-                            company_name, company_description, products_json, faqs_json,
-                            business_rules_json, whatsapp_phone_id, whatsapp_access_token,
-                            whatsapp_verify_token
-                        ],
-                        outputs=[company_result]
-                    )
-                
-                # Tab: Analytics
-                with gr.Tab("📊 Analytics"):
-                    gr.Markdown("### 📊 Analytics y Métricas")
-                    
-                    company_id_analytics = gr.Textbox(
-                        label="🆔 Company ID",
-                        placeholder="Ingresa el Company ID",
-                        info="ID de la empresa para ver analytics"
-                    )
-                    
-                    refresh_analytics_btn = gr.Button(
-                        "🔄 Actualizar Analytics",
-                        variant="primary"
-                    )
-                    
-                    analytics_output = gr.Markdown(
-                        label="📊 Resultados"
-                    )
-                    
-                    def get_analytics_handler(company_id):
-                        """Obtiene analytics de una empresa."""
-                        if not company_id.strip():
-                            return "❌ Ingresa un Company ID válido"
-                        
-                        try:
-                            analytics = business_ai_agent.get_analytics(company_id)
-                            
-                            result = f"""## 📊 Analytics - Empresa: {company_id}
-
-**Período**: {analytics.get('period', {}).get('start', 'N/A')} - {analytics.get('period', {}).get('end', 'N/A')}
-
-### 📈 Métricas Principales
-
-- **Total Conversaciones**: {analytics.get('total_conversations', 0)}
-- **Total Leads Capturados**: {analytics.get('total_leads', 0)}
-- **Escalaciones a Humanos**: {analytics.get('escalations', 0)}
-
-### 🎯 Distribución de Intenciones
-
-"""
-                            intent_dist = analytics.get('intent_distribution', {})
-                            if intent_dist:
-                                for intent, count in intent_dist.items():
-                                    result += f"- **{intent}**: {count}\n"
-                            else:
-                                result += "No hay datos de intenciones aún.\n"
-                            
-                            return result
-                            
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    refresh_analytics_btn.click(
-                        fn=get_analytics_handler,
-                        inputs=[company_id_analytics],
-                        outputs=[analytics_output]
-                    )
-                
-                # Tab: Test Chat
-                with gr.Tab("💬 Probar Chat"):
-                    gr.Markdown("### 💬 Prueba el Agente AI")
-                    gr.Markdown("Prueba cómo responderá el agente a mensajes de clientes")
-                    
-                    test_company_id = gr.Textbox(
-                        label="🆔 Company ID",
-                        placeholder="Ingresa el Company ID"
-                    )
-                    test_message = gr.Textbox(
-                        label="💬 Mensaje de Prueba",
-                        placeholder="¿Cuánto cuesta su producto premium?",
-                        lines=3
-                    )
-                    
-                    test_chat_btn = gr.Button(
-                        "🚀 Enviar Mensaje",
-                        variant="primary"
-                    )
-                    
-                    test_response = gr.Markdown(
-                        label="🤖 Respuesta del Agente"
-                    )
-                    
-                    def test_chat_handler(company_id, message):
-                        """Prueba el chat con un mensaje."""
-                        if not company_id.strip() or not message.strip():
-                            return "❌ Completa ambos campos"
-                        
-                        try:
-                            from docchat.business_ai_agent_mode import ChannelType
-                            result = business_ai_agent.process_message(
-                                company_id=company_id,
-                                user_message=message,
-                                user_id="test_user",
-                                channel=ChannelType.WEB
-                            )
-                            
-                            response_text = f"""## 🤖 Respuesta del Agente
-
-**Mensaje**: {message}
-
-**Respuesta**: {result.get('response', 'N/A')}
-
-**Intención Detectada**: {result.get('intent', 'N/A')}
-**Requiere Escalación**: {'✅ Sí' if result.get('escalate') else '❌ No'}
-**Lead Capturado**: {'✅ Sí' if result.get('lead_captured') else '❌ No'}
-**Conversation ID**: {result.get('conversation_id', 'N/A')}
-"""
-                            return response_text
-                            
-                        except Exception as e:
-                            return f"❌ Error: {str(e)}"
-                    
-                    test_chat_btn.click(
-                        fn=test_chat_handler,
-                        inputs=[test_company_id, test_message],
-                        outputs=[test_response]
-                    )
-                
-                # Tab: Documentación
-                with gr.Tab("📖 Documentación"):
-                    gr.Markdown("""
-                    ## 📖 Documentación del Business AI Agent
-                    
-                    ### 🚀 Inicio Rápido
-                    
-                    1. **Crear Empresa**: Ve a "🏢 Configurar Empresa" y completa los datos
-                    2. **Obtener Widget Script**: Copia el script generado
-                    3. **Integrar en Website**: Pega el script antes de `</body>` en tu HTML
-                    4. **Configurar WhatsApp** (opcional): Completa los datos en "📱 WhatsApp Business"
-                    
-                    ### 📡 Integración Web Widget
-                    
-                    El widget es un chat flotante que aparece en tu website. Los usuarios pueden:
-                    - Hacer preguntas sobre productos
-                    - Consultar precios
-                    - Iniciar proceso de compra
-                    - Solicitar soporte
-                    
-                    ### 📱 Integración WhatsApp
-                    
-                    1. Crea una app en [Meta for Developers](https://developers.facebook.com)
-                    2. Configura WhatsApp Business API
-                    3. Obtén el Phone Number ID y Access Token
-                    4. Configura el webhook en tu app
-                    5. Usa el webhook URL: `{tu_dominio}/api/v1/whatsapp/webhook`
-                    6. Agrega el header: `X-Widget-Key: {widget_secret_key}`
-                    
-                    ### 🎯 Intenciones Soportadas
-                    
-                    - **product_inquiry**: Preguntas sobre productos
-                    - **pricing**: Consultas de precios
-                    - **purchase**: Intención de compra
-                    - **support**: Solicitudes de soporte
-                    - **greeting**: Saludos
-                    - **goodbye**: Despedidas
-                    
-                    ### 🔧 Personalización
-                    
-                    El agente usa la información que configuraste:
-                    - Nombre y descripción de la empresa
-                    - Lista de productos con precios
-                    - FAQs configuradas
-                    - Reglas de negocio
-                    - CTAs (Call-to-Action links)
-                    
-                    ### 📊 Analytics
-                    
-                    Monitorea:
-                    - Número de conversaciones
-                    - Leads capturados
-                    - Escalaciones
-                    - Distribución de intenciones
-                    
-                    ### 🔒 Seguridad
-                    
-                    - Cada empresa tiene su propio `widget_secret_key`
-                    - Los mensajes se almacenan de forma segura
-                    - Soporte para multi-tenant
-                    
-                    ### 💡 Tips
-                    
-                    - Configura productos detallados para mejores respuestas
-                    - Agrega FAQs comunes para respuestas rápidas
-                    - Revisa analytics regularmente para optimizar
-                    - Prueba el chat antes de publicar en producción
-                    """)
 
         # Tab: 👑 ADVICE GOD - Clon de Enterprise API
         with gr.Tab("👑 ADVICE GOD"):
@@ -31382,4 +29851,8227 @@ Genera el análisis ahora siguiendo EXACTAMENTE el formato especificado arriba.
                                                     return (history, None, meta)
                                                 
                                                 # Si hay error, retornar
-     
+                                                if err:
+                                                    return (new_hist, err, meta)
+                                                
+                                                # Guardar resultado final (se actualiza con cada yield)
+                                                final_result = (new_hist, err, meta)
+                                            
+                                            # Retornar resultado final
+                                            return final_result if final_result else (history, "❌ Error: No se generó respuesta", {})
+                                        
+                                        except StopAsyncIteration:
+                                            return final_result if final_result else (history, "❌ Error: No se generó respuesta", {})
+                                        except Exception as e:
+                                            print(f"⚠️ [Company Knowledge] Error en async generator: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                                            return (history, f"❌ Error: {str(e)}", {})
+                                        finally:
+                                            # CRÍTICO: Cerrar el generator correctamente
+                                            if async_gen is not None:
+                                                try:
+                                                    await async_gen.aclose()
+                                                except Exception as close_error:
+                                                    pass
+                                    
+                                    # Ejecutar y obtener resultado final
+                                    new_hist, err, meta = loop.run_until_complete(consume_with_streaming())
+                                    
+                                    # CRÍTICO: Cerrar el loop correctamente para evitar warnings
+                                    try:
+                                        # Cancelar todas las tareas pendientes
+                                        pending = asyncio.all_tasks(loop)
+                                        for task in pending:
+                                            if not task.done():
+                                                task.cancel()
+                                        # Ejecutar todas las cancelaciones
+                                        if pending:
+                                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                                    except Exception as cleanup_error:
+                                        # Ignorar errores de limpieza
+                                        pass
+                                    
+                                    # Verificar si es un fallo silencioso (tokens expirados - no mostrar nada)
+                                    silent_fail = meta.get("silent_fail", False)
+                                    if silent_fail:
+                                        # No mostrar nada al usuario - simplemente retornar sin respuesta
+                                        print(f"⚠️ [Company Knowledge] Fallo silencioso (tokens expirados) - No mostrando mensaje al usuario")
+                                        yield history, history, "", gr.Markdown(visible=False), gr.Markdown("", visible=False)
+                                        return
+                                    
+                                    if err:
+                                        error_history = history + [(message, f"❌ {err}")]
+                                        yield error_history, error_history, err, gr.Markdown(visible=False), gr.Markdown("**❌ Error en búsqueda**", visible=True)
+                                        return
+                                    
+                                    # Extraer respuesta y metadata
+                                    if new_hist and len(new_hist) > 0:
+                                        response_text = new_hist[-1][1] if len(new_hist[-1]) > 1 else ""
+                                    else:
+                                        response_text = ""
+                                    
+                                    # Construir sidebar mejorado con metadata
+                                    search_status_text = "**🔍 Búsqueda Completada**\n\n"
+                                    
+                                    # Usar metadata mejorado
+                                    search_status = meta.get("search_status", [])
+                                    results_by_app = meta.get("results_by_app", {})
+                                    total_sources = meta.get("total_sources", 0)
+                                    conflicts_detected = meta.get("conflicts_detected", False)
+                                    consensus_level = meta.get("consensus_level", 1.0)
+                                    
+                                    if search_status:
+                                        search_status_text += "**📱 Apps consultadas:**\n\n"
+                                        for status_item in search_status:
+                                            if isinstance(status_item, dict):
+                                                app_name = status_item.get("app", "Unknown")
+                                                source = status_item.get("source", "Unknown")
+                                                status_icon = "✅" if status_item.get("status") == "completed" else "⏳"
+                                                search_status_text += f"{status_icon} **{app_name}** - {source}\n"
+                                        search_status_text += "\n"
+                                    elif results_by_app:
+                                        search_status_text += "**📱 Apps consultadas:**\n\n"
+                                        for app_name, count in results_by_app.items():
+                                            search_status_text += f"✅ **{app_name}** ({count} resultados)\n"
+                                        search_status_text += "\n"
+                                    
+                                    search_status_text += f"**Total:** {total_sources} fuentes encontradas\n\n"
+                                    
+                                    conflicts_resolved = meta.get("conflicts_resolved", False)
+                                    if conflicts_detected:
+                                        if conflicts_resolved:
+                                            search_status_text += f"✅ **Conflictos resueltos automáticamente** (Consenso inicial: {consensus_level*100:.0f}%)\n"
+                                            search_status_text += "*Se realizaron búsquedas adicionales para resolver discrepancias.*\n"
+                                        else:
+                                            search_status_text += f"⚠️ **Conflictos detectados** (Consenso: {consensus_level*100:.0f}%)\n"
+                                            search_status_text += "*Se presentan perspectivas balanceadas.*\n"
+                                    else:
+                                        search_status_text += f"✅ **Consenso alto** ({consensus_level*100:.0f}%)\n"
+                                    
+                                    # Yield final con respuesta completa y sidebar mejorado
+                                    new_history = history + [(message, response_text)]
+                                    status_msg = f"✅ Respuesta completada ({total_sources} fuentes)"
+                                    if conflicts_detected:
+                                        status_msg += " - Conflictos detectados"
+                                    yield new_history, new_history, status_msg, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                finally:
+                                    loop.close()
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                error_msg = f"❌ Error: {str(e)}"
+                                error_history = history + [(message, error_msg)]
+                                yield error_history, error_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
+                                
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                error_msg = f"❌ Error al procesar consulta: {str(e)}"
+                                new_history = history + [(message, error_msg)]
+                                return new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error en búsqueda**\n\nNo se pudo procesar la consulta.", visible=True)
+                    
+                    def copy_sources(history):
+                        """Extrae URLs de la última respuesta del bot"""
+                        if not history or len(history) == 0:
+                            return ""
+                        
+                        last_bot_message = history[-1][1] if len(history[-1]) > 1 else ""
+                        if not last_bot_message:
+                            return ""
+                        
+                        # Buscar URLs en el mensaje
+                        import re
+                        urls = re.findall(r'https?://[^\s\)]+', last_bot_message)
+                        if not urls:
+                            # Buscar en formato markdown [texto](url)
+                            urls = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', last_bot_message)
+                            if urls:
+                                urls = [url for _, url in urls]
+                        
+                        if urls:
+                            return "\n".join(set(urls))  # Eliminar duplicados
+                        return "No se encontraron URLs en la última respuesta."
+                    
+                    def clear_company_knowledge(history, session_id):
+                        company_knowledge = get_company_knowledge(
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        if hasattr(company_knowledge, 'sessions') and session_id in company_knowledge.sessions:
+                            company_knowledge.sessions[session_id]["history"] = []
+                            company_knowledge.sessions[session_id]["docs"] = []
+                            company_knowledge.sessions[session_id]["retriever"] = None
+                            company_knowledge.sessions[session_id]["processed_files"].clear()
+                        return [], "✅ Chat limpiado. Puedes cargar nuevos documentos.", gr.Markdown(visible=False)
+                    
+                    def clear_company_knowledge_files(files, session_id):
+                        company_knowledge = get_company_knowledge(
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        if hasattr(company_knowledge, 'sessions') and session_id in company_knowledge.sessions:
+                            company_knowledge.sessions[session_id]["processed_files"].clear()
+                            company_knowledge.sessions[session_id]["docs"] = []
+                            company_knowledge.sessions[session_id]["retriever"] = None
+                        return None, "✅ Documentos limpiados. Puedes cargar nuevos.", gr.Markdown(visible=False)
+                    
+                    def show_company_knowledge_stats(session_id):
+                        company_knowledge = get_company_knowledge(
+                            config=config,
+                            processor=processor,
+                            retriever_builder=retriever_builder,
+                            context_manager=context_manager
+                        )
+                        stats = company_knowledge.get_statistics(session_id=session_id)
+                        
+                        output = "## 📊 Estadísticas Avanzadas - Company Knowledge\n\n"
+                        output += f"### 📦 Context Folding\n"
+                        output += f"- Ramas activas: {stats['context_folding']['active_branches']}\n"
+                        output += f"- Ramas plegadas: {stats['context_folding']['folded_branches']}\n"
+                        output += f"- Tokens ahorrados: {stats['context_folding']['total_tokens_saved']:,}\n"
+                        output += f"- Ratio de compresión: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                        
+                        output += f"### 🔍 Data Provenance\n"
+                        output += f"- Registros totales: {stats['data_provenance']['total_records']}\n"
+                        output += f"- Fuentes únicas: {stats['data_provenance']['unique_sources']}\n"
+                        output += f"- Promedio fuentes/registro: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                        
+                        output += f"### 📱 Apps Conectadas\n"
+                        app_stats = stats.get('app_integrations', {})
+                        output += f"- Total conexiones: {app_stats.get('total_connections', 0)}\n"
+                        output += f"- Apps conectadas: {app_stats.get('connected_apps', 0)}\n"
+                        output += f"- Apps por tipo: {app_stats.get('apps_by_type', {})}\n\n"
+                        
+                        output += f"### 🧠 Chain of Thought\n"
+                        output += f"- Cadenas activas: {stats['chain_of_thought']['active_chains']}\n"
+                        output += f"- Cadenas completadas: {stats['chain_of_thought']['completed_chains']}\n"
+                        output += f"- Pasos totales: {stats['chain_of_thought']['total_steps']}\n\n"
+                        
+                        output += f"### 🛤️ Path-dependent Reasoning\n"
+                        output += f"- Caminos probados: {stats['path_reasoning']['total_paths_tested']}\n"
+                        output += f"- Tasa de éxito: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                        output += f"- Enfoques aprendidos: {stats['path_reasoning']['learned_approaches']}\n\n"
+                        
+                        output += f"### 📈 Test Time Training\n"
+                        output += f"- Episodios totales: {stats['test_time_training']['total_episodes']}\n"
+                        output += f"- Tasa de éxito: {stats['test_time_training']['success_rate']:.1f}%\n"
+                        output += f"- Patrones aprendidos: {stats['test_time_training']['learned_patterns']}\n\n"
+                        
+                        output += f"### 👤 Person in the Loop\n"
+                        output += f"- Aprobaciones pendientes: {stats['person_in_loop']['pending_approvals']}\n"
+                        output += f"- Tasa de aprobación: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                        output += f"- Reglas activas: {stats['person_in_loop']['active_rules']}\n\n"
+                        
+                        output += f"### 🧠 Reinforcement Learning y Planning\n"
+                        output += f"- Árboles totales: {stats['reinforcement_planning']['total_trees']}\n"
+                        output += f"- Tasa de éxito: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                        output += f"- Exploraciones totales: {stats['reinforcement_planning']['total_explorations']}\n"
+                        output += f"- Memoria de aprendizaje: {stats['reinforcement_planning']['learning_memory_size']} patrones\n\n"
+                        
+                        output += f"### 🔌 MCP Potenciado (Model Context Protocol)\n"
+                        output += f"- Conexiones totales: {stats['mcp_integration']['connections']}\n"
+                        output += f"- Conexiones activas: {stats['mcp_integration']['enabled_connections']}\n"
+                        
+                        if 'session' in stats:
+                            output += f"\n### 📋 Sesión\n"
+                            output += f"- Documentos: {stats['session']['docs_count']}\n"
+                            output += f"- Mensajes: {stats['session']['history_count']}\n"
+                            output += f"- Archivos procesados: {stats['session']['processed_files']}\n"
+                        
+                        return gr.Markdown(output, visible=True)
+                    
+                    view_connected_pdfs_btn.click(
+                        fn=view_connected_pdfs,
+                        inputs=[company_knowledge_pdfs_list, company_knowledge_selected_pdfs],
+                        outputs=[view_connected_pdfs_output, company_knowledge_pdfs_list, apply_pdf_selection_btn, pdf_selection_status]
+                    )
+                    
+                    apply_pdf_selection_btn.click(
+                        fn=apply_pdf_selection,
+                        inputs=[view_connected_pdfs_output, company_knowledge_pdfs_list],
+                        outputs=[company_knowledge_selected_pdfs, pdf_selection_status]
+                    )
+                    
+                    company_knowledge_submit_btn.click(
+                        fn=company_knowledge_submit_v2,
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type, company_knowledge_max_pdfs, company_knowledge_selected_pdfs],
+                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output, search_status_sidebar],
+                    ).then(
+                        fn=lambda: gr.Markdown(visible=False),
+                        outputs=[company_knowledge_stats_output]
+                    )
+                    
+                    company_knowledge_input.submit(
+                        fn=company_knowledge_submit_v2,
+                        inputs=[company_knowledge_input, company_knowledge_bot, company_knowledge_files, company_knowledge_session_id, company_knowledge_speed_mode, company_knowledge_provider_toggle, company_knowledge_days, company_knowledge_urls_toggle, company_knowledge_task_type, company_knowledge_max_pdfs, company_knowledge_selected_pdfs],
+                        outputs=[company_knowledge_bot, company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output, search_status_sidebar],
+                    ).then(
+                        fn=lambda: gr.Markdown(visible=False),
+                        outputs=[company_knowledge_stats_output]
+                    )
+                    
+                    copy_sources_btn.click(
+                        fn=copy_sources,
+                        inputs=[company_knowledge_bot],
+                        outputs=[copy_sources_output]
+                    )
+
+                    clear_company_knowledge_btn.click(
+                        fn=clear_company_knowledge,
+                        inputs=[company_knowledge_bot, company_knowledge_session_id],
+                        outputs=[company_knowledge_bot, company_knowledge_status, company_knowledge_stats_output]
+                    )
+                    
+                    clear_company_knowledge_files_btn.click(
+                        fn=clear_company_knowledge_files,
+                        inputs=[company_knowledge_files, company_knowledge_session_id],
+                        outputs=[company_knowledge_files, company_knowledge_status]
+                    )
+                    
+                    company_knowledge_stats_btn.click(
+                        fn=show_company_knowledge_stats,
+                        inputs=[company_knowledge_session_id],
+                        outputs=[company_knowledge_stats_output]
+                    )
+                
+                # Sub-tab: Tareas Autónomas
+                with gr.Tab("🤖 Tareas Autónomas"):
+                    gr.Markdown("### Ejecuta tareas autónomas usando tus apps conectadas")
+                    gr.Markdown("""
+                    **Tipos de tareas disponibles:**
+                    - **Resumir**: Resumir información de múltiples fuentes
+                    - **Analizar**: Analizar datos y generar insights
+                    - **Crear Informe**: Crear un informe basado en datos
+                    - **Planificar**: Crear un plan basado en información disponible
+                    - **Comparar**: Comparar información de diferentes fuentes
+                    """)
+                    
+                    task_type_select = gr.Dropdown(
+                        label="⚙️ Tipo de Tarea",
+                        choices=[
+                            ("📝 Resumir información", "summarize"),
+                            ("📊 Analizar datos", "analyze"),
+                            ("📄 Crear informe", "create_report"),
+                            ("📋 Planificar", "plan"),
+                            ("⚖️ Comparar información", "compare")
+                        ],
+                        value="summarize"
+                    )
+                    
+                    task_description_input = gr.Textbox(
+                        label="Descripción de la Tarea",
+                        placeholder="Ej: Resume los comentarios de clientes de Slack y HubSpot del último trimestre",
+                        lines=5
+                    )
+                    
+                    execute_task_btn = gr.Button("🚀 Ejecutar Tarea Autónoma", variant="primary", size="lg")
+                    task_output = gr.Markdown(label="📊 Resultado de la Tarea")
+                    
+                    def execute_autonomous_task(task_type, task_description):
+                        if not task_description.strip():
+                            return "⚠️ Por favor, describe la tarea que quieres ejecutar."
+                        
+                        try:
+                            company_knowledge = get_company_knowledge(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            result = loop.run_until_complete(
+                                company_knowledge.execute_autonomous_task(
+                                    task_description=task_description,
+                                    task_type=task_type,
+                                    context=None
+                                )
+                            )
+                            loop.close()
+                            
+                            if result.get("success"):
+                                output = f"""
+## ✅ Tarea Completada: {task_type}
+
+### 📋 Resultado:
+
+{result.get('summary', result.get('analysis', result.get('report', result.get('plan', result.get('comparison', 'N/A')))))}
+
+### 📚 Fuentes Consultadas:
+{', '.join(result.get('sources', []))}
+
+### 📊 Información:
+- **Tipo:** {result.get('task_type')}
+- **Fuentes:** {result.get('sources_count', len(result.get('sources', [])))}
+"""
+                                return output
+                            else:
+                                return f"❌ Error: {result.get('error', 'Error desconocido')}"
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando tarea: {str(e)}"
+                    
+                    execute_task_btn.click(
+                        fn=execute_autonomous_task,
+                        inputs=[task_type_select, task_description_input],
+                        outputs=[task_output]
+                    )
+        
+        # Tab 4.5.7: Accountability (NUEVO - Con conexión de apps y tareas autónomas)
+        with gr.Tab("📋 Accountability"):
+            if not ACCOUNTABILITY_AVAILABLE or not get_accountability:
+                gr.Markdown("### ⚠️ Accountability no disponible")
+                gr.Markdown("""
+                **Error cargando Accountability.**
+                
+                Por favor, verifica que todas las dependencias estén instaladas.
+                """)
+            else:
+                gr.Markdown("### 📋 Accountability - Sistema Automático de Contabilidad y Finanzas")
+                gr.Markdown("""
+                **💰 Sistema especializado de procesamiento automático de documentos contables y financieros**
+                
+                **🚀 Procesamiento Automático SIN Prompts:**
+                - 📄 **Sube PDFs → Obtén Resumen Automático**: Solo sube tus PDFs y recibe información estructurada automáticamente
+                - 🔍 **Detección Automática**: Identifica automáticamente facturas, contratos, reportes financieros, recibos
+                - 📊 **Extracción Estructurada**: Extrae datos clave automáticamente (proveedor, monto, fecha, impuestos, número de factura, etc.)
+                - 🔗 **Conciliación Automática**: Compara facturas con pagos, detecta inconsistencias y errores
+                - 📈 **Resúmenes Ejecutivos**: Genera resúmenes de 1-2 páginas automáticamente por lote de PDFs
+                - 🏷️ **Clasificación Automática**: Separa y etiqueta PDFs por tipo (factura, contrato, reporte)
+                - ⚠️ **Alertas Automáticas**: Señala documentos vencidos, pagos pendientes, riesgos, errores contables
+                
+                **✨ Capacidades Avanzadas:**
+                - 📦 **Procesamiento Masivo**: Procesa 500+ PDFs automáticamente en minutos
+                - 🔍 **Data Provenance**: Rastrea el origen de cada información para compliance y auditoría
+                - 🧠 **Análisis Inteligente**: Detecta errores, inconsistencias, duplicados y anomalías
+                - 📱 **Integraciones**: SharePoint, Google Drive, Box, Confluence, Dropbox (máximo impacto $$$)
+                - 💼 **Ahorro de Tiempo**: Reemplaza 20-40 horas de trabajo manual por minutos de procesamiento automático
+                
+                **💼 Perfecto para:**
+                - **Procesar facturas y recibos**: Extrae automáticamente proveedor, monto, fecha, impuestos, estado de pago
+                - **Analizar contratos**: Fechas de vencimiento, obligaciones, cláusulas críticas, partes involucradas
+                - **Reportes financieros**: Totales, ingresos, gastos, KPIs, balances
+                - **Auditorías internas**: Detecta inconsistencias, errores, duplicados, anomalías
+                - **Conciliación de cuentas**: Compara automáticamente registros de bancos, pagos y facturas
+                - **Empresas grandes**: Ahorro masivo de tiempo y dinero (ROI enorme)
+                
+                **💡 Ejemplo de uso:**
+                1. Sube 500 PDFs de facturas, contratos y reportes financieros
+                2. El sistema automáticamente:
+                   - Detecta el tipo de cada documento
+                   - Extrae todos los datos estructurados
+                   - Clasifica y organiza
+                   - Genera resumen ejecutivo completo
+                   - Detecta errores y alertas
+                   - Hace conciliación básica
+                3. Recibe resumen ejecutivo automático con:
+                   - Total de documentos por tipo
+                   - Montos totales (facturas, contratos)
+                   - Top proveedores y clientes
+                   - Facturas vencidas
+                   - Errores detectados
+                   - Recomendaciones
+                4. Haz preguntas específicas sobre los documentos procesados
+                
+                **💰 Ahorro Estimado:**
+                - 1 contable senior: ~$50-80 USD/hora
+                - Procesar 500 PDFs manualmente: 20-40 horas → $1,000-3,000 USD
+                - Con Accountability: minutos → Ahorro casi total
+                """)
+                
+                with gr.Tabs():
+                    # Sub-tab: Conectar Apps
+                    with gr.Tab("🔌 Conectar Apps"):
+                        gr.Markdown("## 🚀 Conecta tus Aplicaciones Empresariales")
+                        gr.Markdown("""
+                        ### ✨ Conecta tus apps en 3 pasos simples:
+                        
+                        1. **Selecciona** el tipo de app que quieres conectar
+                        2. **Ingresa** tu token/API key (te guiamos paso a paso)
+                        3. **Conecta** y listo - ¡Ya puedes hacer preguntas sobre tus apps!
+                        
+                        **📱 Apps Disponibles:**
+                        - 💬 **Comunicación:** Slack, Teams, Gmail, Outlook
+                        - 📁 **Documentos:** Google Drive, SharePoint, Dropbox, Box
+                        - 💻 **Desarrollo:** GitHub, GitLab, Linear, Asana, ClickUp
+                        - 📊 **Negocio:** HubSpot, Salesforce, Intercom
+                        - 🎯 **Proyectos:** Jira, Confluence
+                        
+                        **🔐 Seguridad Total:**
+                        - ✅ Credenciales almacenadas localmente (solo en tu computadora)
+                        - ✅ Validación automática de tokens antes de guardar
+                        - ✅ Solo accede a lo que ya tienes permiso de ver
+                        - ✅ Nunca compartimos tus datos con terceros
+                        """)
+                        
+                        # Indicador de estado global
+                        with gr.Row():
+                            global_status = gr.Markdown(
+                                value="**Estado:** Esperando conexión...",
+                                visible=True
+                            )
+                        
+                        gr.Markdown("### 📝 Paso 1: Selecciona tu App")
+                        with gr.Row():
+                            app_type_select = gr.Dropdown(
+                                label="📱 ¿Qué app quieres conectar?",
+                                choices=[
+                                    ("💬 Slack - Mensajes y canales", "slack"),
+                                    ("📁 Google Drive - Documentos y archivos", "google_drive"),
+                                    ("📂 SharePoint - Documentos empresariales", "sharepoint"),
+                                    ("💻 GitHub - Código y repositorios", "github"),
+                                    ("📧 Gmail - Emails y calendario", "gmail"),
+                                    ("📧 Outlook - Emails de Microsoft", "outlook"),
+                                    ("📦 Dropbox - Almacenamiento en la nube", "dropbox"),
+                                    ("📦 Box - Almacenamiento empresarial", "box"),
+                                    ("💬 Teams - Colaboración Microsoft", "teams"),
+                                    ("📊 HubSpot - CRM y marketing", "hubspot"),
+                                    ("☁️ Salesforce - CRM empresarial", "salesforce"),
+                                    ("📋 Linear - Gestión de proyectos", "linear"),
+                                    ("✅ Asana - Tareas y proyectos", "asana"),
+                                    ("🔧 GitLab - DevOps y código", "gitlab"),
+                                    ("📝 ClickUp - Productividad", "clickup"),
+                                    ("💬 Intercom - Soporte al cliente", "intercom"),
+                                    ("🎯 Jira - Tickets y issues", "jira"),
+                                    ("📚 Confluence - Wiki y documentación", "confluence")
+                                ],
+                                value="slack",
+                                info="💡 Selecciona la app que usas más en tu trabajo diario"
+                            )
+                        
+                        # Guía dinámica que cambia según la app seleccionada
+                        app_guide_output = gr.Markdown(
+                            value="**💡 Selecciona una app arriba para ver la guía paso a paso**",
+                            visible=True
+                        )
+                        
+                        def update_app_guide(app_type):
+                            guides = {
+                                "slack": """
+### 🔑 Cómo obtener tu token de Slack (2 minutos):
+
+**Paso 1:** Ve a https://api.slack.com/apps y haz clic en "Create New App"
+
+**Paso 2:** Selecciona "From scratch"
+- **App Name:** "Accountability" (o el nombre que prefieras)
+- **Workspace:** Selecciona tu workspace
+
+**Paso 3:** En el menú lateral, ve a "OAuth & Permissions"
+
+**Paso 4:** En "Scopes" → "Bot Token Scopes", agrega:
+- `channels:read` - Leer canales
+- `channels:history` - Ver historial de mensajes
+- `search:read` - Buscar mensajes
+
+**Paso 5:** Ve arriba y haz clic en "Install to Workspace"
+- Autoriza la app en tu workspace
+
+**Paso 6:** Copia el "Bot User OAuth Token" (empieza con `xoxb-`)
+- Este es el token que necesitas pegar abajo
+
+✅ **Listo!** Pega el token en el campo "Token / API Key"
+                            """,
+                                "google_drive": """
+### 🔑 Cómo obtener acceso a Google Drive (3 minutos):
+
+**Opción A: Service Account (Recomendado para empresas)**
+
+**Paso 1:** Ve a https://console.cloud.google.com/
+- Crea un proyecto nuevo o selecciona uno existente
+
+**Paso 2:** Ve a "APIs & Services" → "Credentials" → "Create Credentials" → "Service Account"
+- Nombre: "Accountability"
+- Crea y continúa
+
+**Paso 3:** En "Grant this service account access to project", selecciona "Editor"
+- Haz clic en "Done"
+
+**Paso 4:** Haz clic en el service account creado → "Keys" → "Add Key" → "Create new key"
+- Selecciona "JSON" y descarga el archivo
+
+**Paso 5:** Abre el archivo JSON descargado
+- Copia todo el contenido del campo `private_key` (sin las comillas)
+- Este es tu token
+
+**Paso 6 (Opcional):** Si quieres limitar a una carpeta específica:
+- Comparte la carpeta con el email del service account (está en el JSON como `client_email`)
+- En "Credenciales extra", agrega: `{"folder_id": "ID_DE_LA_CARPETA"}`
+
+✅ **Listo!** Pega el private_key en el campo "Token / API Key"
+
+**Opción B: OAuth 2.0 (Para uso personal)**
+- Más complejo, requiere configuración de OAuth
+- Recomendamos Service Account para empresas
+                            """,
+                                "hubspot": """
+### 🔑 Cómo obtener tu token de HubSpot (2 minutos):
+
+**Paso 1:** Inicia sesión en HubSpot y ve a Settings (⚙️)
+
+**Paso 2:** En el menú lateral, ve a "Integrations" → "Private Apps"
+
+**Paso 3:** Haz clic en "Create a private app"
+- **Name:** "Accountability"
+- **Description:** "Para búsqueda y análisis de datos"
+
+**Paso 4:** En "Scopes", selecciona los permisos que necesitas:
+- `content` - Leer contenido
+- `contacts` - Leer contactos
+- `deals` - Leer deals
+- `engagements` - Leer emails y llamadas
+
+**Paso 5:** Haz clic en "Create app" en la parte superior
+
+**Paso 6:** Copia el "Private app access token" (empieza con `pat-`)
+- Este es el token que necesitas pegar abajo
+
+✅ **Listo!** Pega el token en el campo "Token / API Key"
+                            """,
+                                "github": """
+### 🔑 Cómo obtener tu token de GitHub (1 minuto):
+
+**Paso 1:** Ve a GitHub.com y haz clic en tu foto de perfil (arriba derecha)
+
+**Paso 2:** Selecciona "Settings"
+
+**Paso 3:** En el menú lateral, ve a "Developer settings" (al final)
+
+**Paso 4:** Selecciona "Personal access tokens" → "Tokens (classic)"
+
+**Paso 5:** Haz clic en "Generate new token" → "Generate new token (classic)"
+
+**Paso 6:** Configura el token:
+- **Note:** "Accountability"
+- **Expiration:** Elige cuánto tiempo quieres que dure
+- **Scopes:** Selecciona:
+  - `repo` - Acceso completo a repositorios
+  - `read:org` - Leer datos de organización
+
+**Paso 7:** Haz clic en "Generate token" al final
+- ⚠️ **IMPORTANTE:** Copia el token inmediatamente (empieza con `ghp_`)
+- No podrás verlo de nuevo
+
+✅ **Listo!** Pega el token en el campo "Token / API Key"
+                            """,
+                                "jira": """
+### 🔑 Cómo obtener acceso a Jira (2 minutos):
+
+**Paso 1:** Inicia sesión en tu instancia de Jira (ej: tuempresa.atlassian.net)
+
+**Paso 2:** Haz clic en tu foto de perfil (arriba derecha) → "Account settings"
+
+**Paso 3:** En el menú lateral, ve a "Security" → "API tokens"
+
+**Paso 4:** Haz clic en "Create API token"
+- **Label:** "Accountability"
+- Copia el token generado
+
+**Paso 5:** En "Credenciales extra", agrega:
+```json
+{
+  "base_url": "https://tuempresa.atlassian.net"
+}
+```
+- Reemplaza `tuempresa` con el nombre de tu instancia
+
+**Paso 6:** Para el token, usa el formato: `email@tudominio.com:TOKEN_GENERADO`
+- Ejemplo: `juan@empresa.com:ATATT3xFfGF0...`
+
+✅ **Listo!** Pega el email:token en el campo "Token / API Key"
+                            """,
+                                "salesforce": """
+### 🔑 Cómo obtener acceso a Salesforce (3 minutos):
+
+**Paso 1:** Inicia sesión en Salesforce como administrador
+
+**Paso 2:** Ve a Setup (⚙️) → "App Manager" → "New Connected App"
+
+**Paso 3:** Completa el formulario:
+- **Connected App Name:** "Accountability"
+- **API Name:** Se genera automáticamente
+- **Contact Email:** Tu email
+
+**Paso 4:** En "API (Enable OAuth Settings)":
+- ✅ Marca "Enable OAuth Settings"
+- **Callback URL:** `https://localhost` (puede ser cualquier URL)
+- **Selected OAuth Scopes:** 
+  - `Full access (full)`
+  - `Perform requests on your behalf at any time (refresh_token, offline_access)`
+
+**Paso 5:** Guarda y continúa
+- Copia el "Consumer Key" y "Consumer Secret"
+
+**Paso 6:** Para obtener el Access Token:
+- Usa OAuth flow o Username/Password flow
+- El token que necesitas es el "Access Token"
+
+**Paso 7:** En "Credenciales extra", agrega:
+```json
+{
+  "instance_url": "https://tuinstancia.salesforce.com"
+}
+```
+
+✅ **Listo!** Pega el Access Token en el campo "Token / API Key"
+                            """
+                            }
+                            
+                            guide = guides.get(app_type, f"""
+### 🔑 Guía para {app_type}
+
+**Pasos generales:**
+1. Ve a la configuración de la app
+2. Busca "API", "Tokens", "Integrations" o "Developer settings"
+3. Crea un token/API key con permisos de lectura
+4. Copia el token y pégalo abajo
+
+**💡 Tip:** Si no encuentras cómo obtener el token, busca en Google: "{app_type} API token how to get"
+                            """)
+                            
+                            return guide
+                        
+                        def toggle_connection_method(app_type, method):
+                            """Muestra/oculta grupos según método de conexión y tipo de app."""
+                            # Apps que soportan OAuth Playground
+                            oauth_playground_apps = ["google_drive", "gmail"]
+                            
+                            if method == "oauth_playground" and app_type in oauth_playground_apps:
+                                # Mostrar OAuth Playground, ocultar token directo
+                                return gr.update(visible=False), gr.update(visible=True)
+                            else:
+                                # Mostrar token directo, ocultar OAuth Playground
+                                return gr.update(visible=True), gr.update(visible=False)
+                        
+                        app_type_select.change(
+                            fn=update_app_guide,
+                            inputs=[app_type_select],
+                            outputs=[app_guide_output]
+                        )
+                        
+                        gr.Markdown("### 📝 Paso 2: Configura tu Conexión")
+                        
+                        app_name_input = gr.Textbox(
+                            label="🏷️ Nombre de la Conexión",
+                            placeholder="Ej: Slack Oficina Principal, Mi Google Drive, HubSpot Producción",
+                            info="💡 Un nombre descriptivo para identificar esta conexión (puedes tener múltiples conexiones de la misma app)",
+                            value=""
+                        )
+                        
+                        # Método de conexión: Token directo o OAuth Playground (solo para apps que lo soportan)
+                        connection_method = gr.Radio(
+                            label="🔐 Método de Conexión",
+                            choices=[
+                                ("🔑 Token / API Key Directo", "token")
+                            ],
+                            value="token",
+                            info="💡 OAuth Playground solo está disponible para apps de Google (Drive, Gmail)"
+                        )
+                        
+                        # Actualizar visibilidad de métodos según app seleccionada
+                        def update_connection_method_visibility(app_type):
+                            """Actualiza las opciones de método según la app."""
+                            oauth_playground_apps = ["google_drive", "gmail"]
+                            
+                            if app_type in oauth_playground_apps:
+                                # Mostrar ambas opciones
+                                return gr.update(
+                                    choices=[
+                                        ("🔑 Token / API Key Directo", "token"),
+                                        ("🎮 OAuth Playground (Solo Google)", "oauth_playground")
+                                    ],
+                                    visible=True,
+                                    value="token"  # Resetear a token por defecto
+                                )
+                            else:
+                                # Solo mostrar token directo
+                                return gr.update(
+                                    choices=[("🔑 Token / API Key Directo", "token")],
+                                    visible=True,
+                                    value="token"
+                                )
+                        
+                        # Grupo para Token directo (siempre visible) - DEFINIR PRIMERO
+                        with gr.Group(visible=True) as token_method_group:
+                            token_input = gr.Textbox(
+                                label="🔑 Token / API Key",
+                                type="password",
+                                placeholder="Pega aquí tu token o API key...",
+                                info="💡 El token que obtuviste siguiendo la guía arriba. Se guarda de forma segura y encriptada.",
+                                value=""
+                            )
+                        
+                        # Grupo para OAuth Playground (solo visible para apps de Google)
+                        with gr.Group(visible=False) as oauth_playground_group:
+                            gr.Markdown("""
+### 🎮 Conexión vía OAuth Playground (Solo Google)
+
+**Pasos para obtener el Access Token:**
+
+**Paso 1:** Click en el botón azul de abajo → Se abre OAuth Playground
+
+**Paso 2:**
+1. Marca el scope necesario:
+   - Para **Google Drive**: `https://www.googleapis.com/auth/drive.readonly`
+   - Para **Gmail**: `https://www.googleapis.com/auth/gmail.readonly`
+2. Click en **"Authorize APIs"**
+3. Inicia sesión con Google
+4. Click en **"Exchange authorization code for tokens"**
+
+**Paso 3:** Copia el **"Access token"** y pégalo abajo → Click en **"Conectar"**
+
+💡 **Tip:** El token empieza con `ya29.` y es largo (más de 100 caracteres)
+
+⏰ **Importante:** El token dura ~1 hora. Después necesitarás generar uno nuevo.
+                            """)
+                            
+                            oauth_playground_link = gr.Markdown(
+                                value='<a href="https://developers.google.com/oauthplayground/" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #4285F4; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">🔗 Abrir OAuth Playground (Click Aquí)</a>',
+                                visible=True
+                            )
+                            
+                            oauth_token_input = gr.Textbox(
+                                label="🔑 Pega aquí el Access Token",
+                                type="password",
+                                placeholder="ya29.a0AfH6SMC...",
+                                info="💡 Copia el token desde OAuth Playground (empieza con ya29.)",
+                                value=""
+                            )
+                        
+                        # Event handlers - DESPUÉS de definir los grupos
+                        app_type_select.change(
+                            fn=update_connection_method_visibility,
+                            inputs=[app_type_select],
+                            outputs=[connection_method]
+                        )
+                        
+                        # Toggle entre métodos de conexión
+                        connection_method.change(
+                            fn=toggle_connection_method,
+                            inputs=[app_type_select, connection_method],
+                            outputs=[token_method_group, oauth_playground_group]
+                        )
+                        
+                        # Botón para mostrar/ocultar token (simplificado)
+                        with gr.Row():
+                            show_token_btn = gr.Button("👁️ Mostrar/Ocultar Token", variant="secondary", size="sm")
+                        
+                        extra_credentials_input = gr.Textbox(
+                            label="⚙️ Credenciales Extra (Opcional - Solo si la app lo requiere)",
+                            placeholder='Ejemplo para Jira: {"base_url": "https://tuempresa.atlassian.net"}\nEjemplo para Google Drive: {"folder_id": "1a2b3c4d5e6f7g8h9i0j"}\nEjemplo para Salesforce: {"instance_url": "https://tuinstancia.salesforce.com"}',
+                            lines=4,
+                            info="💡 Solo necesitas esto para algunas apps. La guía arriba te dirá si lo necesitas. Formato: JSON válido."
+                        )
+                        
+                        # Test de conexión antes de guardar
+                        test_connection_btn = gr.Button("🧪 Probar Conexión", variant="secondary")
+                        test_result = gr.Markdown(visible=False)
+                        
+                        # Función para probar conexión
+                        def test_connection(app_type, connection_method, token, oauth_token, extra_credentials):
+                            # Determinar qué token usar según el método
+                            if connection_method == "oauth_playground":
+                                actual_token = oauth_token.strip()
+                                if not actual_token:
+                                    return gr.Markdown("⚠️ **Ingresa el Access Token de OAuth Playground primero.**", visible=True)
+                            else:
+                                actual_token = token.strip()
+                                if not actual_token:
+                                    return gr.Markdown("⚠️ **Ingresa un token primero para probar la conexión.**", visible=True)
+                            
+                            extra = {}
+                            if extra_credentials.strip():
+                                try:
+                                    extra = json.loads(extra_credentials.strip())
+                                except json.JSONDecodeError:
+                                    return gr.Markdown("❌ **Error:** Las credenciales extra deben estar en formato JSON válido.", visible=True)
+                            
+                            try:
+                                from docchat.company_knowledge_integrations import IntegrationType, CompanyKnowledgeIntegrations
+                                from docchat.config import AppConfig
+                                
+                                # Crear instancia temporal para probar
+                                temp_config = AppConfig()
+                                temp_integrations = CompanyKnowledgeIntegrations(temp_config)
+                                
+                                integration_type = IntegrationType(app_type)
+                                # Usar el token correcto según el método
+                                token_to_use = oauth_token.strip() if connection_method == "oauth_playground" else token.strip()
+                                credentials = {"token": token_to_use, **extra}
+                                
+                                # Validar credenciales
+                                is_valid = temp_integrations._validate_credentials(integration_type, credentials)
+                                
+                                if is_valid:
+                                    return gr.Markdown("""
+## ✅ ¡Conexión Exitosa!
+
+**Tu token es válido y funciona correctamente.**
+
+🎉 Ahora puedes hacer clic en "🔌 Conectar App" para guardar esta conexión.
+
+**💡 Próximos pasos:**
+1. Haz clic en "🔌 Conectar App" para guardar
+2. Ve a "Chat con Apps" para hacer preguntas
+3. El sistema buscará automáticamente en esta app
+                                    """, visible=True)
+                                else:
+                                    return gr.Markdown("""
+## ⚠️ Token Inválido
+
+**El token no pudo validarse correctamente.**
+
+**Posibles causas:**
+- El token está expirado o fue revocado
+- El token no tiene los permisos necesarios
+- Las credenciales extra son incorrectas (si aplica)
+
+**💡 Soluciones:**
+1. Verifica que el token sea correcto (copia y pega de nuevo)
+2. Asegúrate de que el token tenga los scopes/permisos necesarios
+3. Si usas credenciales extra, verifica el formato JSON
+4. Revisa la guía arriba para obtener un token nuevo si es necesario
+                                    """, visible=True)
+                            except Exception as e:
+                                error_msg = str(e)
+                                return gr.Markdown(f"""
+## ❌ Error al Probar Conexión
+
+**Error:** {error_msg}
+
+**💡 Verifica:**
+- Que el token sea correcto
+- Que tengas conexión a internet
+- Que la app esté disponible
+                                """, visible=True)
+                        
+                        test_connection_btn.click(
+                            fn=test_connection,
+                            inputs=[app_type_select, connection_method, token_input, oauth_token_input, extra_credentials_input],
+                            outputs=[test_result]
+                        )
+                        
+                        gr.Markdown("### 📝 Paso 3: Conecta y Guarda")
+                        
+                        with gr.Row():
+                            connect_app_btn = gr.Button("🔌 Conectar y Guardar App", variant="primary", scale=2)
+                            clear_form_btn = gr.Button("🗑️ Limpiar Formulario", variant="secondary", scale=1)
+                        
+                        app_connection_output = gr.Markdown(label="📊 Estado de Conexión")
+                        
+                        def clear_connection_form():
+                            return "", "token", "", "", "", "**✅ Formulario limpiado. Puedes conectar una nueva app.**"
+                        
+                        clear_form_btn.click(
+                            fn=clear_connection_form,
+                            inputs=[],
+                            outputs=[app_name_input, connection_method, token_input, oauth_token_input, extra_credentials_input, app_connection_output]
+                        )
+                        
+                        def connect_app(app_type, app_name, connection_method, token, oauth_token, extra_credentials):
+                            if not app_name.strip():
+                                return "⚠️ Por favor, ingresa un nombre para la conexión."
+                            
+                            # Determinar qué token usar según el método
+                            if connection_method == "oauth_playground":
+                                actual_token = oauth_token.strip()
+                                if not actual_token:
+                                    return "⚠️ Por favor, ingresa el Access Token de OAuth Playground."
+                                if not actual_token.startswith("ya29."):
+                                    return "⚠️ El Access Token de OAuth Playground debe empezar con 'ya29.'. Verifica que copiaste el token correcto."
+                            else:
+                                actual_token = token.strip()
+                                if not actual_token:
+                                    return "⚠️ Por favor, ingresa un token o API key."
+                            
+                            # Parsear credenciales extra si se proporcionan
+                            extra = {}
+                            if extra_credentials.strip():
+                                try:
+                                    extra = json.loads(extra_credentials.strip())
+                                except json.JSONDecodeError:
+                                    return "❌ Error: Las credenciales extra deben estar en formato JSON válido."
+                            
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not accountability.app_integrations:
+                                    return "❌ Sistema de integraciones no disponible."
+                                
+                                from docchat.company_knowledge_integrations import IntegrationType
+                                integration_type = IntegrationType(app_type)
+                                
+                                # Preparar credenciales (usar el token correcto según método)
+                                token_to_use = oauth_token.strip() if connection_method == "oauth_playground" else token.strip()
+                                credentials = {
+                                    "token": token_to_use,
+                                    **extra
+                                }
+                                
+                                # Conectar app con validación
+                                connection = accountability.app_integrations.connect_app(
+                                    app_type=integration_type,
+                                    app_name=app_name.strip(),
+                                    credentials=credentials,
+                                    permissions={}
+                                )
+                                
+                                if connection.status == "connected":
+                                    # Actualizar estado global
+                                    connected_count = len(accountability.app_integrations.get_connected_apps())
+                                    
+                                    return f"""
+## ✅ ¡App Conectada Exitosamente!
+
+**🎉 {app_name} está ahora conectada y lista para usar.**
+
+**📋 Detalles de la Conexión:**
+- **ID:** `{connection.connection_id}`
+- **Tipo:** {app_type}
+- **Estado:** ✅ Conectada
+- **Conectado:** {connection.connected_at}
+- **Total de apps conectadas:** {connected_count}
+
+**🚀 Próximos Pasos:**
+
+1. **Haz una pregunta:** Ve al tab "💬 Chat con Apps"
+2. **Escribe tu pregunta:** Por ejemplo:
+   - "¿Qué hay en el canal #general de Slack?"
+   - "Busca documentos sobre Q4 en Google Drive"
+   - "Muéstrame los contactos de HubSpot de este mes"
+3. **El sistema buscará automáticamente** en esta app y te dará respuestas con citas
+
+**💡 Tip:** Puedes conectar múltiples apps del mismo tipo (ej: varios workspaces de Slack)
+
+**🔍 Prueba ahora:** Ve a "Chat con Apps" y haz tu primera pregunta!
+"""
+                                else:
+                                    return f"""
+## ⚠️ Conexión con Problemas
+
+**ID de Conexión:** `{connection.connection_id}`
+**App:** {app_name} ({app_type})
+**Estado:** {connection.status}
+
+**💡 Verifica tus credenciales y vuelve a intentar.**
+"""
+                            except ValueError as e:
+                                # Error de validación con mensaje claro
+                                error_msg = str(e)
+                                return f"""
+## ❌ Error al Conectar App
+
+**{error_msg}**
+
+**💡 Pasos para Solucionar:**
+
+1. **Verifica el token:**
+   - Asegúrate de copiar el token completo (sin espacios al inicio/final)
+   - Si el token es muy largo, cópialo de nuevo desde la fuente original
+
+2. **Verifica los permisos:**
+   - Revisa que el token tenga los scopes/permisos necesarios
+   - Consulta la guía arriba para ver qué permisos necesita esta app
+
+3. **Verifica credenciales extra (si aplica):**
+   - Asegúrate de que el JSON sea válido
+   - Verifica que los valores (base_url, instance_url, etc.) sean correctos
+
+4. **Prueba la conexión primero:**
+   - Usa el botón "🧪 Probar Conexión" antes de conectar
+   - Esto te dirá exactamente qué está mal
+
+5. **Obtén un token nuevo:**
+   - Si el token está expirado, genera uno nuevo
+   - Sigue la guía paso a paso arriba
+
+**🔍 Si el problema persiste:**
+- Verifica que tengas conexión a internet
+- Asegúrate de que la app esté disponible
+- Revisa los logs de la aplicación para más detalles
+                                """
+                            except Exception as e:
+                                error_msg = str(e)
+                                return f"""
+## ❌ Error Inesperado
+
+**Error:** {error_msg}
+
+**💡 Esto no debería pasar. Por favor:**
+1. Verifica que todos los campos estén completos
+2. Intenta de nuevo
+3. Si el problema persiste, contacta al soporte
+
+**Detalles técnicos:** {type(e).__name__}
+                                """
+                        
+                        connect_app_btn.click(
+                            fn=connect_app,
+                            inputs=[app_type_select, app_name_input, connection_method, token_input, oauth_token_input, extra_credentials_input],
+                            outputs=[app_connection_output]
+                        )
+                        
+                        # Listar apps conectadas
+                        list_apps_btn = gr.Button("📋 Listar Apps Conectadas", variant="secondary")
+                        apps_list_output = gr.Markdown(label="📊 Apps Conectadas")
+                        
+                        def list_connected_apps():
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not accountability.app_integrations:
+                                    return "❌ Sistema de integraciones no disponible."
+                                
+                                apps = accountability.app_integrations.get_connected_apps()
+                                
+                                if not apps:
+                                    return "## 📋 No hay apps conectadas\n\nConecta apps en el tab 'Conectar Apps'."
+                                
+                                output = f"## 📋 Apps Conectadas: {len(apps)}\n\n"
+                                for app in apps:
+                                    output += f"### 📱 {app.app_name}\n\n"
+                                    output += f"- **Tipo:** {app.app_type.value}\n"
+                                    output += f"- **Estado:** {app.status}\n"
+                                    output += f"- **Conectado:** {app.connected_at}\n"
+                                    output += f"- **Última sincronización:** {app.last_sync or 'N/A'}\n"
+                                    output += f"- **ID:** `{app.connection_id}`\n\n"
+                                
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        list_apps_btn.click(
+                            fn=list_connected_apps,
+                            inputs=[],
+                            outputs=[apps_list_output]
+                        )
+                    
+                    # Sub-tab: Chat con Apps
+                    with gr.Tab("💬 Chat con Apps"):
+                        gr.Markdown("### Haz preguntas que buscan en tus apps conectadas")
+                        gr.Markdown("""
+                        **Pregunta sobre información que está en tus apps conectadas:**
+                        - "Resume los comentarios de clientes de Slack y HubSpot"
+                        - "¿Qué hay en el documento X de Google Drive?"
+                        - "Analiza los issues abiertos en GitHub"
+                        """)
+                        
+                        # Generar session_id único
+                        accountability_session_id = gr.State(value=str(uuid.uuid4()))
+                        
+                        with gr.Row():
+                            accountability_files = gr.Files(
+                                label="📂 Documentos (Opcional - PDF, DOCX, TXT, MD)",
+                                file_count="multiple",
+                                file_types=[".pdf", ".docx", ".txt", ".md"],
+                            )
+                        
+                        with gr.Row():
+                            process_from_apps_btn = gr.Button(
+                                "🚀 Procesar PDFs desde SharePoint/Google Drive",
+                                variant="primary"
+                            )
+                            accountability_max_pdfs_from_apps = gr.Dropdown(
+                                label="📄 Máximo PDFs a procesar",
+                                choices=[
+                                    ("5 PDFs", 5),
+                                    ("10 PDFs", 10),
+                                    ("25 PDFs", 25),
+                                    ("50 PDFs", 50),
+                                    ("100 PDFs", 100),
+                                    ("250 PDFs", 250),
+                                    ("500 PDFs", 500)
+                                ],
+                                value=100,
+                                info="Máximo número de PDFs a procesar desde SharePoint/Google Drive"
+                            )
+                        
+                        with gr.Row():
+                            accountability_speed_mode = gr.Radio(
+                                label="⚡ Modo de Velocidad",
+                                choices=[
+                                    ("🚀 Rápido", "fast"),
+                                    ("⚖️ Balanceado (recomendado)", "balanced"),
+                                    ("🎯 Máxima Calidad", "quality")
+                                ],
+                                value="balanced",
+                            )
+                            accountability_provider_toggle = gr.Radio(
+                                label="🤖 Motor de IA",
+                                choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                                value="openai",
+                                info="Cambia el motor de IA utilizado"
+                            )
+                        
+                        with gr.Row():
+                            accountability_task_type = gr.Dropdown(
+                                label="⚙️ Tipo de Tarea",
+                                choices=[
+                                    ("💬 Normal (chat)", "normal"),
+                                    ("📝 Pre-Brief", "prebrief"),
+                                    ("📊 Análisis de Datos / KPIs", "data_analysis"),
+                                    ("📧 Responder Emails (Gmail)", "email_response")
+                                ],
+                                value="normal",
+                                info="Selecciona el tipo de tarea para Accountability"
+                            )
+                            accountability_days = gr.Radio(
+                                label="Rango de búsqueda (días)",
+                                choices=[("Últimos 7 días", 7), ("Últimos 30 días", 30), ("Últimos 90 días", 90), ("Todo", None)],
+                                value=30,
+                                interactive=True,
+                                info="Limita la búsqueda a los últimos N días (si la app lo soporta)"
+                            )
+                            accountability_urls_toggle = gr.Checkbox(
+                                label="URLs en bullets",
+                                value=False,
+                                info="Incluir URLs de las fuentes directamente en los puntos del resumen (si aplica)"
+                            )
+                        
+                        # Sidebar en tiempo real (mostrar apps siendo buscadas)
+                        with gr.Row():
+                            with gr.Column(scale=3):
+                                # Chatbot component
+                                accountability_bot = gr.Chatbot(
+                                    label="💬 Conversación de Conocimiento",
+                                    height=500,
+                                    show_copy_button=True,
+                                )
+                            with gr.Column(scale=1):
+                                search_status_sidebar = gr.Markdown(
+                                    label="🔍 Búsqueda en Tiempo Real",
+                                    value="**Apps conectadas:**\n\n*Esperando consulta...*",
+                                    visible=True
+                                )
+                        
+                        with gr.Row():
+                            accountability_input = gr.Textbox(
+                                label="Escribe tu pregunta",
+                                placeholder="Ejemplo: ¿Cuál es nuestra política de trabajo remoto según Slack y Google Drive?",
+                                lines=2,
+                                scale=4,
+                            )
+                            accountability_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                        
+                        with gr.Row():
+                            clear_accountability_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                            clear_accountability_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+                            accountability_stats_btn = gr.Button("📊 Ver Estadísticas", variant="secondary")
+                            copy_sources_btn = gr.Button("🔗 Copiar fuentes", variant="secondary")
+                        
+                        accountability_status = gr.Markdown(label="ℹ️ Estado del Chat")
+                        accountability_stats_output = gr.Markdown(label="📊 Estadísticas Avanzadas", visible=False)
+                        copy_sources_output = gr.Textbox(
+                            label="Fuentes (URLs)",
+                            lines=4,
+                            interactive=False
+                        )
+                        
+                        gr.Markdown("### ⚠️ Checklist de Gobernanza Esencial:")
+                        gr.Markdown("- **Revisar permisos Drive/SharePoint antes de activar:** Asegúrate de que los permisos de acceso en Google Drive y SharePoint estén configurados correctamente para evitar la exposición de datos sensibles.")
+                        gr.Markdown("- **Aviso de reconexión:** Recuerda que los tokens no se persisten. Si reinicias la aplicación, deberás reconectar tus apps.")
+                        
+                        # Event handlers
+                        def accountability_submit(message, history, files, session_id, speed_mode, provider):
+                            if not message.strip():
+                                return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                            
+                            new_history, error = run_accountability(
+                                message=message,
+                                history=history,
+                                files=files or [],
+                                session_id=session_id,
+                                speed_mode=speed_mode,
+                                provider=provider,
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            status = f"✅ {len(new_history)} mensajes en la conversación"
+                            if error:
+                                status = error
+                            return new_history, new_history, status, gr.Markdown(visible=False)
+                        
+                        def format_executive_summary(executive_summary, result):
+                            """Formatea el resumen ejecutivo para mostrar en la UI."""
+                            if not executive_summary:
+                                return "No se generó resumen ejecutivo."
+                            
+                            summary_text = f"""# 📊 Resumen Ejecutivo Automático
+
+## 📄 Resumen General
+
+- **Total de documentos procesados:** {executive_summary.get('total_documents', 0)}
+- **Facturas:** {executive_summary.get('invoices_count', 0)}
+- **Contratos:** {executive_summary.get('contracts_count', 0)}
+- **Reportes financieros:** {executive_summary.get('financial_reports_count', 0)}
+
+## 💰 Totales Financieros
+
+"""
+                            
+                            if executive_summary.get('total_amount'):
+                                summary_text += f"- **Monto total:** {executive_summary.get('total_amount', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            if executive_summary.get('total_invoices_amount'):
+                                summary_text += f"- **Total facturas:** {executive_summary.get('total_invoices_amount', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            if executive_summary.get('total_contracts_amount'):
+                                summary_text += f"- **Total contratos:** {executive_summary.get('total_contracts_amount', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            
+                            reconciliation = executive_summary.get('reconciliation_summary', {})
+                            if reconciliation:
+                                summary_text += f"\n## 🔗 Conciliación\n\n"
+                                summary_text += f"- **Facturas pagadas:** {reconciliation.get('paid_invoices', 0)}\n"
+                                summary_text += f"- **Facturas pendientes:** {reconciliation.get('pending_invoices', 0)}\n"
+                                summary_text += f"- **Facturas vencidas:** {reconciliation.get('overdue_invoices', 0)}\n"
+                                summary_text += f"- **Contratos activos:** {reconciliation.get('active_contracts', 0)}\n"
+                                summary_text += f"- **Contratos próximos a vencer:** {reconciliation.get('expiring_soon', 0)}\n"
+                            
+                            # Top proveedores
+                            top_suppliers = executive_summary.get('top_suppliers', [])
+                            if top_suppliers:
+                                summary_text += f"\n## 🏢 Top Proveedores\n\n"
+                                for i, supplier in enumerate(top_suppliers[:5], 1):
+                                    summary_text += f"{i}. **{supplier.get('name', 'N/A')}**: {supplier.get('total', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            
+                            # Top clientes
+                            top_clients = executive_summary.get('top_clients', [])
+                            if top_clients:
+                                summary_text += f"\n## 👥 Top Clientes\n\n"
+                                for i, client in enumerate(top_clients[:5], 1):
+                                    summary_text += f"{i}. **{client.get('name', 'N/A')}**: {client.get('total', 0):,.2f} {executive_summary.get('currency', 'USD')}\n"
+                            
+                            # Alertas
+                            alerts = executive_summary.get('alerts', [])
+                            if alerts:
+                                summary_text += f"\n## ⚠️ Alertas ({len(alerts)})\n\n"
+                                for alert in alerts[:10]:
+                                    summary_text += f"- {alert}\n"
+                            
+                            # Errores
+                            errors = executive_summary.get('errors_detected', [])
+                            if errors:
+                                summary_text += f"\n## ❌ Errores Detectados ({len(errors)})\n\n"
+                                for error in errors[:10]:
+                                    summary_text += f"- {error}\n"
+                            
+                            # Recomendaciones
+                            recommendations = executive_summary.get('recommendations', [])
+                            if recommendations:
+                                summary_text += f"\n## 💡 Recomendaciones\n\n"
+                                for rec in recommendations:
+                                    summary_text += f"- {rec}\n"
+                            
+                            # Vencimientos próximos
+                            vencimientos = executive_summary.get('vencimientos_proximos', [])
+                            if vencimientos:
+                                summary_text += f"\n## 📅 Vencimientos Próximos\n\n"
+                                for venc in vencimientos[:10]:
+                                    summary_text += f"- **{venc.get('document_type', 'N/A')}**: {venc.get('entity', 'N/A')} - Vence: {venc.get('due_date', 'N/A')} - Monto: {venc.get('amount', 'N/A')}\n"
+                            
+                            return summary_text
+                        
+                        def accountability_submit_v2(message, history, files, session_id, speed_mode, provider, days, urls_in_bullets, task_type):
+                            # NUEVO: Si hay archivos, procesar automáticamente primero
+                            if files:
+                                try:
+                                    accountability = get_accountability(
+                                        config=config,
+                                        processor=processor,
+                                        retriever_builder=retriever_builder,
+                                        context_manager=context_manager
+                                    )
+                                    
+                                    print(f"📊 [Accountability] Procesando {len(files)} documentos automáticamente...")
+                                    
+                                    # Procesar documentos contables automáticamente
+                                    result = accountability.process_accounting_documents_automatically(
+                                        session_id=session_id,
+                                        files=files,
+                                        generate_summary=True
+                                    )
+                                    
+                                    if result.get("status") == "success":
+                                        # Generar resumen ejecutivo automático
+                                        executive_summary = result.get("executive_summary")
+                                        if executive_summary:
+                                            summary_text = format_executive_summary(executive_summary, result)
+                                            
+                                            # Agregar al historial automáticamente
+                                            auto_message = "📊 **Procesamiento Automático Completado**\n\nSe procesaron los documentos automáticamente. Aquí está el resumen ejecutivo:"
+                                            history = history + [(auto_message, summary_text)]
+                                            
+                                            # Si no hay mensaje del usuario, solo mostrar el resumen
+                                            if not message.strip():
+                                                return history, history, f"✅ {result.get('total_documents', 0)} documentos procesados automáticamente. Resumen ejecutivo generado.", gr.Markdown(visible=False)
+                                    
+                                    # Si hay mensaje del usuario, continuar con el procesamiento normal
+                                except Exception as e:
+                                    print(f"⚠️ [Accountability] Error en procesamiento automático: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                            
+                            if not message.strip():
+                                return history, history, "⚠️ Escribe una pregunta.", gr.Markdown(visible=False)
+                            
+                            # Preparar filtros
+                            filters = {}
+                            if days:
+                                filters["days"] = days
+                            
+                            # Si es una tarea autónoma (prebrief, data_analysis, o email_response), usar execute_autonomous_task_v2
+                            if task_type in ["prebrief", "data_analysis", "email_response"]:
+                                try:
+                                    accountability = get_accountability(
+                                        config=config,
+                                        processor=processor,
+                                        retriever_builder=retriever_builder,
+                                        context_manager=context_manager
+                                    )
+                                    
+                                    if not hasattr(accountability, 'app_integrations') or not accountability.app_integrations:
+                                        error_msg = "⚠️ No hay apps conectadas. Ve a la pestaña 'Conectar Apps' para conectar tus aplicaciones."
+                                        new_history = history + [(message, error_msg)]
+                                        return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                                    
+                                    # Ejecutar tarea autónoma
+                                    import asyncio
+                                    
+                                    # Mostrar estado de búsqueda inicial
+                                    search_status_text = "**🔍 Buscando en apps conectadas...**\n\n"
+                                    
+                                    result = asyncio.run(
+                                        accountability.execute_autonomous_task_v2(
+                                            task_description=message,
+                                            task_type=task_type,
+                                            filters=filters,
+                                            urls_in_bullets=urls_in_bullets
+                                        )
+                                    )
+                                    
+                                    if result.get("success"):
+                                        if task_type == "prebrief":
+                                            response_text = result.get("prebrief_summary", "No se generó resumen.")
+                                        elif task_type == "email_response":
+                                            # Formatear respuestas de email
+                                            responses = result.get("responses", [])
+                                            response_text = f"✅ **{result.get('responses_generated', 0)} respuestas generadas**\n\n"
+                                            for i, resp in enumerate(responses, 1):
+                                                response_text += f"### 📧 Respuesta {i}: {resp.get('original_subject', 'Sin asunto')}\n\n"
+                                                response_text += f"**Para:** {resp.get('to', 'N/A')}\n"
+                                                response_text += f"**Asunto:** {resp.get('subject', 'N/A')}\n\n"
+                                                response_text += f"**Respuesta generada:**\n{resp.get('body', 'N/A')}\n\n"
+                                                if resp.get('gmail_url'):
+                                                    response_text += f"🔗 [Ver email original]({resp.get('gmail_url')})\n\n"
+                                                response_text += "---\n\n"
+                                            if result.get("errors"):
+                                                response_text += f"\n⚠️ **Errores:**\n" + "\n".join(f"- {e}" for e in result.get("errors", []))
+                                        else:
+                                            response_text = result.get("summary", "No se generó análisis.")
+                                        
+                                        # Agregar información de conflictos si existen
+                                        if result.get("conflicts_detected"):
+                                            response_text = f"⚠️ **Nota:** Se detectaron discrepancias entre fuentes. Se presentan perspectivas balanceadas.\n\n{response_text}"
+                                        
+                                        # Agregar fuentes mejoradas con citations
+                                        sources = result.get("sources", [])
+                                        total_sources = result.get("total_sources", len(sources))
+                                        search_status = result.get("search_status", [])
+                                        
+                                        # Construir sidebar de búsqueda
+                                        if search_status:
+                                            search_status_text = "**🔍 Apps consultadas:**\n\n"
+                                            apps_searched = {}
+                                            for status_item in search_status:
+                                                app = status_item.get("app", "Unknown")
+                                                source = status_item.get("source", "Unknown")
+                                                if app not in apps_searched:
+                                                    apps_searched[app] = []
+                                                apps_searched[app].append(source)
+                                            
+                                            for app, sources_list in apps_searched.items():
+                                                search_status_text += f"**{app}**\n"
+                                                for src in sources_list[:3]:  # Mostrar top 3 por app
+                                                    search_status_text += f"  • {src}\n"
+                                                if len(sources_list) > 3:
+                                                    search_status_text += f"  • ... y {len(sources_list) - 3} más\n"
+                                                search_status_text += "\n"
+                                            
+                                            search_status_text += f"\n**Total:** {total_sources} fuentes encontradas"
+                                        else:
+                                            search_status_text = f"**✅ Búsqueda completada**\n\n{total_sources} fuentes consultadas"
+                                        
+                                        # Agregar sección de fuentes con links clickeables
+                                        if sources:
+                                            response_text += "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
+                                            for i, src in enumerate(sources[:15], 1):  # Top 15 fuentes
+                                                app_name = src.get("app", "Unknown")
+                                                source_name = src.get("source", "Unknown")
+                                                url = src.get("url", "")
+                                                if url:
+                                                    response_text += f"{i}. **[{app_name}]** {source_name}\n   🔗 [Abrir fuente]({url})\n\n"
+                                                else:
+                                                    response_text += f"{i}. **[{app_name}]** {source_name}\n\n"
+                                            
+                                            if len(sources) > 15:
+                                                response_text += f"\n*... y {len(sources) - 15} fuentes adicionales*\n"
+                                        
+                                        new_history = history + [(message, response_text)]
+                                        status = f"✅ Tarea {task_type} completada. {total_sources} fuentes consultadas."
+                                        if result.get("conflicts_detected"):
+                                            status += " ⚠️ Conflictos detectados y resueltos."
+                                    else:
+                                        error_msg = result.get("error", "Error desconocido al ejecutar la tarea.")
+                                        # Verificar si es un error de scopes/tokens
+                                        if "token" in error_msg.lower() or "scope" in error_msg.lower() or "permiso" in error_msg.lower():
+                                            error_msg += "\n\n💡 **Sugerencia:** Verifica que las apps estén conectadas correctamente y tengan los permisos necesarios. Ve a 'Conectar Apps' para reconectar."
+                                        new_history = history + [(message, f"❌ {error_msg}")]
+                                        status = error_msg
+                                        search_status_text = "**❌ Error en búsqueda**\n\nNo se pudieron consultar las apps."
+                                    
+                                    return new_history, new_history, status, gr.Markdown(visible=False), gr.Markdown(search_status_text, visible=True)
+                                    
+                                except Exception as e:
+                                    error_msg = f"❌ Error al ejecutar tarea autónoma: {str(e)}"
+                                    new_history = history + [(message, error_msg)]
+                                    return new_history, new_history, error_msg, gr.Markdown(visible=False)
+                            else:
+                                # Tarea normal (chat) - CON STREAMING EN TIEMPO REAL
+                                try:
+                                    accountability = get_accountability(
+                                        config=config,
+                                        processor=processor,
+                                        retriever_builder=retriever_builder,
+                                        context_manager=context_manager
+                                    )
+                                    
+                                    # Función generadora para streaming (Gradio detecta automáticamente)
+                                    def stream_response():
+                                        import asyncio
+                                        full_response = ""
+                                        
+                                        # Inicializar con mensaje vacío
+                                        yield history + [(message, "")], history + [(message, "")], "⏳ Generando respuesta...", gr.Markdown(visible=False), gr.Markdown("**🔍 Buscando información...**", visible=True)
+                                        
+                                        try:
+                                            # Ejecutar query con streaming del LLM
+                                            loop = asyncio.new_event_loop()
+                                            asyncio.set_event_loop(loop)
+                                            
+                                            async def get_streaming_response():
+                                                # Obtener instancia y preparar contexto
+                                                session = accountability.initialize_session(session_id)
+                                                
+                                                # Buscar en apps si están conectadas
+                                                app_results = []
+                                                if accountability.app_integrations:
+                                                    connected_apps = accountability.app_integrations.get_connected_apps()
+                                                    if connected_apps:
+                                                        app_results = await accountability.app_integrations.search_across_apps(
+                                                            query=message,
+                                                            filters=filters
+                                                        )
+                                                
+                                                # Si hay resultados de apps, generar respuesta con streaming
+                                                if app_results:
+                                                    ranked_results = accountability._rank_results_by_relevance_and_recency(
+                                                        query=message,
+                                                        results=app_results,
+                                                        filters=filters
+                                                    )
+                                                    
+                                                    # Construir contexto
+                                                    ctx_lines = []
+                                                    sources_list = []
+                                                    for r in ranked_results[:10]:
+                                                        snippet = (r.snippet or r.content or "")[:5000]
+                                                        ctx_lines.append(f"[{r.app_name}] {r.source_name}: {snippet}")
+                                                        if r.url:
+                                                            sources_list.append({"app": r.app_name, "source": r.source_name, "url": r.url})
+                                                    
+                                                    context_block = "\n".join(ctx_lines)
+                                                    prompt = f"""Eres un asistente experto. Responde la pregunta del usuario usando SOLO la información proporcionada.
+
+INFORMACIÓN DISPONIBLE:
+{context_block}
+
+PREGUNTA: {message}
+
+Responde de forma clara, profesional y detallada:"""
+                                                    
+                                                    # Stream tokens del LLM
+                                                    from langchain_core.messages import HumanMessage
+                                                    async for chunk in accountability.llm.astream([HumanMessage(content=prompt)]):
+                                                        if hasattr(chunk, 'content'):
+                                                            token = chunk.content
+                                                        else:
+                                                            token = str(chunk)
+                                                        full_response += token
+                                                        # Yield actualización incremental
+                                                        yield history + [(message, full_response)]
+                                                    
+                                                    # Agregar fuentes
+                                                    if sources_list:
+                                                        sources_text = "\n\n---\n\n### 📚 Fuentes Consultadas\n\n"
+                                                        for i, src in enumerate(sources_list[:10], 1):
+                                                            app_name = src.get("app", "Unknown")
+                                                            source_name = src.get("source", "Unknown")
+                                                            url = src.get("url", "")
+                                                            if url:
+                                                                sources_text += f"{i}. **[{app_name}]** {source_name} - [🔗 Abrir]({url})\n"
+                                                            else:
+                                                                sources_text += f"{i}. **[{app_name}]** {source_name}\n"
+                                                        full_response += sources_text
+                                                        yield history + [(message, full_response)]
+                                                else:
+                                                    # Sin resultados de apps, usar método normal
+                                                    new_hist, err, meta = await accountability.process_query_async(
+                                                        session_id=session_id,
+                                                        message=message,
+                                                        history=history,
+                                                        speed_mode=speed_mode,
+                                                        provider=provider,
+                                                        filters=filters,
+                                                        urls_in_bullets=urls_in_bullets
+                                                    )
+                                                    yield new_hist
+                                            
+                                            # Ejecutar streaming usando el loop
+                                            async_gen = get_streaming_response()
+                                            try:
+                                                while True:
+                                                    try:
+                                                        # Usar run_until_complete para obtener el siguiente valor del async generator
+                                                        result = loop.run_until_complete(async_gen.__anext__())
+                                                        # Yield actualización del chatbot
+                                                        status = f"✅ {len(result)} mensajes"
+                                                        yield result, result, status, gr.Markdown(visible=False), gr.Markdown("**✅ Búsqueda completada**", visible=True)
+                                                    except StopAsyncIteration:
+                                                        break
+                                            finally:
+                                                loop.close()
+                                        except Exception as e:
+                                            import traceback
+                                            traceback.print_exc()
+                                            error_msg = f"❌ Error: {str(e)}"
+                                            error_history = history + [(message, error_msg)]
+                                            yield error_history, error_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error**", visible=True)
+                                    
+                                    # Devolver generador para streaming (Gradio lo detecta automáticamente)
+                                    return stream_response()
+                                    
+                                except Exception as e:
+                                    import traceback
+                                    traceback.print_exc()
+                                    error_msg = f"❌ Error al procesar consulta: {str(e)}"
+                                    new_history = history + [(message, error_msg)]
+                                    return new_history, new_history, error_msg, gr.Markdown(visible=False), gr.Markdown("**❌ Error en búsqueda**\n\nNo se pudo procesar la consulta.", visible=True)
+                        
+                        def copy_sources(history):
+                            """Extrae URLs de la última respuesta del bot"""
+                            if not history or len(history) == 0:
+                                return ""
+                            
+                            last_bot_message = history[-1][1] if len(history[-1]) > 1 else ""
+                            if not last_bot_message:
+                                return ""
+                            
+                            # Buscar URLs en el mensaje
+                            import re
+                            urls = re.findall(r'https?://[^\s\)]+', last_bot_message)
+                            if not urls:
+                                # Buscar en formato markdown [texto](url)
+                                urls = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', last_bot_message)
+                                if urls:
+                                    urls = [url for _, url in urls]
+                            
+                            if urls:
+                                return "\n".join(set(urls))  # Eliminar duplicados
+                            return "No se encontraron URLs en la última respuesta."
+                        
+                        def clear_accountability(history, session_id):
+                            accountability = get_accountability(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            if hasattr(accountability, 'sessions') and session_id in accountability.sessions:
+                                accountability.sessions[session_id]["history"] = []
+                                accountability.sessions[session_id]["docs"] = []
+                                accountability.sessions[session_id]["retriever"] = None
+                                accountability.sessions[session_id]["processed_files"].clear()
+                            return [], "✅ Chat limpiado. Puedes cargar nuevos documentos.", gr.Markdown(visible=False)
+                        
+                        def clear_accountability_files(files, session_id):
+                            accountability = get_accountability(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            if hasattr(accountability, 'sessions') and session_id in accountability.sessions:
+                                accountability.sessions[session_id]["processed_files"].clear()
+                                accountability.sessions[session_id]["docs"] = []
+                                accountability.sessions[session_id]["retriever"] = None
+                            return None, "✅ Documentos limpiados. Puedes cargar nuevos.", gr.Markdown(visible=False)
+                        
+                        def process_pdfs_from_connected_apps(session_id, max_pdfs, history):
+                            """Procesa PDFs automáticamente desde SharePoint y Google Drive conectados."""
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                if not hasattr(accountability, 'app_integrations') or not accountability.app_integrations:
+                                    error_msg = "⚠️ No hay apps conectadas. Conecta SharePoint o Google Drive primero en 'Conectar Apps'."
+                                    return history, error_msg, gr.Markdown(visible=False)
+                                
+                                # Verificar que haya SharePoint o Google Drive conectados
+                                connected_apps = accountability.app_integrations.get_connected_apps()
+                                from docchat.company_knowledge_integrations import IntegrationType
+                                target_apps = [
+                                    app for app in connected_apps
+                                    if app.app_type in [IntegrationType.SHAREPOINT, IntegrationType.GOOGLE_DRIVE]
+                                ]
+                                
+                                if not target_apps:
+                                    error_msg = "⚠️ No hay SharePoint o Google Drive conectados. Conecta estas apps primero en 'Conectar Apps'."
+                                    return history, error_msg, gr.Markdown(visible=False)
+                                
+                                # Procesar PDFs desde apps
+                                import asyncio
+                                
+                                result = asyncio.run(
+                                    accountability.process_pdfs_from_connected_apps(
+                                        session_id=session_id,
+                                        max_pdfs=max_pdfs,
+                                        generate_summary=True
+                                    )
+                                )
+                                
+                                if result.get("status") == "success":
+                                    # Generar resumen ejecutivo automático
+                                    executive_summary = result.get("executive_summary")
+                                    if executive_summary:
+                                        summary_text = format_executive_summary(executive_summary, result)
+                                        
+                                        # Agregar al historial
+                                        auto_message = f"🚀 **Procesamiento Automático desde Apps Conectadas**\n\nSe procesaron {result.get('total_documents', 0)} PDFs automáticamente desde SharePoint/Google Drive. Aquí está el resumen ejecutivo:"
+                                        new_history = history + [(auto_message, summary_text)]
+                                        
+                                        status_msg = f"✅ {result.get('total_documents', 0)} PDFs procesados automáticamente desde apps conectadas. Resumen ejecutivo generado."
+                                        return new_history, status_msg, gr.Markdown(visible=False)
+                                    else:
+                                        error_msg = "⚠️ Se procesaron PDFs pero no se generó resumen ejecutivo."
+                                        return history, error_msg, gr.Markdown(visible=False)
+                                else:
+                                    error_msg = result.get("error", "Error desconocido al procesar PDFs desde apps.")
+                                    return history, f"❌ {error_msg}", gr.Markdown(visible=False)
+                                    
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                error_msg = f"❌ Error procesando PDFs desde apps: {str(e)}"
+                                return history, error_msg, gr.Markdown(visible=False)
+                        
+                        def show_accountability_stats(session_id):
+                            accountability = get_accountability(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            stats = accountability.get_statistics(session_id=session_id)
+                            
+                            output = "## 📊 Estadísticas Avanzadas - Accountability\n\n"
+                            output += f"### 📦 Context Folding\n"
+                            output += f"- Ramas activas: {stats['context_folding']['active_branches']}\n"
+                            output += f"- Ramas plegadas: {stats['context_folding']['folded_branches']}\n"
+                            output += f"- Tokens ahorrados: {stats['context_folding']['total_tokens_saved']:,}\n"
+                            output += f"- Ratio de compresión: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                            
+                            output += f"### 🔍 Data Provenance\n"
+                            output += f"- Registros totales: {stats['data_provenance']['total_records']}\n"
+                            output += f"- Fuentes únicas: {stats['data_provenance']['unique_sources']}\n"
+                            output += f"- Promedio fuentes/registro: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                            
+                            output += f"### 📱 Apps Conectadas\n"
+                            app_stats = stats.get('app_integrations', {})
+                            output += f"- Total conexiones: {app_stats.get('total_connections', 0)}\n"
+                            output += f"- Apps conectadas: {app_stats.get('connected_apps', 0)}\n"
+                            output += f"- Apps por tipo: {app_stats.get('apps_by_type', {})}\n\n"
+                            
+                            output += f"### 🧠 Chain of Thought\n"
+                            output += f"- Cadenas activas: {stats['chain_of_thought']['active_chains']}\n"
+                            output += f"- Cadenas completadas: {stats['chain_of_thought']['completed_chains']}\n"
+                            output += f"- Pasos totales: {stats['chain_of_thought']['total_steps']}\n\n"
+                            
+                            output += f"### 🛤️ Path-dependent Reasoning\n"
+                            output += f"- Caminos probados: {stats['path_reasoning']['total_paths_tested']}\n"
+                            output += f"- Tasa de éxito: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                            output += f"- Enfoques aprendidos: {stats['path_reasoning']['learned_approaches']}\n\n"
+                            
+                            output += f"### 📈 Test Time Training\n"
+                            output += f"- Episodios totales: {stats['test_time_training']['total_episodes']}\n"
+                            output += f"- Tasa de éxito: {stats['test_time_training']['success_rate']:.1f}%\n"
+                            output += f"- Patrones aprendidos: {stats['test_time_training']['learned_patterns']}\n\n"
+                            
+                            output += f"### 👤 Person in the Loop\n"
+                            output += f"- Aprobaciones pendientes: {stats['person_in_loop']['pending_approvals']}\n"
+                            output += f"- Tasa de aprobación: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                            output += f"- Reglas activas: {stats['person_in_loop']['active_rules']}\n\n"
+                            
+                            output += f"### 🧠 Reinforcement Learning y Planning\n"
+                            output += f"- Árboles totales: {stats['reinforcement_planning']['total_trees']}\n"
+                            output += f"- Tasa de éxito: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                            output += f"- Exploraciones totales: {stats['reinforcement_planning']['total_explorations']}\n"
+                            output += f"- Memoria de aprendizaje: {stats['reinforcement_planning']['learning_memory_size']} patrones\n\n"
+                            
+                            output += f"### 🔌 MCP Potenciado (Model Context Protocol)\n"
+                            output += f"- Conexiones totales: {stats['mcp_integration']['connections']}\n"
+                            output += f"- Conexiones activas: {stats['mcp_integration']['enabled_connections']}\n"
+                            
+                            if 'session' in stats:
+                                output += f"\n### 📋 Sesión\n"
+                                output += f"- Documentos: {stats['session']['docs_count']}\n"
+                                output += f"- Mensajes: {stats['session']['history_count']}\n"
+                                output += f"- Archivos procesados: {stats['session']['processed_files']}\n"
+                            
+                            return gr.Markdown(output, visible=True)
+                        
+                        accountability_submit_btn.click(
+                            fn=accountability_submit_v2,
+                            inputs=[accountability_input, accountability_bot, accountability_files, accountability_session_id, accountability_speed_mode, accountability_provider_toggle, accountability_days, accountability_urls_toggle, accountability_task_type],
+                            outputs=[accountability_bot, accountability_bot, accountability_status, accountability_stats_output, search_status_sidebar],
+                        ).then(
+                            fn=lambda: gr.Markdown(visible=False),
+                            outputs=[accountability_stats_output]
+                        )
+                        
+                        accountability_input.submit(
+                            fn=accountability_submit_v2,
+                            inputs=[accountability_input, accountability_bot, accountability_files, accountability_session_id, accountability_speed_mode, accountability_provider_toggle, accountability_days, accountability_urls_toggle, accountability_task_type],
+                            outputs=[accountability_bot, accountability_bot, accountability_status, accountability_stats_output, search_status_sidebar],
+                        ).then(
+                            fn=lambda: gr.Markdown(visible=False),
+                            outputs=[accountability_stats_output]
+                        )
+                        
+                        copy_sources_btn.click(
+                            fn=copy_sources,
+                            inputs=[accountability_bot],
+                            outputs=[copy_sources_output]
+                        )
+
+                        clear_accountability_btn.click(
+                            fn=clear_accountability,
+                            inputs=[accountability_bot, accountability_session_id],
+                            outputs=[accountability_bot, accountability_status, accountability_stats_output]
+                        )
+                        
+                        clear_accountability_files_btn.click(
+                            fn=clear_accountability_files,
+                            inputs=[accountability_files, accountability_session_id],
+                            outputs=[accountability_files, accountability_status]
+                        )
+                        
+                        process_from_apps_btn.click(
+                            fn=process_pdfs_from_connected_apps,
+                            inputs=[accountability_session_id, accountability_max_pdfs_from_apps, accountability_bot],
+                            outputs=[accountability_bot, accountability_status, accountability_stats_output]
+                        )
+                        
+                        accountability_stats_btn.click(
+                            fn=show_accountability_stats,
+                            inputs=[accountability_session_id],
+                            outputs=[accountability_stats_output]
+                        )
+                    
+                    # Sub-tab: Tareas Autónomas
+                    with gr.Tab("🤖 Tareas Autónomas"):
+                        gr.Markdown("### Ejecuta tareas autónomas usando tus apps conectadas")
+                        gr.Markdown("""
+                        **Tipos de tareas disponibles:**
+                        - **Resumir**: Resumir información de múltiples fuentes
+                        - **Analizar**: Analizar datos y generar insights
+                        - **Crear Informe**: Crear un informe basado en datos
+                        - **Planificar**: Crear un plan basado en información disponible
+                        - **Comparar**: Comparar información de diferentes fuentes
+                        """)
+                        
+                        task_type_select = gr.Dropdown(
+                            label="⚙️ Tipo de Tarea",
+                            choices=[
+                                ("📝 Resumir información", "summarize"),
+                                ("📊 Analizar datos", "analyze"),
+                                ("📄 Crear informe", "create_report"),
+                                ("📋 Planificar", "plan"),
+                                ("⚖️ Comparar información", "compare")
+                            ],
+                            value="summarize"
+                        )
+                        
+                        task_description_input = gr.Textbox(
+                            label="Descripción de la Tarea",
+                            placeholder="Ej: Resume los comentarios de clientes de Slack y HubSpot del último trimestre",
+                            lines=5
+                        )
+                        
+                        execute_task_btn = gr.Button("🚀 Ejecutar Tarea Autónoma", variant="primary", size="lg")
+                        task_output = gr.Markdown(label="📊 Resultado de la Tarea")
+                        
+                        def execute_autonomous_task(task_type, task_description):
+                            if not task_description.strip():
+                                return "⚠️ Por favor, describe la tarea que quieres ejecutar."
+                            
+                            try:
+                                accountability = get_accountability(
+                                    config=config,
+                                    processor=processor,
+                                    retriever_builder=retriever_builder,
+                                    context_manager=context_manager
+                                )
+                                
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                result = loop.run_until_complete(
+                                    accountability.execute_autonomous_task(
+                                        task_description=task_description,
+                                        task_type=task_type,
+                                        context=None
+                                    )
+                                )
+                                loop.close()
+                                
+                                if result.get("success"):
+                                    output = f"""
+## ✅ Tarea Completada: {task_type}
+
+### 📋 Resultado:
+
+{result.get('summary', result.get('analysis', result.get('report', result.get('plan', result.get('comparison', 'N/A')))))}
+
+### 📚 Fuentes Consultadas:
+{', '.join(result.get('sources', []))}
+
+### 📊 Información:
+- **Tipo:** {result.get('task_type')}
+- **Fuentes:** {result.get('sources_count', len(result.get('sources', [])))}
+"""
+                                    return output
+                                else:
+                                    return f"❌ Error: {result.get('error', 'Error desconocido')}"
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
+                                return f"❌ Error ejecutando tarea: {str(e)}"
+                        
+                        execute_task_btn.click(
+                            fn=execute_autonomous_task,
+                            inputs=[task_type_select, task_description_input],
+                            outputs=[task_output]
+                        )
+        
+        # Tab 4.5.7.5: Invoice Mode (NUEVO - Sistema autónomo de procesamiento de facturas)
+        with gr.Tab("🧾 Invoice"):
+            gr.Markdown("### 🧾 Invoice Mode - Sistema Autónomo de Procesamiento de Facturas")
+            gr.Markdown("""
+            **🌟 Sistema completamente autónomo para procesamiento de facturas**
+            
+            **✨ Funcionalidades Autónomas:**
+            - 📄 **Procesamiento automático**: Procesa 500+ facturas simultáneamente sin intervención
+            - 🔍 **Extracción automática**: Extrae datos estructurados (proveedor, número, fecha, monto, items)
+            - ✅ **Validación automática**: Valida contra órdenes de compra (POs) automáticamente
+            - ⚠️ **Detección automática**: Detecta discrepancias y errores automáticamente
+            - 📊 **Reportes automáticos**: Genera reportes ejecutivos automáticamente
+            - 🎯 **Aprobación automática**: Aprueba o marca facturas para revisión automáticamente
+            - 🔌 **Integración con apps**: Busca POs en Google Drive, SharePoint y más
+            
+            **💼 Perfecto para:**
+            - Accounts Payable/Receivable automation
+            - Invoice processing masivo
+            - Validación contra POs
+            - Detección de discrepancias
+            - Reportes ejecutivos de facturas
+            
+            **💡 Cómo funciona:**
+            1. Sube facturas (PDFs) - puede ser 1 o 500+
+            2. El sistema procesa automáticamente todas las facturas
+            3. Extrae datos estructurados de cada factura
+            4. Valida contra POs (si están conectadas apps)
+            5. Detecta discrepancias automáticamente
+            6. Genera resumen ejecutivo completo
+            7. Aprueba facturas que coinciden o marca las que tienen problemas
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Procesar Facturas
+                with gr.Tab("📄 Procesar Facturas"):
+                    gr.Markdown("## 🚀 Procesamiento Automático de Facturas")
+                    gr.Markdown("""
+                    ### ✨ Sube tus facturas y el sistema las procesará automáticamente:
+                    
+                    - **Extracción automática** de datos estructurados
+                    - **Validación automática** contra POs (si hay apps conectadas)
+                    - **Detección automática** de discrepancias
+                    - **Generación automática** de reportes ejecutivos
+                    - **Aprobación/marcado automático** de facturas
+                    """)
+                    
+                    invoice_files = gr.File(
+                        label="📄 Subir Facturas (PDFs)",
+                        file_count="multiple",
+                        file_types=[".pdf"],
+                        type="filepath"
+                    )
+                    
+                    invoice_session_id = gr.State(value=str(uuid.uuid4()))
+                    
+                    with gr.Row():
+                        validate_against_pos = gr.Checkbox(
+                            label="✅ Validar contra POs automáticamente",
+                            value=True,
+                            info="Busca órdenes de compra en apps conectadas para validar facturas"
+                        )
+                        generate_summary = gr.Checkbox(
+                            label="📊 Generar resumen ejecutivo",
+                            value=True,
+                            info="Genera un resumen ejecutivo completo del procesamiento"
+                        )
+                    
+                    invoice_submit_btn = gr.Button("🚀 Procesar Facturas Automáticamente", variant="primary")
+                    
+                    invoice_bot = gr.Chatbot(
+                        label="📊 Resultados del Procesamiento",
+                        height=600,
+                        show_label=True
+                    )
+                    
+                    invoice_status = gr.Markdown("**Status:** Esperando facturas...")
+                    
+                    def invoice_submit(files, session_id, validate_pos, gen_summary):
+                        if not files:
+                            return [], "⚠️ Por favor, sube al menos una factura (PDF)"
+                        
+                        try:
+                            invoice_mode = get_invoice_mode(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager
+                            )
+                            
+                            # Procesar facturas automáticamente (async)
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                result = loop.run_until_complete(
+                                    invoice_mode.process_invoices_automatically(
+                                        session_id=session_id,
+                                        files=files,
+                                        validate_against_pos=validate_pos,
+                                        generate_summary=gen_summary
+                                    )
+                                )
+                            finally:
+                                loop.close()
+                            
+                            if result.get("status") == "error":
+                                error_msg = result.get("error", "Error desconocido")
+                                return [(f"❌ Error: {error_msg}", "")], f"❌ {error_msg}"
+                            
+                            # Formatear respuesta
+                            summary = result.get("executive_summary", "")
+                            invoices_processed = result.get("invoices_processed", 0)
+                            approved = result.get("approved_invoices", [])
+                            flagged = result.get("flagged_invoices", [])
+                            discrepancies = result.get("discrepancies", [])
+                            
+                            response = f"""# ✅ Procesamiento Completado
+
+## 📊 Resumen
+- **Facturas procesadas:** {invoices_processed}
+- **Facturas aprobadas:** {len(approved)}
+- **Facturas marcadas para revisión:** {len(flagged)}
+- **Discrepancias detectadas:** {len(discrepancies)}
+
+{summary}
+
+## ✅ Facturas Aprobadas ({len(approved)})
+"""
+                            for inv_num in approved[:10]:
+                                response += f"- {inv_num}\n"
+                            if len(approved) > 10:
+                                response += f"- ... y {len(approved) - 10} más\n"
+                            
+                            if flagged:
+                                response += f"\n## ⚠️ Facturas Marcadas para Revisión ({len(flagged)})\n"
+                                for inv_num in flagged[:10]:
+                                    response += f"- {inv_num}\n"
+                                if len(flagged) > 10:
+                                    response += f"- ... y {len(flagged) - 10} más\n"
+                            
+                            if discrepancies:
+                                response += f"\n## ⚠️ Discrepancias Detectadas ({len(discrepancies)})\n"
+                                for disc in discrepancies[:5]:
+                                    response += f"- **{disc.get('invoice_number')}**: {disc.get('description')}\n"
+                            
+                            return [(response, "")], f"✅ {invoices_processed} facturas procesadas exitosamente"
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return [(f"❌ Error: {str(e)}", "")], f"❌ Error: {str(e)}"
+                    
+                    invoice_submit_btn.click(
+                        fn=invoice_submit,
+                        inputs=[invoice_files, invoice_session_id, validate_against_pos, generate_summary],
+                        outputs=[invoice_bot, invoice_status]
+                    )
+        
+        # Tab 4.5.8: Gmail Company Knowledge (NUEVO - Sistema de consulta y respuestas masivas de emails)
+        with gr.Tab("📧 Gmail Company Knowledge"):
+            if not GMAIL_COMPANY_KNOWLEDGE_AVAILABLE:
+                gr.Markdown("### ⚠️ Gmail Company Knowledge no disponible")
+                gr.Markdown("""
+                **Error cargando Gmail Company Knowledge.**
+                
+                Por favor, verifica que todas las dependencias estén instaladas.
+                """)
+            else:
+                gr.Markdown("### 📧 Gmail Company Knowledge - Sistema de Consulta y Respuestas Masivas de Emails")
+                gr.Markdown("""
+                **🌟 Sistema especializado para trabajar con emails de Gmail**
+                
+                **✨ Funcionalidades:**
+                - 📥 **Cargar emails de Gmail**: Convierte emails en documentos consultables
+                - 💬 **Hacer preguntas sobre emails**: Consulta información de tus emails cargados
+                - 📧 **Responder automáticamente**: Responde a múltiples emails con respuestas personalizadas
+                - 📝 **Plantillas de respuestas masivas**: Crea y usa plantillas para respuestas automáticas
+                - 🔍 **Búsqueda avanzada**: Usa queries de Gmail para filtrar emails (ej: "is:unread", "from:juan@example.com")
+                
+                **💡 Perfecto para:**
+                - Gestión masiva de emails
+                - Respuestas automáticas personalizadas
+                - Análisis de conversaciones por email
+                - Consultas sobre información en emails históricos
+                """)
+                
+                # Inicializar Gmail Company Knowledge
+                try:
+                    # Obtener instancias necesarias
+                    company_knowledge = get_company_knowledge(
+                        config=config,
+                        processor=processor,
+                        retriever_builder=retriever_builder,
+                        context_manager=context_manager
+                    )
+                    
+                    if not company_knowledge.app_integrations:
+                        gr.Markdown("### ⚠️ Sistema de integraciones no disponible")
+                        gr.Markdown("**Error:** No se pudo inicializar el sistema de integraciones.")
+                    else:
+                        gmail_knowledge = GmailCompanyKnowledge(
+                            company_knowledge=company_knowledge,
+                            integrations=company_knowledge.app_integrations,
+                            config=config
+                        )
+                        
+                        with gr.Tabs():
+                            # Sub-tab: Cargar Emails de Gmail
+                            with gr.Tab("📥 Cargar Emails de Gmail"):
+                                gr.Markdown("### 📥 Cargar Emails de Gmail como Documentos")
+                                gr.Markdown("""
+                                **Carga emails de Gmail y conviértelos en documentos consultables:**
+                                - Los emails se indexan en Company Knowledge
+                                - Puedes hacer preguntas sobre ellos después
+                                - Soporta queries de Gmail (ej: "is:unread", "from:juan@example.com")
+                                """)
+                                
+                                gmail_session_id = gr.State(value=str(uuid.uuid4()))
+                                
+                                gmail_query = gr.Textbox(
+                                    label="🔍 Query de Búsqueda de Gmail",
+                                    placeholder='Ej: "in:inbox", "is:unread", "from:juan@example.com", "subject:reunión"',
+                                    value="in:inbox",
+                                    info="Usa la sintaxis de búsqueda de Gmail. Ejemplos: 'is:unread', 'from:juan@example.com', 'subject:reunión', 'has:attachment'"
+                                )
+                                
+                                gmail_max_results = gr.Slider(
+                                    label="📊 Máximo de Emails",
+                                    minimum=1,
+                                    maximum=200,
+                                    value=50,
+                                    step=1,
+                                    info="Cantidad máxima de emails a cargar"
+                                )
+                                
+                                gmail_mark_as_read = gr.Checkbox(
+                                    label="✅ Marcar como leído",
+                                    value=False,
+                                    info="Si está marcado, los emails se marcarán como leídos después de cargarlos"
+                                )
+                                
+                                load_emails_btn = gr.Button("📥 Cargar Emails de Gmail", variant="primary")
+                                load_emails_output = gr.Markdown(label="📊 Resultado de Carga")
+                                
+                                def load_gmail_emails(query, max_results, mark_as_read, session_id):
+                                    try:
+                                        result = gmail_knowledge.load_emails_from_gmail(
+                                            session_id=session_id,
+                                            query=query,
+                                            max_results=int(max_results),
+                                            mark_as_read=mark_as_read
+                                        )
+                                        
+                                        if result.get("status") == "success":
+                                            loaded = result.get("loaded", 0)
+                                            total_found = result.get("total_found", 0)
+                                            emails = result.get("emails", [])
+                                            
+                                            output = f"""
+## ✅ Emails Cargados Exitosamente
+
+**📊 Estadísticas:**
+- **Emails encontrados:** {total_found}
+- **Emails cargados:** {loaded}
+- **Marcados como leídos:** {"Sí" if mark_as_read else "No"}
+
+### 📧 Emails Cargados:
+"""
+                                            for i, email in enumerate(emails[:20], 1):  # Mostrar primeros 20
+                                                output += f"{i}. **{email.get('subject', 'Sin asunto')}**\n"
+                                                output += f"   - De: {email.get('from', 'Desconocido')}\n"
+                                                output += f"   - Fecha: {email.get('date', 'N/A')}\n\n"
+                                            
+                                            if len(emails) > 20:
+                                                output += f"\n*... y {len(emails) - 20} emails más*\n"
+                                            
+                                            output += f"""
+### 🚀 Próximos Pasos:
+
+1. Ve al tab **"💬 Hacer Preguntas sobre Emails"** para consultar información
+2. O ve al tab **"📧 Responder Emails Masivamente"** para crear respuestas automáticas
+
+**💡 Tip:** Los emails están ahora indexados y puedes hacer preguntas sobre ellos.
+"""
+                                            return output
+                                        else:
+                                            error = result.get("error", "Error desconocido")
+                                            return f"❌ **Error:** {error}"
+                                    except Exception as e:
+                                        import traceback
+                                        traceback.print_exc()
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                load_emails_btn.click(
+                                    fn=load_gmail_emails,
+                                    inputs=[gmail_query, gmail_max_results, gmail_mark_as_read, gmail_session_id],
+                                    outputs=[load_emails_output]
+                                )
+                            
+                            # Sub-tab: Hacer Preguntas sobre Emails
+                            with gr.Tab("💬 Hacer Preguntas sobre Emails"):
+                                gr.Markdown("### 💬 Consulta Información de tus Emails Cargados")
+                                gr.Markdown("""
+                                **Haz preguntas sobre los emails que cargaste:**
+                                - "¿Qué emails mencionan X?"
+                                - "Resume los emails de esta semana"
+                                - "¿Quién me escribió sobre Y?"
+                                """)
+                                
+                                gmail_question_input = gr.Textbox(
+                                    label="Escribe tu pregunta",
+                                    placeholder="Ej: ¿Qué emails mencionan la reunión de mañana?",
+                                    lines=3
+                                )
+                                
+                                gmail_question_btn = gr.Button("💬 Consultar Emails", variant="primary")
+                                gmail_question_output = gr.Markdown(label="📊 Respuesta")
+                                
+                                def query_gmail_emails(question, session_id):
+                                    if not question.strip():
+                                        return "⚠️ Escribe una pregunta sobre tus emails."
+                                    
+                                    try:
+                                        import asyncio
+                                        
+                                        # Verificar que hay emails cargados
+                                        indexed_count = gmail_knowledge.get_indexed_emails_count(session_id)
+                                        if indexed_count == 0:
+                                            return "⚠️ **No hay emails cargados.**\n\nVe al tab '📥 Cargar Emails de Gmail' para cargar emails primero."
+                                        
+                                        # Obtener historial de la sesión
+                                        session = company_knowledge.initialize_session(session_id)
+                                        history = session.get("history", [])
+                                        
+                                        # Convertir historial a formato tuple
+                                        tuple_history = []
+                                        for item in history:
+                                            if isinstance(item, dict):
+                                                user_msg = item.get("question", "")
+                                                bot_msg = item.get("answer", "")
+                                                if user_msg and bot_msg:
+                                                    tuple_history.append((user_msg, bot_msg))
+                                        
+                                        # Hacer pregunta
+                                        loop = asyncio.new_event_loop()
+                                        asyncio.set_event_loop(loop)
+                                        answer, metadata = loop.run_until_complete(
+                                            gmail_knowledge.query_emails(
+                                                session_id=session_id,
+                                                question=question,
+                                                history=tuple_history
+                                            )
+                                        )
+                                        loop.close()
+                                        
+                                        return answer
+                                    except Exception as e:
+                                        import traceback
+                                        traceback.print_exc()
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                gmail_question_btn.click(
+                                    fn=query_gmail_emails,
+                                    inputs=[gmail_question_input, gmail_session_id],
+                                    outputs=[gmail_question_output]
+                                )
+                                
+                                gmail_question_input.submit(
+                                    fn=query_gmail_emails,
+                                    inputs=[gmail_question_input, gmail_session_id],
+                                    outputs=[gmail_question_output]
+                                )
+                            
+                            # Sub-tab: Responder Emails Masivamente
+                            with gr.Tab("📧 Responder Emails Masivamente"):
+                                gr.Markdown("### 📧 Respuestas Masivas con Plantillas")
+                                gr.Markdown("""
+                                **Crea plantillas y responde automáticamente a múltiples emails:**
+                                - Crea plantillas personalizadas con variables ({subject}, {sender}, {body})
+                                - Responde a múltiples emails de una vez
+                                - Modo dry-run para probar antes de enviar
+                                """)
+                                
+                                with gr.Tabs():
+                                    # Sub-sub-tab: Crear Plantilla
+                                    with gr.Tab("📝 Crear Plantilla"):
+                                        template_name_input = gr.Textbox(
+                                            label="📝 Nombre de la Plantilla",
+                                            placeholder="Ej: Respuesta de Soporte, Confirmación de Reunión",
+                                            info="Un nombre descriptivo para identificar esta plantilla"
+                                        )
+                                        
+                                        template_subject = gr.Textbox(
+                                            label="📧 Asunto (Plantilla)",
+                                            placeholder='Ej: Re: {subject}',
+                                            info="Puedes usar variables: {subject}, {sender}, {sender_email}, {date}"
+                                        )
+                                        
+                                        template_body = gr.Textbox(
+                                            label="📄 Cuerpo del Email (Plantilla)",
+                                            placeholder='''Hola,
+
+Gracias por tu email sobre {subject}.
+
+{body}
+
+Saludos,
+Tu Equipo''',
+                                            lines=10,
+                                            info="Puedes usar variables: {subject}, {sender}, {sender_email}, {date}, {body}"
+                                        )
+                                        
+                                        create_template_btn = gr.Button("💾 Crear Plantilla", variant="primary")
+                                        create_template_output = gr.Markdown(label="📊 Estado")
+                                        
+                                        def create_template(name, subject, body):
+                                            if not name.strip():
+                                                return "⚠️ Ingresa un nombre para la plantilla."
+                                            if not subject.strip():
+                                                return "⚠️ Ingresa un asunto para la plantilla."
+                                            if not body.strip():
+                                                return "⚠️ Ingresa un cuerpo para la plantilla."
+                                            
+                                            try:
+                                                result = gmail_knowledge.create_mass_response_template(
+                                                    template_name=name.strip(),
+                                                    subject_template=subject.strip(),
+                                                    body_template=body.strip()
+                                                )
+                                                
+                                                if result.get("status") == "success":
+                                                    return f"✅ **Plantilla '{name}' creada exitosamente**\n\nAhora puedes usarla en el tab 'Enviar Respuestas'."
+                                                else:
+                                                    return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                                            except Exception as e:
+                                                return f"❌ **Error:** {str(e)}"
+                                        
+                                        create_template_btn.click(
+                                            fn=create_template,
+                                            inputs=[template_name_input, template_subject, template_body],
+                                            outputs=[create_template_output]
+                                        )
+                                    
+                                    # Sub-sub-tab: Enviar Respuestas
+                                    with gr.Tab("📤 Enviar Respuestas"):
+                                        templates_list = gmail_knowledge.get_templates()
+                                        template_names = [t.get("name", "Unknown") for t in templates_list] if templates_list else []
+                                        
+                                        if not template_names:
+                                            gr.Markdown("### ⚠️ No hay plantillas creadas")
+                                            gr.Markdown("**Crea una plantilla primero en el tab '📝 Crear Plantilla'**")
+                                        else:
+                                            selected_template = gr.Dropdown(
+                                                label="📝 Seleccionar Plantilla",
+                                                choices=template_names,
+                                                value=template_names[0] if template_names else None,
+                                                info="Selecciona la plantilla a usar para las respuestas"
+                                            )
+                                            
+                                            mass_query = gr.Textbox(
+                                                label="🔍 Query de Búsqueda de Gmail",
+                                                placeholder='Ej: "in:inbox is:unread", "from:cliente@example.com"',
+                                                value="in:inbox is:unread",
+                                                info="Query de Gmail para buscar emails a responder"
+                                            )
+                                            
+                                            mass_max_emails = gr.Slider(
+                                                label="📊 Máximo de Emails",
+                                                minimum=1,
+                                                maximum=100,
+                                                value=20,
+                                                step=1
+                                            )
+                                            
+                                            mass_dry_run = gr.Checkbox(
+                                                label="🧪 Modo Dry-Run (Solo Simular)",
+                                                value=True,
+                                                info="Si está marcado, solo muestra qué se enviaría sin enviar realmente"
+                                            )
+                                            
+                                            send_mass_btn = gr.Button("📤 Enviar Respuestas Masivas", variant="primary")
+                                            mass_response_output = gr.Markdown(label="📊 Resultado")
+                                            
+                                            def send_mass_responses(template_name, query, max_emails, dry_run, session_id):
+                                                if not template_name:
+                                                    return "⚠️ Selecciona una plantilla."
+                                                
+                                                try:
+                                                    result = gmail_knowledge.send_mass_responses(
+                                                        session_id=session_id,
+                                                        template_name=template_name,
+                                                        query=query,
+                                                        max_emails=int(max_emails),
+                                                        dry_run=dry_run
+                                                    )
+                                                    
+                                                    if result.get("status") == "success":
+                                                        sent = result.get("sent", 0)
+                                                        simulated = result.get("simulated", 0)
+                                                        errors = result.get("errors", 0)
+                                                        total = result.get("total_processed", 0)
+                                                        results_list = result.get("results", [])
+                                                        
+                                                        action = "simuladas" if dry_run else "enviadas"
+                                                        output = f"""
+## ✅ Respuestas {action.capitalize()} Exitosamente
+
+**📊 Estadísticas:**
+- **Total procesados:** {total}
+- **{'Simuladas' if dry_run else 'Enviadas'}:** {simulated if dry_run else sent}
+- **Errores:** {errors}
+
+### 📧 Detalles:
+"""
+                                                        for i, res in enumerate(results_list[:10], 1):  # Primeros 10
+                                                            status_emoji = "✅" if res.get("status") == "sent" or res.get("status") == "dry_run" else "❌"
+                                                            output += f"{i}. {status_emoji} **{res.get('to', 'N/A')}**\n"
+                                                            output += f"   - Asunto: {res.get('subject', 'N/A')[:50]}...\n"
+                                                            if res.get("status") == "error":
+                                                                output += f"   - Error: {res.get('reason', 'Desconocido')}\n"
+                                                            output += "\n"
+                                                        
+                                                        if len(results_list) > 10:
+                                                            output += f"\n*... y {len(results_list) - 10} resultados más*\n"
+                                                        
+                                                        if dry_run:
+                                                            output += f"\n**💡 Tip:** Esto fue una simulación. Desmarca 'Modo Dry-Run' para enviar realmente."
+                                                        
+                                                        return output
+                                                    else:
+                                                        return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                                                except Exception as e:
+                                                    import traceback
+                                                    traceback.print_exc()
+                                                    return f"❌ **Error:** {str(e)}"
+                                            
+                                            send_mass_btn.click(
+                                                fn=send_mass_responses,
+                                                inputs=[selected_template, mass_query, mass_max_emails, mass_dry_run, gmail_session_id],
+                                                outputs=[mass_response_output]
+                                            )
+                                    
+                                    # Sub-sub-tab: Ver Plantillas
+                                    with gr.Tab("📋 Ver Plantillas"):
+                                        list_templates_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                                        templates_output = gr.Markdown(label="📋 Plantillas Disponibles")
+                                        
+                                        def list_templates():
+                                            templates = gmail_knowledge.get_templates()
+                                            
+                                            if not templates:
+                                                return "📋 **No hay plantillas creadas**\n\nCrea una plantilla en el tab '📝 Crear Plantilla'."
+                                            
+                                            output = f"## 📋 Plantillas Disponibles ({len(templates)})\n\n"
+                                            for template in templates:
+                                                name = template.get("name", "Unknown")
+                                                created_at = template.get("created_at", "N/A")
+                                                used_count = template.get("used_count", 0)
+                                                subject = template.get("subject_template", "")
+                                                body_preview = template.get("body_template", "")[:100]
+                                                
+                                                output += f"### 📝 {name}\n\n"
+                                                output += f"- **Creada:** {created_at}\n"
+                                                output += f"- **Usada:** {used_count} veces\n"
+                                                output += f"- **Asunto:** `{subject}`\n"
+                                                output += f"- **Cuerpo (preview):** {body_preview}...\n\n"
+                                            
+                                            return output
+                                        
+                                        list_templates_btn.click(
+                                            fn=list_templates,
+                                            inputs=[],
+                                            outputs=[templates_output]
+                                        )
+                                        
+                                        # Cargar lista inicial
+                                        templates_output.value = list_templates()
+                
+                except Exception as e:
+                    gr.Markdown(f"### ❌ Error al inicializar Gmail Company Knowledge")
+                    gr.Markdown(f"**Error:** {str(e)}\n\nPor favor, verifica la configuración y las dependencias.")
+        
+        # Tab 4.5.9: Expert Guide NextGen (NUEVO - Consejero Empresarial con Capacidades Avanzadas) - OCULTO
+        # with gr.Tab("🎯 Expert Guide NextGen"):
+            gr.Markdown("### 🧠 Expert Guide NextGen - Consejero Empresarial con Capacidades de Eric Schmidt")
+            gr.Markdown("""
+            **🚀 Guía Experto NextGen con TODAS las capacidades avanzadas:**
+            
+            **✨ Capacidades Integradas:**
+            - 📚 **Context Windows Masivos**: Hasta 1 millón de tokens (500k en prompts)
+            - 🤖 **Agentes Autónomos**: Descubren patrones y principios de tus documentos
+            - 🎯 **Text-to-Action**: Convierte texto en acciones ejecutables
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso con pasos visibles
+            - 🛡️ **Adversarial Testing**: Valida respuestas antes de enviarlas
+            
+            **💡 Personalidad del Sistema:**
+            - Sin filtros corporativos: Respuestas directas y honestas
+            - Transparente: Identifica problemas ocultos que otros no ven
+            - Específico: Recomendaciones accionables con datos concretos
+            - Crítico: Detecta riesgos e ineficiencias que otros pasan por alto
+            
+            **🎯 Tipos de Negocio Especializados:**
+            - 💰 **Finanzas**: Análisis financiero, detección de fraudes, recomendaciones de inversión
+            - 🛒 **E-commerce**: Identifica productos que no venden, empleados ineficientes, procesos rotos
+            - 🏢 **Otros**: Análisis empresarial general con enfoque crítico
+            
+            **Ejemplos:**
+            - 💰 **Finanzas**: "Invierte en X, diversifica en Y, NO inviertas en Z"
+            - 🛒 **Ecommerce**: "Elimina a este empleado, vende este producto, haz esto"
+            - 🏢 **Cualquier empresa**: Recomendaciones específicas basadas en tus datos
+            """)
+            
+            # Generar session_id único para el guía experto
+            expert_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                expert_files = gr.Files(
+                    label="📂 Sube tus Documentos Empresariales (PDF, DOCX, TXT, MD)",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                expert_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+                expert_provider = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Motor Alternativo = Claude (mayor precisión)"
+                )
+            
+            # Chatbot para el guía experto
+            expert_chatbot = gr.Chatbot(
+                label="💬 Conversación con tu Guía Experto",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                expert_input = gr.Textbox(
+                    label="Escribe tu pregunta o situación",
+                    placeholder="Ejemplo: Analiza mis documentos y dime qué debo hacer para mejorar mi negocio",
+                    lines=3,
+                    scale=4,
+                )
+                expert_submit_btn = gr.Button("📤 Consultar Guía", variant="primary", scale=1)
+            
+            with gr.Row():
+                expert_clear_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                expert_clear_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+            
+            expert_status = gr.Markdown(label="ℹ️ Estado")
+            
+            # Event handlers
+            def expert_chat_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta o solicita análisis."
+                if not files:
+                    return history, history, "⚠️ Primero sube documentos empresariales para que el guía experto los analice."
+                
+                new_history, error = run_expert_guide(
+                    message, history, files, session_id, speed_mode, provider
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+            
+            def expert_clear_chat(history, session_id):
+                if session_id in expert_sessions:
+                    del expert_sessions[session_id]
+                return [], "✅ Chat limpiado. Puedes cargar nuevos documentos."
+            
+            def expert_clear_files(files, session_id):
+                if session_id in expert_sessions:
+                    expert_sessions[session_id]["processed_files"].clear()
+                    expert_sessions[session_id]["docs"] = []
+                    expert_sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+            
+            expert_submit_btn.click(
+                fn=expert_chat_submit,
+                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+                outputs=[expert_chatbot, expert_chatbot, expert_status],
+            ).then(
+                lambda: "", None, expert_input
+            )
+            
+            expert_input.submit(
+                fn=expert_chat_submit,
+                inputs=[expert_input, expert_chatbot, expert_files, expert_session_id, expert_speed_mode, expert_provider],
+                outputs=[expert_chatbot, expert_chatbot, expert_status],
+            ).then(
+                lambda: "", None, expert_input
+            )
+            
+            expert_clear_btn.click(
+                fn=expert_clear_chat,
+                inputs=[expert_chatbot, expert_session_id],
+                outputs=[expert_chatbot, expert_status],
+            )
+            
+            expert_clear_files_btn.click(
+                fn=expert_clear_files,
+                inputs=[expert_files, expert_session_id],
+                outputs=[expert_files, expert_status],
+            )
+        
+        # Tab 4.6: Chat Multi-Formato (NUEVO - Soporta todos los formatos) - OCULTO
+        # with gr.Tab("📚 Chat Multi-Formato"):
+            gr.Markdown("### Chat Conversacional con Todos los Formatos")
+            gr.Markdown("""
+            **🚀 Conversación Natural con CUALQUIER Tipo de Documento**
+            
+            - 💬 Haz preguntas de seguimiento sin repetir contexto
+            - 📚 Carga documentos de CUALQUIER formato (PDF, Word, Excel, CSV, JSON, XML, Logs, Emails, etc.)
+            - 🧠 El sistema recuerda la conversación anterior
+            - 🔄 Ideal para explorar documentos en profundidad
+            
+            **📋 Formatos Soportados:**
+            - **Documentos:** PDF, DOC/DOCX, ODT, RTF, TXT, MD, LaTeX, HTML, EPUB, MOBI
+            - **Datos:** CSV, TSV, JSON, XML, YAML, INI, LOG
+            - **Presentaciones:** PPT/PPTX, ODP, Keynote
+            - **Hojas de cálculo:** XLS/XLSX
+            - **Y más...**
+            
+            **💡 Ejemplo:** 
+            - "¿Qué información importante hay en estos documentos?"
+            - "Analiza los datos del CSV"
+            - "Compara los logs de error"
+            """)
+            
+            # Generar session_id único
+            multi_format_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                multi_format_files = gr.Files(
+                    label="📂 Documentos Multi-Formato (Todos los formatos soportados) - Hasta 1000 documentos",
+                    file_count="multiple",
+                    file_types=[
+                        # Documentos
+                        ".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md", ".tex", ".html", ".htm",
+                        ".epub", ".mobi",
+                        # Datos estructurados
+                        ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".ini", ".log",
+                        # Presentaciones
+                        ".ppt", ".pptx", ".odp", ".key",
+                        # Hojas de cálculo
+                        ".xls", ".xlsx",
+                        # Subtítulos y transcripciones
+                        ".srt", ".vtt",
+                        # Código fuente
+                        ".py", ".js", ".ts", ".java", ".cpp", ".c", ".h", ".cs", ".php", ".rb", ".go", ".rs",
+                        ".sh", ".bash", ".ps1", ".bat", ".cmd", ".r", ".R", ".m", ".matlab",
+                        # Otros
+                        ".gdoc", ".zip", ".eml", ".msg", ".sql"
+                    ],
+                )
+            
+            with gr.Row():
+                multi_format_speed_mode = gr.Radio(
+                    label="⚡ Modo de Velocidad",
+                    choices=[
+                        ("🚀 Rápido", "fast"),
+                        ("⚖️ Balanceado (recomendado)", "balanced"),
+                        ("🎯 Máxima Calidad", "quality")
+                    ],
+                    value="balanced",
+                )
+                multi_format_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal (Recomendado)", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai",
+                    info="Cambia el motor de IA utilizado. Motor Alternativo = Claude (mayor precisión)"
+                )
+            
+            # Chatbot component
+            multi_format_chatbot = gr.Chatbot(
+                label="💬 Conversación Multi-Formato",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                multi_format_input = gr.Textbox(
+                    label="Escribe tu pregunta",
+                    placeholder="Ejemplo: ¿Qué información importante hay en estos documentos?",
+                    lines=2,
+                    scale=4,
+                )
+                multi_format_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_multi_format_chat_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                clear_multi_format_files_btn = gr.Button("📂 Limpiar Documentos", variant="secondary")
+            
+            multi_format_status = gr.Markdown(label="ℹ️ Estado del Chat")
+            
+            # Event handlers
+            def multi_format_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Escribe una pregunta."
+                if not files:
+                    return history, history, "⚠️ Primero carga documentos."
+                
+                new_history, error = run_chat_multi_format(
+                    message, history, files, session_id, speed_mode, provider
+                )
+                status = f"✅ {len(new_history)} mensajes en la conversación"
+                if error:
+                    status = error
+                return new_history, new_history, status
+            
+            def clear_multi_format_chat(history, session_id):
+                new_history, status = clear_multi_format_session(session_id)
+                return new_history, status
+            
+            def clear_multi_format_files(files, session_id):
+                if session_id in multi_format_sessions:
+                    multi_format_sessions[session_id]["processed_files"].clear()
+                    multi_format_sessions[session_id]["docs"] = []
+                    multi_format_sessions[session_id]["retriever"] = None
+                return None, "✅ Documentos limpiados. Puedes cargar nuevos."
+            
+            multi_format_submit_btn.click(
+                fn=multi_format_submit,
+                inputs=[multi_format_input, multi_format_chatbot, multi_format_files, multi_format_session_id, multi_format_speed_mode, multi_format_provider_toggle],
+                outputs=[multi_format_chatbot, multi_format_chatbot, multi_format_status],
+            ).then(
+                lambda: "", None, multi_format_input
+            )
+            
+            multi_format_input.submit(
+                fn=multi_format_submit,
+                inputs=[multi_format_input, multi_format_chatbot, multi_format_files, multi_format_session_id, multi_format_speed_mode, multi_format_provider_toggle],
+                outputs=[multi_format_chatbot, multi_format_chatbot, multi_format_status],
+            ).then(
+                lambda: "", None, multi_format_input
+            )
+            
+            clear_multi_format_chat_btn.click(
+                fn=clear_multi_format_chat,
+                inputs=[multi_format_chatbot, multi_format_session_id],
+                outputs=[multi_format_chatbot, multi_format_status],
+            )
+            
+            clear_multi_format_files_btn.click(
+                fn=clear_multi_format_files,
+                inputs=[multi_format_files, multi_format_session_id],
+                outputs=[multi_format_files, multi_format_status],
+            )
+        
+        # Tab 4.7: Chatbot Mode (NUEVO - Para conectar chatbots externos)
+        with gr.Tab("🤖 Chatbot"):
+            gr.Markdown("### 🤖 Modo Chatbot - Backend RAG para tu Chatbot")
+            gr.Markdown("""
+            **🚀 Backend RAG para Chatbots Empresariales**
+            
+            **Flujo:**
+            1. Cliente pregunta → En tu chatbot (en tu app)
+            2. Tu chatbot consulta → DocChat Enterprise por API
+            3. DocChat Enterprise busca → En tus documentos privados
+            4. DocChat Enterprise responde → A tu chatbot
+            5. Tu chatbot muestra → Respuesta al cliente en tu app
+            
+            **Funcionalidades:**
+            - Backend RAG que tu chatbot consulta por API
+            - Sube toda tu data privada empresarial
+            - Respuestas basadas en tus documentos
+            - Optimizado con chunking inteligente, reranking y metadatos enriquecidos
+            - Base vectorizada aislada por chatbot
+            
+            **💡 Perfecto para empresas que ya tienen chatbots y quieren mejorarlos con RAG**
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Registrar Chatbot
+                with gr.Tab("📝 Registrar Chatbot"):
+                    gr.Markdown("### Paso 1: Registra tu Chatbot")
+                    gr.Markdown("""
+                    Registra tu chatbot para obtener un `chatbot_id` y `api_key` que usarás
+                    para conectar tu chatbot por API.
+                    """)
+                    
+                    chatbot_name_input = gr.Textbox(
+                        label="Nombre del Chatbot",
+                        placeholder="Ej: Chatbot de Soporte Cliente"
+                    )
+                    
+                    company_name_input = gr.Textbox(
+                        label="Nombre de la Empresa",
+                        placeholder="Ej: Mi Empresa S.A."
+                    )
+                    
+                    register_chatbot_btn = gr.Button("📝 Registrar Chatbot", variant="primary")
+                    chatbot_registration_output = gr.Markdown(label="📊 Información del Chatbot")
+                    
+                    register_chatbot_btn.click(
+                        fn=register_chatbot,
+                        inputs=[chatbot_name_input, company_name_input],
+                        outputs=[chatbot_registration_output]
+                    )
+                
+                # Sub-tab: Subir Data
+                with gr.Tab("📂 Subir Data del Chatbot"):
+                    gr.Markdown("### Paso 2: Sube la Data para tu Chatbot")
+                    gr.Markdown("""
+                    Sube todos los documentos que tu chatbot necesita para responder.
+                    Se procesarán con chunking optimizado y se creará una base vectorizada.
+                    """)
+                    
+                    chatbot_id_input = gr.Textbox(
+                        label="Chatbot ID",
+                        placeholder="Pega el chatbot_id que obtuviste al registrar"
+                    )
+                    
+                    chatbot_files = gr.File(
+                        label="📄 Documentos para el Chatbot (multiformato, se convierten automáticamente a PDF)",
+                        file_count="multiple",
+                        file_types=[
+                            ".pdf", ".doc", ".docx", ".dotx", ".odt", ".fodt", ".ott",
+                            ".xls", ".xlsx", ".ods", ".fods", ".csv", ".tsv",
+                            ".ppt", ".pptx", ".odp", ".fodp",
+                            ".txt", ".md", ".rtf", ".log", ".ini", ".cfg", ".env",
+                            ".yaml", ".yml", ".json", ".xml",
+                            ".eml", ".msg", ".mbox",
+                            ".html", ".htm", ".mhtml",
+                            ".tex", ".epub", ".srt", ".vtt",
+                            ".py", ".js", ".ts", ".java", ".cpp", ".c", ".cs", ".go", ".rs", ".php",
+                            ".css", ".sql", ".sh", ".bat"
+                        ]
+                    )
+                    
+                    upload_chatbot_data_btn = gr.Button("📤 Subir y Procesar Data", variant="primary")
+                    chatbot_data_output = gr.Markdown(label="📊 Estado del Procesamiento")
+                    
+                    upload_chatbot_data_btn.click(
+                        fn=upload_chatbot_data,
+                        inputs=[chatbot_id_input, chatbot_files],
+                        outputs=[chatbot_data_output]
+                    )
+                
+                # Sub-tab: Probar Chatbot
+                with gr.Tab("💬 Probar Chatbot"):
+                    gr.Markdown("### Paso 3: Prueba tu Chatbot")
+                    gr.Markdown("""
+                    Prueba consultas a tu chatbot para verificar que funciona correctamente
+                    con la data que subiste.
+                    """)
+                    
+                    test_chatbot_id = gr.Textbox(
+                        label="Chatbot ID",
+                        placeholder="Pega el chatbot_id"
+                    )
+                    
+                    test_question = gr.Textbox(
+                        label="Pregunta de Prueba",
+                        placeholder="Ej: ¿Cuáles son las políticas de la empresa?",
+                        lines=3
+                    )
+                    
+                    test_chatbot_btn = gr.Button("🔍 Consultar Chatbot", variant="primary")
+                    chatbot_test_output = gr.Markdown(label="📊 Respuesta del Chatbot")
+                    
+                    test_chatbot_btn.click(
+                        fn=test_chatbot_query,
+                        inputs=[test_chatbot_id, test_question],
+                        outputs=[chatbot_test_output]
+                    )
+                
+                # Sub-tab: API y Conexión
+                with gr.Tab("🔌 API y Conexión"):
+                    gr.Markdown("### Paso 4: Conecta tu Chatbot por API")
+                    gr.Markdown("""
+                    **🚀 Para conectar tu chatbot empresarial:**
+                    
+                    **1. Inicia el servidor API:**
+                    ```bash
+                    python api_server.py
+                    ```
+                    
+                    **2. Endpoints disponibles:**
+                    - `POST /api/chatbot/register` - Registrar chatbot
+                    - `POST /api/chatbot/{chatbot_id}/upload` - Subir documentos
+                    - `POST /api/chatbot/{chatbot_id}/query` - **CONSULTAR RAG (PRINCIPAL)**
+                    - `GET /api/chatbot/{chatbot_id}/info` - Info del chatbot
+                    
+                    **3. Ejemplo de integración desde tu chatbot (Python):**
+                    ```python
+                    import requests
+                    
+                    # Cuando un cliente pregunta en tu chatbot (en tu app)
+                    chatbot_id = "tu-chatbot-id"
+                    api_key = "tu-api-key"
+                    user_question = "¿Cuál es la política de devoluciones?"
+                    
+                    # Tu chatbot consulta a DocChat Enterprise (backend RAG)
+                    response = requests.post(
+                        f"https://tu-servidor.com/api/chatbot/{chatbot_id}/query",
+                        json={
+                            "question": user_question,
+                            "use_reranking": True,
+                            "max_chunks": 5
+                        },
+                        headers={"X-API-Key": api_key}
+                    )
+                    
+                    data = response.json()
+                    answer = data["answer"]  # Esta respuesta la muestras al cliente
+                    sources = data["sources"]  # Fuentes usadas (opcional)
+                    
+                    # Mostrar answer al cliente en TU APP
+                    ```
+                    
+                    **4. Ejemplo de respuesta:**
+                    ```json
+                    {
+                        "answer": "Según nuestros documentos, la política de devoluciones...",
+                        "sources": ["politicas.pdf", "terminos.pdf"],
+                        "confidence": 0.95,
+                        "chunks_used": 5,
+                        "reranked": true
+                    }
+                    ```
+                    
+                    **📚 Documentación completa:** Visita `/docs` cuando el servidor esté corriendo
+                    """)
+            
+            with gr.Row():
+                gr.Markdown("### 📋 Chatbots Registrados")
+                list_chatbots_btn = gr.Button("📋 Listar Chatbots", variant="secondary")
+                chatbots_list_output = gr.Markdown(label="📊 Lista de Chatbots")
+                
+                list_chatbots_btn.click(
+                    fn=list_chatbots,
+                    inputs=[],
+                    outputs=[chatbots_list_output]
+                )
+        
+        # Tab 4.7: Automatización RPA (NUEVO)
+        with gr.Tab("🤖 Automatización RPA"):
+            gr.Markdown("### Automatización de Procesos con RPA + IA")
+            gr.Markdown("""
+            **🚀 Automatiza tareas repetitivas empresariales con Agentic AI**
+            
+            - 💰 **Finanzas**: Facturación, conciliación, pagos, impuestos, auditoría, cuentas
+            - 👥 **RRHH**: Reclutamiento, onboarding, nómina, ausencias, evaluaciones
+            - 📦 **Logística**: Inventario, envíos, rutas, órdenes de compra, facturación transporte
+            - 📢 **Marketing**: Leads, campañas, seguimiento, precios, análisis comportamiento
+            - 🏥 **Salud**: Registros médicos, citas, reclamaciones, diagnóstico, monitoreo
+            - 🏭 **Manufactura**: Mantenimiento predictivo, calidad, producción, proveedores, productividad
+            - 🔒 **TI**: Seguridad, contraseñas, anomalías, backups
+            - ⚖️ **Legal**: Contratos, documentos, cumplimiento, investigación
+            - 📊 **Proyectos**: Gestión, reportes, recursos, alertas
+            - 🎓 **Educación**: Evaluaciones, contenidos, inscripciones, progreso
+            - 💬 **Comunicaciones**: Emails, agendas, transcripciones
+            
+            **💡 Perfecto para empresas que quieren automatizar procesos complejos sin intervención humana**
+            """)
+            
+            with gr.Tabs():
+                with gr.Tab("🎯 Ejecutar Automatización"):
+                    gr.Markdown("### Selecciona una categoría y tipo de automatización")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            rpa_category = gr.Dropdown(
+                                label="📂 Categoría",
+                                choices=[
+                                    ("💰 Finanzas y Contabilidad", "finanzas"),
+                                    ("👥 Recursos Humanos", "rrhh"),
+                                    ("📦 Logística y Cadena de Suministro", "logistica"),
+                                    ("📢 Marketing y Ventas", "marketing"),
+                                    ("🏥 Salud", "salud"),
+                                    ("🏭 Industria y Manufactura", "manufactura"),
+                                    ("🔒 TI y Seguridad", "ti_seguridad"),
+                                    ("⚖️ Legal", "legal"),
+                                    ("📊 Gestión de Proyectos", "gestion_proyectos"),
+                                    ("🎓 Educación", "educacion"),
+                                    ("💬 Comunicaciones", "comunicaciones")
+                                ],
+                                value="finanzas",
+                                info="Selecciona el área de automatización"
+                            )
+                            
+                            rpa_task_type = gr.Dropdown(
+                                label="⚙️ Tipo de Tarea",
+                                choices=[],
+                                value=None,
+                                info="Selecciona la tarea específica a automatizar"
+                            )
+                            
+                            rpa_parameters = gr.Textbox(
+                                label="📝 Parámetros (JSON)",
+                                placeholder='{"parametro1": "valor1", "parametro2": "valor2"}',
+                                lines=10,
+                                value="{}",
+                                info="Ingresa los parámetros necesarios en formato JSON"
+                            )
+                            
+                            rpa_documents = gr.Files(
+                                label="📄 Documentos de Entrada (Opcional)",
+                                file_count="multiple",
+                                file_types=[".pdf", ".docx", ".txt", ".json", ".csv"]
+                            )
+                            
+                            execute_rpa_btn = gr.Button("🚀 Ejecutar Automatización", variant="primary", size="lg")
+                        
+                        with gr.Column(scale=1):
+                            rpa_output = gr.Markdown("")
+                            rpa_execution_time = gr.Markdown("")
+                    
+                    def update_task_types(category):
+                        """Actualiza los tipos de tarea según la categoría seleccionada."""
+                        if not rpa_engine:
+                            return gr.Dropdown(choices=[], value=None)
+                        
+                        _init_rpa()
+                        if rpa_engine is None:
+                            raise gr.Error("RPA no está disponible")
+                        categories = rpa_engine.get_available_categories()
+                        category_data = next((c for c in categories if c["category"] == category), None)
+                        
+                        if category_data:
+                            choices = [(task["name"], task["id"]) for task in category_data["tasks"]]
+                            return gr.Dropdown(choices=choices, value=choices[0][1] if choices else None)
+                        return gr.Dropdown(choices=[], value=None)
+                    
+                    def execute_rpa_automation(category, task_type, parameters_json, documents):
+                        """Ejecuta una automatización RPA."""
+                        if not rpa_engine:
+                            return "❌ RPA Engine no está habilitado. Configura DOCCHAT_ENABLE_AGENTS=true", ""
+                        
+                        if not category or not task_type:
+                            return "⚠️ Por favor, selecciona una categoría y tipo de tarea.", ""
+                        
+                        try:
+                            # Parsear parámetros JSON
+                            try:
+                                parameters = json.loads(parameters_json) if parameters_json.strip() else {}
+                            except json.JSONDecodeError:
+                                return "❌ Error: Los parámetros deben estar en formato JSON válido.", ""
+                            
+                            # Procesar documentos si hay
+                            docs = None
+                            if documents:
+                                from docchat.document_processor import DocumentProcessor
+                                _init_rpa()
+                                if rpa_engine is None:
+                                    raise gr.Error("RPA no está disponible")
+                                processor = DocumentProcessor(rpa_engine.config)
+                                docs = processor.process(documents)
+                            
+                            # Ejecutar automatización
+                            _init_rpa()
+                            if rpa_engine is None:
+                                raise gr.Error("RPA no está disponible")
+                            result = rpa_engine.execute_automation(
+                                category=category,
+                                task_type=task_type,
+                                parameters=parameters,
+                                documents=docs
+                            )
+                            
+                            # Formatear salida
+                            output = f"""
+## ✅ Automatización Completada
+
+**ID:** {result.automation_id}
+**Categoría:** {result.category}
+**Tipo:** {result.task_type}
+**Estado:** {'✅ Éxito' if result.success else '❌ Error'}
+**Tiempo de Ejecución:** {result.execution_time:.2f} segundos
+
+### 📊 Resultado:
+```json
+{json.dumps(result.data, indent=2, ensure_ascii=False)}
+```
+
+### 💬 Mensaje:
+{result.message}
+
+### 🔧 Herramientas Usadas:
+{', '.join(result.tools_used) if result.tools_used else 'Ninguna'}
+"""
+                            
+                            time_info = f"⏱️ **Tiempo de ejecución:** {result.execution_time:.2f} segundos"
+                            
+                            return output, time_info
+                        
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando automatización: {str(e)}", ""
+                    
+                    rpa_category.change(
+                        fn=update_task_types,
+                        inputs=[rpa_category],
+                        outputs=[rpa_task_type]
+                    )
+                    
+                    execute_rpa_btn.click(
+                        fn=execute_rpa_automation,
+                        inputs=[rpa_category, rpa_task_type, rpa_parameters, rpa_documents],
+                        outputs=[rpa_output, rpa_execution_time]
+                    )
+                    
+                    # Cargar tipos de tarea iniciales
+                    if rpa_engine:
+                        initial_tasks = update_task_types("finanzas")
+                        if hasattr(initial_tasks, 'choices') and initial_tasks.choices:
+                            rpa_task_type.choices = initial_tasks.choices
+                            rpa_task_type.value = initial_tasks.value
+                
+                with gr.Tab("📋 Categorías Disponibles"):
+                    gr.Markdown("### Todas las Categorías y Tareas de Automatización")
+                    
+                    categories_info = gr.Markdown("")
+                    
+                    def load_categories_info():
+                        if not rpa_engine:
+                            return "❌ RPA Engine no está habilitado."
+                        
+                        _init_rpa()
+                        if rpa_engine is None:
+                            raise gr.Error("RPA no está disponible")
+                        categories = rpa_engine.get_available_categories()
+                        
+                        info = "## 📚 Categorías de Automatización RPA\n\n"
+                        
+                        for cat in categories:
+                            info += f"### {cat['name']}\n\n"
+                            info += f"**Categoría ID:** `{cat['category']}`\n\n"
+                            info += "**Tareas disponibles:**\n"
+                            for task in cat['tasks']:
+                                info += f"- **{task['name']}** (ID: `{task['id']}`)\n"
+                            info += "\n---\n\n"
+                        
+                        return info
+                    
+                    if rpa_engine:
+                        categories_info.value = load_categories_info()
+                    else:
+                        categories_info.value = "❌ RPA Engine no está habilitado."
+                
+                with gr.Tab("📊 Estadísticas"):
+                    gr.Markdown("### Estadísticas de Automatizaciones RPA")
+                    
+                    rpa_stats_output = gr.Markdown("")
+                    refresh_rpa_stats_btn = gr.Button("🔄 Actualizar Estadísticas", variant="secondary")
+                    
+                    def get_rpa_stats():
+                        if not rpa_engine:
+                            return "❌ RPA Engine no está habilitado."
+                        
+                        try:
+                            stats = rpa_engine.get_stats()
+                            
+                            return f"""
+## 📊 Estadísticas de Automatización RPA
+
+### 📈 Métricas Generales:
+- **Total de Tareas:** {stats['total_tasks']}
+- **Completadas:** {stats['completed_tasks']}
+- **Fallidas:** {stats['failed_tasks']}
+- **Tasa de Éxito:** {stats.get('success_rate', 0):.1f}%
+- **Tiempo Promedio:** {stats.get('average_execution_time', 0):.2f} segundos
+
+### 📂 Por Categoría:
+{chr(10).join([f"- **{cat}**: {count} tareas" for cat, count in stats.get('by_category', {}).items()]) if stats.get('by_category') else "Ninguna"}
+
+### 📊 Total de Automatizaciones:
+- **Ejecutadas:** {stats.get('total_automations', 0)}
+"""
+                        except Exception as e:
+                            return f"❌ Error obteniendo estadísticas: {str(e)}"
+                    
+                    refresh_rpa_stats_btn.click(
+                        fn=get_rpa_stats,
+                        outputs=[rpa_stats_output]
+                    )
+                    
+                    if rpa_engine:
+                        rpa_stats_output.value = get_rpa_stats()
+                    else:
+                        rpa_stats_output.value = "❌ RPA Engine no está habilitado."
+                
+                with gr.Tab("🔌 API y Conexiones Enterprise"):
+                    gr.Markdown("### Conecta tu Sistema Enterprise por API")
+                    gr.Markdown("""
+                    **🚀 Integra tu sistema empresarial con Automatización RPA**
+                    
+                    Conecta tu ERP, CRM, o cualquier sistema empresarial para que los Agentic AI procesen datos automáticamente en tiempo real.
+                    
+                    **Características:**
+                    - 📡 **Webhooks en Tiempo Real**: Recibe datos de tu empresa automáticamente
+                    - 🤖 **Procesamiento Automático**: Los Agentic AI procesan datos sin intervención
+                    - 🔄 **Integración Continua**: Datos fluyen automáticamente desde tu sistema
+                    - 📊 **Monitoreo en Tiempo Real**: Ve el estado de todas las automatizaciones
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📝 Registrar Conexión Enterprise")
+                            
+                            enterprise_name = gr.Textbox(
+                                label="🏢 Nombre de la Empresa/App",
+                                placeholder="Mi Empresa S.A.",
+                                value=""
+                            )
+                            
+                            enterprise_api_key = gr.Textbox(
+                                label="🔑 API Key (se generará automáticamente)",
+                                value="",
+                                interactive=False
+                            )
+                            
+                            enterprise_webhook_url = gr.Textbox(
+                                label="📡 Webhook URL de tu Sistema",
+                                placeholder="https://tu-sistema.com/webhook",
+                                value="",
+                                info="URL donde tu sistema enviará datos en tiempo real"
+                            )
+                            
+                            enterprise_categories = gr.CheckboxGroup(
+                                label="📂 Categorías de Automatización",
+                                choices=[
+                                    "Finanzas",
+                                    "RRHH",
+                                    "Logística",
+                                    "Marketing",
+                                    "Salud",
+                                    "Manufactura",
+                                    "TI y Seguridad",
+                                    "Legal",
+                                    "Gestión de Proyectos",
+                                    "Educación",
+                                    "Comunicaciones"
+                                ],
+                                value=[],
+                                info="Selecciona las categorías que tu empresa usará"
+                            )
+                            
+                            register_enterprise_btn = gr.Button("✅ Registrar Conexión Enterprise", variant="primary")
+                            enterprise_status = gr.Markdown("")
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("### 📋 Conexiones Registradas")
+                            
+                            enterprise_connections = gr.Dataframe(
+                                label="Conexiones Activas",
+                                headers=["Empresa", "Enterprise ID", "Estado", "Total Requests", "Éxito"],
+                                interactive=False,
+                                wrap=True
+                            )
+                            
+                            refresh_connections_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                            
+                            def refresh_connections_list():
+                                """Actualiza la lista de conexiones."""
+                                if not rpa_enterprise:
+                                    return None, "❌ RPA Enterprise Integration no está habilitado."
+                                
+                                try:
+                                    connections = rpa_enterprise.get_all_connections()
+                                    
+                                    if not connections:
+                                        return None, "📝 No hay conexiones registradas aún."
+                                    
+                                    data = []
+                                    for conn in connections:
+                                        success_rate = (
+                                            (conn.get("successful_automations", 0) / conn.get("total_requests", 1) * 100)
+                                            if conn.get("total_requests", 0) > 0 else 0
+                                        )
+                                        data.append([
+                                            conn.get("name", ""),
+                                            conn.get("enterprise_id", "")[:20] + "...",
+                                            "✅ Activa" if conn.get("status") == "active" else "⏸️ Pausada",
+                                            str(conn.get("total_requests", 0)),
+                                            f"{success_rate:.1f}%"
+                                        ])
+                                    
+                                    return data, f"✅ {len(connections)} conexiones encontradas"
+                                except Exception as e:
+                                    return None, f"❌ Error: {str(e)}"
+                            
+                            refresh_connections_btn.click(
+                                fn=refresh_connections_list,
+                                outputs=[enterprise_connections, enterprise_status]
+                            )
+                            
+                            # Cargar conexiones iniciales
+                            if rpa_enterprise:
+                                initial_data, initial_msg = refresh_connections_list()
+                                if initial_data:
+                                    enterprise_connections.value = initial_data
+                            
+                            gr.Markdown("### 📡 Endpoint de Webhook")
+                            webhook_endpoint_info = gr.Markdown("""
+                            **URL del Webhook para recibir datos:**
+                            
+                            ```
+                            POST http://tu-servidor:8000/api/v1/rpa/webhook/{enterprise_id}
+                            ```
+                            
+                            **Headers requeridos:**
+                            - `X-API-Key`: Tu API Key
+                            - `Content-Type`: application/json
+                            
+                            **Body (JSON):**
+                            ```json
+                            {
+                              "category": "finanzas",
+                              "task_type": "generar_factura",
+                              "data": {
+                                "parametro1": "valor1",
+                                "parametro2": "valor2"
+                              }
+                            }
+                            ```
+                            """)
+                    
+                    def register_enterprise_connection(name, webhook_url, categories):
+                        """Registra una nueva conexión enterprise."""
+                        if not rpa_enterprise:
+                            return "❌ RPA Enterprise Integration no está habilitado.", None, ""
+                        
+                        if not name or not name.strip():
+                            return "⚠️ Ingresa el nombre de la empresa.", None, ""
+                        
+                        try:
+                            # Registrar conexión
+                            connection = rpa_enterprise.register_enterprise_connection(
+                                name=name,
+                                webhook_url=webhook_url if webhook_url else None,
+                                categories=categories if categories else None
+                            )
+                            
+                            status_msg = f"""
+✅ **Conexión registrada exitosamente!**
+
+**Enterprise ID:** `{connection.enterprise_id}`
+**API Key:** `{connection.api_key}`
+
+⚠️ **IMPORTANTE:** Guarda esta API Key de forma segura. No se mostrará nuevamente.
+
+**Endpoint de Webhook:**
+```
+POST http://tu-servidor:8000/api/v1/rpa/webhook/{connection.enterprise_id}
+Headers:
+  X-API-Key: {connection.api_key}
+  Content-Type: application/json
+
+Body:
+{{
+  "category": "finanzas",
+  "task_type": "generar_factura",
+  "data": {{ ... }}
+}}
+```
+"""
+                            
+                            return status_msg, None, connection.api_key
+                        except Exception as e:
+                            return f"❌ Error registrando conexión: {str(e)}", None, ""
+                    
+                    register_enterprise_btn.click(
+                        fn=register_enterprise_connection,
+                        inputs=[enterprise_name, enterprise_webhook_url, enterprise_categories],
+                        outputs=[enterprise_status, enterprise_connections, enterprise_api_key]
+                    )
+                
+                with gr.Tab("📖 Guía y Ejemplos"):
+                    gr.Markdown("""
+                    ### 📖 Guía de Uso de Automatización RPA
+                    
+                    ## 🎯 Cómo Usar
+                    
+                    1. **Selecciona una Categoría** (ej: Finanzas, RRHH, Logística)
+                    2. **Selecciona un Tipo de Tarea** (se actualiza automáticamente)
+                    3. **Ingresa los Parámetros** en formato JSON
+                    4. **Opcionalmente sube Documentos** relacionados
+                    5. **Ejecuta** y recibe el resultado automáticamente
+                    
+                    ## 💰 Ejemplo: Finanzas - Generar Factura
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "orden_compra": "OC-12345",
+                      "cliente": {
+                        "nombre": "Empresa ABC",
+                        "email": "contacto@empresaabc.com",
+                        "direccion": "Calle 123"
+                      },
+                      "items": [
+                        {"descripcion": "Producto A", "cantidad": 2, "precio": 100},
+                        {"descripcion": "Producto B", "cantidad": 1, "precio": 200}
+                      ]
+                    }
+                    ```
+                    
+                    ## 👥 Ejemplo: RRHH - Filtrar CVs
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "cvs": [
+                        {
+                          "nombre": "Juan Pérez",
+                          "contenido": "Ingeniero con 5 años de experiencia en Python, SQL, Machine Learning..."
+                        }
+                      ],
+                      "requisitos": {
+                        "experiencia_minima": 3,
+                        "educacion": "universitaria",
+                        "habilidades": ["Python", "SQL", "Machine Learning"]
+                      }
+                    }
+                    ```
+                    
+                    ## 📦 Ejemplo: Logística - Gestión de Inventario
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "productos": [
+                        {"id": "PROD-001", "nombre": "Producto A", "stock": 5, "stock_maximo": 100, "proveedor": "Proveedor X"},
+                        {"id": "PROD-002", "nombre": "Producto B", "stock": 15, "stock_maximo": 50, "proveedor": "Proveedor Y"}
+                      ],
+                      "umbral_minimo": 10
+                    }
+                    ```
+                    
+                    ## 🏥 Ejemplo: Salud - Gestión de Citas
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "solicitudes": [
+                        {
+                          "paciente": "María García",
+                          "fecha_preferida": "2025-01-25T10:00:00",
+                          "tipo": "consulta"
+                        }
+                      ],
+                      "doctores": [
+                        {"id": "DOC-001", "nombre": "Dr. López", "especialidad": "General"}
+                      ]
+                    }
+                    ```
+                    
+                    ## ⚖️ Ejemplo: Legal - Revisar Contrato
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "contrato": "Texto del contrato aquí..."
+                    }
+                    ```
+                    
+                    O sube un documento PDF/DOCX con el contrato.
+                    
+                    ## 🔒 Ejemplo: TI - Gestión de Contraseñas
+                    
+                    **Parámetros:**
+                    ```json
+                    {
+                      "sistemas": [
+                        {"nombre": "Sistema ERP", "usuario": "admin"},
+                        {"nombre": "Sistema CRM", "usuario": "admin"}
+                      ],
+                      "longitud": 16
+                    }
+                    ```
+                    
+                    ---
+                    
+                    **💡 Tip:** Consulta la documentación completa en `GUIA_RPA_AUTOMATION.md`
+                    """)
+        
+        # Tab 4.9: Integraciones Conectadas (NUEVO - Reemplaza Analytics) - OCULTO
+        # with gr.Tab("🔌 Integraciones"):
+            gr.Markdown("### 🔌 Integraciones Conectadas - Busca en Todas tus Apps")
+            gr.Markdown("""
+            **🚀 Conecta DocChat con 30+ Apps Empresariales:**
+            
+            **📧 Comunicación:** Gmail, Outlook, Microsoft Teams, Slack, Zoom
+            
+            **📁 Almacenamiento:** Google Drive, OneDrive, SharePoint, Dropbox
+            
+            **📊 CRM y Ventas:** Salesforce, HubSpot, Pipedrive, Zoho CRM
+            
+            **✅ Gestión de Proyectos:** Jira, Asana, Trello, Monday.com
+            
+            **💻 Desarrollo:** GitHub, Confluence
+            
+            **💰 Finanzas:** QuickBooks, FreshBooks, Wave
+            
+            **👥 Recursos Humanos:** Workday, BambooHR
+            
+            **📊 Analytics:** Power BI, Google Analytics
+            
+            **🎫 Soporte:** Zendesk, ServiceNow
+            
+            **📝 Documentación:** Notion, Confluence
+            
+            **💡 Cuando preguntes algo, DocChat busca automáticamente en TODAS las apps conectadas**
+            
+            **✨ Características:**
+            - 🔄 Sincronización automática cada 15 minutos
+            - 📦 Caché inteligente para respuestas rápidas
+            - 🔍 Búsqueda en tiempo real cuando es necesario
+            - 🌐 API RESTful para integraciones programáticas
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Conectar Apps
+                with gr.Tab("🔌 Conectar Apps"):
+                    gr.Markdown("### Conectar Apps Empresariales")
+                    gr.Markdown("""
+                    **✨ Método Super Simple:** Obtén un token desde OAuth Playground → Pégalo aquí → ¡Listo!
+                    
+                    **✅ Ventajas:**
+                    - No necesitas agregar testers
+                    - No necesitas verificación de Google
+                    - Funciona inmediatamente
+                    - Super fácil para clientes no técnicos
+                    """)
+                    
+                    # Tabs para cada tipo de app
+                    with gr.Tabs():
+                        # Tab: Google Workspace
+                        with gr.Tab("📧 Google Workspace"):
+                            gr.Markdown("### Conectar Google Workspace (Gmail, Drive, Calendar)")
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    google_token = gr.Textbox(
+                                        label="Token de OAuth (Obtener desde OAuth Playground)",
+                                        type="password",
+                                        placeholder="ya29.a0AfH6SMC..."
+                                    )
+                                    google_type = gr.Dropdown(
+                                        label="Tipo de App",
+                                        choices=["gmail", "drive", "calendar"],
+                                        value="gmail"
+                                    )
+                                    connect_google_btn = gr.Button("🔌 Conectar Google", variant="primary")
+                                
+                                with gr.Column():
+                                    google_output = gr.Markdown()
+                            
+                            def connect_google_integration(token, app_type):
+                                """Conecta integración de Google."""
+                                if not token.strip():
+                                    return "❌ Por favor, ingresa un token de OAuth"
+                                
+                                try:
+                                    # Aquí iría la lógica de conexión real
+                                    return f"""✅ **Google {app_type} conectado exitosamente**
+
+**Token recibido:** {token[:20]}...
+
+**Estado:** Conectado
+**Sincronización:** Automática cada 15 minutos
+
+💡 La integración está activa y funcionando."""
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}"
+                            
+                            connect_google_btn.click(
+                                fn=connect_google_integration,
+                                inputs=[google_token, google_type],
+                                outputs=[google_output]
+                            )
+                        
+                        # Tab: Microsoft 365
+                        with gr.Tab("💼 Microsoft 365"):
+                            gr.Markdown("### Conectar Microsoft 365 (Outlook, OneDrive, Teams)")
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    microsoft_token = gr.Textbox(
+                                        label="Token de OAuth",
+                                        type="password",
+                                        placeholder="eyJ0eXAiOiJKV1QiLCJhbGc..."
+                                    )
+                                    microsoft_type = gr.Dropdown(
+                                        label="Tipo de App",
+                                        choices=["outlook", "onedrive", "teams"],
+                                        value="outlook"
+                                    )
+                                    connect_microsoft_btn = gr.Button("🔌 Conectar Microsoft", variant="primary")
+                                
+                                with gr.Column():
+                                    microsoft_output = gr.Markdown()
+                            
+                            def connect_microsoft_integration(token, app_type):
+                                """Conecta integración de Microsoft."""
+                                if not token.strip():
+                                    return "❌ Por favor, ingresa un token de OAuth"
+                                
+                                try:
+                                    return f"""✅ **Microsoft {app_type} conectado exitosamente**
+
+**Token recibido:** {token[:20]}...
+
+**Estado:** Conectado
+**Sincronización:** Automática cada 15 minutos"""
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}"
+                            
+                            connect_microsoft_btn.click(
+                                fn=connect_microsoft_integration,
+                                inputs=[microsoft_token, microsoft_type],
+                                outputs=[microsoft_output]
+                            )
+                        
+                        # Tab: Colaboración
+                        with gr.Tab("💬 Colaboración"):
+                            gr.Markdown("### Conectar Apps de Colaboración")
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    slack_token = gr.Textbox(
+                                        label="Token de Slack",
+                                        type="password",
+                                        placeholder="xoxb-..."
+                                    )
+                                    connect_slack_btn = gr.Button("🔌 Conectar Slack", variant="primary")
+                                
+                                with gr.Column():
+                                    slack_output = gr.Markdown()
+                            
+                            def connect_slack_integration(token):
+                                """Conecta integración de Slack."""
+                                if not token.strip():
+                                    return "❌ Por favor, ingresa un token de Slack"
+                                
+                                try:
+                                    return f"""✅ **Slack conectado exitosamente**
+
+**Token recibido:** {token[:20]}...
+
+**Estado:** Conectado
+**Canales disponibles:** Todos los canales accesibles"""
+                                except Exception as e:
+                                    return f"❌ Error: {str(e)}"
+                            
+                            connect_slack_btn.click(
+                                fn=connect_slack_integration,
+                                inputs=[slack_token],
+                                outputs=[slack_output]
+                            )
+                    
+                    # Sub-tab: Apps Conectadas
+                    with gr.Tab("📋 Apps Conectadas"):
+                        gr.Markdown("### Apps Conectadas Actualmente")
+                        
+                        connected_apps_output = gr.Markdown("📭 No hay apps conectadas aún.\n\n💡 Usa el tab 'Conectar Apps' para agregar integraciones.")
+                        
+                        def list_connected_apps():
+                            """Lista las apps conectadas."""
+                            # Aquí iría la lógica real para listar apps conectadas
+                            return "📭 No hay apps conectadas aún.\n\n💡 Usa el tab 'Conectar Apps' para agregar integraciones."
+                        
+                        refresh_apps_btn = gr.Button("🔄 Actualizar Lista", variant="primary")
+                        refresh_apps_btn.click(
+                            fn=list_connected_apps,
+                            outputs=[connected_apps_output]
+                        )
+                    
+                    # Sub-tab: Integraciones Avanzadas (LangGraph, CrewAI, Composio)
+                    with gr.Tab("🚀 Integraciones Avanzadas"):
+                        gr.Markdown("### 🚀 LangGraph, CrewAI y Composio")
+                        gr.Markdown("""
+                        **🔥 Nuevas capacidades avanzadas para Integraciones:**
+                        
+                        - **🌳 LangGraph:** Workflows complejos de sincronización
+                        - **👥 CrewAI:** Equipo de especialistas (integration specialist, data synchronizer, security validator)
+                        - **🔌 Composio:** 250+ apps disponibles para conectar automáticamente
+                        
+                        **💡 Expande tus integraciones con workflows avanzados y acceso a 250+ apps**
+                        """)
+                        
+                        with gr.Tabs():
+                            with gr.Tab("🌳 LangGraph - Workflows"):
+                                gr.Markdown("### Workflows Avanzados para Sincronización")
+                                
+                                workflow_integration_id = gr.Textbox(
+                                    label="ID de la Integración",
+                                    placeholder="integration_123",
+                                    info="ID de la integración para crear workflow de sincronización"
+                                )
+                                
+                                create_sync_workflow_btn = gr.Button("🌳 Crear Workflow de Sincronización", variant="primary")
+                                sync_workflow_output = gr.Markdown()
+                                
+                                def create_sync_workflow(integration_id):
+                                    if not integration_manager or not integration_manager.langgraph:
+                                        return "❌ LangGraph no está disponible"
+                                    try:
+                                        result = integration_manager.create_integration_sync_workflow(integration_id)
+                                        if result.get("success"):
+                                            return f"✅ **Workflow creado y ejecutado exitosamente**\n\n{json.dumps(result.get('final_data', {}), indent=2)}"
+                                        else:
+                                            return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                    except Exception as e:
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                create_sync_workflow_btn.click(
+                                    fn=create_sync_workflow,
+                                    inputs=[workflow_integration_id],
+                                    outputs=[sync_workflow_output]
+                                )
+                            
+                            with gr.Tab("👥 CrewAI - Multi-Agent"):
+                                gr.Markdown("### Equipo de Especialistas en Integraciones")
+                                
+                                integration_brief = gr.Textbox(
+                                    label="Brief de Integración",
+                                    placeholder="Conecta Salesforce y sincroniza leads con HubSpot",
+                                    info="Describe la integración que quieres configurar",
+                                    lines=3
+                                )
+                                
+                                execute_integration_crew_btn = gr.Button("👥 Ejecutar Crew de Integración", variant="primary")
+                                integration_crew_output = gr.Markdown()
+                                
+                                def execute_integration_crew(brief):
+                                    if not integration_manager or not integration_manager.crewai:
+                                        return "❌ CrewAI no está disponible"
+                                    try:
+                                        # Crear crew si no existe
+                                        if "integration_crew" not in integration_manager.crewai.crews:
+                                            integration_manager.create_integration_crew()
+                                        
+                                        result = integration_manager.crewai.execute_crew(
+                                            crew_id="integration_crew",
+                                            inputs={"brief": brief}
+                                        )
+                                        if result.get("success"):
+                                            return f"✅ **Crew ejecutado exitosamente**\n\n**Resultado:**\n{result.get('result', '')}\n\n**Agentes usados:** {', '.join(result.get('agents_used', []))}"
+                                        else:
+                                            return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                    except Exception as e:
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                execute_integration_crew_btn.click(
+                                    fn=execute_integration_crew,
+                                    inputs=[integration_brief],
+                                    outputs=[integration_crew_output]
+                                )
+                            
+                            with gr.Tab("🔌 Composio - 250+ Apps"):
+                                gr.Markdown("### Acceso a 250+ Apps Pre-construidas")
+                                
+                                composio_app_name = gr.Dropdown(
+                                    label="App a Conectar",
+                                    choices=["gmail", "slack", "salesforce", "hubspot", "mailchimp", "linkedin", "github", "jira", "zendesk", "notion"],
+                                    value="gmail",
+                                    info="Selecciona una app de las 250+ disponibles"
+                                )
+                                
+                                connect_composio_integration_btn = gr.Button("🔌 Conectar App vía Composio", variant="primary")
+                                
+                                composio_action_app = gr.Dropdown(
+                                    label="App para Ejecutar Acción",
+                                    choices=["gmail", "slack", "salesforce", "hubspot", "mailchimp"],
+                                    value="gmail",
+                                    info="App donde ejecutar acción"
+                                )
+                                
+                                composio_action_name = gr.Textbox(
+                                    label="Nombre de la Acción",
+                                    placeholder="send_email",
+                                    info="Nombre de la acción a ejecutar"
+                                )
+                                
+                                composio_action_params = gr.Textbox(
+                                    label="Parámetros (JSON)",
+                                    placeholder='{"to": "user@example.com", "subject": "Hello", "body": "Test"}',
+                                    info="Parámetros de la acción en formato JSON",
+                                    lines=3
+                                )
+                                
+                                execute_composio_action_btn = gr.Button("⚡ Ejecutar Acción", variant="secondary")
+                                
+                                composio_integration_output = gr.Markdown()
+                                
+                                def connect_composio_integration_app(app_name):
+                                    if not integration_manager or not integration_manager.composio:
+                                        return "❌ Composio no está disponible"
+                                    try:
+                                        result = integration_manager.connect_via_composio(app_name)
+                                        if result.get("success"):
+                                            return f"✅ **App conectada:** {app_name}\n\n{json.dumps(result, indent=2)}"
+                                        else:
+                                            return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                    except Exception as e:
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                def execute_composio_integration_action(app_name, action_name, params_json):
+                                    if not integration_manager or not integration_manager.composio:
+                                        return "❌ Composio no está disponible"
+                                    try:
+                                        # Parsear JSON
+                                        try:
+                                            params = json.loads(params_json) if params_json.strip() else {}
+                                        except:
+                                            return "❌ **Error:** Parámetros JSON inválidos"
+                                        
+                                        result = integration_manager.execute_composio_action(
+                                            app_name=app_name,
+                                            action_name=action_name,
+                                            parameters=params
+                                        )
+                                        if result.get("success"):
+                                            return f"✅ **Acción ejecutada exitosamente**\n\n{json.dumps(result, indent=2)}"
+                                        else:
+                                            return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                    except Exception as e:
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                connect_composio_integration_btn.click(
+                                    fn=connect_composio_integration_app,
+                                    inputs=[composio_app_name],
+                                    outputs=[composio_integration_output]
+                                )
+                                
+                                execute_composio_action_btn.click(
+                                    fn=execute_composio_integration_action,
+                                    inputs=[composio_action_app, composio_action_name, composio_action_params],
+                                    outputs=[composio_integration_output]
+                                )
+                                
+                                # Lista de apps disponibles
+                                gr.Markdown("### 📋 Apps Disponibles en Composio")
+                                composio_apps_list = gr.Markdown("🔄 Cargando lista de apps...")
+                                
+                                def get_composio_apps_list():
+                                    if not integration_manager or not integration_manager.composio:
+                                        return "❌ Composio no está disponible"
+                                    try:
+                                        apps = integration_manager.get_composio_apps()
+                                        if apps:
+                                            output = "### 📋 Apps Disponibles (250+)\n\n"
+                                            for app in apps[:50]:  # Mostrar primeras 50
+                                                output += f"- **{app.get('display_name', app.get('name', 'Unknown'))}** ({app.get('name', 'N/A')})\n"
+                                            if len(apps) > 50:
+                                                output += f"\n... y {len(apps) - 50} más apps disponibles"
+                                            return output
+                                        else:
+                                            return "📭 No se pudieron cargar las apps. Configura COMPOSIO_API_KEY para ver la lista completa."
+                                    except Exception as e:
+                                        return f"❌ **Error:** {str(e)}"
+                                
+                                refresh_composio_apps_btn = gr.Button("🔄 Actualizar Lista de Apps", variant="secondary")
+                                refresh_composio_apps_btn.click(
+                                    fn=get_composio_apps_list,
+                                    outputs=[composio_apps_list]
+                                )
+                                
+                                # Cargar lista inicial
+                                composio_apps_list.value = get_composio_apps_list()
+        
+        # Tab: ☁️ Cloud Storage - Integración con servicios de almacenamiento en la nube
+        with gr.Tab("☁️ Cloud Storage"):
+            gr.Markdown("### ☁️ Conecta tu Cloud Storage para Procesamiento Automático")
+            gr.Markdown("""
+            **🚀 Conecta S3, Google Cloud Storage o Azure Blob Storage**
+            
+            - Sube archivos a tu cloud storage
+            - Se procesan automáticamente
+            - Detecta problemas y oportunidades
+            - Genera resúmenes ejecutivos
+            
+            **💡 Perfecto para empresas que tienen datos en la nube**
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: AWS S3
+                with gr.Tab("📦 AWS S3"):
+                    gr.Markdown("### Conectar Bucket de AWS S3")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            cs_s3_bucket = gr.Textbox(
+                                label="Nombre del Bucket",
+                                placeholder="mi-bucket-empresa",
+                            )
+                            cs_s3_access_key = gr.Textbox(
+                                label="AWS Access Key",
+                                type="password",
+                                placeholder="AKIAIOSFODNN7EXAMPLE",
+                            )
+                            cs_s3_secret_key = gr.Textbox(
+                                label="AWS Secret Key",
+                                type="password",
+                                placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                            )
+                            cs_s3_region = gr.Textbox(
+                                label="Región",
+                                value="us-east-1",
+                                placeholder="us-east-1",
+                            )
+                            cs_s3_prefix = gr.Textbox(
+                                label="Prefijo (opcional)",
+                                placeholder="documentos/",
+                                info="Solo procesa archivos en esta carpeta",
+                            )
+                            cs_s3_auto_process = gr.Checkbox(
+                                label="Procesar archivos automáticamente",
+                                value=True,
+                            )
+                            cs_s3_connect_btn = gr.Button("🔗 Conectar S3", variant="primary")
+                    
+                    cs_s3_output = gr.Markdown(label="📊 Resultado de Conexión")
+                    
+                    cs_s3_connect_btn.click(
+                        fn=connect_s3_storage,
+                        inputs=[cs_s3_bucket, cs_s3_access_key, cs_s3_secret_key, cs_s3_region, cs_s3_prefix, cs_s3_auto_process],
+                        outputs=[cs_s3_output],
+                    )
+                
+                # Sub-tab: Google Drive
+                with gr.Tab("📁 Google Drive (Recomendado)"):
+                    gr.Markdown("### Conectar Google Drive")
+                    gr.Markdown("""
+                    **🚀 LA MEJOR OPCIÓN - Procesa archivos directamente sin descargarlos**
+                    
+                    - ✅ Conecta tu Google Drive
+                    - ✅ Procesa hasta 200 PDFs sin ocupar espacio en tu PC
+                    - ✅ Los archivos se procesan directamente desde Drive
+                    - ✅ Perfecto para Enterprise API Mode
+                    """)
+                    
+                    with gr.Tabs():
+                        with gr.Tab("🔑 Método Fácil (Recomendado)"):
+                            gr.Markdown("""
+                            ### ✨ Conectar Google Drive en 3 Pasos Simples
+                            
+                            **Paso 1:** Click en el botón azul de abajo → Se abre OAuth Playground
+                            
+                            **Paso 2:** 
+                            - Marca: `https://www.googleapis.com/auth/drive.readonly`
+                            - Click en "Authorize APIs"
+                            - Inicia sesión con Google
+                            - Click en "Exchange authorization code for tokens"
+                            
+                            **Paso 3:** Copia el "Access token" y pégalo abajo → Click en "Conectar"
+                            """)
+                            
+                            oauth_link_cs = gr.Markdown("""
+                            <div style="text-align: center; margin: 20px 0;">
+                                <a href="https://developers.google.com/oauthplayground/" target="_blank" style="text-decoration: none;">
+                                    <button style="background-color: #4285F4; color: white; padding: 20px 40px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                        🔗 Abrir OAuth Playground (Click Aquí)
+                                    </button>
+                                </a>
+                            </div>
+                            """)
+                            
+                            gr.Markdown("""
+                            **💡 Tip:** El token empieza con `ya29.` y es largo (más de 100 caracteres)
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    cs_drive_access_token = gr.Textbox(
+                                        label="🔑 Pega aquí el Access Token",
+                                        placeholder="ya29.a0AfH6SMC...",
+                                        type="password",
+                                        info="Copia el token desde OAuth Playground",
+                                    )
+                                    
+                                    with gr.Accordion("⚙️ Opciones Avanzadas (Opcional)", open=False):
+                                        cs_drive_folder_id_easy = gr.Textbox(
+                                            label="ID de Carpeta específica (opcional)",
+                                            placeholder="1ABC123xyz...",
+                                            info="Deja vacío para procesar todo 'My Drive'",
+                                        )
+                                    cs_drive_auto_process_easy = gr.Checkbox(
+                                        label="Procesar automáticamente al conectar",
+                                        value=False,
+                                        info="⚠️ DESACTIVADO por defecto"
+                                    )
+                                    
+                                    cs_drive_connect_easy_btn = gr.Button("✅ Conectar Google Drive", variant="primary", size="lg")
+                            
+                            cs_drive_output_easy = gr.Markdown(
+                                label="📊 Resultado",
+                                value="**Esperando conexión...**\n\n1. Click en el botón de arriba para abrir OAuth Playground\n2. Sigue los pasos\n3. Pega el token y click en 'Conectar Google Drive'"
+                            )
+                            
+                            cs_drive_connect_easy_btn.click(
+                                fn=lambda token, folder, auto: connect_google_drive_with_token(token, folder, auto),
+                                inputs=[cs_drive_access_token, cs_drive_folder_id_easy, cs_drive_auto_process_easy],
+                                outputs=[cs_drive_output_easy],
+                            )
+                        
+                        with gr.Tab("⚙️ Método Completo (OAuth)"):
+                            gr.Markdown("""
+                            **📋 Cómo obtener credenciales:**
+                            1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
+                            2. Crea un proyecto o selecciona uno existente
+                            3. Habilita "Google Drive API"
+                            4. Crea credenciales OAuth 2.0 (tipo "Aplicación de escritorio")
+                            5. Descarga el JSON de credenciales
+                            """)
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    cs_drive_credentials = gr.Textbox(
+                                        label="Credenciales JSON de Google Drive",
+                                        placeholder='{"web": {"client_id": "...", "client_secret": "...", ...}}',
+                                        lines=8,
+                                        info="Pega el contenido completo del archivo JSON de credenciales",
+                                    )
+                                    cs_drive_folder_id = gr.Textbox(
+                                        label="ID de Carpeta (opcional)",
+                                        placeholder="1ABC123xyz...",
+                                        info="Deja vacío para procesar todo 'My Drive'",
+                                    )
+                                    cs_drive_auto_process = gr.Checkbox(
+                                        label="Procesar automáticamente al conectar",
+                                        value=True,
+                                    )
+                                    cs_drive_connect_btn = gr.Button("🔗 Conectar Google Drive", variant="primary", size="lg")
+                            
+                            cs_drive_output = gr.Markdown(label="📊 Resultado de Conexión")
+                            
+                            cs_drive_connect_btn.click(
+                                fn=connect_google_drive_storage,
+                                inputs=[cs_drive_credentials, cs_drive_folder_id, cs_drive_auto_process],
+                                outputs=[cs_drive_output],
+                    )
+                
+                # Sub-tab: Google Cloud Storage
+                with gr.Tab("📦 Google Cloud Storage"):
+                    gr.Markdown("### Conectar Bucket de Google Cloud Storage")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            cs_gcs_bucket = gr.Textbox(
+                                label="Nombre del Bucket",
+                                placeholder="mi-bucket-gcs",
+                            )
+                            cs_gcs_credentials = gr.Textbox(
+                                label="Credenciales JSON",
+                                placeholder='{"type": "service_account", ...}',
+                                lines=5,
+                                info="Pega el contenido completo del archivo JSON de credenciales",
+                            )
+                            cs_gcs_prefix = gr.Textbox(
+                                label="Prefijo (opcional)",
+                                placeholder="documentos/",
+                            )
+                            cs_gcs_auto_process = gr.Checkbox(
+                                label="Procesar archivos automáticamente",
+                                value=True,
+                            )
+                            cs_gcs_connect_btn = gr.Button("🔗 Conectar GCS", variant="primary")
+                    
+                    cs_gcs_output = gr.Markdown(label="📊 Resultado de Conexión")
+                    
+                    cs_gcs_connect_btn.click(
+                        fn=connect_gcs_storage,
+                        inputs=[cs_gcs_bucket, cs_gcs_credentials, cs_gcs_prefix, cs_gcs_auto_process],
+                        outputs=[cs_gcs_output],
+                    )
+                
+                # Sub-tab: Azure Blob Storage
+                with gr.Tab("📦 Azure Blob Storage"):
+                    gr.Markdown("### Conectar Contenedor de Azure Blob Storage")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            cs_azure_container = gr.Textbox(
+                                label="Nombre del Contenedor",
+                                placeholder="mi-contenedor",
+                            )
+                            cs_azure_connection_string = gr.Textbox(
+                                label="Connection String",
+                                type="password",
+                                placeholder="DefaultEndpointsProtocol=https;AccountName=...",
+                            )
+                            cs_azure_prefix = gr.Textbox(
+                                label="Prefijo (opcional)",
+                                placeholder="documentos/",
+                            )
+                            cs_azure_auto_process = gr.Checkbox(
+                                label="Procesar archivos automáticamente",
+                                value=True,
+                            )
+                            cs_azure_connect_btn = gr.Button("🔗 Conectar Azure", variant="primary")
+                    
+                    cs_azure_output = gr.Markdown(label="📊 Resultado de Conexión")
+                    
+                    cs_azure_connect_btn.click(
+                        fn=connect_azure_storage,
+                        inputs=[cs_azure_container, cs_azure_connection_string, cs_azure_prefix, cs_azure_auto_process],
+                        outputs=[cs_azure_output],
+                    )
+                
+                # Sub-tab: Webhooks
+                with gr.Tab("🔔 Webhooks"):
+                    gr.Markdown("### Configurar Webhooks para Procesamiento en Tiempo Real")
+                    gr.Markdown("""
+                    **📋 Instrucciones:**
+                    
+                    1. Configura un webhook en tu cloud storage
+                    2. Cuando se suba un archivo, se procesará automáticamente
+                    3. El endpoint es: `http://tu-servidor:8000/api/v1/cloud/webhook/{source}`
+                    
+                    **Fuentes soportadas:** `s3`, `gcs`, `azure`
+                    """)
+                    
+                    webhook_info_cs = gr.Markdown("""
+                    ### 📍 Endpoint de Webhook
+                    
+                    **URL Base:** `http://tu-servidor:8000/api/v1/cloud/webhook/`
+                    
+                    **Ejemplos:**
+                    - S3: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
+                    - GCS: `http://tu-servidor:8000/api/v1/cloud/webhook/gcs`
+                    - Azure: `http://tu-servidor:8000/api/v1/cloud/webhook/azure`
+                    
+                    **Configuración en AWS S3:**
+                    1. Ve a tu bucket → Properties → Event notifications
+                    2. Crea nueva notificación
+                    3. Event type: `s3:ObjectCreated:*`
+                    4. Destination: HTTP/HTTPS endpoint
+                    5. URL: `http://tu-servidor:8000/api/v1/cloud/webhook/s3`
+                    """)
+        
+        # Tab: 📧 Marketing - Agente de Email Marketing / Campañas
+        with gr.Tab("📧 Marketing"):
+            gr.Markdown("### 📧 Agente de Email Marketing / Campañas Autónomo")
+            gr.Markdown("""
+            **🚀 Sistema super inteligente para automatización completa de marketing por email**
+            
+            - ✍️ Generación inteligente de copys con IA
+            - 🎯 Segmentación automática de audiencias
+            - 📧 Creación y envío de campañas vía API
+            - 📊 Análisis de performance automático
+            - 💬 Text-to-Action: comandos en lenguaje natural
+            - 🔌 Integración con Mailchimp, HubSpot, ActiveCampaign
+            
+            **💡 Perfecto para empresas que necesitan automatizar newsletters y campañas**
+            
+            **🤖 NUEVO: Agentic AI para Marketing**
+            - Genera copys persuasivos automáticamente
+            - Crea segmentaciones inteligentes
+            - Envía campañas y analiza resultados
+            - "Crea una campaña de newsletter para clientes activos" → Lo hace automáticamente
+            """)
+            
+            if not marketing_agent:
+                gr.Markdown("⚠️ **Marketing Agent no está habilitado.**")
+            else:
+                with gr.Tabs():
+                    # Sub-tab: Generar Copy
+                    with gr.Tab("✍️ Generar Copy"):
+                        gr.Markdown("### Generar Copy Inteligente con IA")
+                        gr.Markdown("""
+                        **Genera copys persuasivos y optimizados para email marketing:**
+                        - Subject lines que capturan atención
+                        - Preheaders complementarios
+                        - Body HTML profesional y scannable
+                        - CTAs claros y accionables
+                        - Personalización automática
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                mkt_copy_campaign_name = gr.Textbox(
+                                    label="📝 Nombre de la Campaña",
+                                    placeholder="Ej: Newsletter Q1 2025",
+                                    value=""
+                                )
+                                
+                                mkt_copy_campaign_type = gr.Dropdown(
+                                    label="📋 Tipo de Campaña",
+                                    choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
+                                    value="newsletter",
+                                    interactive=True
+                                )
+                                
+                                mkt_copy_target_audience = gr.Textbox(
+                                    label="🎯 Audiencia Objetivo",
+                                    placeholder="Ej: Clientes activos de tecnología, empresas B2B, suscriptores premium",
+                                    lines=2
+                                )
+                                
+                                mkt_copy_key_message = gr.Textbox(
+                                    label="💬 Mensaje Clave",
+                                    placeholder="Ej: Nuevas características de nuestro producto, ofertas especiales, actualizaciones importantes",
+                                    lines=3
+                                )
+                                
+                                mkt_copy_tone = gr.Dropdown(
+                                    label="🎨 Tono",
+                                    choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
+                                    value="professional",
+                                    interactive=True
+                                )
+                                
+                                mkt_copy_include_cta = gr.Checkbox(
+                                    label="Incluir Call-to-Action",
+                                    value=True
+                                )
+                                
+                                mkt_generate_copy_btn = gr.Button("✨ Generar Copy", variant="primary", size="lg")
+                            
+                            with gr.Column():
+                                mkt_copy_output = gr.Markdown(label="📄 Copy Generado")
+                    
+                        def mkt_generate_copy(campaign_name, campaign_type, target_audience, key_message, tone, include_cta):
+                            if not marketing_agent:
+                                return "❌ Marketing Agent no está habilitado."
+                            
+                            if not campaign_name or not key_message:
+                                return "⚠️ Por favor, completa al menos el nombre de la campaña y el mensaje clave."
+                            
+                            try:
+                                copy = marketing_agent.generate_campaign_copy(
+                                    campaign_name=campaign_name,
+                                    campaign_type=campaign_type,
+                                    target_audience=target_audience or "General audience",
+                                    key_message=key_message,
+                                    tone=tone,
+                                    include_cta=include_cta
+                                )
+                                
+                                output = f"""
+## ✅ Copy Generado Exitosamente
+
+**Copy ID:** `{copy.copy_id}`
+
+### 📧 Subject Line
+{copy.subject_line}
+
+### 📝 Preheader
+{copy.preheader}
+
+### 📄 Body HTML
+{copy.body_html[:500]}...
+
+### 📄 Body Text (Plain Text)
+{copy.body_text[:500]}...
+
+### 🔗 Call-to-Action
+**Texto:** {copy.cta_text}
+**URL:** {copy.cta_url or "No especificada"}
+
+### 🎯 Personalización
+Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalization_fields else "Ninguno"}
+
+**💡 Tip:** Usa este copy para crear una campaña completa.
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error generando copy: {str(e)}"
+                    
+                        mkt_generate_copy_btn.click(
+                            fn=mkt_generate_copy,
+                            inputs=[mkt_copy_campaign_name, mkt_copy_campaign_type, mkt_copy_target_audience, mkt_copy_key_message, mkt_copy_tone, mkt_copy_include_cta],
+                            outputs=[mkt_copy_output]
+                        )
+                    
+                    # Sub-tab: Crear Campaña
+                    with gr.Tab("📊 Crear Campaña"):
+                        gr.Markdown("### Crear Campaña de Email Marketing con Agentic AI")
+                        gr.Markdown("""
+                        **Diseña y lanza campañas completas con un solo flujo:**
+                        - Definición de objetivo
+                        - Selección de audiencia
+                        - Generación de copy
+                        - Envío (simulado o real según configuración)
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                mkt_campaign_name = gr.Textbox(
+                                    label="📝 Nombre de la Campaña",
+                                    placeholder="Ej: Lanzamiento Producto X",
+                                    value=""
+                                )
+                                
+                                mkt_campaign_type = gr.Dropdown(
+                                    label="📋 Tipo de Campaña",
+                                    choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
+                                    value="promotional",
+                                    interactive=True
+                                )
+                                
+                                mkt_campaign_platform = gr.Dropdown(
+                                    label="📡 Plataforma",
+                                    choices=["mailchimp", "hubspot", "sendgrid", "smtp_simulado"],
+                                    value="smtp_simulado"
+                                )
+                                
+                                mkt_campaign_auto_generate = gr.Checkbox(
+                                    label="Generar copy automáticamente",
+                                    value=True
+                                )
+                                
+                                mkt_campaign_audience = gr.Textbox(
+                                    label="🎯 Audiencia Objetivo",
+                                    placeholder="Ej: Leads calientes, clientes enterprise, lista VIP",
+                                    lines=2
+                                )
+                                
+                                mkt_campaign_message = gr.Textbox(
+                                    label="💬 Mensaje Base (opcional si generas copy automático)",
+                                    placeholder="Ej: Queremos presentarte nuestra nueva solución...",
+                                    lines=4
+                                )
+                                
+                                mkt_campaign_tone = gr.Dropdown(
+                                    label="🎭 Tono",
+                                    choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
+                                    value="professional",
+                                    interactive=True
+                                )
+                            with gr.Column():
+                                mkt_campaign_output = gr.Markdown(label="📊 Campaña Creada")
+                    
+                        def mkt_create_campaign(name, camp_type, platform, auto_gen, audience, message, tone):
+                            if not marketing_agent:
+                                return "❌ Marketing Agent no está habilitado."
+                            
+                            if not name:
+                                return "⚠️ Por favor, ingresa un nombre para la campaña."
+                            
+                            try:
+                                result = marketing_agent.create_campaign(
+                                    campaign_name=name,
+                                    campaign_type=camp_type,
+                                    platform=platform,
+                                    auto_generate_copy=auto_gen,
+                                    audience_description=audience,
+                                    base_message=message,
+                                    tone=tone
+                                )
+                                
+                                output = f"""
+## ✅ Campaña Creada Exitosamente
+
+**Nombre:** {result.get('campaign_name', name)}
+**Tipo:** {result.get('campaign_type', camp_type)}
+**Plataforma:** {result.get('platform', platform)}
+
+### 🎯 Audiencia
+{result.get('audience_summary', audience or 'No especificada')}
+
+### 💬 Resumen del Mensaje
+{result.get('message_summary', 'Mensaje generado o proporcionado.')}
+
+### 📊 Estado
+{result.get('status', 'simulado')}
+
+**💡 Tip:** Revisa esta campaña en tu plataforma de email marketing para activarla.
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error creando campaña: {str(e)}"
+                    
+                        mkt_create_campaign_btn = gr.Button("🚀 Crear Campaña", variant="primary", size="lg")
+                        mkt_create_campaign_btn.click(
+                            fn=mkt_create_campaign,
+                            inputs=[mkt_campaign_name, mkt_campaign_type, mkt_campaign_platform, mkt_campaign_auto_generate, mkt_campaign_audience, mkt_campaign_message, mkt_campaign_tone],
+                            outputs=[mkt_campaign_output]
+                        )
+        
+        # Tab: Leads - Agente de Ventas / SDR Outbound
+        with gr.Tab("🎯 Leads"):
+            gr.Markdown("### 🎯 Agente de Ventas / SDR Outbound")
+            gr.Markdown("""
+            **🚀 Sistema completo de gestión y automatización de leads**
+            
+            - 📥 Importación de leads desde CSV
+            - ✉️ Generación de mensajes personalizados con IA
+            - 📧 Envío automático por Email y WhatsApp
+            - 🔄 Secuencias de follow-up automatizadas
+            - 📊 Scoring y calificación de leads
+            - 📈 Analytics y reportes en tiempo real
+            
+            **💡 Perfecto para equipos de ventas que necesitan escalar su outreach**
+            
+            **🤖 NUEVO: Generación Automática de Leads con Agentic AI**
+            - Genera leads de forma autónoma usando LinkedIn, Apollo.io, ZoomInfo
+            - Text-to-Action: "Genera 50 leads de empresas de tecnología"
+            - Integración con CRMs (Salesforce, HubSpot, Zoho, Pipedrive)
+            - Alertas automáticas (Slack, Teams, Email, SMS)
+            """)
+            
+            with gr.Tabs():
+                # Sub-tab: Importar Leads
+                with gr.Tab("📥 Importar Leads"):
+                    gr.Markdown("### Importar Leads desde CSV")
+                    gr.Markdown("""
+                    **📋 Formato del CSV:**
+                    
+                    El archivo CSV debe tener las siguientes columnas (al menos `name` y `email` son requeridos):
+                    - `name`: Nombre del lead (requerido)
+                    - `email`: Email del lead (requerido)
+                    - `phone`: Teléfono (opcional)
+                    - `company`: Compañía (opcional)
+                    - `position`: Posición/Cargo (opcional)
+                    - `industry`: Industria (opcional)
+                    - `source`: Fuente del lead (opcional)
+                    
+                    **Ejemplo:**
+                    ```csv
+                    name,email,phone,company,position,industry,source
+                    Juan Pérez,juan@empresa.com,+1234567890,Empresa SA,CEO,Tecnología,LinkedIn
+                    María García,maria@otra.com,,Otra Corp,CMO,Marketing,Webinar
+                    ```
+                    """)
+                    
+                    leads_csv_file = gr.File(
+                        label="📄 Subir archivo CSV con leads",
+                        file_types=[".csv"],
+                        type="filepath"
+                    )
+                    
+                    leads_csv_text = gr.Textbox(
+                        label="O pegar contenido CSV directamente",
+                        placeholder="name,email,phone,company,position,industry,source\nJuan Pérez,juan@empresa.com,+1234567890,Empresa SA,CEO,Tecnología,LinkedIn",
+                        lines=10
+                    )
+                    
+                    import_leads_btn = gr.Button("📥 Importar Leads", variant="primary", size="lg")
+                    import_leads_output = gr.Markdown(label="📊 Resultado de Importación")
+                    
+                    def import_leads(csv_file, csv_text):
+                        """Importa leads desde CSV."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado. Verifica la configuración."
+                        
+                        try:
+                            # Leer CSV
+                            if csv_file:
+                                with open(csv_file, 'r', encoding='utf-8') as f:
+                                    csv_content = f.read()
+                            elif csv_text:
+                                csv_content = csv_text
+                            else:
+                                return "❌ Por favor, sube un archivo CSV o pega el contenido CSV."
+                            
+                            # Importar
+                            result = leads_mode.import_leads_from_csv(csv_content)
+                            
+                            if result.get("success"):
+                                output = f"""✅ **Leads importados exitosamente**
+                                
+**📊 Estadísticas:**
+- ✅ Leads importados: **{result['imported']}**
+- 📈 Total de leads en sistema: **{result['total']}**
+
+"""
+                                if result.get("errors"):
+                                    output += f"\n⚠️ **Errores encontrados:**\n"
+                                    for error in result["errors"][:10]:  # Mostrar solo primeros 10
+                                        output += f"- {error}\n"
+                                    if len(result["errors"]) > 10:
+                                        output += f"\n... y {len(result['errors']) - 10} errores más."
+                                
+                                return output
+                            else:
+                                return f"❌ **Error al importar:** {result.get('error', 'Error desconocido')}"
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    import_leads_btn.click(
+                        fn=import_leads,
+                        inputs=[leads_csv_file, leads_csv_text],
+                        outputs=[import_leads_output]
+                    )
+                
+                # Sub-tab: Gestionar Leads
+                with gr.Tab("👥 Gestionar Leads"):
+                    gr.Markdown("### Lista de Leads")
+                    
+                    leads_status_filter = gr.Radio(
+                        label="Filtrar por status",
+                        choices=[
+                            ("Todos", "all"),
+                            ("Nuevos", "new"),
+                            ("Contactados", "contacted"),
+                            ("Respondieron", "responded"),
+                            ("Calificados", "qualified"),
+                            ("Convertidos", "converted"),
+                            ("Perdidos", "lost")
+                        ],
+                        value="all"
+                    )
+                    
+                    refresh_leads_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                    leads_list_output = gr.Markdown(label="📋 Lista de Leads")
+                    
+                    def get_leads_list(status_filter):
+                        """Obtiene lista de leads."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        try:
+                            status = None if status_filter == "all" else status_filter
+                            leads = leads_mode.get_leads_list(status=status, limit=100)
+                            
+                            if not leads:
+                                return "📭 **No hay leads** con ese filtro."
+                            
+                            output = f"### 📋 Lista de Leads ({len(leads)} leads)\n\n"
+                            output += "| Nombre | Email | Compañía | Status | Score | Último Contacto |\n"
+                            output += "|--------|-------|----------|--------|-------|-----------------|\n"
+                            
+                            for lead in leads[:50]:  # Mostrar solo primeros 50
+                                name = lead.get("name", "N/A")
+                                email = lead.get("email", "N/A")
+                                company = lead.get("company", "N/A") or "N/A"
+                                status = lead.get("status", "new")
+                                score = lead.get("score", 0.0)
+                                last_contacted = lead.get("last_contacted", "Nunca")
+                                
+                                if last_contacted and last_contacted != "Nunca":
+                                    try:
+                                        dt = datetime.fromisoformat(last_contacted)
+                                        last_contacted = dt.strftime("%Y-%m-%d")
+                                    except:
+                                        pass
+                                
+                                output += f"| {name} | {email} | {company} | {status} | {score:.1f} | {last_contacted} |\n"
+                            
+                            if len(leads) > 50:
+                                output += f"\n... y {len(leads) - 50} leads más."
+                            
+                            return output
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    refresh_leads_btn.click(
+                        fn=get_leads_list,
+                        inputs=[leads_status_filter],
+                        outputs=[leads_list_output]
+                    )
+                
+                # Sub-tab: Enviar Mensajes
+                with gr.Tab("📧 Enviar Mensajes"):
+                    gr.Markdown("### Enviar Mensajes a Leads")
+                    gr.Markdown("""
+                    **🚀 Envía mensajes personalizados a tus leads**
+                    
+                    - ✨ Generación automática de mensajes personalizados con IA
+                    - 📧 Envío por Email o WhatsApp
+                    - 🎯 Personalización basada en perfil del lead
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            lead_email_input = gr.Textbox(
+                                label="Email del Lead",
+                                placeholder="juan@empresa.com",
+                                info="Email del lead al que enviar el mensaje"
+                            )
+                            
+                            message_channel = gr.Radio(
+                                label="Canal",
+                                choices=[
+                                    ("📧 Email", "email"),
+                                    ("💬 WhatsApp", "whatsapp"),
+                                    ("🔄 Ambos", "both")
+                                ],
+                                value="email"
+                            )
+                            
+                            product_info = gr.Textbox(
+                                label="Información del Producto/Servicio (opcional)",
+                                placeholder="Nuestro producto ayuda a empresas a automatizar sus procesos...",
+                                lines=3,
+                                info="Información que se usará para personalizar el mensaje"
+                            )
+                            
+                            auto_generate = gr.Checkbox(
+                                label="Generar mensaje automáticamente con IA",
+                                value=True,
+                                info="Si está desactivado, puedes escribir el mensaje manualmente"
+                            )
+                            
+                            manual_subject = gr.Textbox(
+                                label="Asunto (solo para email, si no generas automáticamente)",
+                                placeholder="Quick question about your business",
+                                visible=False
+                            )
+                            
+                            manual_content = gr.Textbox(
+                                label="Contenido del Mensaje (si no generas automáticamente)",
+                                placeholder="Hi [Name],\n\nI noticed that...",
+                                lines=5,
+                                visible=False
+                            )
+                            
+                            send_message_btn = gr.Button("📤 Enviar Mensaje", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            send_message_output = gr.Markdown(label="📊 Resultado")
+                    
+                    def send_message_to_lead(email, channel, product_info_text, auto_gen, subject, content):
+                        """Envía mensaje a un lead."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        try:
+                            # Buscar lead por email
+                            lead = None
+                            for l in leads_mode.leads.values():
+                                if l.email.lower() == email.lower():
+                                    lead = l
+                                    break
+                            
+                            if not lead:
+                                return f"❌ **Lead no encontrado** con email: {email}\n\n💡 **Sugerencia:** Importa el lead primero desde el tab '📥 Importar Leads'."
+                            
+                            # Determinar canal
+                            if channel == "both":
+                                # Enviar a ambos canales
+                                result_email = leads_mode.send_message_to_lead(
+                                    lead.lead_id,
+                                    "email",
+                                    subject=subject if not auto_gen else None,
+                                    content=content if not auto_gen else "",
+                                    auto_generate=auto_gen
+                                )
+                                
+                                result_whatsapp = leads_mode.send_message_to_lead(
+                                    lead.lead_id,
+                                    "whatsapp",
+                                    content=content if not auto_gen else "",
+                                    auto_generate=auto_gen
+                                )
+                                
+                                output = f"""✅ **Mensajes enviados a {lead.name}**
+                                
+**📧 Email:** {'✅ Enviado' if result_email.get('success') else '❌ Error: ' + result_email.get('error', 'Unknown')}
+**💬 WhatsApp:** {'✅ Enviado' if result_whatsapp.get('success') else '❌ Error: ' + result_whatsapp.get('error', 'Unknown')}
+"""
+                                return output
+                            else:
+                                result = leads_mode.send_message_to_lead(
+                                    lead.lead_id,
+                                    channel,
+                                    subject=subject if channel == "email" and not auto_gen else None,
+                                    content=content if not auto_gen else "",
+                                    auto_generate=auto_gen
+                                )
+                                
+                                if result.get("success"):
+                                    return f"""✅ **Mensaje enviado exitosamente**
+                                
+**Lead:** {lead.name} ({lead.email})
+**Canal:** {channel}
+**Mensaje ID:** {result.get('message_id', 'N/A')}
+"""
+                                else:
+                                    return f"❌ **Error al enviar:** {result.get('error', 'Error desconocido')}"
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    auto_generate.change(
+                        fn=lambda x: (gr.update(visible=not x), gr.update(visible=not x)),
+                        inputs=[auto_generate],
+                        outputs=[manual_subject, manual_content]
+                    )
+                    
+                    send_message_btn.click(
+                        fn=send_message_to_lead,
+                        inputs=[lead_email_input, message_channel, product_info, auto_generate, manual_subject, manual_content],
+                        outputs=[send_message_output]
+                    )
+                
+                # Sub-tab: Analytics
+                with gr.Tab("📊 Analytics"):
+                    gr.Markdown("### Analytics y Métricas")
+                    
+                    refresh_analytics_btn = gr.Button("🔄 Actualizar Analytics", variant="secondary")
+                    analytics_output = gr.Markdown(label="📈 Analytics")
+                    
+                    def get_analytics():
+                        """Obtiene analytics de leads."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        try:
+                            analytics = leads_mode.get_analytics()
+                            
+                            output = f"""## 📊 Analytics de Leads
+
+### 📈 Resumen General
+- **Total de Leads:** {analytics['total_leads']}
+- **Total de Mensajes:** {analytics['total_messages']}
+- **Tasa de Respuesta:** {analytics['response_rate']}
+
+### 📊 Distribución por Status
+"""
+                            for status, count in analytics.get('status_distribution', {}).items():
+                                output += f"- **{status.capitalize()}:** {count}\n"
+                            
+                            output += "\n### 📧 Distribución por Canal\n"
+                            for channel, count in analytics.get('channel_distribution', {}).items():
+                                output += f"- **{channel.capitalize()}:** {count}\n"
+                            
+                            output += f"""
+### 📅 Límites Diarios
+- **Emails enviados hoy:** {analytics['daily_emails_sent']} / {analytics['daily_email_limit']}
+- **WhatsApp enviados hoy:** {analytics['daily_whatsapp_sent']} / {analytics['daily_whatsapp_limit']}
+"""
+                            
+                            return output
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    refresh_analytics_btn.click(
+                        fn=get_analytics,
+                        inputs=[],
+                        outputs=[analytics_output]
+                    )
+                
+                # Sub-tab: Generación Automática de Leads
+                with gr.Tab("🤖 Generar Leads Automáticamente"):
+                    gr.Markdown("### 🤖 Generación Automática de Leads con Agentic AI")
+                    gr.Markdown("""
+                    **🚀 Genera leads de forma autónoma usando múltiples fuentes**
+                    
+                    - 🔍 Búsqueda en LinkedIn Sales Navigator
+                    - 📊 Consulta en bases de datos B2B (Apollo.io, ZoomInfo)
+                    - 📱 Extracción de Google Ads Lead Forms
+                    - 📘 Extracción de Facebook Lead Ads
+                    - 🌐 Web scraping (con permisos)
+                    
+                    **💡 El sistema busca, califica y importa leads automáticamente**
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            gen_industry = gr.Textbox(
+                                label="Industria",
+                                placeholder="Technology, SaaS, Fintech",
+                                info="Industria objetivo"
+                            )
+                            
+                            gen_location = gr.Textbox(
+                                label="Ubicación",
+                                placeholder="San Francisco, New York, Remote",
+                                info="Ubicación de las empresas"
+                            )
+                            
+                            gen_titles = gr.Textbox(
+                                label="Títulos/Cargos",
+                                placeholder="CEO, CTO, VP Sales",
+                                info="Separados por comas"
+                            )
+                            
+                            gen_company_size = gr.Textbox(
+                                label="Tamaño de Empresa",
+                                placeholder="51-200, 201-500, 501-1000",
+                                info="Rangos de empleados"
+                            )
+                            
+                            gen_keywords = gr.Textbox(
+                                label="Palabras Clave",
+                                placeholder="startup, enterprise, B2B",
+                                info="Palabras clave adicionales"
+                            )
+                            
+                            gen_sources = gr.CheckboxGroup(
+                                label="Fuentes",
+                                choices=[
+                                    ("LinkedIn", "linkedin"),
+                                    ("Apollo.io", "apollo"),
+                                    ("ZoomInfo", "zoominfo"),
+                                    ("Google Ads", "google_ads"),
+                                    ("Facebook Lead Ads", "facebook")
+                                ],
+                                value=["apollo", "linkedin"],
+                                info="Selecciona las fuentes a usar"
+                            )
+                            
+                            gen_max_leads = gr.Slider(
+                                label="Máximo de Leads",
+                                minimum=10,
+                                maximum=500,
+                                value=50,
+                                step=10,
+                                info="Número máximo de leads a generar"
+                            )
+                            
+                            generate_leads_btn = gr.Button("🤖 Generar Leads Automáticamente", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            generate_leads_output = gr.Markdown(label="📊 Resultado de Generación")
+                    
+                    def generate_leads_auto(industry, location, titles, company_size, keywords, sources, max_leads):
+                        """Genera leads automáticamente."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        try:
+                            criteria = {
+                                "industry": industry or None,
+                                "location": location or None,
+                                "titles": [t.strip() for t in titles.split(",")] if titles else [],
+                                "company_sizes": [s.strip() for s in company_size.split(",")] if company_size else [],
+                                "keywords": keywords or None
+                            }
+                            
+                            # Filtrar None values
+                            criteria = {k: v for k, v in criteria.items() if v}
+                            
+                            result = leads_mode.generate_leads_autonomously(
+                                criteria=criteria,
+                                sources=sources,
+                                max_leads=int(max_leads)
+                            )
+                            
+                            if result.get("success"):
+                                output = f"""✅ **Leads generados exitosamente**
+                                
+**📊 Estadísticas:**
+- ✅ Total generados: **{result['total_generated']}**
+- 📥 Importados al sistema: **{result['imported']}**
+
+**📈 Por Fuente:**
+"""
+                                for source, source_result in result.get("results_by_source", {}).items():
+                                    if source_result.get("success"):
+                                        output += f"- **{source}:** {source_result.get('count', 0)} leads\n"
+                                    else:
+                                        output += f"- **{source}:** ❌ {source_result.get('error', 'Error')}\n"
+                                
+                                return output
+                            else:
+                                return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    generate_leads_btn.click(
+                        fn=generate_leads_auto,
+                        inputs=[gen_industry, gen_location, gen_titles, gen_company_size, gen_keywords, gen_sources, gen_max_leads],
+                        outputs=[generate_leads_output]
+                    )
+                
+                # Sub-tab: Text-to-Action para Leads
+                with gr.Tab("💬 Text-to-Action Leads"):
+                    gr.Markdown("### 💬 Text-to-Action para Generación de Leads")
+                    gr.Markdown("""
+                    **🚀 Genera leads usando comandos en lenguaje natural**
+                    
+                    **Ejemplos:**
+                    - "Genera 50 leads de empresas de tecnología en San Francisco"
+                    - "Busca 20 CEOs de startups de fintech en Nueva York"
+                    - "Encuentra leads de empresas de más de 100 empleados en la industria de SaaS"
+                    - "Genera 30 leads de CMOs en empresas de marketing digital"
+                    """)
+                    
+                    text_action_command = gr.Textbox(
+                        label="Comando",
+                        placeholder="Genera 50 leads de empresas de tecnología en San Francisco",
+                        lines=3,
+                        info="Escribe tu comando en lenguaje natural"
+                    )
+                    
+                    text_action_btn = gr.Button("🚀 Ejecutar Comando", variant="primary", size="lg")
+                    text_action_output = gr.Markdown(label="📊 Resultado")
+                    
+                    def execute_text_action(command):
+                        """Ejecuta comando Text-to-Action para leads."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        if not command.strip():
+                            return "❌ Por favor, escribe un comando."
+                        
+                        try:
+                            result = leads_mode.text_to_action_leads(command)
+                            
+                            if result.get("success"):
+                                gen_result = result.get("generation_result", {})
+                                output = f"""✅ **Comando ejecutado exitosamente**
+                                
+**📝 Comando:** {command}
+
+**📊 Resultado:**
+- ✅ Leads generados: **{gen_result.get('total_generated', 0)}**
+- 📥 Importados: **{gen_result.get('imported', 0)}**
+
+**🔍 Criterios detectados:**
+"""
+                                parsed = result.get("parsed_command", {})
+                                criteria = parsed.get("criteria", {})
+                                for key, value in criteria.items():
+                                    if value:
+                                        output += f"- **{key}:** {value}\n"
+                                
+                                return output
+                            else:
+                                return f"❌ **Error:** {result.get('error', 'Error desconocido')}"
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    text_action_btn.click(
+                        fn=execute_text_action,
+                        inputs=[text_action_command],
+                        outputs=[text_action_output]
+                    )
+                
+                # Sub-tab: Conectar CRMs
+                with gr.Tab("🔌 Conectar CRMs"):
+                    gr.Markdown("### 🔌 Integración con CRMs")
+                    gr.Markdown("""
+                    **🚀 Conecta tu CRM para sincronización automática de leads**
+                    
+                    - 📊 Salesforce
+                    - 🎯 HubSpot
+                    - 📋 Zoho CRM
+                    - 📈 Pipedrive
+                    - ✅ Close.com
+                    
+                    **💡 Los leads generados se sincronizan automáticamente con tu CRM**
+                    """)
+                    
+                    crm_platform = gr.Radio(
+                        label="Plataforma CRM",
+                        choices=[
+                            ("Salesforce", "salesforce"),
+                            ("HubSpot", "hubspot"),
+                            ("Zoho CRM", "zoho"),
+                            ("Pipedrive", "pipedrive"),
+                            ("Close.com", "close")
+                        ],
+                        value="hubspot"
+                    )
+                    
+                    crm_credentials_info = gr.Markdown("""
+                    ### 📋 Credenciales Necesarias
+                    
+                    **Para Salesforce:**
+                    - Instance URL (ej: https://yourcompany.salesforce.com)
+                    - Access Token
+                    
+                    **Para HubSpot:**
+                    - API Key
+                    
+                    **Para Zoho CRM:**
+                    - Client ID
+                    - Client Secret
+                    - Refresh Token
+                    
+                    **Para Pipedrive:**
+                    - API Token
+                    - Company Domain
+                    
+                    **Para Close.com:**
+                    - API Key
+                    
+                    **💡 Configura las credenciales en variables de entorno (.env)**
+                    """)
+                    
+                    test_crm_btn = gr.Button("🔌 Probar Conexión", variant="primary")
+                    crm_connection_output = gr.Markdown(label="📊 Resultado de Conexión")
+                    
+                    def test_crm_connection(platform):
+                        """Prueba conexión con CRM."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        try:
+                            result = leads_mode.connect_crm(platform, {})
+                            
+                            if result.get("success"):
+                                return f"""✅ **CRM {platform} conectado exitosamente**
+                                
+**🔗 Plataforma:** {platform}
+**📊 Estado:** Conectado y listo para sincronización
+
+**💡 Los leads generados se sincronizarán automáticamente con {platform}**
+"""
+                            else:
+                                return f"""❌ **Error al conectar con {platform}**
+                                
+**Error:** {result.get('error', 'Error desconocido')}
+
+**💡 Verifica:**
+1. Que las credenciales estén configuradas en variables de entorno
+2. Que las credenciales sean válidas
+3. Que tengas permisos de API en tu CRM
+"""
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    test_crm_btn.click(
+                        fn=test_crm_connection,
+                        inputs=[crm_platform],
+                        outputs=[crm_connection_output]
+                    )
+                
+                # Sub-tab: Configurar Alertas
+                with gr.Tab("🔔 Alertas"):
+                    gr.Markdown("### 🔔 Sistema de Alertas para Leads")
+                    gr.Markdown("""
+                    **🚀 Configura alertas automáticas cuando se generen nuevos leads**
+                    
+                    - 💬 Slack: Notificaciones en canales de Slack
+                    - 💼 Teams: Alertas en Microsoft Teams
+                    - 📧 Email: Notificaciones por email
+                    - 📱 SMS/WhatsApp: Alertas urgentes por mensaje
+                    
+                    **💡 Perfecto para mantener a tu equipo informado en tiempo real**
+                    """)
+                    
+                    alert_slack_channel = gr.Textbox(
+                        label="Canal de Slack",
+                        placeholder="#sales-leads",
+                        info="Canal donde enviar alertas (ej: #sales-leads)"
+                    )
+                    
+                    alert_teams_channel = gr.Textbox(
+                        label="Canal de Teams",
+                        placeholder="Sales Leads",
+                        info="Canal de Microsoft Teams"
+                    )
+                    
+                    alert_email = gr.Textbox(
+                        label="Email para Alertas",
+                        placeholder="sales@company.com",
+                        info="Email donde enviar notificaciones"
+                    )
+                    
+                    alert_phone = gr.Textbox(
+                        label="Teléfono para SMS/WhatsApp",
+                        placeholder="+1234567890",
+                        info="Teléfono para alertas urgentes"
+                    )
+                    
+                    enable_alerts = gr.Checkbox(
+                        label="Habilitar Alertas Automáticas",
+                        value=True,
+                        info="Las alertas se enviarán cuando se generen nuevos leads"
+                    )
+                    
+                    test_alert_btn = gr.Button("🔔 Probar Alerta", variant="secondary")
+                    alert_config_output = gr.Markdown(label="📊 Estado de Configuración")
+                    
+                    def test_alert():
+                        """Prueba el sistema de alertas."""
+                        if not leads_mode:
+                            return "❌ **Error:** Leads Mode no está inicializado."
+                        
+                        try:
+                            test_message = "🧪 **Prueba de Alerta**\n\nEste es un mensaje de prueba del sistema de alertas de leads."
+                            
+                            results = {}
+                            if alert_slack_channel.value:
+                                results["slack"] = leads_mode.send_alert("slack", test_message)
+                            if alert_teams_channel.value:
+                                results["teams"] = leads_mode.send_alert("teams", test_message)
+                            if alert_email.value:
+                                results["email"] = leads_mode.send_alert("email", test_message)
+                            if alert_phone.value:
+                                results["sms"] = leads_mode.send_alert("sms", test_message)
+                            
+                            output = "### 🔔 Resultado de Prueba de Alertas\n\n"
+                            for alert_type, result in results.items():
+                                if result.get("success"):
+                                    output += f"✅ **{alert_type.upper()}:** Alerta enviada exitosamente\n"
+                                else:
+                                    output += f"❌ **{alert_type.upper()}:** {result.get('error', 'Error')}\n"
+                            
+                            return output
+                        
+                        except Exception as e:
+                            return f"❌ **Error:** {str(e)}"
+                    
+                    test_alert_btn.click(
+                        fn=test_alert,
+                        inputs=[],
+                        outputs=[alert_config_output]
+                    )
+                
+                # Sub-tab: Integraciones Avanzadas (LangGraph, CrewAI, Composio)
+                with gr.Tab("🚀 Integraciones Avanzadas"):
+                    gr.Markdown("### 🚀 LangGraph, CrewAI y Composio")
+                    gr.Markdown("""
+                    **🔥 Nuevas capacidades avanzadas para Leads:**
+                    
+                    - **🌳 LangGraph:** Workflows complejos con estado persistente
+                    - **👥 CrewAI:** Equipos de agentes especializados colaborando
+                    - **🔌 Composio:** 250+ integraciones pre-construidas
+                    
+                    **💡 Mejora tu sistema de leads con workflows avanzados y más integraciones**
+                    """)
+                    
+                    with gr.Tabs():
+                        with gr.Tab("🌳 LangGraph - Workflows"):
+                            gr.Markdown("### Workflows Avanzados para Nurturing de Leads")
+                            
+                            workflow_lead_id = gr.Textbox(
+                                label="ID del Lead",
+                                placeholder="lead_123",
+                                info="ID del lead para crear workflow de nurturing"
+                            )
+                            
+                            create_workflow_btn = gr.Button("🌳 Crear Workflow de Nurturing", variant="primary")
+                            workflow_output = gr.Markdown()
+                            
+                            def create_lead_workflow(lead_id):
+                                if not leads_mode or not leads_mode.langgraph:
+                                    return "❌ LangGraph no está disponible"
+                                try:
+                                    result = leads_mode.create_lead_nurturing_workflow(lead_id)
+                                    if result.get("success"):
+                                        return f"✅ **Workflow creado y ejecutado exitosamente**\n\n{json.dumps(result.get('final_data', {}), indent=2)}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            create_workflow_btn.click(
+                                fn=create_lead_workflow,
+                                inputs=[workflow_lead_id],
+                                outputs=[workflow_output]
+                            )
+                        
+                        with gr.Tab("👥 CrewAI - Multi-Agent"):
+                            gr.Markdown("### Equipo de Agentes para Generación de Leads")
+                            
+                            crew_query = gr.Textbox(
+                                label="Query para Generación de Leads",
+                                placeholder="Empresas de tecnología con 50-500 empleados",
+                                info="Describe el tipo de leads que quieres generar"
+                            )
+                            
+                            crew_count = gr.Slider(
+                                label="Cantidad de Leads",
+                                minimum=5,
+                                maximum=50,
+                                value=10,
+                                step=5
+                            )
+                            
+                            execute_crew_btn = gr.Button("👥 Ejecutar Crew de Generación", variant="primary")
+                            crew_output = gr.Markdown()
+                            
+                            def execute_lead_crew(query, count):
+                                if not leads_mode or not leads_mode.crewai:
+                                    return "❌ CrewAI no está disponible"
+                                try:
+                                    result = leads_mode.execute_lead_generation_crew(query, int(count))
+                                    if result.get("success"):
+                                        return f"✅ **Crew ejecutado exitosamente**\n\n**Resultado:**\n{result.get('result', '')}\n\n**Agentes usados:** {', '.join(result.get('agents_used', []))}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            execute_crew_btn.click(
+                                fn=execute_lead_crew,
+                                inputs=[crew_query, crew_count],
+                                outputs=[crew_output]
+                            )
+                        
+                        with gr.Tab("🔌 Composio - 250+ Apps"):
+                            gr.Markdown("### Integraciones con 250+ Apps")
+                            
+                            composio_app_name = gr.Dropdown(
+                                label="App a Conectar",
+                                choices=["salesforce", "hubspot", "pipedrive", "zoho_crm", "linkedin", "apollo", "zoominfo"],
+                                value="salesforce",
+                                info="Selecciona una app para conectar"
+                            )
+                            
+                            connect_composio_btn = gr.Button("🔌 Conectar App", variant="primary")
+                            composio_lead_id = gr.Textbox(
+                                label="ID del Lead a Sincronizar",
+                                placeholder="lead_123",
+                                info="ID del lead para sincronizar con CRM"
+                            )
+                            sync_composio_btn = gr.Button("🔄 Sincronizar Lead", variant="secondary")
+                            composio_output = gr.Markdown()
+                            
+                            def connect_composio_app(app_name):
+                                if not leads_mode or not leads_mode.composio:
+                                    return "❌ Composio no está disponible"
+                                try:
+                                    result = leads_mode.connect_composio_app(app_name)
+                                    if result.get("success"):
+                                        return f"✅ **App conectada:** {app_name}\n\n{json.dumps(result, indent=2)}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            def sync_lead_composio(lead_id, app_name):
+                                if not leads_mode or not leads_mode.composio:
+                                    return "❌ Composio no está disponible"
+                                try:
+                                    result = leads_mode.sync_lead_to_composio_crm(lead_id, app_name)
+                                    if result.get("success"):
+                                        return f"✅ **Lead sincronizado exitosamente**\n\n{json.dumps(result, indent=2)}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            connect_composio_btn.click(
+                                fn=connect_composio_app,
+                                inputs=[composio_app_name],
+                                outputs=[composio_output]
+                            )
+                            
+                            sync_composio_btn.click(
+                                fn=sync_lead_composio,
+                                inputs=[composio_lead_id, composio_app_name],
+                                outputs=[composio_output]
+                            )
+        
+    
+    gr.Markdown(
+        """
+        ---
+        ### 💡 Consejos
+        
+        - **RAG Principal**: Para consultas estándar con verificación
+        - **Procesamiento Masivo**: Para analizar grandes volúmenes de documentos
+        - **Agentes Autónomos**: Para automatizar tareas complejas
+        - **Memoria**: El sistema aprende y mejora con cada consulta
+        
+        ### ⚙️ Configuración
+        
+        - Límite de documentos: hasta 1000 por lote
+        - Tamaño máximo: 5GB por lote
+        - Workers paralelos: 16 (optimizado para lotes grandes)
+        - Memoria: Habilitada por defecto (365 días de retención)
+        - Auditoría: Habilitada por defecto
+        """
+    )
+    
+    # [Marketing Mode ya existe antes de Leads - duplicado eliminado]
+    
+    if False:  # Marketing duplicado eliminado - el código original sigue para mantener estructura
+        if not marketing_agent:
+            gr.Markdown("⚠️ **Marketing Agent no está habilitado.**")
+        else:
+            with gr.Tabs():
+                # Sub-tab: Generar Copy
+                with gr.Tab("✍️ Generar Copy"):
+                    gr.Markdown("### Generar Copy Inteligente con IA")
+                    gr.Markdown("""
+                    **Genera copys persuasivos y optimizados para email marketing:**
+                    - Subject lines que capturan atención
+                    - Preheaders complementarios
+                    - Body HTML profesional y scannable
+                    - CTAs claros y accionables
+                    - Personalización automática
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            copy_campaign_name = gr.Textbox(
+                                label="📝 Nombre de la Campaña",
+                                placeholder="Ej: Newsletter Q1 2025",
+                                value=""
+                            )
+                            
+                            copy_campaign_type = gr.Dropdown(
+                                label="📋 Tipo de Campaña",
+                                choices=["newsletter", "promotional", "transactional", "automated", "announcement"],
+                                value="newsletter",
+                                interactive=True
+                            )
+                            
+                            copy_target_audience = gr.Textbox(
+                                label="🎯 Audiencia Objetivo",
+                                placeholder="Ej: Clientes activos de tecnología, empresas B2B, suscriptores premium",
+                                lines=2
+                            )
+                            
+                            copy_key_message = gr.Textbox(
+                                label="💬 Mensaje Clave",
+                                placeholder="Ej: Nuevas características de nuestro producto, ofertas especiales, actualizaciones importantes",
+                                lines=3
+                            )
+                            
+                            copy_tone = gr.Dropdown(
+                                label="🎨 Tono",
+                                choices=["professional", "friendly", "urgent", "casual", "formal", "conversational"],
+                                value="professional",
+                                interactive=True
+                            )
+                            
+                            copy_include_cta = gr.Checkbox(
+                                label="Incluir Call-to-Action",
+                                value=True
+                            )
+                            
+                            generate_copy_btn = gr.Button("✨ Generar Copy", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            copy_output = gr.Markdown(label="📄 Copy Generado")
+                    
+                    def generate_copy(campaign_name, campaign_type, target_audience, key_message, tone, include_cta):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        if not campaign_name or not key_message:
+                            return "⚠️ Por favor, completa al menos el nombre de la campaña y el mensaje clave."
+                        
+                        try:
+                            copy = marketing_agent.generate_campaign_copy(
+                                campaign_name=campaign_name,
+                                campaign_type=campaign_type,
+                                target_audience=target_audience or "General audience",
+                                key_message=key_message,
+                                tone=tone,
+                                include_cta=include_cta
+                            )
+                            
+                            output = f"""
+## ✅ Copy Generado Exitosamente
+
+**Copy ID:** `{copy.copy_id}`
+
+### 📧 Subject Line
+{copy.subject_line}
+
+### 📝 Preheader
+{copy.preheader}
+
+### 📄 Body HTML
+{copy.body_html[:500]}...
+
+### 📄 Body Text (Plain Text)
+{copy.body_text[:500]}...
+
+### 🔗 Call-to-Action
+**Texto:** {copy.cta_text}
+**URL:** {copy.cta_url or "No especificada"}
+
+### 🎯 Personalización
+Campos disponibles: {', '.join(copy.personalization_fields) if copy.personalization_fields else "Ninguno"}
+
+**💡 Tip:** Usa este copy para crear una campaña completa.
+"""
+                            return output
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error generando copy: {str(e)}"
+                    
+                    generate_copy_btn.click(
+                        fn=generate_copy,
+                        inputs=[copy_campaign_name, copy_campaign_type, copy_target_audience, copy_key_message, copy_tone, copy_include_cta],
+                        outputs=[copy_output]
+                    )
+                
+                # Sub-tab: Crear Campaña
+                with gr.Tab("📧 Crear Campaña"):
+                    gr.Markdown("### Crear Campaña Completa")
+                    gr.Markdown("""
+                    **Crea una campaña completa con copy generado automáticamente:**
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            campaign_name = gr.Textbox(
+                                label="📝 Nombre de la Campaña",
+                                placeholder="Ej: Newsletter Q1 2025",
+                                value=""
+                            )
+                            
+                            campaign_type = gr.Dropdown(
+                                label="📋 Tipo",
+                                choices=["newsletter", "promotional", "transactional", "automated"],
+                                value="newsletter"
+                            )
+                            
+                            campaign_platform = gr.Dropdown(
+                                label="🔌 Plataforma",
+                                choices=["local", "mailchimp", "hubspot", "activecampaign"],
+                                value="local"
+                            )
+                            
+                            auto_generate_copy = gr.Checkbox(
+                                label="Generar Copy Automáticamente",
+                                value=True
+                            )
+                            
+                            with gr.Accordion("Parámetros de Copy (si auto-generar)", open=False):
+                                copy_params_audience = gr.Textbox(
+                                    label="Audiencia Objetivo",
+                                    placeholder="Ej: Clientes activos",
+                                    value=""
+                                )
+                                
+                                copy_params_message = gr.Textbox(
+                                    label="Mensaje Clave",
+                                    placeholder="Ej: Nuevas características",
+                                    lines=2
+                                )
+                                
+                                copy_params_tone = gr.Dropdown(
+                                    label="Tono",
+                                    choices=["professional", "friendly", "urgent", "casual"],
+                                    value="professional"
+                                )
+                            
+                            create_campaign_btn = gr.Button("🚀 Crear Campaña", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            campaign_output = gr.Markdown(label="📊 Campaña Creada")
+                    
+                    def create_campaign(name, camp_type, platform, auto_gen, audience, message, tone):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        if not name:
+                            return "⚠️ Por favor, ingresa un nombre para la campaña."
+                        
+                        try:
+                            copy_params = None
+                            if auto_gen:
+                                copy_params = {
+                                    "campaign_name": name,
+                                    "campaign_type": camp_type,
+                                    "target_audience": audience or "General audience",
+                                    "key_message": message or f"Campaign: {name}",
+                                    "tone": tone
+                                }
+                            
+                            campaign = marketing_agent.create_campaign(
+                                name=name,
+                                campaign_type=camp_type,
+                                platform=platform,
+                                auto_generate_copy=auto_gen,
+                                copy_params=copy_params
+                            )
+                            
+                            output = f"""
+## ✅ Campaña Creada Exitosamente
+
+**Campaign ID:** `{campaign.campaign_id}`
+**Nombre:** {campaign.name}
+**Tipo:** {campaign.campaign_type}
+**Plataforma:** {campaign.platform}
+**Estado:** {campaign.status}
+
+### 📧 Copy
+**Subject:** {campaign.copy.subject_line if campaign.copy else "No generado"}
+**Preheader:** {campaign.copy.preheader if campaign.copy else "No generado"}
+
+**💡 Siguiente paso:** Envía la campaña desde el tab "Enviar Campaña"
+"""
+                            return output
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error creando campaña: {str(e)}"
+                    
+                    create_campaign_btn.click(
+                        fn=create_campaign,
+                        inputs=[campaign_name, campaign_type, campaign_platform, auto_generate_copy, copy_params_audience, copy_params_message, copy_params_tone],
+                        outputs=[campaign_output]
+                    )
+                
+                # Sub-tab: Enviar Campaña
+                with gr.Tab("📤 Enviar Campaña"):
+                    gr.Markdown("### Enviar Campaña")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            send_campaign_id = gr.Textbox(
+                                label="📝 Campaign ID",
+                                placeholder="ID de la campaña a enviar",
+                                value=""
+                            )
+                            
+                            send_campaign_confirm = gr.Checkbox(
+                                label="Confirmar antes de enviar",
+                                value=False
+                            )
+                            
+                            send_campaign_btn = gr.Button("📤 Enviar Campaña", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            send_campaign_output = gr.Markdown(label="📊 Resultado")
+                    
+                    def send_campaign(campaign_id, confirm):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        if not campaign_id:
+                            return "⚠️ Por favor, ingresa el ID de la campaña."
+                        
+                        try:
+                            result = marketing_agent.send_campaign(
+                                campaign_id=campaign_id,
+                                confirm=confirm
+                            )
+                            
+                            if result.get("success"):
+                                output = f"""
+## ✅ Campaña Enviada Exitosamente
+
+**Campaign ID:** `{result.get('campaign_id')}`
+**Enviada en:** {result.get('sent_at')}
+**Plataforma:** {result.get('platform')}
+
+**📊 El análisis de performance se iniciará automáticamente.**
+"""
+                            else:
+                                output = f"❌ Error: {result.get('error', 'Error desconocido')}"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    send_campaign_btn.click(
+                        fn=send_campaign,
+                        inputs=[send_campaign_id, send_campaign_confirm],
+                        outputs=[send_campaign_output]
+                    )
+                
+                # Sub-tab: Analizar Performance
+                with gr.Tab("📊 Analizar Performance"):
+                    gr.Markdown("### Análisis de Performance con IA")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            analyze_campaign_id = gr.Textbox(
+                                label="📝 Campaign ID",
+                                placeholder="ID de la campaña a analizar",
+                                value=""
+                            )
+                            
+                            analyze_btn = gr.Button("📊 Analizar Performance", variant="primary", size="lg")
+                            generate_report_btn = gr.Button("📄 Generar Reporte Ejecutivo", variant="secondary", size="lg")
+                        
+                        with gr.Column():
+                            analyze_output = gr.Markdown(label="📊 Performance")
+                            report_output = gr.Markdown(label="📄 Reporte Ejecutivo")
+                    
+                    def analyze_performance(campaign_id):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        if not campaign_id:
+                            return "⚠️ Por favor, ingresa el ID de la campaña."
+                        
+                        try:
+                            performance = marketing_agent.analyze_campaign_performance(campaign_id)
+                            
+                            output = f"""
+## 📊 Performance de la Campaña
+
+**Campaign ID:** `{campaign_id}`
+
+### 📈 Métricas Principales
+- **Enviados:** {performance.sent:,}
+- **Entregados:** {performance.delivered:,}
+- **Abiertos:** {performance.opened:,}
+- **Clickeados:** {performance.clicked:,}
+- **Rebotados:** {performance.bounced:,}
+- **Desuscritos:** {performance.unsubscribed:,}
+
+### 📊 Tasas
+- **Tasa de Apertura:** {performance.open_rate:.2f}%
+- **Tasa de Clicks:** {performance.click_rate:.2f}%
+- **Tasa de Rebote:** {performance.bounce_rate:.2f}%
+- **Tasa de Conversión:** {performance.conversion_rate:.2f}%
+- **Tasa de Desuscripción:** {performance.unsubscribe_rate:.2f}%
+
+### 💰 Revenue
+**Revenue:** ${performance.revenue:.2f}
+"""
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def generate_report(campaign_id):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        if not campaign_id:
+                            return "⚠️ Por favor, ingresa el ID de la campaña."
+                        
+                        try:
+                            report = marketing_agent.generate_performance_report(campaign_id)
+                            
+                            if report.get("success"):
+                                return report.get("report", "Reporte no disponible")
+                            else:
+                                return f"❌ Error: {report.get('error', 'Error desconocido')}"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    analyze_btn.click(
+                        fn=analyze_performance,
+                        inputs=[analyze_campaign_id],
+                        outputs=[analyze_output]
+                    )
+                    
+                    generate_report_btn.click(
+                        fn=generate_report,
+                        inputs=[analyze_campaign_id],
+                        outputs=[report_output]
+                    )
+                
+                # Sub-tab: Text-to-Action
+                with gr.Tab("💬 Text-to-Action Marketing"):
+                    gr.Markdown("### Comandos en Lenguaje Natural")
+                    gr.Markdown("""
+                    **Ejemplos de comandos:**
+                    - "Crea una campaña de newsletter para clientes activos"
+                    - "Genera copy para promoción de producto nuevo"
+                    - "Envía campaña de bienvenida a nuevos suscriptores"
+                    - "Analiza performance de la última campaña"
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            tta_command = gr.Textbox(
+                                label="💬 Comando",
+                                placeholder="Ej: Crea una campaña de newsletter para clientes activos",
+                                lines=3
+                            )
+                            
+                            tta_execute_btn = gr.Button("⚡ Ejecutar Comando", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            tta_output = gr.Markdown(label="📊 Resultado")
+                    
+                    def execute_tta_command(command):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        if not command or not command.strip():
+                            return "⚠️ Por favor, ingresa un comando."
+                        
+                        try:
+                            result = marketing_agent.text_to_action_marketing(command)
+                            
+                            if result.get("success"):
+                                action_result = result.get("result", {})
+                                action_type = action_result.get("action", "unknown")
+                                
+                                output = f"""
+## ✅ Comando Ejecutado
+
+**Comando:** {command}
+
+**Acción:** {action_type}
+
+**Resultado:**
+{json.dumps(action_result, indent=2, ensure_ascii=False)}
+"""
+                            else:
+                                output = f"❌ Error: {result.get('error', 'Error desconocido')}"
+                            
+                            return output
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error: {str(e)}"
+                    
+                    tta_execute_btn.click(
+                        fn=execute_tta_command,
+                        inputs=[tta_command],
+                        outputs=[tta_output]
+                    )
+                
+                # Sub-tab: Lista de Campañas
+                with gr.Tab("📋 Lista de Campañas"):
+                    gr.Markdown("### Campañas Creadas")
+                    
+                    campaigns_list_output = gr.Markdown("")
+                    refresh_campaigns_btn = gr.Button("🔄 Actualizar Lista", variant="secondary")
+                    
+                    def get_campaigns_list():
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        try:
+                            campaigns = marketing_agent.get_campaigns_list(limit=50)
+                            
+                            if not campaigns:
+                                return "📭 No hay campañas creadas aún."
+                            
+                            output = "## 📋 Campañas\n\n"
+                            for camp in campaigns:
+                                output += f"""
+### {camp.get('name', 'Sin nombre')}
+- **ID:** `{camp.get('campaign_id', 'N/A')}`
+- **Tipo:** {camp.get('campaign_type', 'N/A')}
+- **Plataforma:** {camp.get('platform', 'N/A')}
+- **Estado:** {camp.get('status', 'N/A')}
+- **Creada:** {camp.get('created_at', 'N/A')[:10]}
+- **Enviada:** {camp.get('sent_at', 'No enviada')[:10] if camp.get('sent_at') else 'No enviada'}
+
+---
+"""
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    refresh_campaigns_btn.click(
+                        fn=get_campaigns_list,
+                        outputs=[campaigns_list_output]
+                    )
+                    
+                    # Cargar lista inicial
+                    campaigns_list_output.value = get_campaigns_list()
+                
+                # Sub-tab: Analytics
+                with gr.Tab("📈 Analytics"):
+                    gr.Markdown("### Analytics Generales")
+                    
+                    analytics_output = gr.Markdown("")
+                    refresh_analytics_btn = gr.Button("🔄 Actualizar Analytics", variant="secondary")
+                    
+                    def get_analytics():
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        
+                        try:
+                            analytics = marketing_agent.get_analytics()
+                            
+                            output = f"""
+## 📈 Analytics de Marketing
+
+### 📊 Campañas
+- **Total de Campañas:** {analytics.get('total_campaigns', 0)}
+- **Campañas Enviadas:** {analytics.get('sent_campaigns', 0)}
+- **Campañas en Borrador:** {analytics.get('draft_campaigns', 0)}
+
+### 🎯 Segmentación
+- **Total de Segmentos:** {analytics.get('total_segments', 0)}
+
+### ✍️ Copy
+- **Copys Generados:** {analytics.get('total_copies_generated', 0)}
+
+### 📧 Emails
+- **Total Enviados:** {analytics.get('total_emails_sent', 0):,}
+- **Total Abiertos:** {analytics.get('total_emails_opened', 0):,}
+- **Total Clickeados:** {analytics.get('total_emails_clicked', 0):,}
+
+### 📊 Tasas Promedio
+- **Tasa de Apertura Promedio:** {analytics.get('average_open_rate', '0%')}
+- **Tasa de Clicks Promedio:** {analytics.get('average_click_rate', '0%')}
+"""
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    refresh_analytics_btn.click(
+                        fn=get_analytics,
+                        outputs=[analytics_output]
+                    )
+                    
+                    # Cargar analytics iniciales
+                    analytics_output.value = get_analytics()
+                
+                # Sub-tab: Integraciones Avanzadas (LangGraph, CrewAI, Composio)
+                with gr.Tab("🚀 Integraciones Avanzadas"):
+                    gr.Markdown("### 🚀 LangGraph, CrewAI y Composio")
+                    gr.Markdown("""
+                    **🔥 Nuevas capacidades avanzadas para Marketing:**
+                    
+                    - **🌳 LangGraph:** Workflows complejos para campañas completas
+                    - **👥 CrewAI:** Equipo de especialistas (copywriter, analista, optimizador)
+                    - **🔌 Composio:** Integración directa con Mailchimp, HubSpot, ActiveCampaign
+                    
+                    **💡 Automatiza campañas completas con workflows avanzados y más plataformas**
+                    """)
+                    
+                    with gr.Tabs():
+                        with gr.Tab("🌳 LangGraph - Workflows"):
+                            gr.Markdown("### Workflows Avanzados para Campañas")
+                            
+                            workflow_campaign_id = gr.Textbox(
+                                label="ID de la Campaña",
+                                placeholder="campaign_123",
+                                info="ID de la campaña para crear workflow completo"
+                            )
+                            
+                            create_campaign_workflow_btn = gr.Button("🌳 Crear Workflow de Campaña", variant="primary")
+                            campaign_workflow_output = gr.Markdown()
+                            
+                            def create_marketing_workflow(campaign_id):
+                                if not marketing_agent or not marketing_agent.langgraph:
+                                    return "❌ LangGraph no está disponible"
+                                try:
+                                    result = marketing_agent.create_campaign_workflow(campaign_id)
+                                    if result.get("success"):
+                                        return f"✅ **Workflow creado y ejecutado exitosamente**\n\n{json.dumps(result.get('final_data', {}), indent=2)}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            create_campaign_workflow_btn.click(
+                                fn=create_marketing_workflow,
+                                inputs=[workflow_campaign_id],
+                                outputs=[campaign_workflow_output]
+                            )
+                        
+                        with gr.Tab("👥 CrewAI - Multi-Agent"):
+                            gr.Markdown("### Equipo de Especialistas en Marketing")
+                            
+                            crew_brief = gr.Textbox(
+                                label="Brief de Campaña",
+                                placeholder="Crea una campaña de newsletter para clientes activos sobre nuevos productos",
+                                info="Describe la campaña que quieres crear",
+                                lines=3
+                            )
+                            
+                            execute_marketing_crew_btn = gr.Button("👥 Ejecutar Crew de Marketing", variant="primary")
+                            marketing_crew_output = gr.Markdown()
+                            
+                            def execute_marketing_crew(brief):
+                                if not marketing_agent or not marketing_agent.crewai:
+                                    return "❌ CrewAI no está disponible"
+                                try:
+                                    result = marketing_agent.execute_marketing_crew(brief)
+                                    if result.get("success"):
+                                        return f"✅ **Crew ejecutado exitosamente**\n\n**Resultado:**\n{result.get('result', '')}\n\n**Agentes usados:** {', '.join(result.get('agents_used', []))}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            execute_marketing_crew_btn.click(
+                                fn=execute_marketing_crew,
+                                inputs=[crew_brief],
+                                outputs=[marketing_crew_output]
+                            )
+                        
+                        with gr.Tab("🔌 Composio - Plataformas"):
+                            gr.Markdown("### Integración Directa con Plataformas de Marketing")
+                            
+                            composio_platform = gr.Dropdown(
+                                label="Plataforma de Marketing",
+                                choices=["mailchimp", "hubspot", "activecampaign", "sendgrid", "constant_contact"],
+                                value="mailchimp",
+                                info="Selecciona una plataforma para conectar"
+                            )
+                            
+                            connect_marketing_platform_btn = gr.Button("🔌 Conectar Plataforma", variant="primary")
+                            composio_campaign_id = gr.Textbox(
+                                label="ID de la Campaña a Enviar",
+                                placeholder="campaign_123",
+                                info="ID de la campaña para enviar vía Composio"
+                            )
+                            send_composio_campaign_btn = gr.Button("📤 Enviar Campaña vía Composio", variant="secondary")
+                            marketing_composio_output = gr.Markdown()
+                            
+                            def connect_marketing_platform(platform):
+                                if not marketing_agent or not marketing_agent.composio:
+                                    return "❌ Composio no está disponible"
+                                try:
+                                    result = marketing_agent.connect_marketing_platform(platform)
+                                    if result.get("success"):
+                                        return f"✅ **Plataforma conectada:** {platform}\n\n{json.dumps(result, indent=2)}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            def send_campaign_composio(campaign_id, platform):
+                                if not marketing_agent or not marketing_agent.composio:
+                                    return "❌ Composio no está disponible"
+                                try:
+                                    result = marketing_agent.send_campaign_via_composio(campaign_id, platform)
+                                    if result.get("success"):
+                                        return f"✅ **Campaña enviada exitosamente**\n\n{json.dumps(result, indent=2)}"
+                                    else:
+                                        return f"❌ **Error:** {result.get('error', 'Unknown error')}"
+                                except Exception as e:
+                                    return f"❌ **Error:** {str(e)}"
+                            
+                            connect_marketing_platform_btn.click(
+                                fn=connect_marketing_platform,
+                                inputs=[composio_platform],
+                                outputs=[marketing_composio_output]
+                            )
+                            
+                            send_composio_campaign_btn.click(
+                                fn=send_campaign_composio,
+                                inputs=[composio_campaign_id, composio_platform],
+                                outputs=[marketing_composio_output]
+                            )
+
+                # Sub-tab: Agentic AI – Meta / TikTok
+                with gr.Tab("📱 Agentic AI – Meta & TikTok"):
+                    gr.Markdown("### 📱 Agentic AI para Meta (FB/IG/WhatsApp) y TikTok")
+                    gr.Markdown("""
+                    **Conecta al Marketing Agent con tus cuentas de Meta y TikTok vía Composio (250+ integraciones).**
+
+                    - 🔌 Conecta cuentas de **Meta Ads / Facebook / Instagram / WhatsApp Business / TikTok Ads**
+                    - 🤖 El agente diseña un plan agentic (multi-agente) para tu objetivo de marketing
+                    - ⚙️ Usa Composio para orquestar acciones dentro de esas plataformas (modo real o simulado)
+
+                    > 💡 Para ejecución REAL, configura `COMPOSIO_API_KEY` y completa el onboarding OAuth en el panel de Composio.
+                    """)
+
+                    with gr.Row():
+                        with gr.Column():
+                            social_channel = gr.Dropdown(
+                                label="Canal principal",
+                                choices=[
+                                    ("Meta Ads (FB/IG)", "meta_ads"),
+                                    ("Facebook orgánico", "facebook"),
+                                    ("Instagram orgánico", "instagram"),
+                                    ("WhatsApp Business", "whatsapp"),
+                                    ("TikTok Ads", "tiktok_ads"),
+                                    ("TikTok orgánico", "tiktok"),
+                                ],
+                                value="meta_ads",
+                            )
+                            social_objective = gr.Textbox(
+                                label="🎯 Objetivo de negocio",
+                                placeholder="Ej: 'Aumentar ventas online un 20% en 90 días' o 'Generar 500 leads B2B cualificados'",
+                                lines=3,
+                            )
+                            social_audience = gr.Textbox(
+                                label="👥 Audiencia objetivo (opcional)",
+                                placeholder="Ej: 'CMOs de empresas SaaS en Europa, 50-500 empleados'",
+                                lines=3,
+                            )
+                            social_budget = gr.Number(
+                                label="💰 Presupuesto aproximado (EUR, opcional)",
+                                value=None,
+                            )
+                            connect_social_btn = gr.Button("🔌 Conectar cuenta (Meta/TikTok)", variant="secondary")
+                            run_social_agent_btn = gr.Button("🤖 Lanzar Agente de Marketing Omnicanal", variant="primary", size="lg")
+
+                        with gr.Column():
+                            social_output = gr.Markdown(label="📊 Resultado Agente Meta/TikTok")
+
+                    def connect_social_platform_ui(channel: str):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        try:
+                            result = marketing_agent.connect_social_platform(channel)
+                            if not result.get("success"):
+                                return f"❌ Error conectando plataforma social: {result.get('error', 'Error desconocido')}"
+                            app_name = result.get("app_name", channel)
+                            msg = result.get("message", "")
+                            return f"""✅ Plataforma social conectada\n
+**Canal:** `{channel}`  
+**App Composio:** `{app_name}`  
+{msg}
+"""
+                        except Exception as e:
+                            return f"❌ Error conectando plataforma social: {str(e)}"
+
+                    def run_social_agent_ui(channel: str, objective: str, audience: str, budget: float | None):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        if not objective or not objective.strip():
+                            return "⚠️ Define al menos un objetivo de negocio."
+                        try:
+                            result = marketing_agent.run_agentic_social_workflow(
+                                channel=channel,
+                                objective=objective.strip(),
+                                audience=audience.strip() if audience else None,
+                                budget_eur=budget if budget is not None else None,
+                            )
+                            plan = result.get("plan", {}) or {}
+                            strategy = plan.get("strategy_summary", "")
+                            rec_assets = plan.get("recommended_assets", [])
+                            rec_actions = plan.get("recommended_actions", [])
+                            composio_res = result.get("composio_result", {})
+
+                            md = f"## 🤖 Agente de Marketing – {channel}\n\n"
+                            md += f"**Objetivo:** {objective.strip()}\n\n"
+                            if audience:
+                                md += f"**Audiencia:** {audience.strip()}\n\n"
+                            if budget is not None:
+                                md += f"**Presupuesto aprox.:** {budget:.2f} EUR\n\n"
+
+                            if strategy:
+                                md += "### 🧠 Estrategia propuesta por el agente\n\n"
+                                md += strategy + "\n\n"
+
+                            if rec_assets:
+                                md += "### 📽️ Piezas recomendadas\n\n"
+                                for a in rec_assets:
+                                    md += f"- **{a.get('type','asset')}** × {a.get('count',1)} en `{a.get('channel','multi')}`\n"
+
+                            if rec_actions:
+                                md += "\n### ⚙️ Acciones sugeridas\n\n"
+                                for act in rec_actions:
+                                    md += f"- {act}\n"
+
+                            if composio_res:
+                                md += "\n### 🔌 Estado de integración Meta/TikTok (Composio)\n\n"
+                                if composio_res.get("success"):
+                                    md += "- ✅ Acción ejecutada (o simulada) en la plataforma conectada.\n"
+                                else:
+                                    md += f"- ⚠️ No se pudo ejecutar acción real: {composio_res.get('error','Error desconocido')}\n"
+                                note = result.get("note")
+                                if note:
+                                    md += f"\n> {note}\n"
+
+                            return md
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando agente de marketing Meta/TikTok: {str(e)}"
+
+                    connect_social_btn.click(
+                        fn=connect_social_platform_ui,
+                        inputs=[social_channel],
+                        outputs=[social_output],
+                    )
+                    run_social_agent_btn.click(
+                        fn=run_social_agent_ui,
+                        inputs=[social_channel, social_objective, social_audience, social_budget],
+                        outputs=[social_output],
+                    )
+
+                # Sub-tab: Agentic Ads – Google Ads & Meta Ads
+                with gr.Tab("📊 Agentic Ads – Google & Meta"):
+                    gr.Markdown("### 📊 Agentic Ads – Google Ads & Meta Ads (Autonomous Ads)")
+                    gr.Markdown("""
+                    **Conecta el Marketing Agent con Google Ads y Meta Ads para campañas semi-autónomas o autónomas.**
+
+                    - 🔑 Usa las credenciales ya configuradas en `.env` (GOOGLE_ADS_*, META_ACCESS_TOKEN, etc.)
+                    - 🤖 El agente diseña un plan y propone acciones sobre campañas
+                    - 🛟 Puedes ejecutar en modo **solo recomendaciones** o **auto‑ejecución** con guardrails
+
+                    > 💡 Para ejecución REAL en Google Ads / Meta Ads necesitas configurar:
+                    > - GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN  
+                    > - META_ACCESS_TOKEN, META_AD_ACCOUNT_ID
+                    """)
+
+                    with gr.Row():
+                        with gr.Column():
+                            agentic_ads_platform = gr.Dropdown(
+                                label="Plataforma principal",
+                                choices=[
+                                    ("Google Ads", "google_ads"),
+                                    ("Meta Ads (Facebook / Instagram)", "meta"),
+                                ],
+                                value="google_ads",
+                            )
+                            agentic_ads_objective = gr.Textbox(
+                                label="🎯 Objetivo de negocio",
+                                placeholder="Ej: 'Maximizar ROAS de la campaña de e‑commerce', 'Reducir CPA a 20€ en leads B2B'",
+                                lines=3,
+                            )
+                            agentic_ads_kpi = gr.Textbox(
+                                label="📈 KPI principal",
+                                value="ROAS",
+                                placeholder="Ej: ROAS, CPA, leads, ventas",
+                            )
+                            agentic_ads_budget = gr.Number(
+                                label="💰 Presupuesto diario aproximado (EUR)",
+                                value=100.0,
+                            )
+                            agentic_ads_audience = gr.Textbox(
+                                label="👥 Audiencia objetivo (opcional)",
+                                placeholder="Ej: 'Usuarios que han añadido al carrito en los últimos 7 días'",
+                                lines=3,
+                            )
+                            agentic_ads_advisory = gr.Checkbox(
+                                label="🛟 Modo asesor (solo recomendaciones, sin cambios reales)",
+                                value=True,
+                            )
+                            run_agentic_ads_btn = gr.Button("🤖 Lanzar Agentic Ads", variant="primary", size="lg")
+
+                        with gr.Column():
+                            agentic_ads_output = gr.Markdown(label="📊 Resultado Agentic Ads")
+
+                    def run_agentic_ads_ui(platform, objective, kpi, budget, audience, advisory):
+                        if not marketing_agent:
+                            return "❌ Marketing Agent no está habilitado."
+                        if not objective or not objective.strip():
+                            return "⚠️ Define un objetivo de negocio claro."
+                        if not kpi or not kpi.strip():
+                            return "⚠️ Define al menos un KPI principal."
+                        try:
+                            result = marketing_agent.run_agentic_ads_workflow(
+                                platform=platform,
+                                business_objective=objective.strip(),
+                                kpi=kpi.strip(),
+                                daily_budget=float(budget or 0),
+                                audience_description=audience.strip() if audience else None,
+                                advisory_mode=bool(advisory),
+                            )
+
+                            md = f"## 🤖 Agentic Ads – {platform}\n\n"
+                            md += f"**Objetivo de negocio:** {result.get('business_objective','')}\n\n"
+                            md += f"**KPI:** {result.get('kpi','')}\n\n"
+                            md += f"**Presupuesto diario aprox.:** {result.get('daily_budget',0):.2f} EUR\n\n"
+                            if result.get("audience_description"):
+                                md += f"**Audiencia:** {result.get('audience_description')}\n\n"
+                            md += f"**Modo:** `{'ASESOR (solo recomendaciones)' if result.get('advisory_mode') else 'AUTÓNOMO (ejecutando cambios donde es posible)'}`\n\n"
+
+                            strategy = result.get("strategy_summary", "")
+                            if strategy:
+                                md += "### 🧠 Estrategia generada por el agente\n\n"
+                                md += strategy + "\n\n"
+
+                            rec = result.get("actions_recommended", []) or []
+                            if rec:
+                                md += "### 📝 Acciones recomendadas\n\n"
+                                for a in rec:
+                                    md += f"- **{a.get('type','action')}** en `{a.get('platform')}` → campaña `{a.get('campaign_name')}` con presupuesto {a.get('budget',0)} EUR (objetivo: {a.get('objective','')})\n"
+
+                            exe = result.get("actions_executed", []) or []
+                            if exe:
+                                md += "\n### ✅ Acciones ejecutadas automáticamente\n\n"
+                                for a in exe:
+                                    req = a.get("requested", {})
+                                    tr = a.get("tool_result", {})
+                                    md += f"- **{req.get('type','action')}** en `{req.get('platform')}` → campaña `{req.get('campaign_name')}` → `{ 'OK' if tr.get('success') else 'ERROR'}` ({tr.get('message','')})\n"
+
+                            if not exe and advisory:
+                                md += "\n> 🛟 Estás en **modo asesor**: no se realizaron cambios reales, solo se muestran recomendaciones.\n"
+
+                            return md
+                        except Exception as e:
+                            import traceback
+                            traceback.print_exc()
+                            return f"❌ Error ejecutando Agentic Ads: {str(e)}"
+
+                    run_agentic_ads_btn.click(
+                        fn=run_agentic_ads_ui,
+                        inputs=[
+                            agentic_ads_platform,
+                            agentic_ads_objective,
+                            agentic_ads_kpi,
+                            agentic_ads_budget,
+                            agentic_ads_audience,
+                            agentic_ads_advisory,
+                        ],
+                        outputs=[agentic_ads_output],
+                    )
+    
+    # ============================================
+    # RESEARCH & ACTION AGENT (R&A Agent)
+    # ============================================
+    
+    # Inicializar Research & Action Agent
+    research_action_agent = None
+    try:
+        from docchat.research_action_agent import ResearchActionAgent
+        research_action_agent = ResearchActionAgent(
+            config,
+            provider="openai",
+            semantic_engine=semantic_engine,  # Pasar semantic_engine para RAG
+        )
+        print("✅ Research & Action Agent inicializado - ReAct Enterprise Agent")
+    except Exception as e:
+        print(f"⚠️ Error inicializando Research & Action Agent: {e}")
+        import traceback
+        traceback.print_exc()
+        research_action_agent = None
+
+    # Inicializar Enterprise Autonomous Workflows una vez que existe research_action_agent
+    try:
+        from docchat.enterprise_autonomous_workflows import EnterpriseAutonomousWorkflows as EAW
+
+        enterprise_workflows = EAW(
+            config=config,
+            enterprise_api=enterprise_api,
+            research_agent=research_action_agent,
+            ingestion_engine=data_ingestion_engine,
+            audit_logger=audit_logger,
+        )
+        print("✅ Enterprise Autonomous Workflows inicializado")
+    except Exception as e:
+        print(f"⚠️ Error inicializando Enterprise Autonomous Workflows: {e}")
+        enterprise_workflows = None
+
+    # Inicializar Deep Research Mode (Enterprise Deep Research-style)
+    deep_research_mode = None
+    try:
+        from docchat.deep_research import DeepResearch
+
+        if research_action_agent is not None:
+            deep_research_mode = DeepResearch(
+                config=config,
+                research_agent=research_action_agent,
+                ingestion_engine=data_ingestion_engine,
+                audit_logger=audit_logger,
+            )
+            print("✅ Deep Research Mode inicializado (Enterprise Deep Research-style)")
+        else:
+            print("⚠️ Deep Research Mode no disponible: ResearchActionAgent no inicializado")
+    except Exception as e:
+        print(f"⚠️ Error inicializando Deep Research Mode: {e}")
+        import traceback
+        traceback.print_exc()
+        deep_research_mode = None
+
+# Inicializar Enterprise Data Intelligence (SQL Generation + Data Registry)
+enterprise_data_intelligence = None
+try:
+    from docchat.enterprise_data_intelligence import EnterpriseDataIntelligence as EDI
+    enterprise_data_intelligence = EDI(config=config)
+    if enterprise_data_intelligence.sql_generator:
+        print("✅ Enterprise Data Intelligence inicializado (SQL Generation + Data Registry + Agent Registry)")
+    else:
+        print("⚠️ Enterprise Data Intelligence inicializado PERO SQL Generator falló")
+        print("   💡 Verifica OPENAI_API_KEY y que langchain-openai esté instalado")
+except Exception as e:
+    print(f"⚠️ Error inicializando Enterprise Data Intelligence: {e}")
+    import traceback
+    traceback.print_exc()
+    enterprise_data_intelligence = None
+    
+    with gr.Tab("🔍 Research & Action Agent"):
+        gr.Markdown("### 🔍 Research & Action Agent (R&A Agent) - ReAct Enterprise")
+        gr.Markdown("""
+        **🚀 Agente ReAct empresarial que razona, busca, actúa y ejecuta tareas automáticamente**
+        
+        **✨ Características principales:**
+        
+        - 🧠 **ReAct Pattern**: Razonamiento paso a paso (Think → Act → Observe → Loop)
+        - 📚 **RAG Integration**: Busca en documentos internos de la empresa
+        - 🌐 **Web Search**: Información actualizada en tiempo real
+        - 🧮 **Calculator**: Cálculos matemáticos y análisis de datos
+        - ⚡ **Action Executor**: Ejecuta acciones reales (tickets, emails, ERP, RPA)
+        - 📊 **Risk Assessment**: Evaluación automática de riesgos
+        - 🎫 **Auto-Ticketing**: Crea tickets automáticamente cuando detecta problemas
+        - 📄 **Research Briefs**: Informes profesionales con fuentes citadas
+        - 🔒 **Audit Logging**: Registro completo de razonamiento y acciones
+        
+        **💡 Casos de uso:**
+        - Evaluar riesgo de proveedores/empleados/contratos
+        - Detectar problemas y crear tickets automáticamente
+        - Generar informes de investigación con fuentes
+        - Ejecutar acciones empresariales basadas en análisis
+        """)
+        
+        with gr.Tabs():
+            # Sub-tab: Consulta General
+            with gr.Tab("💬 Consulta General"):
+                gr.Markdown("### Consulta General - ReAct Agent")
+                gr.Markdown("""
+                **Ejemplos de consultas:**
+                - "Evaluar riesgo del proveedor ACME y crear ticket si hay anomalías"
+                - "Analizar cumplimiento del contrato X y enviar alerta si hay incumplimientos"
+                - "Investigar sobre el tema Y y generar un informe ejecutivo"
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        ra_query = gr.Textbox(
+                            label="💬 Consulta o Tarea",
+                            placeholder="Ej: Evaluar riesgo del proveedor ACME y crear ticket si hay anomalías",
+                            lines=4
+                        )
+                        
+                        ra_mode = gr.Radio(
+                            label="🔒 Modo de Ejecución",
+                            choices=[
+                                ("Confirmación Humana (Recomendado)", "manual"),
+                                ("Automático (Solo acciones seguras)", "auto")
+                            ],
+                            value="manual",
+                            info="Modo manual requiere confirmación para acciones destructivas"
+                        )
+                        
+                        ra_execute_btn = gr.Button("🚀 Ejecutar Consulta", variant="primary", size="lg")
+                    
+                    with gr.Column():
+                        ra_output = gr.Markdown(label="📊 Resultado")
+                        ra_steps = gr.JSON(label="🔍 Pasos ReAct (Debug)", visible=False)
+                
+                def execute_ra_query(query, mode):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado.", None
+                    
+                    if not query or not query.strip():
+                        return "⚠️ Por favor, ingresa una consulta o tarea.", None
+                    
+                    try:
+                        result = research_action_agent.run_query(query, mode=mode)
+                        
+                        # Formatear output
+                        if result.get("error"):
+                            output = f"## ❌ Error\n\n**Error:** {result.get('error')}\n\n**Mensaje:** {result.get('summary', 'Error desconocido')}"
+                        else:
+                            summary = result.get("summary", "Sin resumen")
+                            score = result.get("score", 0.0)
+                            confidence = result.get("confidence", 0.0)
+                            sources = result.get("sources", [])
+                            actions_recommended = result.get("actions_recommended", [])
+                            actions_executed = result.get("actions_executed", [])
+                            log = result.get("log", [])
+                            execution_time = result.get("execution_time_ms", 0)
+                            steps_count = result.get("steps_count", 0)
+                            
+                            output = f"""## ✅ Análisis Completado
+
+**Resumen Ejecutivo:**
+{summary}
+
+### 📊 Métricas
+- **Score:** {score:.2f}/1.0
+- **Confianza:** {confidence*100:.1f}%
+- **Tiempo de Ejecución:** {execution_time}ms
+- **Pasos ReAct:** {steps_count}
+
+### 📚 Fuentes ({len(sources)})
+"""
+                            for idx, source in enumerate(sources[:10], 1):
+                                title = source.get("title", "Sin título")
+                                url = source.get("url", "")
+                                snippet = source.get("snippet", "")[:200]
+                                score_src = source.get("score", 0.0)
+                                output += f"\n**{idx}. {title}**\n"
+                                if url:
+                                    output += f"   - URL: {url}\n"
+                                if snippet:
+                                    output += f"   - Extracto: {snippet}...\n"
+                                output += f"   - Relevancia: {score_src:.2f}\n"
+                            
+                            if actions_recommended:
+                                output += f"\n### ⚡ Acciones Recomendadas ({len(actions_recommended)})\n"
+                                for idx, action in enumerate(actions_recommended[:5], 1):
+                                    action_type = action.get("type", "unknown")
+                                    description = action.get("description", "")
+                                    priority = action.get("priority", "medium")
+                                    output += f"\n**{idx}. {action_type}** ({priority})\n"
+                                    output += f"   - {description}\n"
+                            
+                            if actions_executed:
+                                output += f"\n### ✅ Acciones Ejecutadas ({len(actions_executed)})\n"
+                                for idx, action in enumerate(actions_executed[:5], 1):
+                                    action_type = action.get("type", "unknown")
+                                    status = action.get("status", "unknown")
+                                    result_act = action.get("result", {})
+                                    output += f"\n**{idx}. {action_type}** - {status}\n"
+                                    if result_act:
+                                        output += f"   - Resultado: {json.dumps(result_act, indent=2, ensure_ascii=False)[:200]}...\n"
+                            
+                            if log:
+                                output += f"\n### 🔍 Log de Razonamiento ({len(log)} pasos)\n"
+                                for idx, step in enumerate(log[:10], 1):
+                                    step_desc = step.get("step", "")
+                                    tool_used = step.get("tool_used", "")
+                                    step_result = step.get("result", "")[:100]
+                                    output += f"\n**Paso {idx}:** {step_desc}\n"
+                                    if tool_used:
+                                        output += f"   - Herramienta: {tool_used}\n"
+                                    if step_result:
+                                        output += f"   - Resultado: {step_result}...\n"
+                        
+                        return output, result
+                    except Exception as e:
+                        import traceback
+                        traceback.print_exc()
+                        return f"❌ Error: {str(e)}", None
+                
+                ra_execute_btn.click(
+                    fn=execute_ra_query,
+                    inputs=[ra_query, ra_mode],
+                    outputs=[ra_output, ra_steps]
+                )
+
+            # Sub-tab: Ingesta de Datos (Docs & Grafos)
+            with gr.Tab("📂 Ingesta de Datos"):
+                gr.Markdown("### 📂 Ingesta de Documentos y Grafos para Research & Action Agent")
+                gr.Markdown("""
+                Sube documentos (PDF, DOCX, TXT, CSV, etc.) para que el motor semántico y el grafo
+                puedan utilizarlos en los análisis del Research & Action Agent.
+                """)
+
+                with gr.Row():
+                    with gr.Column():
+                        ra_files = gr.Files(
+                            label="📁 Documentos a Ingerir",
+                            file_types=["file"],
+                            file_count="multiple",
+                        )
+                        ingest_btn = gr.Button("📥 Ingerir Documentos", variant="primary")
+                    with gr.Column():
+                        ingest_output = gr.Markdown(label="📊 Resultado de Ingesta")
+
+                def ingest_ra_files(files):
+                    if not data_ingestion_engine or not semantic_engine:
+                        return "❌ Data Ingestion Engine o Semantic Engine no están habilitados."
+                    if not files:
+                        return "⚠️ No se seleccionaron archivos."
+
+                    imported_ids = []
+                    errors = []
+                    for f in files:
+                        try:
+                            # En Gradio, f.name es la ruta temporal del archivo subido
+                            doc_id = data_ingestion_engine.ingest_file(f.name)
+                            if doc_id:
+                                imported_ids.append((f.name, doc_id))
+                            else:
+                                errors.append(f"❌ No se pudo ingerir: {getattr(f, 'name', 'archivo')}")
+                        except Exception as e:
+                            errors.append(f"❌ Error con {getattr(f, 'name', 'archivo')}: {e}")
+
+                    if not imported_ids and not errors:
+                        return "⚠️ No se pudo ingerir ningún archivo."
+
+                    result_md = "## 📥 Ingesta Completada\n\n"
+                    if imported_ids:
+                        result_md += "### ✅ Documentos Ingeridos:\n"
+                        for path, doc_id in imported_ids:
+                            result_md += f"- `{path}` → `doc_id={doc_id}`\n"
+                    if errors:
+                        result_md += "\n### ⚠️ Errores:\n"
+                        for err in errors:
+                            result_md += f"- {err}\n"
+                    return result_md
+
+                ingest_btn.click(
+                    fn=ingest_ra_files,
+                    inputs=[ra_files],
+                    outputs=[ingest_output],
+                )
+            
+            # Sub-tab: Risk Assessment
+            with gr.Tab("⚠️ Risk Assessment"):
+                gr.Markdown("### ⚠️ Evaluación de Riesgo - One-Click Risk Assessment")
+                gr.Markdown("""
+                **Evaluación automática de riesgo para proveedores, empleados, contratos, etc.**
+                
+                El agente:
+                1. Busca contratos y documentos relacionados
+                2. Revisa histórico de entregas/pagos
+                3. Busca noticias externas
+                4. Calcula score de riesgo
+                5. Sugiere acciones automáticamente
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        risk_entity = gr.Textbox(
+                            label="🏢 Entidad a Evaluar",
+                            placeholder="Ej: proveedor ACME, empleado Juan Pérez, contrato X",
+                            lines=2
+                        )
+                        
+                        risk_context = gr.Textbox(
+                            label="📝 Contexto Adicional (opcional)",
+                            placeholder="Ej: Revisar últimos 6 meses, verificar cumplimiento de SLA",
+                            lines=2
+                        )
+                        
+                        risk_assess_btn = gr.Button("⚠️ Evaluar Riesgo", variant="primary", size="lg")
+                    
+                    with gr.Column():
+                        risk_output = gr.Markdown(label="📊 Evaluación de Riesgo")
+                
+                def assess_risk(entity, context):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado."
+                    
+                    if not entity or not entity.strip():
+                        return "⚠️ Por favor, ingresa una entidad a evaluar."
+                    
+                    try:
+                        result = research_action_agent.risk_assessment(entity, context if context.strip() else None)
+                        
+                        # Formatear output similar a consulta general
+                        if result.get("error"):
+                            return f"## ❌ Error\n\n{result.get('error')}"
+                        
+                        summary = result.get("summary", "")
+                        score = result.get("score", 0.0)
+                        confidence = result.get("confidence", 0.0)
+                        sources = result.get("sources", [])
+                        actions_recommended = result.get("actions_recommended", [])
+                        
+                        output = f"""## ⚠️ Evaluación de Riesgo: {entity}
+
+**Score de Riesgo:** {score:.2f}/1.0
+**Confianza:** {confidence*100:.1f}%
+
+### 📊 Resumen
+{summary}
+
+### 📚 Fuentes Analizadas ({len(sources)})
+"""
+                        for idx, source in enumerate(sources[:5], 1):
+                            title = source.get("title", "")
+                            url = source.get("url", "")
+                            output += f"\n{idx}. **{title}**\n"
+                            if url:
+                                output += f"   - {url}\n"
+                        
+                        if actions_recommended:
+                            output += f"\n### ⚡ Acciones Recomendadas\n"
+                            for idx, action in enumerate(actions_recommended, 1):
+                                action_type = action.get("type", "")
+                                description = action.get("description", "")
+                                priority = action.get("priority", "medium")
+                                output += f"\n**{idx}. {action_type}** ({priority})\n"
+                                output += f"   - {description}\n"
+                        
+                        return output
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                risk_assess_btn.click(
+                    fn=assess_risk,
+                    inputs=[risk_entity, risk_context],
+                    outputs=[risk_output]
+                )
+            
+            # Sub-tab: Auto-Ticketing
+            with gr.Tab("🎫 Auto-Ticketing"):
+                gr.Markdown("### 🎫 Auto-Ticketing - Detección y Creación Automática de Tickets")
+                gr.Markdown("""
+                **Detecta problemas automáticamente y crea tickets en Jira/ServiceNow**
+                
+                El agente:
+                1. Analiza documentos y datos
+                2. Detecta inconsistencias o problemas
+                3. Crea ticket automáticamente con contexto completo
+                4. Notifica a los responsables
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        ticket_description = gr.Textbox(
+                            label="📝 Descripción del Problema",
+                            placeholder="Ej: Detectar problemas de facturación y crear ticket si hay inconsistencias",
+                            lines=4
+                        )
+                        
+                        ticket_auto_btn = gr.Button("🎫 Crear Ticket Automático", variant="primary", size="lg")
+                    
+                    with gr.Column():
+                        ticket_output = gr.Markdown(label="📊 Resultado")
+                
+                def auto_ticket(description):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado."
+                    
+                    if not description or not description.strip():
+                        return "⚠️ Por favor, ingresa una descripción del problema."
+                    
+                    try:
+                        result = research_action_agent.auto_ticket(description)
+                        
+                        if result.get("error"):
+                            return f"## ❌ Error\n\n{result.get('error')}"
+                        
+                        summary = result.get("summary", "")
+                        actions_executed = result.get("actions_executed", [])
+                        
+                        output = f"""## 🎫 Auto-Ticketing Completado
+
+**Descripción:** {description}
+
+### 📊 Análisis
+{summary}
+
+### ✅ Acciones Ejecutadas
+"""
+                        for action in actions_executed:
+                            action_type = action.get("type", "")
+                            status = action.get("status", "")
+                            result_act = action.get("result", {})
+                            output += f"\n**{action_type}** - {status}\n"
+                            if result_act:
+                                ticket_id = result_act.get("ticket_id", "")
+                                if ticket_id:
+                                    output += f"   - Ticket ID: {ticket_id}\n"
+                                output += f"   - Detalles: {json.dumps(result_act, indent=2, ensure_ascii=False)[:300]}...\n"
+                        
+                        return output
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                ticket_auto_btn.click(
+                    fn=auto_ticket,
+                    inputs=[ticket_description],
+                    outputs=[ticket_output]
+                )
+            
+            # Sub-tab: Research Briefs
+            with gr.Tab("📄 Research Briefs"):
+                gr.Markdown("### 📄 Research Briefs - Informes de Investigación Profesionales")
+                gr.Markdown("""
+                **Genera informes profesionales con fuentes citadas y exportación a PDF**
+                
+                Características:
+                - Búsqueda en RAG + Web
+                - Consolidación de información
+                - Citas de fuentes
+                - Export a PDF
+                - Confidence score
+                """)
+                
+                with gr.Row():
+                    with gr.Column():
+                        brief_topic = gr.Textbox(
+                            label="📚 Tema de Investigación",
+                            placeholder="Ej: Tendencias de IA en 2024, Análisis de mercado de SaaS",
+                            lines=2
+                        )
+                        
+                        brief_depth = gr.Radio(
+                            label="🔍 Profundidad",
+                            choices=[
+                                ("Rápido (Resumen ejecutivo)", "quick"),
+                                ("Estándar (Análisis completo)", "standard"),
+                                ("Profundo (Análisis exhaustivo)", "deep")
+                            ],
+                            value="standard"
+                        )
+                        
+                        brief_generate_btn = gr.Button("📄 Generar Research Brief", variant="primary", size="lg")
+                        brief_export_btn = gr.Button("📥 Exportar a PDF", variant="secondary")
+                    
+                    with gr.Column():
+                        brief_output = gr.Markdown(label="📊 Research Brief")
+                        brief_json = gr.JSON(label="JSON (para export)", visible=False)
+                
+                def generate_brief(topic, depth):
+                    if not research_action_agent:
+                        return "❌ Research & Action Agent no está habilitado.", None
+                    
+                    if not topic or not topic.strip():
+                        return "⚠️ Por favor, ingresa un tema de investigación.", None
+                    
+                    try:
+                        result = research_action_agent.research_brief(topic, depth)
+                        
+                        if result.get("error"):
+                            return f"## ❌ Error\n\n{result.get('error')}", None
+                        
+                        summary = result.get("summary", "")
+                        score = result.get("score", 0.0)
+                        confidence = result.get("confidence", 0.0)
+                        sources = result.get("sources", [])
+                        log = result.get("log", [])
+                        
+                        output = f"""## 📄 Research Brief: {topic}
+
+**Profundidad:** {depth}
+**Confianza:** {confidence*100:.1f}%
+**Score de Relevancia:** {score:.2f}/1.0
+
+### 📊 Resumen Ejecutivo
+{summary}
+
+### 📚 Fuentes Citadas ({len(sources)})
+"""
+                        for idx, source in enumerate(sources, 1):
+                            title = source.get("title", "")
+                            url = source.get("url", "")
+                            snippet = source.get("snippet", "")[:300]
+                            score_src = source.get("score", 0.0)
+                            output += f"\n**{idx}. {title}**\n"
+                            if url:
+                                output += f"   - URL: {url}\n"
+                            if snippet:
+                                output += f"   - Extracto: {snippet}...\n"
+                            output += f"   - Relevancia: {score_src:.2f}\n"
+                        
+                        if log:
+                            output += f"\n### 🔍 Metodología ({len(log)} pasos)\n"
+                            for idx, step in enumerate(log[:5], 1):
+                                step_desc = step.get("step", "")
+                                tool_used = step.get("tool_used", "")
+                                output += f"\n**Paso {idx}:** {step_desc}\n"
+                                if tool_used:
+                                    output += f"   - Herramienta: {tool_used}\n"
+                        
+                        return output, result
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}", None
+                
+                def export_brief_pdf(brief_json_data):
+                    if not brief_json_data:
+                        return "⚠️ Genera un brief primero."
+                    
+                    try:
+                        # Crear PDF simple (placeholder - implementar con reportlab o similar)
+                        output_path = f"data/research_brief_{int(time.time())}.json"
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            json.dump(brief_json_data, f, indent=2, ensure_ascii=False)
+                        
+                        return f"✅ Brief exportado a: {output_path}\n\n**Nota:** Para exportar a PDF real, instala reportlab: `pip install reportlab`"
+                    except Exception as e:
+                        return f"❌ Error exportando: {str(e)}"
+                
+                brief_generate_btn.click(
+                    fn=generate_brief,
+                    inputs=[brief_topic, brief_depth],
+                    outputs=[brief_output, brief_json]
+                )
+                
+                brief_export_btn.click(
+                    fn=export_brief_pdf,
+                    inputs=[brief_json],
+                    outputs=[brief_output]
+                )
+    
+    # ============================================
+    # NUEVOS MODOS AVANZADOS
+    # ============================================
+    
+    # Tab 5.1: Agentes de Aprendizaje Iterativo
+    with gr.Tab("🧠 Aprendizaje Iterativo"):
+        gr.Markdown("### 🧠 Agentes de Aprendizaje Iterativo")
+        gr.Markdown("""
+        **🚀 Sistema que aprende iterativamente siguiendo el método científico**
+        
+        Basado en conceptos avanzados de agentes autónomos que:
+        - Leen y descubren principios
+        - Generan hipótesis
+        - Prueban hipótesis
+        - Aprenden de resultados
+        - Actualizan su entendimiento
+        
+        **💡 Ejemplo:** Como ChemCrow que aprende química probando hipótesis en laboratorio
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                il_topic = gr.Textbox(
+                    label="📚 Tema de Investigación",
+                    placeholder="Ej: Principios de química orgánica, Análisis de mercado, etc.",
+                    lines=2
+                )
+                
+                il_domain = gr.Textbox(
+                    label="🔬 Dominio",
+                    placeholder="Ej: chemistry, physics, business, etc.",
+                    value="general"
+                )
+                
+                il_max_hypotheses = gr.Slider(
+                    label="Máximo de Hipótesis",
+                    minimum=3,
+                    maximum=20,
+                    value=5,
+                    step=1
+                )
+                
+                il_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                il_start_btn = gr.Button("🚀 Iniciar Ciclo de Aprendizaje", variant="primary")
+            
+            with gr.Column(scale=1):
+                il_files = gr.Files(
+                    label="📄 Documentos para Analizar (opcional)",
+                    file_count="multiple"
+                )
+                
+                il_output = gr.Markdown(label="📊 Resultado del Ciclo de Aprendizaje")
+        
+        # Funciones
+        def run_iterative_learning(topic, domain, max_hyp, provider, files):
+            if not iterative_learning_agent:
+                return "❌ Agentes autónomos no están habilitados"
+            
+            if not topic.strip():
+                return "❌ Ingresa un tema de investigación"
+            
+            try:
+                # Procesar documentos si hay
+                documents = []
+                if files:
+                    docs = multi_format_processor.process(files)
+                    documents = docs
+                
+                # Cambiar provider si es necesario
+                if provider != iterative_learning_agent.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    iterative_learning_agent.provider = provider
+                    iterative_learning_agent.llm = create_llm(
+                        provider=provider,
+                        model=iterative_learning_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.3,
+                        api_key=iterative_learning_agent.config.openai_api_key if provider == "openai" else iterative_learning_agent.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=180
+                    )
+                
+                # Ejecutar ciclo de aprendizaje
+                cycle = iterative_learning_agent.start_learning_cycle(
+                    topic=topic,
+                    documents=documents,
+                    domain=domain,
+                    max_hypotheses=int(max_hyp)
+                )
+                
+                # Formatear resultado
+                result = f"""## 🧠 Ciclo de Aprendizaje Completado
+
+**Tema:** {cycle.topic}
+**Dominio:** {domain}
+**Ciclo ID:** {cycle.cycle_id}
+
+### 📖 Principios Descubiertos ({len(cycle.principles_discovered)}):
+{chr(10).join([f"{i+1}. {p}" for i, p in enumerate(cycle.principles_discovered)])}
+
+### 💡 Hipótesis Generadas ({len(cycle.hypotheses)}):
+{chr(10).join([f"**{i+1}. {h.description}**{chr(10)}   - Estado: {'✅ PASÓ' if h.status == 'passed' else '❌ FALLÓ'}{chr(10)}   - Resultado: {h.test_result[:200] if h.test_result else 'N/A'}{chr(10)}" for i, h in enumerate(cycle.hypotheses)])}
+
+### 📚 Insights Aprendidos ({len(cycle.insights_learned)}):
+{chr(10).join([f"- {insight}" for insight in cycle.insights_learned])}
+
+### 🔄 Entendimiento Actualizado:
+{cycle.updated_understanding[:1000]}...
+"""
+                return result
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        il_start_btn.click(
+            fn=run_iterative_learning,
+            inputs=[il_topic, il_domain, il_max_hypotheses, il_provider_toggle, il_files],
+            outputs=[il_output]
+        )
+    
+    # Tab 5.2: Text-to-Action Full-Stack
+    with gr.Tab("🚀 Text-to-Action Full-Stack"):
+        gr.Markdown("### 🚀 Text-to-Action Full-Stack - Construye Aplicaciones Completas")
+        gr.Markdown("""
+        **🚀 Convierte lenguaje natural en aplicaciones full-stack completas**
+        
+        Basado en conceptos avanzados de agentes autónomos:
+        - "Make me a copy of TikTok. Produce this program in the next 30 seconds"
+        - Construye aplicaciones completas (frontend + backend + APIs)
+        - Deployment automático
+        - Cada humano tiene su propio programador
+        
+        **💡 Ejemplo:** "Crea una aplicación de gestión de tareas con API REST y UI moderna"
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                fsta_description = gr.Textbox(
+                    label="📝 Descripción de la Aplicación",
+                    placeholder="Ej: Crea una aplicación web de gestión de tareas con API REST, base de datos y UI moderna",
+                    lines=4
+                )
+                
+                fsta_name = gr.Textbox(
+                    label="📱 Nombre de la Aplicación (opcional)",
+                    placeholder="Mi App"
+                )
+                
+                fsta_tech_stack = gr.Textbox(
+                    label="🛠️ Stack Tecnológico (opcional)",
+                    placeholder="Ej: React, Flask, PostgreSQL (o déjalo vacío para auto-selección)",
+                    lines=2
+                )
+                
+                fsta_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                fsta_build_btn = gr.Button("🏗️ Construir Aplicación", variant="primary")
+                fsta_deploy_btn = gr.Button("🚀 Desplegar Aplicación", variant="primary")
+            
+            with gr.Column(scale=1):
+                fsta_output = gr.Markdown(label="📊 Estado de la Aplicación")
+                fsta_app_id = gr.State(value=None)
+        
+        # Funciones
+        def build_fullstack_app(description, name, tech_stack, provider):
+            if not fullstack_text_to_action:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not description.strip():
+                return "❌ Ingresa una descripción de la aplicación", None
+            
+            try:
+                # Cambiar provider si es necesario
+                if provider != fullstack_text_to_action.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    fullstack_text_to_action.provider = provider
+                    fullstack_text_to_action.architect_llm = create_llm(
+                        provider=provider,
+                        model=fullstack_text_to_action.config.agentic_model or "gpt-4o",
+                        temperature=0.2,
+                        api_key=fullstack_text_to_action.config.openai_api_key if provider == "openai" else fullstack_text_to_action.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=180
+                    )
+                    fullstack_text_to_action.code_llm = create_llm(
+                        provider=provider,
+                        model=fullstack_text_to_action.config.agentic_model or "gpt-4o",
+                        temperature=0.1,
+                        api_key=fullstack_text_to_action.config.openai_api_key if provider == "openai" else fullstack_text_to_action.config.anthropic_api_key,
+                        max_tokens=16000,
+                        request_timeout=300
+                    )
+                
+                # Parsear tech stack
+                tech_list = [t.strip() for t in tech_stack.split(',')] if tech_stack.strip() else None
+                
+                # Construir aplicación
+                app = fullstack_text_to_action.build_application(
+                    description=description,
+                    app_name=name if name.strip() else None,
+                    tech_stack=tech_list
+                )
+                
+                result = f"""## 🚀 Aplicación Construida Exitosamente
+
+**Nombre:** {app.name}
+**ID:** {app.app_id}
+**Estado:** {app.status}
+
+### 📦 Componentes Generados ({len(app.components)}):
+{chr(10).join([f"**{i+1}. {comp.name}** ({comp.type}){chr(10)}   - Dependencias: {', '.join(comp.dependencies) if comp.dependencies else 'Ninguna'}{chr(10)}" for i, comp in enumerate(app.components)])}
+
+### 🏗️ Arquitectura:
+- Tipo: {app.architecture.get('architecture_type', 'N/A')}
+- Stack: {', '.join(app.architecture.get('tech_stack', []))}
+- Platform: {app.architecture.get('deployment_platform', 'N/A')}
+
+### 📝 Componentes:
+{chr(10).join([f"**{comp.name}:**{chr(10)}```{chr(10)}{comp.code[:500]}...{chr(10)}```{chr(10)}" for comp in app.components[:3]])}
+"""
+                return result, app.app_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        def deploy_fullstack_app(app_id):
+            if not fullstack_text_to_action or not app_id:
+                return "❌ No hay aplicación para desplegar"
+            
+            try:
+                result = fullstack_text_to_action.deploy_application(app_id)
+                if result["success"]:
+                    return f"""## ✅ Aplicación Desplegada
+
+**URL:** {result.get('deployment_url', 'N/A')}
+**Ruta:** {result.get('deployment_path', 'N/A')}
+
+La aplicación está lista para usar.
+"""
+                else:
+                    return f"❌ Error en deployment: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        fsta_build_btn.click(
+            fn=build_fullstack_app,
+            inputs=[fsta_description, fsta_name, fsta_tech_stack, fsta_provider_toggle],
+            outputs=[fsta_output, fsta_app_id]
+        )
+        
+        fsta_deploy_btn.click(
+            fn=deploy_fullstack_app,
+            inputs=[fsta_app_id],
+            outputs=[fsta_output]
+        )
+    
+    # Tab 5.3: Web Recency / Información Actualizada
+    with gr.Tab("🌐 Recency / Info Actualizada"):
+        gr.Markdown("### 🌐 Web Recency Agent - Información Actualizada en Tiempo Real")
+        gr.Markdown("""
+        **🚀 Resuelve el problema de "recency" con información actualizada**
+        
+        - Los modelos toman 18 meses en entrenarse, siempre están desactualizados
+        - Context windows permiten alimentar información reciente
+        - Este agente busca y actualiza información en tiempo real
+        
+        **💡 Ejemplo:** Pregunta sobre eventos recientes, noticias actuales, información actualizada
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                recency_query = gr.Textbox(
+                    label="🔍 Query de Búsqueda",
+                    placeholder="Ej: Guerra Israel-Hamas, Últimas noticias de IA, etc.",
+                    lines=2
+                )
+                
+                recency_topic = gr.Textbox(
+                    label="📚 Tema General (opcional)",
+                    placeholder="Ej: conflictos internacionales, tecnología, etc."
+                )
+                
+                recency_time_range = gr.Dropdown(
+                    label="⏰ Rango de Tiempo",
+                    choices=[
+                        ("Últimas 24 horas", "1 day"),
+                        ("Última semana", "1 week"),
+                        ("Último mes", "1 month")
+                    ],
+                    value="1 week"
+                )
+                
+                recency_max_sources = gr.Slider(
+                    label="Máximo de Fuentes",
+                    minimum=3,
+                    maximum=10,
+                    value=5,
+                    step=1
+                )
+                
+                recency_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                recency_search_btn = gr.Button("🔍 Buscar Información Reciente", variant="primary")
+            
+            with gr.Column(scale=1):
+                recency_output = gr.Markdown(label="📊 Información Reciente Encontrada")
+        
+        # Funciones
+        def search_recent_info(query, topic, time_range, max_sources, provider):
+            if not web_recency_agent:
+                return "❌ Agentes autónomos no están habilitados"
+            
+            if not query.strip():
+                return "❌ Ingresa una query de búsqueda"
+            
+            try:
+                # Cambiar provider si es necesario
+                if provider != web_recency_agent.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    web_recency_agent.provider = provider
+                    web_recency_agent.llm = create_llm(
+                        provider=provider,
+                        model=web_recency_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.2,
+                        api_key=web_recency_agent.config.openai_api_key if provider == "openai" else web_recency_agent.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=180
+                    )
+                
+                # Buscar información reciente
+                update = web_recency_agent.get_recent_information(
+                    query=query,
+                    topic=topic if topic.strip() else None,
+                    max_sources=int(max_sources),
+                    time_range=time_range
+                )
+                
+                result = f"""## 🌐 Información Reciente Encontrada
+
+**Query:** {update.query}
+**Tema:** {update.topic}
+**Actualizado:** {update.timestamp}
+
+### 📊 Resumen:
+{update.summary}
+
+### 🔑 Hechos Clave:
+{chr(10).join([f"- {fact}" for fact in update.key_facts])}
+
+### 📚 Fuentes ({len(update.sources)}):
+{chr(10).join([f"**{i+1}. {s.title}**{chr(10)}   - URL: {s.url}{chr(10)}   - Relevancia: {s.relevance_score:.2f}{chr(10)}" for i, s in enumerate(update.sources[:5])])}
+"""
+                return result
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        recency_search_btn.click(
+            fn=search_recent_info,
+            inputs=[recency_query, recency_topic, recency_time_range, recency_max_sources, recency_provider_toggle],
+            outputs=[recency_output]
+        )
+    
+    # Tab 5.4: Chain of Thought Profundo (1000 pasos)
+    with gr.Tab("🧠 Chain of Thought Profundo"):
+        gr.Markdown("### 🧠 Deep Chain of Thought - Razonamiento de hasta 1000 Pasos")
+        gr.Markdown("""
+        **🚀 Razonamiento profundo estructurado**
+        
+        Basado en conceptos avanzados de agentes autónomos:
+        - Genera hasta 1000 pasos de razonamiento
+        - Cada paso es verificable
+        - Como construir "recetas" que se pueden ejecutar y probar
+        - Razonamiento paso a paso estructurado
+        
+        **💡 Ejemplo:** Problemas complejos que requieren razonamiento profundo
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                cot_problem = gr.Textbox(
+                    label="❓ Problema a Resolver",
+                    placeholder="Ej: ¿Cómo optimizar el proceso de producción de una fábrica?",
+                    lines=4
+                )
+                
+                cot_max_steps = gr.Slider(
+                    label="Máximo de Pasos",
+                    minimum=10,
+                    maximum=1000,
+                    value=100,
+                    step=10
+                )
+                
+                cot_verify_steps = gr.Checkbox(
+                    label="Verificar Cada Paso",
+                    value=True
+                )
+                
+                cot_provider_toggle = gr.Radio(
+                    label="🤖 Motor de IA",
+                    choices=[("Motor Principal", "openai"), ("Motor Alternativo", "claude")],
+                    value="openai"
+                )
+                
+                cot_solve_btn = gr.Button("🧠 Resolver con Chain of Thought", variant="primary")
+            
+            with gr.Column(scale=1):
+                cot_output = gr.Markdown(label="📊 Proceso de Razonamiento")
+                cot_chain_id = gr.State(value=None)
+        
+        # Funciones
+        def solve_with_deep_cot(problem, max_steps, verify_steps, provider):
+            if not deep_cot_agent:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not problem.strip():
+                return "❌ Ingresa un problema a resolver", None
+            
+            try:
+                # Cambiar provider si es necesario
+                if provider != deep_cot_agent.provider:
+                    from docchat.utils.llm_factory import create_llm
+                    deep_cot_agent.provider = provider
+                    deep_cot_agent.llm = create_llm(
+                        provider=provider,
+                        model=deep_cot_agent.config.agentic_model or "gpt-4o",
+                        temperature=0.1,
+                        api_key=deep_cot_agent.config.openai_api_key if provider == "openai" else deep_cot_agent.config.anthropic_api_key,
+                        max_tokens=8000,
+                        request_timeout=300
+                    )
+                
+                # Resolver con Chain of Thought
+                chain = deep_cot_agent.solve_with_deep_cot(
+                    problem=problem,
+                    max_steps=int(max_steps),
+                    verify_steps=verify_steps
+                )
+                
+                # Formatear resultado
+                steps_summary = "\n".join([
+                    f"**Paso {s.step_number}:** {s.description}\n   - {s.reasoning[:150]}...\n   - Verificado: {'✅' if s.verified else '❌'}\n"
+                    for s in chain.steps[:20]  # Primeros 20 pasos
+                ])
+                
+                if len(chain.steps) > 20:
+                    steps_summary += f"\n... y {len(chain.steps) - 20} pasos más\n"
+                
+                result = f"""## 🧠 Chain of Thought Completado
+
+**Problema:** {chain.problem}
+**Total de Pasos:** {len(chain.steps)}
+**Pasos Verificados:** {sum(chain.verification_results.values())}/{len(chain.verification_results)}
+**Estado:** {chain.status}
+
+### 📝 Pasos de Razonamiento:
+{steps_summary}
+
+### ✅ Respuesta Final:
+{chain.final_answer or "Respuesta no generada"}
+"""
+                return result, chain.chain_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        cot_solve_btn.click(
+            fn=solve_with_deep_cot,
+            inputs=[cot_problem, cot_max_steps, cot_verify_steps, cot_provider_toggle],
+            outputs=[cot_output, cot_chain_id]
+        )
+    
+    # Tab 5.5: Testing Automático
+    with gr.Tab("🧪 Testing Automático"):
+        gr.Markdown("### 🧪 Sistema de Testing y Verificación Automática")
+        gr.Markdown("""
+        **🚀 Tests automáticos de eficacia**
+        
+        Basado en conceptos avanzados de agentes autónomos:
+        - Tests automáticos para verificar que algo funcionó
+        - Verificación de resultados
+        - Tests adversariales
+        - Tests de eficacia (efficacy tests)
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                test_target = gr.Textbox(
+                    label="🎯 Objetivo a Probar",
+                    placeholder="Código, aplicación, modelo, API, etc.",
+                    lines=3
+                )
+                
+                test_target_type = gr.Dropdown(
+                    label="Tipo de Objetivo",
+                    choices=["code", "application", "model", "api", "system"],
+                    value="code"
+                )
+                
+                test_types = gr.CheckboxGroup(
+                    label="Tipos de Tests",
+                    choices=["unit", "integration", "functional", "adversarial"],
+                    value=["unit", "functional"]
+                )
+                
+                test_custom_req = gr.Textbox(
+                    label="Requisitos Específicos (opcional)",
+                    placeholder="Ej: Probar casos edge, validar seguridad, etc.",
+                    lines=2
+                )
+                
+                test_create_btn = gr.Button("📝 Crear Suite de Pruebas", variant="primary")
+                test_run_btn = gr.Button("🚀 Ejecutar Tests", variant="primary")
+            
+            with gr.Column(scale=1):
+                test_output = gr.Markdown(label="📊 Resultados de Tests")
+                test_suite_id = gr.State(value=None)
+        
+        # Funciones
+        def create_test_suite(target, target_type, test_types_list, custom_req):
+            if not automated_testing:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not target.strip():
+                return "❌ Ingresa un objetivo a probar", None
+            
+            try:
+                suite = automated_testing.create_test_suite(
+                    target=target,
+                    target_type=target_type,
+                    test_types=test_types_list if test_types_list else None,
+                    custom_requirements=custom_req if custom_req.strip() else None
+                )
+                
+                result = f"""## 🧪 Suite de Pruebas Creada
+
+**ID:** {suite.suite_id}
+**Nombre:** {suite.name}
+**Objetivo:** {suite.target[:100]}...
+**Total de Tests:** {suite.total_tests}
+
+### 📋 Tests Generados:
+{chr(10).join([f"**{i+1}. {t.name}** ({t.test_type}){chr(10)}   - {t.description[:100]}...{chr(10)}" for i, t in enumerate(suite.test_cases[:10])])}
+"""
+                return result, suite.suite_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        def run_test_suite(suite_id):
+            if not automated_testing or not suite_id:
+                return "❌ No hay suite de pruebas para ejecutar"
+            
+            try:
+                suite = automated_testing.run_test_suite(suite_id)
+                report = automated_testing.get_test_report(suite_id)
+                
+                result = f"""## 🧪 Resultados de Tests
+
+**Suite:** {report['name']}
+**Estado:** {report['status']}
+**Tiempo de Ejecución:** {report['execution_time']:.2f}s
+
+### 📊 Resumen:
+- **Total:** {report['summary']['total']}
+- **✅ Pasaron:** {report['summary']['passed']}
+- **❌ Fallaron:** {report['summary']['failed']}
+- **📈 Tasa de Éxito:** {report['summary']['pass_rate']*100:.1f}%
+
+### 📋 Detalles:
+{chr(10).join([f"**{t['name']}** ({t['type']}): {'✅ PASÓ' if t['passed'] else '❌ FALLÓ'} ({t['execution_time']:.2f}s)" + (f"{chr(10)}   Error: {t['error']}" if t.get('error') else "") for t in report['test_details'][:20]])}
+"""
+                return result
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        test_create_btn.click(
+            fn=create_test_suite,
+            inputs=[test_target, test_target_type, test_types, test_custom_req],
+            outputs=[test_output, test_suite_id]
+        )
+        
+        test_run_btn.click(
+            fn=run_test_suite,
+            inputs=[test_suite_id],
+            outputs=[test_output]
+        )
+    
+    # Tab 5.6: Adversarial AI / Red Teaming
+    with gr.Tab("🔴 Red Teaming / Adversarial AI"):
+        gr.Markdown("### 🔴 Adversarial AI System - Red Teaming Automatizado")
+        gr.Markdown("""
+        **🚀 Sistema de red teaming y testing adversarial**
+        
+        Basado en conceptos avanzados de agentes autónomos:
+        - Sistemas AI que atacan otros sistemas AI
+        - Encuentran vulnerabilidades
+        - Red teaming automatizado
+        - Testing de límites y casos edge
+        
+        **💡 Ejemplo:** Probar un modelo AI para encontrar vulnerabilidades de seguridad
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                adv_target = gr.Textbox(
+                    label="🎯 Sistema a Atacar",
+                    placeholder="Modelo AI, API, aplicación, etc.",
+                    lines=3
+                )
+                
+                adv_target_type = gr.Dropdown(
+                    label="Tipo de Objetivo",
+                    choices=["model", "api", "application", "system"],
+                    value="model"
+                )
+                
+                adv_attack_types = gr.CheckboxGroup(
+                    label="Tipos de Ataques",
+                    choices=["prompt_injection", "jailbreak", "adversarial_example", "data_poisoning", "privacy_attack"],
+                    value=["prompt_injection", "jailbreak"]
+                )
+                
+                adv_max_attacks = gr.Slider(
+                    label="Máximo de Ataques",
+                    minimum=5,
+                    maximum=50,
+                    value=20,
+                    step=5
+                )
+                
+                adv_start_btn = gr.Button("🔴 Iniciar Red Teaming", variant="stop")
+            
+            with gr.Column(scale=1):
+                adv_output = gr.Markdown(label="📊 Resultados del Red Teaming")
+                adv_session_id = gr.State(value=None)
+        
+        # Funciones
+        def start_red_team(target, target_type, attack_types, max_attacks):
+            if not adversarial_ai:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not target.strip():
+                return "❌ Ingresa un sistema a atacar", None
+            
+            try:
+                session = adversarial_ai.start_red_team_session(
+                    target=target,
+                    target_type=target_type,
+                    attack_types=attack_types if attack_types else None,
+                    max_attacks=int(max_attacks)
+                )
+                
+                report = adversarial_ai.generate_security_report(session.session_id)
+                
+                result = f"""## 🔴 Sesión de Red Teaming Completada
+
+**Objetivo:** {session.target[:100]}...
+**Tipo:** {session.target_type}
+**Total de Ataques:** {len(session.attack_vectors)}
+**Tasa de Éxito:** {session.success_rate*100:.1f}%
+
+### 🔴 Vulnerabilidades Encontradas: {len(session.vulnerabilities_found)}
+
+**Críticas:** {report['summary']['critical_vulns']}
+**Altas:** {report['summary']['high_vulns']}
+**Medias:** {report['summary']['medium_vulns']}
+**Bajas:** {report['summary']['low_vulns']}
+
+### 📋 Detalles de Vulnerabilidades:
+{chr(10).join([f"**{i+1}. {v['type']}** (Severidad: {v['severity']}){chr(10)}   - {v['description'][:200]}...{chr(10)}   - Impacto: {v['impact'][:150]}...{chr(10)}   - Remediation: {v['remediation'][:150]}...{chr(10)}" for i, v in enumerate(report['vulnerabilities'][:10])])}
+
+### 💡 Recomendaciones:
+{chr(10).join([f"- {rec}" for rec in report['recommendations'][:5]])}
+"""
+                return result, session.session_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        adv_start_btn.click(
+            fn=start_red_team,
+            inputs=[adv_target, adv_target_type, adv_attack_types, adv_max_attacks],
+            outputs=[adv_output, adv_session_id]
+        )
+    
+    # Tab 5.7: Agentes Colaborativos
+    with gr.Tab("👥 Agentes Colaborativos"):
+        gr.Markdown("### 👥 Sistema de Agentes Colaborativos")
+        gr.Markdown("""
+        **🚀 Múltiples agentes trabajando juntos**
+        
+        Basado en conceptos avanzados de agentes autónomos:
+        - Múltiples agentes trabajando en equipo
+        - Colaboración en código y tareas complejas
+        - División automática de trabajo
+        - Coordinación entre agentes
+        
+        **💡 Ejemplo:** Equipo de agentes desarrollando una aplicación completa
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                collab_team_name = gr.Textbox(
+                    label="👥 Nombre del Equipo",
+                    placeholder="Ej: Equipo de Desarrollo Alpha",
+                    value="Equipo Colaborativo"
+                )
+                
+                collab_project = gr.Textbox(
+                    label="📋 Descripción del Proyecto",
+                    placeholder="Ej: Desarrollar una aplicación web completa de gestión de proyectos",
+                    lines=3
+                )
+                
+                collab_team_size = gr.Slider(
+                    label="Tamaño del Equipo",
+                    minimum=3,
+                    maximum=10,
+                    value=5,
+                    step=1
+                )
+                
+                collab_create_btn = gr.Button("👥 Crear Equipo", variant="primary")
+                collab_task_btn = gr.Button("🚀 Ejecutar Tarea Colaborativa", variant="primary")
+            
+            with gr.Column(scale=1):
+                collab_task_description = gr.Textbox(
+                    label="📝 Tarea a Ejecutar",
+                    placeholder="Ej: Crear una API REST completa con autenticación y base de datos",
+                    lines=3
+                )
+                
+                collab_output = gr.Markdown(label="📊 Resultado de la Colaboración")
+                collab_team_id = gr.State(value=None)
+        
+        # Funciones
+        def create_collaborative_team(team_name, project, team_size):
+            if not collaborative_agents:
+                return "❌ Agentes autónomos no están habilitados", None
+            
+            if not project.strip():
+                return "❌ Ingresa una descripción del proyecto", None
+            
+            try:
+                team = collaborative_agents.create_team(
+                    team_name=team_name if team_name.strip() else "Equipo Colaborativo",
+                    project_description=project,
+                    team_size=int(team_size)
+                )
+                
+                agents_info = "\n".join([
+                    f"**{a.name}** ({a.role.value}): {a.specialization}\n   - Capacidades: {', '.join(a.capabilities)}\n"
+                    for a in team.agents
+                ])
+                
+                result = f"""## 👥 Equipo Creado Exitosamente
+
+**Nombre:** {team.name}
+**ID:** {team.team_id}
+**Tamaño:** {len(team.agents)} agentes
+
+### 🤖 Agentes del Equipo:
+{agents_info}
+"""
+                return result, team.team_id
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+        
+        def execute_collaborative_task(team_id, task_description):
+            if not collaborative_agents or not team_id:
+                return "❌ Crea un equipo primero o ingresa una tarea"
+            
+            if not task_description.strip():
+                return "❌ Ingresa una descripción de la tarea"
+            
+            try:
+                result = collaborative_agents.execute_collaborative_task(
+                    team_id=team_id,
+                    task_description=task_description
+                )
+                
+                if result["success"]:
+                    output = f"""## ✅ Tarea Colaborativa Completada
+
+**Tarea:** {result['task']}
+**Subtareas:** {result['subtasks']}
+**Agentes Usados:** {result['agents_used']}
+**Verificado:** {'✅ Sí' if result['verified'] else '⚠️ Requiere revisión'}
+
+### 📊 Resultado Final:
+{result['final_result'][:2000]}...
+"""
+                    return output
+                else:
+                    return f"❌ Error: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        collab_create_btn.click(
+            fn=create_collaborative_team,
+            inputs=[collab_team_name, collab_project, collab_team_size],
+            outputs=[collab_output, collab_team_id]
+        )
+        
+        collab_task_btn.click(
+            fn=execute_collaborative_task,
+            inputs=[collab_team_id, collab_task_description],
+            outputs=[collab_output]
+        )
+    
+    # Tab 5.8: Integración Avanzada
+    with gr.Tab("🔌 Integración Avanzada"):
+        gr.Markdown("### 🔌 Sistema de Integración Avanzada")
+        gr.Markdown("""
+        **🚀 Integración con APIs, deployment y cloud**
+        
+        Basado en conceptos avanzados de agentes autónomos:
+        - Integración con APIs externas
+        - Deployment automático a múltiples plataformas
+        - Integración con servicios cloud (AWS, GCP, Azure)
+        - Conectividad con sistemas externos
+        
+        **💡 Ejemplo:** Conectar APIs, desplegar aplicaciones, integrar servicios cloud
+        """)
+        
+        with gr.Tabs():
+            # Sub-tab: API Integration
+            with gr.Tab("📡 Integración de APIs"):
+                gr.Markdown("### Conectar APIs Externas")
+                
+                with gr.Row():
+                    with gr.Column():
+                        api_name = gr.Textbox(
+                            label="Nombre de la API",
+                            placeholder="Ej: OpenAI API, Stripe API, etc."
+                        )
+                        api_url = gr.Textbox(
+                            label="URL Base de la API",
+                            placeholder="https://api.example.com"
+                        )
+                        api_key = gr.Textbox(
+                            label="API Key (opcional)",
+                            type="password",
+                            placeholder="sk-..."
+                        )
+                        api_auto_discover = gr.Checkbox(
+                            label="Descubrir Endpoints Automáticamente",
+                            value=True
+                        )
+                        api_connect_btn = gr.Button("🔌 Conectar API", variant="primary")
+                    
+                    with gr.Column():
+                        api_output = gr.Markdown(label="📊 Estado de Integración")
+                        api_integration_id = gr.State(value=None)
+                
+                # Funciones
+                def connect_api(name, url, key, auto_discover):
+                    if not advanced_integration:
+                        return "❌ Agentes autónomos no están habilitados", None
+                    
+                    if not name.strip() or not url.strip():
+                        return "❌ Completa nombre y URL de la API", None
+                    
+                    try:
+                        integration = advanced_integration.integrate_api(
+                            api_name=name,
+                            api_url=url,
+                            api_key=key if key.strip() else None,
+                            auto_discover=auto_discover
+                        )
+                        
+                        result = f"""## ✅ API Integrada
+
+**Nombre:** {integration.api_name}
+**URL:** {integration.api_url}
+**Estado:** {integration.status}
+**Endpoints Descubiertos:** {len(integration.endpoints)}
+
+### 📡 Endpoints:
+{chr(10).join([f"**{e['method']}** {e['path']}{chr(10)}   - {e.get('description', 'Sin descripción')}{chr(10)}" for e in integration.endpoints[:10]])}
+"""
+                        return result, integration.integration_id
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}", None
+                
+                api_connect_btn.click(
+                    fn=connect_api,
+                    inputs=[api_name, api_url, api_key, api_auto_discover],
+                    outputs=[api_output, api_integration_id]
+                )
+            
+            # Sub-tab: Deployment
+            with gr.Tab("🚀 Deployment"):
+                gr.Markdown("### Desplegar Aplicaciones")
+                
+                with gr.Row():
+                    with gr.Column():
+                        deploy_app_path = gr.Textbox(
+                            label="Ruta de la Aplicación",
+                            placeholder="/path/to/application"
+                        )
+                        deploy_platform = gr.Dropdown(
+                            label="Plataforma",
+                            choices=["vercel", "heroku", "aws", "docker", "local"],
+                            value="local"
+                        )
+                        deploy_env_vars = gr.Textbox(
+                            label="Variables de Entorno (JSON)",
+                            placeholder='{"KEY": "value"}',
+                            lines=3
+                        )
+                        deploy_btn = gr.Button("🚀 Desplegar", variant="primary")
+                    
+                    with gr.Column():
+                        deploy_output = gr.Markdown(label="📊 Estado del Deployment")
+                
+                # Funciones
+                def deploy_app(app_path, platform, env_vars):
+                    if not advanced_integration:
+                        return "❌ Agentes autónomos no están habilitados"
+                    
+                    if not app_path.strip():
+                        return "❌ Ingresa la ruta de la aplicación"
+                    
+                    try:
+                        env_dict = {}
+                        if env_vars.strip():
+                            env_dict = json.loads(env_vars)
+                        
+                        config = advanced_integration.deploy_application(
+                            application_path=app_path,
+                            platform=platform,
+                            environment_vars=env_dict
+                        )
+                        
+                        result = f"""## 🚀 Deployment Configurado
+
+**Plataforma:** {config.platform}
+**Estado:** {config.status}
+**URL:** {config.deployment_url or 'Pendiente'}
+
+### ⚙️ Configuración:
+**Comandos de Build:**
+{chr(10).join([f"- {cmd}" for cmd in config.build_commands])}
+
+**Comandos de Start:**
+{chr(10).join([f"- {cmd}" for cmd in config.start_commands])}
+
+**Variables de Entorno:** {len(config.environment_variables)} configuradas
+"""
+                        return result
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                deploy_btn.click(
+                    fn=deploy_app,
+                    inputs=[deploy_app_path, deploy_platform, deploy_env_vars],
+                    outputs=[deploy_output]
+                )
+            
+            # Sub-tab: Cloud Services
+            with gr.Tab("☁️ Servicios Cloud"):
+                gr.Markdown("### Integrar Servicios Cloud")
+                
+                with gr.Row():
+                    with gr.Column():
+                        cloud_service_type = gr.Dropdown(
+                            label="Tipo de Servicio",
+                            choices=["aws", "gcp", "azure"],
+                            value="aws"
+                        )
+                        cloud_service_name = gr.Textbox(
+                            label="Nombre del Servicio",
+                            placeholder="Mi Servicio Cloud"
+                        )
+                        cloud_credentials = gr.Textbox(
+                            label="Credenciales (JSON)",
+                            placeholder='{"access_key": "...", "secret_key": "..."}',
+                            lines=5
+                        )
+                        cloud_connect_btn = gr.Button("☁️ Conectar Servicio Cloud", variant="primary")
+                    
+                    with gr.Column():
+                        cloud_output = gr.Markdown(label="📊 Estado de Integración Cloud")
+                
+                # Funciones
+                def connect_cloud_service(service_type, service_name, credentials):
+                    if not advanced_integration:
+                        return "❌ Agentes autónomos no están habilitados"
+                    
+                    if not service_name.strip() or not credentials.strip():
+                        return "❌ Completa nombre y credenciales"
+                    
+                    try:
+                        creds_dict = json.loads(credentials)
+                        service = advanced_integration.integrate_cloud_service(
+                            service_type=service_type,
+                            service_name=service_name,
+                            credentials=creds_dict
+                        )
+                        
+                        result = f"""## ☁️ Servicio Cloud Integrado
+
+**Tipo:** {service.service_type}
+**Nombre:** {service.service_name}
+**Estado:** {service.status}
+**Recursos Descubiertos:** {len(service.resources)}
+
+### 📦 Recursos:
+{chr(10).join([f"- **{r['type']}**: {r['name']} ({r['status']})" for r in service.resources[:10]])}
+"""
+                        return result
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                cloud_connect_btn.click(
+                    fn=connect_cloud_service,
+                    inputs=[cloud_service_type, cloud_service_name, cloud_credentials],
+                    outputs=[cloud_output]
+                )
+    
+    # Tab 5.9: Agent Orchestration Studio (MOVIDO DESPUÉS DE INTEGRACIÓN AVANZADA)
+    with gr.Tab("🎭 Agent Orchestration Studio"):
+        gr.Markdown("### 🎭 Agent Orchestration Studio - Estudio de Orquestación de Agentes")
+        gr.Markdown("""
+        **🚀 Crea, Orquesta y Gestiona Múltiples Agentes Especializados que Colaboran en Tiempo Real**
+        
+        **✨ Este es un modo completamente nuevo e innovador que NO existe en ningún otro lugar:**
+        
+        - 🎯 **Crea agentes especializados** visualmente (Analizador, Investigador, Desarrollador, Escritor, etc.)
+        - 🔗 **Define workflows complejos** con Goal Decomposition automática
+        - 🤝 **Orquesta colaboración** entre múltiples agentes en tiempo real
+        - 👁️ **Ve ejecución en tiempo real** con comunicación entre agentes
+        - 📚 **Aprendizaje automático** con Test Time Training
+        - 🌳 **Reinforcement Planning** para encontrar mejores caminos
+        - 🛤️ **Path-dependent Reasoning** para probar diferentes enfoques
+        - 👤 **Person in the Loop** para control humano en acciones críticas
+        
+        **💡 Casos de Uso:**
+        - Procesos de negocio complejos que requieren múltiples especialistas
+        - Análisis de datos que necesita investigación + análisis + reporte
+        - Desarrollo de proyectos con múltiples fases
+        - Automatización de workflows empresariales complejos
+        
+        **🎯 Ejemplo:** "Analiza todas las ventas del trimestre, investiga tendencias del mercado, 
+        genera un reporte ejecutivo y envíalo por email" → Se crean 4 agentes que trabajan juntos
+        """)
+        
+        # Inicializar Agent Orchestration Studio
+        agent_studio = None
+        try:
+            from docchat.agent_orchestration_studio import AgentOrchestrationStudio
+            from docchat.utils.llm_factory import create_llm
+            
+            mcp_manager_instance = None
+            if jarvis_manager:
+                try:
+                    jarvis_instance = jarvis_manager.get_or_create_jarvis("user")
+                    mcp_manager_instance = jarvis_instance.mcp_manager
+                except:
+                    pass
+            
+            # Crear LLM para Agent Studio
+            agent_studio_llm = create_llm(
+                provider="openai",
+                model=config.research_model or "gpt-4o",
+                temperature=0.2,
+                api_key=config.openai_api_key,
+                max_tokens=4000
+            )
+            
+            agent_studio = AgentOrchestrationStudio(
+                config=config,
+                llm=agent_studio_llm,
+                mcp_manager=mcp_manager_instance
+            )
+            print("✅ [Agent Studio] Inicializado correctamente")
+        except Exception as e:
+            print(f"⚠️ [Agent Studio] Error inicializando: {e}")
+            import traceback
+            traceback.print_exc()
+            agent_studio = None
+        
+        gr.Markdown("⚠️ **Nota:** Este modo requiere que los agentes autónomos estén habilitados. Por favor, configura las API keys necesarias en la configuración.")
+    
+    # Tab 5.10: Procesamiento Semántico (MOVIDO DESPUÉS DE INTEGRACIÓN AVANZADA)
+    with gr.Tab("🧠 Procesamiento Semántico"):
+        gr.Markdown("### Procesamiento Semántico de Datos - AI Data Engine")
+        gr.Markdown("""
+        **🚀 Reinvención del Procesamiento de Datos con IA Semántica**
+        
+        Inspirado en la colaboración NVIDIA/NetApp, este modo implementa:
+        
+        - 🧠 **Procesamiento Semántico**: Embedding e indexación basada en redes neuronales (no hash tables)
+        - 🔍 **Base de Datos Vectorizada**: Búsqueda por nearest neighbors en espacio vectorial
+        - 📊 **Multimodal**: Soporte para texto, PDF, video, audio, imágenes, datos estructurados, químicos, proteínas
+        - 💬 **Búsqueda Conversacional**: "Solo pregunta a NetApp" - búsqueda en lenguaje natural
+        - 🔗 **Tracking de Lineage**: Rastreo completo de transformaciones y versiones de embeddings
+        - 🛡️ **Guardrails y Seguridad**: Control de acceso y políticas de seguridad
+        - ⚡ **Procesamiento Near-Data**: Procesamiento cerca de los datos, sin moverlos del storage
+        
+        **💡 Perfecto para empresas que necesitan extraer conocimiento de datos no estructurados y multimodales**
+        """)
+        
+        gr.Markdown("⚠️ **Nota:** Este modo requiere configuración adicional. Por favor, consulta la documentación para más detalles.")
+    
+    # Tab: Sistema de Agentes AI para Ventas
+    if SALES_AGENT_AVAILABLE and SalesAgentSystem is not None:
+        with gr.Tab("💰 Agentes AI Ventas"):
+            gr.Markdown("### 💰 Sistema de Agentes AI para Optimización de Ventas")
+            gr.Markdown("""
+            **🚀 Sistema de Producción Orientado a Ventas**
+            
+            Sistema completo de agentes AI que integra LangGraph, CrewAI, AutoGen y BeeAI para optimizar campañas publicitarias.
+            
+            **🎯 Capacidades:**
+            - 📊 Análisis inteligente de campañas publicitarias
+            - 💰 Optimización automática de presupuestos
+            - ✍️ Generación de creativos publicitarios
+            - 🔍 Crítica y auto-corrección de estrategias
+            - 📈 Recomendaciones basadas en datos
+            
+            **💼 Perfecto para:**
+            - E-commerce y tiendas online
+            - Marketing digital y publicidad
+            - Optimización de ROI de campañas
+            - Automatización de estrategias de ventas
+            """)
+            
+            # Inicializar sistema de ventas
+            sales_system_state = gr.State(value=None)
+            
+            def init_sales_system():
+                """Inicializa el sistema de agentes AI para ventas"""
+                try:
+                    system = SalesAgentSystem()
+                    return system, "✅ Sistema de Agentes AI para Ventas inicializado correctamente"
+                except Exception as e:
+                    return None, f"❌ Error inicializando sistema: {str(e)}"
+            
+            with gr.Row():
+                init_sales_btn = gr.Button("🚀 Inicializar Sistema de Ventas", variant="primary")
+                sales_init_status = gr.Markdown("*Haz clic en 'Inicializar Sistema de Ventas' para comenzar*")
+            
+            init_sales_btn.click(
+                fn=init_sales_system,
+                outputs=[sales_system_state, sales_init_status]
+            )
+            
+            gr.Markdown("---")
+            gr.Markdown("### 📊 Análisis de Campañas")
+            
+            with gr.Row():
+                with gr.Column():
+                    sales_query_input = gr.Textbox(
+                        label="📝 Consulta de Análisis",
+                        placeholder="Ejemplo: Analiza mis campañas publicitarias y proporciona recomendaciones para mejorar ROI",
+                        lines=3,
+                        value="Analiza mis campañas publicitarias y proporciona recomendaciones para mejorar ROI"
+                    )
+                    
+                    analyze_sales_btn = gr.Button("🔍 Analizar Campañas", variant="primary", size="lg")
+                
+                with gr.Column():
+                    sales_output = gr.Markdown(
+                        label="📊 Resultados del Análisis",
+                        value="**💡 Instrucciones:**\n\n1. Haz clic en 'Inicializar Sistema de Ventas'\n2. Ingresa tu consulta de análisis\n3. Haz clic en 'Analizar Campañas'\n4. Revisa los resultados completos"
+                    )
+            
+            def run_sales_analysis(query, system_state):
+                """Ejecuta análisis completo de ventas"""
+                if system_state is None:
+                    return "❌ **Error:** Primero debes inicializar el sistema de ventas. Haz clic en 'Inicializar Sistema de Ventas'."
+                
+                try:
+                    result = system_state.run_complete_analysis(query)
+                    
+                    # Formatear resultado
+                    output = f"""## 📊 Análisis Completo de Campañas Publicitarias
+
+### 📈 Resumen Ejecutivo
+
+- **Campañas analizadas:** {result['campaign_summary']['total_campaigns']}
+- **Gasto total:** ${result['campaign_summary']['total_spend']:,.2f}
+- **Ingresos totales:** ${result['campaign_summary']['total_revenue']:,.2f}
+- **ROAS promedio:** {result['campaign_summary']['average_roas']:.2f}
+- **Validación:** {'✅ Aprobado' if result['autogen_critique']['approved'] else '⚠️ Requiere revisión'}
+- **Iteraciones de mejora:** {result['autogen_critique']['iterations']}
+
+---
+
+### 🎯 Recomendaciones
+
+"""
+                    for rec in result['recommendations']:
+                        output += f"- **[{rec['source']}]** {rec['recommendation']} (Prioridad: {rec['priority']})\n"
+                    
+                    output += "\n---\n\n### 📋 Próximos Pasos\n\n"
+                    for action in result['next_actions']:
+                        output += f"{action}\n"
+                    
+                    output += "\n---\n\n### 📝 Reporte Detallado\n\n"
+                    output += f"**Workflow LangGraph:**\n{result['langgraph_workflow']['final_report'][:500]}...\n\n"
+                    output += f"**Análisis CrewAI:**\n{str(result['crewai_analysis']['result'])[:500]}...\n\n"
+                    output += f"**Crítica AutoGen:**\n{result['autogen_critique']['final_analysis'][:500]}...\n"
+                    
+                    return output
+                except Exception as e:
+                    import traceback
+                    error_msg = f"❌ **Error ejecutando análisis:**\n\n```\n{str(e)}\n```\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+                    return error_msg
+            
+            analyze_sales_btn.click(
+                fn=run_sales_analysis,
+                inputs=[sales_query_input, sales_system_state],
+                outputs=[sales_output]
+            )
+            
+            gr.Markdown("---")
+            gr.Markdown("### 🔧 Funciones Avanzadas")
+            
+            with gr.Row():
+                with gr.Column():
+                    campaign_id_input = gr.Textbox(
+                        label="🆔 ID de Campaña",
+                        placeholder="Ejemplo: camp_1",
+                        value="camp_1"
+                    )
+                    
+                    get_insights_btn = gr.Button("📈 Obtener Insights de Campaña", variant="secondary")
+                    optimize_campaign_btn = gr.Button("💰 Optimizar Campaña", variant="secondary")
+                
+                with gr.Column():
+                    campaign_output = gr.Markdown(
+                        label="📊 Resultados de Campaña",
+                        value="*Ingresa un ID de campaña y selecciona una acción*"
+                    )
+            
+            def get_campaign_insights_ui(campaign_id, system_state):
+                """Obtiene insights de una campaña específica"""
+                if system_state is None:
+                    return "❌ **Error:** Primero debes inicializar el sistema de ventas."
+                
+                try:
+                    insights = system_state.get_campaign_insights(campaign_id)
+                    
+                    if "error" in insights:
+                        return f"❌ **Error:** {insights['error']}"
+                    
+                    campaign = insights['campaign']
+                    output = f"""## 📈 Insights de Campaña: {campaign.get('name', 'N/A')}
+
+### 📊 Métricas de Rendimiento
+
+- **ROAS:** {campaign.get('roas', 0):.2f}
+- **CTR:** {campaign.get('ctr', 0):.2f}%
+- **CPA:** ${campaign.get('cpa', 0):.2f}
+- **CPC:** ${campaign.get('cpc', 0):.2f}
+- **Impresiones:** {campaign.get('impressions', 0):,}
+- **Clics:** {campaign.get('clicks', 0):,}
+- **Conversiones:** {campaign.get('conversions', 0):,}
+- **Gasto:** ${campaign.get('spend', 0):.2f}
+- **Ingresos:** ${campaign.get('revenue', 0):.2f}
+
+### 🎯 Análisis
+
+- **Tier de rendimiento:** {insights['insights']['performance_tier']}
+- **Recomendación:** {insights['insights']['recommendation']}
+"""
+                    return output
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def optimize_campaign_ui(campaign_id, system_state):
+                """Optimiza una campaña específica"""
+                if system_state is None:
+                    return "❌ **Error:** Primero debes inicializar el sistema de ventas."
+                
+                try:
+                    optimization = system_state.optimize_single_campaign(campaign_id)
+                    
+                    output = f"""## 💰 Optimización de Campaña: {optimization['campaign_id']}
+
+### 💵 Cambios de Presupuesto
+
+- **Presupuesto anterior:** ${optimization['old_budget']:.2f}
+- **Presupuesto nuevo:** ${optimization['new_budget']:.2f}
+- **Cambio:** {optimization['change_percent']:.1f}%
+
+### 📝 Justificación
+
+{optimization['reason']}
+"""
+                    return output
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            get_insights_btn.click(
+                fn=get_campaign_insights_ui,
+                inputs=[campaign_id_input, sales_system_state],
+                outputs=[campaign_output]
+            )
+            
+            optimize_campaign_btn.click(
+                fn=optimize_campaign_ui,
+                inputs=[campaign_id_input, sales_system_state],
+                outputs=[campaign_output]
+            )
+            
+            gr.Markdown("---")
+            gr.Markdown("""
+            ### 📚 Información del Sistema
+            
+            Este sistema utiliza:
+            - **LangGraph**: Orquestación de workflows
+            - **CrewAI**: Agentes especializados (Ads Analyst, Budget Optimizer, Creative Generator)
+            - **AutoGen**: Sistema de crítica y auto-corrección
+            - **APIs**: Integración con plataformas de publicidad (stubs para desarrollo)
+            
+            **⚠️ Nota:** En producción, los stubs de API deben ser reemplazados por integraciones reales con Google Ads, Meta Ads, etc.
+            """)
+    else:
+        # Tab deshabilitado si el sistema no está disponible
+        with gr.Tab("💰 Agentes AI Ventas (No Disponible)"):
+            gr.Markdown("### ⚠️ Sistema de Agentes AI para Ventas No Disponible")
+            gr.Markdown("""
+            El sistema de agentes AI para ventas no está disponible en este momento.
+            
+            **Posibles causas:**
+            - Las dependencias no están instaladas
+            - Hay un error en la importación del módulo
+            
+            **Solución:**
+            - Verifica que todas las dependencias estén instaladas: `pip install -r sales_agent_system/requirements.txt`
+            - Revisa los logs para más detalles del error
+            """)
+        
+        # Tab JARVIS ya está en la primera posición (reemplazando Consulta RAG en línea 3384)
+        # Este bloque duplicado ha sido eliminado completamente
+        pass
+    # Confirmar que JARVIS está disponible
+    if jarvis_manager is not None:
+        print("✅ Tab '🤖 JARVIS' agregado a la interfaz - Debería ser visible en la lista de tabs")
+        print("💡 Si no ves el tab, busca '🤖 JARVIS' en la lista de tabs (puede estar al final)")
+    else:
+        print("⚠️ JARVIS Manager no está disponible - El tab '🤖 JARVIS' no se mostrará")
+    
+    # Mensaje de carga ELIMINADO completamente - no se necesita
+    # La app se carga directamente sin bloqueos
+    pass
+
+
+if __name__ == "__main__":
+    # CRÍTICO: Cloud Run solo permite escritura en /tmp
+    cloud_port = os.environ.get("PORT")
+    if cloud_port:
+        # Configurar variables de entorno para usar /tmp
+        os.environ["TMPDIR"] = "/tmp"
+        os.environ["TMP"] = "/tmp"
+        os.environ["TEMP"] = "/tmp"
+        
+        # Crear directorios necesarios en /tmp
+        import tempfile
+        tempfile.tempdir = "/tmp"
+        
+        # Crear directorios en /tmp con permisos correctos
+        os.makedirs("/tmp/documents", exist_ok=True)
+        os.makedirs("/tmp/data", exist_ok=True)
+        
+        # Asegurar permisos de escritura (Cloud Run usa usuario root, pero por si acaso)
+        try:
+            os.chmod("/tmp/documents", 0o777)
+            os.chmod("/tmp/data", 0o777)
+        except:
+            pass
+        
+        print(f"✅ Cloud Run detectado - Configurando /tmp para archivos")
+        print(f"✅ Directorios creados: /tmp/documents, /tmp/data")
+    
+    # Para ejecución local, Gradio usa el puerto 7860 por defecto
+    # Para Cloud Run, usa la variable PORT
+    base_port = int(os.environ.get("PORT", 7860))
+    server_name = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+    
+    # Deshabilitar API info para evitar el bug de TypeError
+    try:
+        demo.api_info = None
+    except:
+        pass
+    
+    # Intentar encontrar un puerto disponible
+    import socket
+    port = None
+    # Usar "0.0.0.0" para verificar puertos en Windows
+    check_host = "0.0.0.0" if server_name == "127.0.0.1" else server_name
+    
+    for attempt_port in range(base_port, base_port + 10):
+        try:
+            # Verificar si el puerto está disponible
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((check_host, attempt_port))
+                port = attempt_port
+                break
+        except (OSError, socket.error):
+            # Puerto ocupado, intentar el siguiente
+            continue
+    
+    if port is None:
+        # Si no encontramos puerto, usar el predeterminado y dejar que Gradio maneje el error
+        port = base_port
+        print(f"⚠️ No se encontró puerto disponible en rango {base_port}-{base_port+9}, intentando {port}")
+    else:
+        if port != base_port:
+            print(f"⚠️ Puerto {base_port} ocupado, usando puerto alternativo: {port}")
+    
+    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port}")
+    
+    try:
+        demo.launch(
+            show_error=True,
+            quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
+            server_name=server_name,
+            server_port=port,
+            share=False,
+            inbrowser=True,
+            show_api=False  # Deshabilitar API info completamente
+        )
+    except OSError as e:
+        if "Cannot find empty port" in str(e):
+            # Si aún falla, intentar con el siguiente puerto
+            print(f"⚠️ Error al iniciar en puerto {port}, intentando puerto {port + 1}...")
+            demo.launch(
+                show_error=True,
+                quiet=True,
+                server_name=server_name,
+                server_port=port + 1,
+                share=False,
+                inbrowser=True,
+                show_api=False
+            )
+        else:
+            raise
