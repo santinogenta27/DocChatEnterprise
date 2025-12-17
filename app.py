@@ -187,6 +187,7 @@ from docchat.chatbot_mode import ChatbotMode
 from docchat.text_to_action import TextToAction
 from docchat.email_autonomous_agent import EmailAutonomousAgent
 from docchat.multi_format_processor import MultiFormatProcessor
+from docchat.ai_agent_business_manager_mode import AIAgentBusinessManagerMode
 from docchat.iterative_learning_agent import IterativeLearningAgent
 from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
 from docchat.alien_mode import run_alien_mode, get_alien_mode
