@@ -6,6 +6,7 @@ Production-ready with error handling and logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
+import os
 import logging
 
 try:
@@ -412,11 +413,137 @@ Always think step by step and explain your decisions."""),
         if not platform_campaign_ids:
             raise ValueError("No se pudieron crear campañas en ninguna plataforma. Verifica las credenciales.")
         
-        # 5. Create ads (simplified - in production create all combinations)
-        logger.info("📌 Creando anuncios...")
+        # 5. Create ads combining copies and visuals
+        logger.info("📌 Creando y publicando anuncios...")
         ads_created = 0
-        # TODO: Implement full ad creation workflow combining copies and visuals
-        logger.info(f"   (Workflow completo de creación de ads pendiente de implementación)")
+        created_ads = []
+        
+        # Combine copies with visuals to create ads
+        for copy in all_copies[:10]:  # Limit to top 10 copies
+            # Find matching visual for this asset
+            matching_visuals = [v for v in all_visuals if v.asset_id == copy.asset_id]
+            visual = matching_visuals[0] if matching_visuals else None
+            
+            # Get original asset
+            asset_analysis = next((a for a in asset_analyses if a.asset_id == copy.asset_id), None)
+            if not asset_analysis:
+                continue
+            
+            # Create ads on each platform
+            # Meta Ads
+            if campaign_request.platforms.value in ["meta", "both"] and self.meta_service:
+                try:
+                    logger.info(f"   Creando ad en Meta para copy: {copy.creative_id[:8]}...")
+                    
+                    # 1. Upload image/video to Meta
+                    image_hash = None
+                    video_id = None
+                    asset_path = None
+                    
+                    # Find asset file path
+                    for asset in assets:
+                        if asset.asset_type.value == asset_analysis.asset_type.value:
+                            asset_path = asset.file_path or asset.file_url
+                            break
+                    
+                    if asset_path and asset_analysis.asset_type.value == "image":
+                        try:
+                            image_hash = self.meta_service.upload_image(asset_path)
+                        except Exception as e:
+                            logger.warning(f"   Error subiendo imagen a Meta: {e}")
+                            continue
+                    elif asset_path and asset_analysis.asset_type.value == "video":
+                        try:
+                            video_id = self.meta_service.upload_video(asset_path)
+                        except Exception as e:
+                            logger.warning(f"   Error subiendo video a Meta: {e}")
+                            continue
+                    
+                    if not image_hash and not video_id:
+                        logger.warning(f"   No se pudo subir asset a Meta, saltando...")
+                        continue
+                    
+                    # 2. Create ad set (one per campaign for simplicity)
+                    ad_set_name = f"{campaign_request.name} - Ad Set 1"
+                    ad_set = self.meta_service.create_ad_set(
+                        campaign_id=platform_campaign_ids["meta"],
+                        name=ad_set_name,
+                        daily_budget=campaign_request.budget_daily,
+                        optimization_goal=campaign_request.objective.value
+                    )
+                    
+                    # 3. Create creative
+                    creative_name = f"{campaign_request.name} - Creative {copy.creative_id[:8]}"
+                    page_id = os.getenv("META_PAGE_ID") or campaign_request.metadata.get("page_id")
+                    if not page_id:
+                        logger.warning("   META_PAGE_ID no configurado, saltando creación de creative")
+                        continue
+                    
+                    creative = self.meta_service.create_ad_creative(
+                        name=creative_name,
+                        creative=copy,
+                        image_hash=image_hash,
+                        video_id=video_id,
+                        page_id=page_id
+                    )
+                    
+                    # 4. Create ad
+                    ad_name = f"{campaign_request.name} - Ad {copy.creative_id[:8]}"
+                    ad = self.meta_service.create_ad(
+                        ad_set_id=ad_set["ad_set_id"],
+                        creative_id=creative["creative_id"],
+                        name=ad_name,
+                        status="PAUSED"  # Start paused, activate manually or via optimization
+                    )
+                    
+                    created_ads.append({
+                        "platform": "meta",
+                        "ad_id": ad["ad_id"],
+                        "creative_id": copy.creative_id,
+                        "status": "paused"
+                    })
+                    ads_created += 1
+                    logger.info(f"   ✅ Ad Meta creado: {ad['ad_id']}")
+                    
+                except Exception as e:
+                    logger.error(f"   Error creando ad en Meta: {e}")
+                    continue
+            
+            # Google Ads
+            if campaign_request.platforms.value in ["google", "both"] and self.google_service:
+                try:
+                    logger.info(f"   Creando ad en Google para copy: {copy.creative_id[:8]}...")
+                    
+                    # 1. Create ad group (one per campaign for simplicity)
+                    ad_group_name = f"{campaign_request.name} - Ad Group 1"
+                    ad_group = self.google_service.create_ad_group(
+                        campaign_resource_name=platform_campaign_ids["google"],
+                        name=ad_group_name,
+                        cpc_bid=1.0
+                    )
+                    
+                    # 2. Create responsive search ad
+                    final_url = copy.generation_params.get("link_url") or campaign_request.metadata.get("landing_page_url", "https://example.com")
+                    ad = self.google_service.create_responsive_search_ad(
+                        ad_group_resource_name=ad_group["ad_group_resource_name"],
+                        creative=copy,
+                        final_url=final_url
+                    )
+                    
+                    created_ads.append({
+                        "platform": "google",
+                        "ad_id": ad["ad_id"],
+                        "creative_id": copy.creative_id,
+                        "status": "paused"
+                    })
+                    ads_created += 1
+                    logger.info(f"   ✅ Ad Google creado: {ad['ad_id']}")
+                    
+                except Exception as e:
+                    logger.error(f"   Error creando ad en Google: {e}")
+                    continue
+        
+        logger.info(f"✅ {ads_created} anuncios creados en total")
         
         # Return campaign response
         logger.info(f"✅ Proceso de campaña completado: {campaign_id}")
