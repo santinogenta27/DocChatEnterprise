@@ -1,0 +1,29 @@
+# Customer Support Manager Requirements
+
+# Core LangChain
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-openai>=0.0.5
+langgraph>=0.0.20
+
+# RAG Components
+faiss-cpu>=1.7.4
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+
+# Document Loaders
+pypdf>=3.17.0
+
+# LLM Providers
+openai>=1.0.0
+# xai (Grok) - install separately if available
+
+# UI
+gradio>=4.0.0
+
+# API
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Utilities
+python-dotenv>=1.0.0

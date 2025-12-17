@@ -394,6 +394,17 @@ enterprise_ads_manager = EnterpriseAdsManagerMode(
 from docchat.ads_worker import AdsWorkerMode
 ads_worker = AdsWorkerMode(config, provider="openai")
 
+# Customer Support Manager
+try:
+    from docchat.customer_support import CustomerSupportMode
+    customer_support = CustomerSupportMode(config, provider="grok")
+    CUSTOMER_SUPPORT_AVAILABLE = True
+    print("✅ Customer Support Manager cargado correctamente")
+except Exception as e:
+    CUSTOMER_SUPPORT_AVAILABLE = False
+    print(f"⚠️ Customer Support Manager no disponible: {e}")
+    customer_support = None
+
 # Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI
 try:
     from docchat.enterprise_sales_manager_mode import EnterpriseSalesManagerMode
@@ -38891,6 +38902,7 @@ if __name__ == "__main__":
         try:
             if hasattr(demo, 'app'):
                 setup_ads_worker_api_endpoints(demo.app)
+                setup_customer_support_api_endpoints(demo.app)
             else:
                 print("⚠️ demo.app no disponible, endpoints de ADS WORKER se configurarán después del launch")
         except Exception as e:
