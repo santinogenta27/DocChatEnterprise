@@ -1,24 +1,48 @@
 """
 Asset Processor Service
 Analyzes images, videos, and text using AI vision and audio models
+Production-ready with error handling and logging
 """
 import os
 import uuid
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-import cv2
-import numpy as np
-from PIL import Image
-import whisper
-import librosa
-from datetime import datetime
+import logging
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
+try:
+    import whisper
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
 
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-    print("⚠️ OpenAI no disponible. Instala con: pip install openai")
+
+from ..utils.logging import setup_logger
+from ..utils.retry import retry_with_backoff
+
+logger = setup_logger("ads_worker.asset_processor")
 
 try:
     import torch
@@ -35,18 +59,29 @@ class AssetProcessor:
     def __init__(self, openai_api_key: Optional[str] = None, storage_path: str = "./assets"):
         self.openai_client = None
         if OPENAI_AVAILABLE and openai_api_key:
-            self.openai_client = OpenAI(api_key=openai_api_key)
+            try:
+                self.openai_client = OpenAI(api_key=openai_api_key)
+                logger.info("✅ OpenAI client inicializado")
+            except Exception as e:
+                logger.warning(f"⚠️ Error inicializando OpenAI client: {e}")
+        else:
+            logger.warning("⚠️ OpenAI no disponible o API key no proporcionada")
         
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📁 Storage path: {self.storage_path}")
         
         # Initialize Whisper for audio transcription
         self.whisper_model = None
-        if TORCH_AVAILABLE:
+        if WHISPER_AVAILABLE:
             try:
+                logger.info("🔄 Cargando modelo Whisper...")
                 self.whisper_model = whisper.load_model("base")
+                logger.info("✅ Modelo Whisper cargado")
             except Exception as e:
-                print(f"⚠️ No se pudo cargar modelo Whisper: {e}")
+                logger.warning(f"⚠️ No se pudo cargar modelo Whisper: {e}")
+        else:
+            logger.warning("⚠️ Whisper no disponible")
     
     def process_asset(
         self,
@@ -80,6 +115,7 @@ class AssetProcessor:
         else:
             raise ValueError(f"Unsupported asset type: {asset_type}")
     
+    @retry_with_backoff(max_retries=2, exceptions=(Exception,))
     def _analyze_image(
         self,
         asset_id: str,
@@ -88,6 +124,8 @@ class AssetProcessor:
         metadata: Optional[Dict[str, Any]]
     ) -> AssetAnalysis:
         """Analyze image using vision models"""
+        logger.info(f"🖼️ Analizando imagen: {asset_id}")
+        
         # Load image
         if file_path:
             img_path = file_path
@@ -97,10 +135,18 @@ class AssetProcessor:
         else:
             raise ValueError("Either file_path or file_url must be provided")
         
+        if not PIL_AVAILABLE:
+            raise ImportError("PIL/Pillow is required for image processing")
+        
         # Get image info
-        img = Image.open(img_path)
-        width, height = img.size
-        file_size = os.path.getsize(img_path)
+        try:
+            img = Image.open(img_path)
+            width, height = img.size
+            file_size = os.path.getsize(img_path) if os.path.exists(img_path) else 0
+            logger.debug(f"Imagen: {width}x{height}, {file_size} bytes")
+        except Exception as e:
+            logger.error(f"Error abriendo imagen: {e}")
+            raise
         
         # Analyze with OpenAI Vision if available
         labels = []
@@ -160,10 +206,12 @@ Return JSON format:
                         dominant_colors = analysis.get("colors", [])
                         style_tags = analysis.get("style", [])
                         emotion_tags = analysis.get("emotion", [])
+                        logger.info(f"✅ Análisis completado: {len(labels)} labels, {len(objects_detected)} objetos")
             except Exception as e:
-                print(f"⚠️ Error en análisis con OpenAI Vision: {e}")
+                logger.warning(f"⚠️ Error en análisis con OpenAI Vision: {e}")
                 # Fallback to basic analysis
                 labels = self._basic_image_analysis(img_path)
+                logger.info("Usando análisis básico como fallback")
         
         # Extract key frames (for images, just the image itself)
         key_frames = [img_path]
@@ -181,6 +229,7 @@ Return JSON format:
             format=Path(img_path).suffix[1:].upper()
         )
     
+    @retry_with_backoff(max_retries=2, exceptions=(Exception,))
     def _analyze_video(
         self,
         asset_id: str,
@@ -189,6 +238,8 @@ Return JSON format:
         metadata: Optional[Dict[str, Any]]
     ) -> AssetAnalysis:
         """Analyze video using vision and audio models"""
+        logger.info(f"🎥 Analizando video: {asset_id}")
+        
         # Load video
         if file_path:
             video_path = file_path
@@ -197,8 +248,17 @@ Return JSON format:
         else:
             raise ValueError("Either file_path or file_url must be provided")
         
+        if not CV2_AVAILABLE:
+            raise ImportError("OpenCV is required for video processing")
+        
         # Get video info using OpenCV
-        cap = cv2.VideoCapture(video_path)
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise ValueError(f"No se pudo abrir el video: {video_path}")
+        except Exception as e:
+            logger.error(f"Error abriendo video: {e}")
+            raise
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -213,10 +273,12 @@ Return JSON format:
         transcript = None
         if self.whisper_model:
             try:
+                logger.info("🎤 Transcribiendo audio del video...")
                 result = self.whisper_model.transcribe(video_path)
                 transcript = result["text"]
+                logger.info(f"✅ Transcripción completada: {len(transcript)} caracteres")
             except Exception as e:
-                print(f"⚠️ Error en transcripción de audio: {e}")
+                logger.warning(f"⚠️ Error en transcripción de audio: {e}")
         
         # Analyze key frames (use first frame for now)
         frame_analysis = None
@@ -302,7 +364,18 @@ Return JSON format:
     
     def _extract_key_frames(self, video_path: str, asset_id: str, num_frames: int = 5) -> List[str]:
         """Extract key frames from video"""
-        cap = cv2.VideoCapture(video_path)
+        if not CV2_AVAILABLE:
+            logger.warning("OpenCV no disponible, no se pueden extraer frames")
+            return []
+        
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                logger.error(f"No se pudo abrir video para extraer frames: {video_path}")
+                return []
+        except Exception as e:
+            logger.error(f"Error extrayendo frames: {e}")
+            return []
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         
@@ -333,29 +406,37 @@ Return JSON format:
     
     def _basic_image_analysis(self, img_path: str) -> List[str]:
         """Basic image analysis using OpenCV"""
-        img = cv2.imread(img_path)
-        if img is None:
+        if not CV2_AVAILABLE or not NUMPY_AVAILABLE:
             return []
         
-        # Basic color analysis
-        labels = []
-        
-        # Convert to HSV for color analysis
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        
-        # Detect dominant colors
-        if np.mean(hsv[:, :, 2]) > 200:
-            labels.append("bright")
-        elif np.mean(hsv[:, :, 2]) < 50:
-            labels.append("dark")
-        
-        # Detect if image has high contrast
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        contrast = gray.std()
-        if contrast > 50:
-            labels.append("high-contrast")
-        
-        return labels
+        try:
+            img = cv2.imread(img_path)
+            if img is None:
+                logger.warning(f"No se pudo leer imagen: {img_path}")
+                return []
+            
+            # Basic color analysis
+            labels = []
+            
+            # Convert to HSV for color analysis
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            
+            # Detect dominant colors
+            if np.mean(hsv[:, :, 2]) > 200:
+                labels.append("bright")
+            elif np.mean(hsv[:, :, 2]) < 50:
+                labels.append("dark")
+            
+            # Detect if image has high contrast
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            contrast = gray.std()
+            if contrast > 50:
+                labels.append("high-contrast")
+            
+            return labels
+        except Exception as e:
+            logger.warning(f"Error en análisis básico de imagen: {e}")
+            return []
     
     def _extract_keywords(self, text: str) -> List[str]:
         """Extract keywords from text (simplified)"""
@@ -414,9 +495,17 @@ Return JSON format:
     
     def _download_file(self, url: str, asset_id: str, file_type: str) -> str:
         """Download file from URL (simplified)"""
-        import requests
-        response = requests.get(url)
-        ext = url.split('.')[-1] if '.' in url else file_type
-        file_path = self.storage_path / f"{asset_id}.{ext}"
-        file_path.write_bytes(response.content)
-        return str(file_path)
+        try:
+            import requests
+            logger.info(f"⬇️ Descargando archivo desde URL: {url}")
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            
+            ext = url.split('.')[-1].split('?')[0] if '.' in url else file_type
+            file_path = self.storage_path / f"{asset_id}.{ext}"
+            file_path.write_bytes(response.content)
+            logger.info(f"✅ Archivo descargado: {file_path}")
+            return str(file_path)
+        except Exception as e:
+            logger.error(f"Error descargando archivo: {e}")
+            raise

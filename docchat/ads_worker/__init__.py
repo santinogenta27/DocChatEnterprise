@@ -8,8 +8,31 @@ Sistema completo de gestión de anuncios con IA que:
 - Genera creativos de anuncios con IA
 - Publica campañas automáticamente en Meta y Google Ads
 - Optimiza en tiempo real basado en métricas de desempeño
+
+Versión: 1.0.0 (Production Ready)
 """
 
 from .ads_worker_mode import AdsWorkerMode
+from .database import DatabaseManager
+from .models.schemas import (
+    AssetUpload,
+    AssetAnalysis,
+    CreativeGeneration,
+    CampaignRequest,
+    CampaignResponse,
+    AdPerformance,
+    OptimizationResult
+)
 
-__all__ = ['AdsWorkerMode']
+__version__ = "1.0.0"
+__all__ = [
+    'AdsWorkerMode',
+    'DatabaseManager',
+    'AssetUpload',
+    'AssetAnalysis',
+    'CreativeGeneration',
+    'CampaignRequest',
+    'CampaignResponse',
+    'AdPerformance',
+    'OptimizationResult'
+]

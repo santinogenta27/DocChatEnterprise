@@ -1,19 +1,27 @@
 """
 ADS WORKER Mode
 Main integration mode for the ADS WORKER system
+Production-ready with database integration and error handling
 """
 from typing import Dict, Any, Optional, List
 import os
 from pathlib import Path
+import logging
 
 from .agents.ads_agent import AdsWorkerAgent
 from .api.routes import router, agent_instance
+from .database import DatabaseManager
 from .models.schemas import (
     AssetUpload,
     CampaignRequest,
     CampaignResponse,
-    OptimizationResult
+    OptimizationResult,
+    AssetAnalysis
 )
+from .utils.logging import setup_logger
+from .utils.queue import SimpleTaskQueue
+
+logger = setup_logger("ads_worker.mode")
 
 
 class AdsWorkerMode:
@@ -56,6 +64,15 @@ class AdsWorkerMode:
         storage_path = Path(getattr(config, "memory_dir", "./data")) / "ads_worker_assets"
         storage_path.mkdir(parents=True, exist_ok=True)
         
+        # Initialize database
+        memory_dir = getattr(config, "memory_dir", "./data")
+        db_url = os.getenv("ADS_WORKER_DB_URL")  # Optional: PostgreSQL URL
+        self.db = DatabaseManager(db_url=db_url, memory_dir=memory_dir)
+        
+        # Initialize task queue for async processing
+        max_workers = int(os.getenv("ADS_WORKER_MAX_WORKERS", "4"))
+        self.task_queue = SimpleTaskQueue(max_workers=max_workers)
+        
         # Initialize agent
         try:
             self.agent = AdsWorkerAgent(
@@ -73,27 +90,30 @@ class AdsWorkerMode:
             global agent_instance
             agent_instance = self.agent
             
-            print("✅ ADS WORKER Mode inicializado")
-            print(f"   - Meta Ads: {'✅' if self.agent.meta_service else '❌'}")
-            print(f"   - Google Ads: {'✅' if self.agent.google_service else '❌'}")
-            print(f"   - Asset Processor: ✅")
-            print(f"   - Copy Generator: ✅")
-            print(f"   - Visual Generator: ✅")
-            print(f"   - Optimizer: ✅")
+            logger.info("✅ ADS WORKER Mode inicializado")
+            logger.info(f"   - Meta Ads: {'✅' if self.agent.meta_service else '❌'}")
+            logger.info(f"   - Google Ads: {'✅' if self.agent.google_service else '❌'}")
+            logger.info(f"   - Asset Processor: ✅")
+            logger.info(f"   - Copy Generator: ✅")
+            logger.info(f"   - Visual Generator: ✅")
+            logger.info(f"   - Optimizer: ✅")
+            logger.info(f"   - Database: ✅")
             
         except Exception as e:
-            print(f"⚠️ Error inicializando ADS WORKER Mode: {e}")
+            logger.error(f"⚠️ Error inicializando ADS WORKER Mode: {e}")
             self.agent = None
     
     def process_assets(
         self,
-        assets: List[AssetUpload]
+        assets: List[AssetUpload],
+        user_id: str = "default"
     ) -> List[Dict[str, Any]]:
         """
         Process user-uploaded assets
         
         Args:
             assets: List of assets to process
+            user_id: User ID for tracking
             
         Returns:
             List of analysis results
@@ -101,28 +121,53 @@ class AdsWorkerMode:
         if not self.agent:
             raise ValueError("ADS WORKER agent not initialized")
         
+        logger.info(f"📦 Procesando {len(assets)} assets para usuario: {user_id}")
+        
         analyses = []
         for asset in assets:
-            analysis = self.agent.asset_processor.process_asset(
-                asset.asset_type,
-                asset.file_path,
-                asset.file_url,
-                asset.text_content,
-                asset.metadata
-            )
-            analyses.append(analysis.model_dump())
+            try:
+                analysis = self.agent.asset_processor.process_asset(
+                    asset.asset_type,
+                    asset.file_path,
+                    asset.file_url,
+                    asset.text_content,
+                    asset.metadata
+                )
+                
+                # Save to database
+                self.db.save_asset(
+                    asset_id=analysis.asset_id,
+                    user_id=user_id,
+                    asset_type=analysis.asset_type.value,
+                    file_path=asset.file_path,
+                    file_url=asset.file_url,
+                    text_content=asset.text_content,
+                    analysis_result=analysis.model_dump(),
+                    metadata=asset.metadata
+                )
+                
+                analyses.append(analysis.model_dump())
+                logger.info(f"✅ Asset procesado: {analysis.asset_id}")
+                
+            except Exception as e:
+                logger.error(f"Error procesando asset: {e}")
+                # Continue with next asset
+                continue
         
+        logger.info(f"✅ {len(analyses)} assets procesados exitosamente")
         return analyses
     
     def launch_campaign(
         self,
-        campaign_request: CampaignRequest
+        campaign_request: CampaignRequest,
+        user_id: str = "default"
     ) -> CampaignResponse:
         """
         Launch a new campaign
         
         Args:
             campaign_request: Campaign creation request
+            user_id: User ID for tracking
             
         Returns:
             Campaign response with details
@@ -130,25 +175,56 @@ class AdsWorkerMode:
         if not self.agent:
             raise ValueError("ADS WORKER agent not initialized")
         
-        # Get assets from database using asset_ids
-        # For now, create empty list (in production fetch from DB)
-        assets = []
+        logger.info(f"🚀 Lanzando campaña: {campaign_request.name} para usuario: {user_id}")
         
+        # Get assets from database using asset_ids
+        assets = []
+        for asset_id in campaign_request.asset_ids:
+            asset_data = self.db.get_asset(asset_id)
+            if asset_data:
+                from .models.schemas import AssetType
+                asset = AssetUpload(
+                    asset_type=AssetType(asset_data["asset_type"]),
+                    file_path=asset_data.get("file_path"),
+                    file_url=asset_data.get("file_url"),
+                    text_content=asset_data.get("text_content"),
+                    metadata=asset_data.get("metadata", {})
+                )
+                assets.append(asset)
+            else:
+                logger.warning(f"Asset no encontrado: {asset_id}")
+        
+        if not assets:
+            raise ValueError(f"No se encontraron assets para los IDs proporcionados: {campaign_request.asset_ids}")
+        
+        # Process and launch campaign
         campaign = self.agent.process_and_launch_campaign(assets, campaign_request)
+        
+        # Save campaign to database
+        self.db.save_campaign(
+            campaign_id=campaign.campaign_id,
+            user_id=user_id,
+            name=campaign.name,
+            objective=campaign_request.objective.value,
+            budget_daily=campaign_request.budget_daily,
+            platforms=campaign_request.platforms.value,
+            platform_campaign_ids=campaign.platform_campaign_ids,
+            metadata=campaign_request.metadata
+        )
+        
+        logger.info(f"✅ Campaña lanzada: {campaign.campaign_id}")
         
         return campaign
     
     def optimize_campaign(
         self,
-        campaign_id: str,
-        platform_campaign_ids: Dict[str, str]
+        campaign_id: str
     ) -> OptimizationResult:
         """
         Optimize an existing campaign
         
         Args:
             campaign_id: Internal campaign ID
-            platform_campaign_ids: Platform campaign IDs
             
         Returns:
             Optimization result
@@ -156,8 +232,44 @@ class AdsWorkerMode:
         if not self.agent:
             raise ValueError("ADS WORKER agent not initialized")
         
-        return self.agent.optimize_existing_campaign(campaign_id, platform_campaign_ids)
+        logger.info(f"🔧 Optimizando campaña: {campaign_id}")
+        
+        # Get campaign from database
+        campaign_data = self.db.get_campaign(campaign_id)
+        if not campaign_data:
+            raise ValueError(f"Campaña no encontrada: {campaign_id}")
+        
+        platform_campaign_ids = campaign_data.get("platform_campaign_ids", {})
+        
+        # Run optimization
+        result = self.agent.optimize_existing_campaign(campaign_id, platform_campaign_ids)
+        
+        logger.info(f"✅ Optimización completada: {result.optimization_id}")
+        logger.info(f"   - Ads pausados: {len(result.ads_paused)}")
+        logger.info(f"   - Ads escalados: {len(result.ads_scaled)}")
+        
+        return result
+    
+    def get_campaign_metrics(
+        self,
+        campaign_id: str,
+        hours: int = 24
+    ) -> List[Dict[str, Any]]:
+        """
+        Get campaign performance metrics
+        
+        Args:
+            campaign_id: Campaign ID
+            hours: Number of hours to look back
+            
+        Returns:
+            List of metrics
+        """
+        return self.db.get_campaign_metrics(campaign_id, hours)
     
     def get_api_router(self):
         """Get FastAPI router for integration"""
+        # Set global mode instance for API
+        global mode_instance
+        mode_instance = self
         return router

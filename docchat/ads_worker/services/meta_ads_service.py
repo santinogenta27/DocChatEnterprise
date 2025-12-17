@@ -1,9 +1,11 @@
 """
 Meta Ads Service
 Integration with Meta Marketing API (Facebook/Instagram)
+Production-ready with retry logic and error handling
 """
 from typing import Dict, Any, List, Optional
 import os
+import logging
 from datetime import datetime
 
 try:
@@ -19,7 +21,11 @@ try:
     META_AVAILABLE = True
 except ImportError:
     META_AVAILABLE = False
-    print("⚠️ facebook-business no disponible. Instala con: pip install facebook-business")
+
+from ..utils.logging import setup_logger
+from ..utils.retry import retry_with_backoff
+
+logger = setup_logger("ads_worker.meta_ads")
 
 from ..models.schemas import CreativeGeneration, CampaignRequest
 
@@ -43,9 +49,15 @@ class MetaAdsService:
         self.ad_account_id = ad_account_id
         
         # Initialize API
-        FacebookAdsApi.init(access_token=access_token, app_id=app_id, app_secret=app_secret)
-        self.account = AdAccount(f'act_{ad_account_id}')
+        try:
+            FacebookAdsApi.init(access_token=access_token, app_id=app_id, app_secret=app_secret)
+            self.account = AdAccount(f'act_{ad_account_id}')
+            logger.info(f"✅ Meta Ads Service inicializado para cuenta: {ad_account_id}")
+        except Exception as e:
+            logger.error(f"Error inicializando Meta Ads API: {e}")
+            raise
     
+    @retry_with_backoff(max_retries=3, exceptions=(FacebookRequestError,))
     def create_campaign(
         self,
         name: str,
@@ -63,6 +75,8 @@ class MetaAdsService:
         Returns:
             Campaign data with ID
         """
+        logger.info(f"📢 Creando campaña Meta: {name} ({objective})")
+        
         try:
             campaign = self.account.create_campaign(
                 params={
@@ -73,13 +87,17 @@ class MetaAdsService:
                 }
             )
             
+            campaign_id = campaign.get_id()
+            logger.info(f"✅ Campaña Meta creada: {campaign_id}")
+            
             return {
-                "campaign_id": campaign.get_id(),
+                "campaign_id": campaign_id,
                 "name": name,
                 "objective": objective,
                 "status": status
             }
         except FacebookRequestError as e:
+            logger.error(f"Error creando campaña Meta: {e}")
             raise Exception(f"Error creating Meta campaign: {e}")
     
     def create_ad_set(
@@ -134,6 +152,7 @@ class MetaAdsService:
         except FacebookRequestError as e:
             raise Exception(f"Error creating Meta ad set: {e}")
     
+    @retry_with_backoff(max_retries=3, exceptions=(FacebookRequestError,))
     def upload_image(self, image_path: str) -> str:
         """
         Upload image to Meta
@@ -144,13 +163,22 @@ class MetaAdsService:
         Returns:
             Image hash (used to reference in creatives)
         """
+        logger.info(f"📤 Subiendo imagen a Meta: {image_path}")
+        
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+        
         try:
             image = AdImage(parent_id=self.ad_account_id)
             image[AdImage.Field.filename] = image_path
             image.remote_create()
             
-            return image[AdImage.Field.hash]
+            image_hash = image[AdImage.Field.hash]
+            logger.info(f"✅ Imagen subida a Meta, hash: {image_hash}")
+            
+            return image_hash
         except FacebookRequestError as e:
+            logger.error(f"Error subiendo imagen a Meta: {e}")
             raise Exception(f"Error uploading image to Meta: {e}")
     
     def upload_video(self, video_path: str) -> str:

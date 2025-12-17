@@ -1,16 +1,23 @@
 """
 Copy Generator Service
 Generates multiple variations of ad copy using AI
+Production-ready with rate limiting and error handling
 """
 from typing import List, Dict, Any, Optional
 import uuid
+import time
+import logging
 
 try:
-    from openai import OpenAI
+    from openai import OpenAI, RateLimitError, APIError
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
-    print("⚠️ OpenAI no disponible. Instala con: pip install openai")
+
+from ..utils.logging import setup_logger
+from ..utils.retry import retry_with_backoff
+
+logger = setup_logger("ads_worker.copy_generator")
 
 from ..models.schemas import AssetAnalysis, CreativeGeneration
 
@@ -19,11 +26,22 @@ class CopyGenerator:
     """Generates multiple ad copy variations using AI"""
     
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o"):
-        self.openai_client = None
-        if OPENAI_AVAILABLE and openai_api_key:
+        if not OPENAI_AVAILABLE:
+            raise ImportError("OpenAI package is required. Install with: pip install openai")
+        
+        if not openai_api_key:
+            raise ValueError("openai_api_key is required")
+        
+        try:
             self.openai_client = OpenAI(api_key=openai_api_key)
+            logger.info(f"✅ Copy Generator inicializado con modelo: {model}")
+        except Exception as e:
+            logger.error(f"Error inicializando OpenAI client: {e}")
+            raise
         
         self.model = model
+        self.last_request_time = 0
+        self.min_request_interval = 0.1  # Rate limiting: 10 requests/second max
     
     def generate_copies(
         self,
@@ -112,6 +130,7 @@ class CopyGenerator:
         
         return "\n".join(context_parts)
     
+    @retry_with_backoff(max_retries=3, exceptions=(RateLimitError, APIError))
     def _generate_batch(
         self,
         context: str,
@@ -121,8 +140,17 @@ class CopyGenerator:
         target_audience: Optional[str]
     ) -> List[CreativeGeneration]:
         """Generate a batch of copy variations"""
+        # Rate limiting
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            time.sleep(self.min_request_interval - time_since_last)
+        self.last_request_time = time.time()
+        
         # Build prompt
         prompt = self._build_prompt(context, count, tone, cta_style, target_audience)
+        
+        logger.info(f"📝 Generando {count} variaciones de copy...")
         
         try:
             response = self.openai_client.chat.completions.create(
@@ -131,7 +159,8 @@ class CopyGenerator:
                     {
                         "role": "system",
                         "content": """You are an expert copywriter specializing in high-converting ad copy. 
-Generate compelling, persuasive ad copy that drives action. Each variation should be unique and optimized for conversions."""
+Generate compelling, persuasive ad copy that drives action. Each variation should be unique and optimized for conversions.
+Always return valid JSON format."""
                     },
                     {
                         "role": "user",
@@ -139,17 +168,35 @@ Generate compelling, persuasive ad copy that drives action. Each variation shoul
                     }
                 ],
                 temperature=0.9,  # Higher temperature for more variation
-                max_tokens=500
+                max_tokens=1000  # Increased for better responses
             )
+            
+            logger.info(f"✅ Copy generado exitosamente")
             
             # Parse response
             content = response.choices[0].message.content
             copies = self._parse_copy_response(content, count)
             
-            return copies
+            if len(copies) < count:
+                logger.warning(f"Solo se generaron {len(copies)}/{count} copies, generando fallback para el resto")
+                fallback_copies = self._generate_fallback_copies(context, count - len(copies))
+                copies.extend(fallback_copies)
             
+            logger.info(f"✅ {len(copies)} variaciones de copy generadas")
+            return copies[:count]  # Ensure we don't exceed requested count
+            
+        except RateLimitError as e:
+            logger.error(f"Rate limit excedido: {e}")
+            # Wait and retry
+            time.sleep(60)
+            raise
+        except APIError as e:
+            logger.error(f"Error de API de OpenAI: {e}")
+            # Fallback: generate simple variations
+            logger.info("Usando fallback para generación de copy")
+            return self._generate_fallback_copies(context, count)
         except Exception as e:
-            print(f"⚠️ Error generando copy: {e}")
+            logger.error(f"Error generando copy: {e}")
             # Fallback: generate simple variations
             return self._generate_fallback_copies(context, count)
     

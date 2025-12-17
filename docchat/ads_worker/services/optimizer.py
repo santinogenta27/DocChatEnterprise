@@ -1,17 +1,22 @@
 """
 Campaign Optimizer Service
 Implements Multi-Armed Bandit and optimization algorithms
+Production-ready with robust error handling
 """
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
 import numpy as np
+import logging
 
 try:
     from sklearn.ensemble import RandomForestRegressor
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
-    print("⚠️ scikit-learn no disponible. Instala con: pip install scikit-learn")
+
+from ..utils.logging import setup_logger
+
+logger = setup_logger("ads_worker.optimizer")
 
 from ..models.schemas import AdPerformance, OptimizationResult
 
@@ -52,6 +57,7 @@ class CampaignOptimizer:
         Returns:
             List of AdPerformance objects
         """
+        logger.info(f"📊 Obteniendo métricas de plataformas...")
         performances = []
         
         # Fetch from Meta
@@ -77,11 +83,12 @@ class CampaignOptimizer:
                             status="active",
                             created_at=datetime.now(),
                             updated_at=datetime.now(),
-                            last_performance_update=datetime.now()
-                        )
-                        performances.append(performance)
-                except Exception as e:
-                    print(f"⚠️ Error fetching Meta metrics for {ad_id}: {e}")
+                    last_performance_update=datetime.now()
+                )
+                performances.append(performance)
+                logger.debug(f"   ✅ Métricas Meta obtenidas para ad: {ad_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ Error fetching Meta metrics for {ad_id}: {e}")
         
         # Fetch from Google
         if google_service and "google" in campaign_ids:
@@ -105,12 +112,14 @@ class CampaignOptimizer:
                             status="active",
                             created_at=datetime.now(),
                             updated_at=datetime.now(),
-                            last_performance_update=datetime.now()
-                        )
-                        performances.append(performance)
-                except Exception as e:
-                    print(f"⚠️ Error fetching Google metrics for {ad_id}: {e}")
+                    last_performance_update=datetime.now()
+                )
+                performances.append(performance)
+                logger.debug(f"   ✅ Métricas Google obtenidas para ad: {ad_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ Error fetching Google metrics for {ad_id}: {e}")
         
+        logger.info(f"✅ {len(performances)} métricas obtenidas en total")
         return performances
     
     def run_bandit_algorithm(
@@ -129,7 +138,10 @@ class CampaignOptimizer:
             List of (ad_id, score) tuples sorted by performance
         """
         if not performances:
+            logger.warning("No hay performances para optimizar")
             return []
+        
+        logger.info(f"🎰 Ejecutando algoritmo Multi-Armed Bandit (objetivo: {optimization_goal})")
         
         # Calculate scores based on optimization goal
         scores = []
@@ -159,6 +171,10 @@ class CampaignOptimizer:
         
         # Sort by score (descending)
         scores.sort(key=lambda x: x[1], reverse=True)
+        
+        logger.info(f"✅ Ranking generado: {len(scores)} ads ordenados")
+        if scores:
+            logger.info(f"   Top ad: {scores[0][0]} (score: {scores[0][1]:.4f})")
         
         return scores
     
@@ -276,6 +292,12 @@ class CampaignOptimizer:
         optimization_id = f"opt_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         campaign_id = performances[0].campaign_id if performances else ""
         
+        logger.info(f"🔧 Iniciando optimización: {optimization_id}")
+        logger.info(f"   - Campaña: {campaign_id}")
+        logger.info(f"   - Ads: {len(performances)}")
+        logger.info(f"   - Presupuesto total: ${total_budget}")
+        logger.info(f"   - Objetivo: {optimization_goal}")
+        
         # Run bandit algorithm
         ranking = self.run_bandit_algorithm(performances, optimization_goal)
         
@@ -304,6 +326,11 @@ class CampaignOptimizer:
             recommendations.append(f"Scale budget for top {len(top_ads)} performing ads")
         if budget_reallocation:
             recommendations.append("Reallocate budget based on performance")
+        
+        logger.info(f"✅ Optimización completada: {optimization_id}")
+        logger.info(f"   - Ads a pausar: {len(ads_to_pause)}")
+        logger.info(f"   - Ads a escalar: {len(top_ads)}")
+        logger.info(f"   - Recomendaciones: {len(recommendations)}")
         
         return OptimizationResult(
             optimization_id=optimization_id,

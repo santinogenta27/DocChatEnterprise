@@ -1,11 +1,13 @@
 """
 Google Ads Service
 Integration with Google Ads API
+Production-ready with retry logic and error handling
 """
 from typing import Dict, Any, List, Optional
 import os
 from datetime import datetime, timedelta
 import uuid
+import logging
 
 try:
     from google.ads.googleads.client import GoogleAdsClient
@@ -20,7 +22,11 @@ try:
     GOOGLE_ADS_AVAILABLE = True
 except ImportError:
     GOOGLE_ADS_AVAILABLE = False
-    print("⚠️ google-ads no disponible. Instala con: pip install google-ads")
+
+from ..utils.logging import setup_logger
+from ..utils.retry import retry_with_backoff
+
+logger = setup_logger("ads_worker.google_ads")
 
 from ..models.schemas import CreativeGeneration, CampaignRequest
 
@@ -35,15 +41,23 @@ class GoogleAdsService:
         self.customer_id = customer_id
         
         # Initialize client
-        if config_path and os.path.exists(config_path):
-            self.client = GoogleAdsClient.load_from_storage(config_path)
-        else:
-            # Try default location
-            try:
-                self.client = GoogleAdsClient.load_from_storage()
-            except:
-                raise ValueError("Google Ads configuration file not found. Create google-ads.yaml")
+        try:
+            if config_path and os.path.exists(config_path):
+                self.client = GoogleAdsClient.load_from_storage(config_path)
+                logger.info(f"✅ Google Ads Service inicializado desde: {config_path}")
+            else:
+                # Try default location
+                try:
+                    self.client = GoogleAdsClient.load_from_storage()
+                    logger.info("✅ Google Ads Service inicializado desde ubicación por defecto")
+                except Exception as e:
+                    logger.error(f"Error cargando configuración de Google Ads: {e}")
+                    raise ValueError("Google Ads configuration file not found. Create google-ads.yaml")
+        except Exception as e:
+            logger.error(f"Error inicializando Google Ads client: {e}")
+            raise
     
+    @retry_with_backoff(max_retries=3, exceptions=(GoogleAdsException,))
     def create_campaign(
         self,
         name: str,
@@ -63,6 +77,8 @@ class GoogleAdsService:
         Returns:
             Campaign data with resource name
         """
+        logger.info(f"📢 Creando campaña Google Ads: {name} (${daily_budget}/día)")
+        
         try:
             campaign_budget_service = self.client.get_service("CampaignBudgetService")
             campaign_service = self.client.get_service("CampaignService")
@@ -114,15 +130,19 @@ class GoogleAdsService:
             )
             
             campaign_resource_name = campaign_response.results[0].resource_name
+            campaign_id = campaign_resource_name.split('/')[-1]
+            
+            logger.info(f"✅ Campaña Google Ads creada: {campaign_id}")
             
             return {
                 "campaign_resource_name": campaign_resource_name,
-                "campaign_id": campaign_resource_name.split('/')[-1],
+                "campaign_id": campaign_id,
                 "name": name,
                 "budget_resource_name": budget_resource_name
             }
             
         except GoogleAdsException as e:
+            logger.error(f"Error creando campaña Google Ads: {e}")
             raise Exception(f"Error creating Google Ads campaign: {e}")
     
     def create_ad_group(

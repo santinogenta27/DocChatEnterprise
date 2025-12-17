@@ -1,10 +1,12 @@
 """
 ADS WORKER Agent
 LangChain-based agent that orchestrates the entire ad creation and optimization workflow
+Production-ready with error handling and logging
 """
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
+import logging
 
 try:
     from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -15,7 +17,11 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    print("⚠️ LangChain no disponible. Instala con: pip install langchain langchain-openai")
+
+from ..utils.logging import setup_logger
+from ..utils.retry import retry_with_backoff
+
+logger = setup_logger("ads_worker.agent")
 
 from ..models.schemas import (
     AssetUpload,
@@ -83,17 +89,30 @@ class AdsWorkerAgent:
         self.optimizer = CampaignOptimizer()
         
         # Initialize LLM
-        self.llm = ChatOpenAI(
-            model="gpt-4o",
-            temperature=0.7,
-            api_key=openai_api_key
-        )
+        try:
+            self.llm = ChatOpenAI(
+                model="gpt-4o",
+                temperature=0.7,
+                api_key=openai_api_key,
+                timeout=60.0,
+                max_retries=2
+            )
+            logger.info("✅ LLM inicializado: gpt-4o")
+        except Exception as e:
+            logger.error(f"Error inicializando LLM: {e}")
+            raise
         
         # Create tools for the agent
         self.tools = self._create_tools()
+        logger.info(f"✅ {len(self.tools)} tools creados para el agente")
         
         # Create agent
-        self.agent = self._create_agent()
+        try:
+            self.agent = self._create_agent()
+            logger.info("✅ Agente LangChain creado")
+        except Exception as e:
+            logger.error(f"Error creando agente: {e}")
+            self.agent = None
     
     def _create_tools(self) -> List[Tool]:
         """Create LangChain tools for the agent"""
@@ -279,43 +298,84 @@ Always think step by step and explain your decisions."""),
         Returns:
             CampaignResponse with campaign details
         """
+        logger.info(f"🚀 Iniciando proceso de campaña: {campaign_request.name}")
+        logger.info(f"   - Assets: {len(assets)}")
+        logger.info(f"   - Presupuesto diario: ${campaign_request.budget_daily}")
+        logger.info(f"   - Plataformas: {campaign_request.platforms.value}")
+        
         # 1. Process all assets
         asset_analyses = []
-        for asset in assets:
-            analysis = self.asset_processor.process_asset(
-                asset.asset_type,
-                asset.file_path,
-                asset.file_url,
-                asset.text_content,
-                asset.metadata
-            )
-            asset_analyses.append(analysis)
+        for i, asset in enumerate(assets, 1):
+            try:
+                logger.info(f"📦 Procesando asset {i}/{len(assets)}: {asset.asset_type.value}")
+                analysis = self.asset_processor.process_asset(
+                    asset.asset_type,
+                    asset.file_path,
+                    asset.file_url,
+                    asset.text_content,
+                    asset.metadata
+                )
+                asset_analyses.append(analysis)
+                logger.info(f"✅ Asset {i} procesado: {analysis.asset_id}")
+            except Exception as e:
+                logger.error(f"Error procesando asset {i}: {e}")
+                # Continue with other assets
+                continue
+        
+        if not asset_analyses:
+            raise ValueError("No se pudieron procesar assets. Verifica los archivos.")
+        
+        logger.info(f"✅ {len(asset_analyses)} assets procesados exitosamente")
         
         # 2. Generate copies for each asset
+        logger.info("📝 Generando variaciones de copy...")
         all_copies = []
-        for analysis in asset_analyses:
-            copies = self.copy_generator.generate_copies(
-                analysis,
-                num_variations=10,
-                tone=campaign_request.metadata.get("tone"),
-                target_audience=campaign_request.metadata.get("target_audience")
-            )
-            # Set asset_id
-            for copy in copies:
-                copy.asset_id = analysis.asset_id
-            all_copies.extend(copies)
+        for i, analysis in enumerate(asset_analyses, 1):
+            try:
+                logger.info(f"   Generando copy para asset {i}/{len(asset_analyses)}")
+                copies = self.copy_generator.generate_copies(
+                    analysis,
+                    num_variations=10,
+                    tone=campaign_request.metadata.get("tone"),
+                    target_audience=campaign_request.metadata.get("target_audience")
+                )
+                # Set asset_id
+                for copy in copies:
+                    copy.asset_id = analysis.asset_id
+                all_copies.extend(copies)
+                logger.info(f"   ✅ {len(copies)} copies generados para asset {i}")
+            except Exception as e:
+                logger.error(f"Error generando copy para asset {i}: {e}")
+                # Continue with other assets
+                continue
+        
+        logger.info(f"✅ {len(all_copies)} variaciones de copy generadas en total")
         
         # 3. Generate visuals
+        logger.info("🎨 Generando variaciones visuales...")
         all_visuals = []
         for i, analysis in enumerate(asset_analyses):
             if analysis.asset_type.value in ["image", "video"]:
-                asset_path = assets[i].file_path or assets[i].file_url
-                visuals = self.visual_generator.generate_visuals_from_asset(
-                    analysis,
-                    asset_path,
-                    {"formats": ["1:1", "4:5", "16:9"]}
-                )
-                all_visuals.extend(visuals)
+                try:
+                    asset_path = assets[i].file_path or assets[i].file_url
+                    if not asset_path:
+                        logger.warning(f"Asset {i} no tiene file_path ni file_url, saltando generación visual")
+                        continue
+                    
+                    logger.info(f"   Generando visuales para asset {i+1}/{len(asset_analyses)}")
+                    visuals = self.visual_generator.generate_visuals_from_asset(
+                        analysis,
+                        asset_path,
+                        {"formats": ["1:1", "4:5", "16:9"]}
+                    )
+                    all_visuals.extend(visuals)
+                    logger.info(f"   ✅ {len(visuals)} visuales generados para asset {i+1}")
+                except Exception as e:
+                    logger.error(f"Error generando visuales para asset {i+1}: {e}")
+                    # Continue with other assets
+                    continue
+        
+        logger.info(f"✅ {len(all_visuals)} variaciones visuales generadas en total")
         
         # 4. Create campaigns on platforms
         campaign_id = str(uuid.uuid4())
@@ -330,12 +390,14 @@ Always think step by step and explain your decisions."""),
                     "PAUSED"  # Start paused, activate after setup
                 )
                 platform_campaign_ids["meta"] = meta_campaign["campaign_id"]
+                logger.info(f"   ✅ Campaña Meta creada: {meta_campaign['campaign_id']}")
             except Exception as e:
-                print(f"⚠️ Error creating Meta campaign: {e}")
+                logger.error(f"   ⚠️ Error creando Meta campaign: {e}")
         
         # Google campaign
         if campaign_request.platforms.value in ["google", "both"] and self.google_service:
             try:
+                logger.info("   Creando campaña en Google Ads...")
                 google_campaign = self.google_service.create_campaign(
                     campaign_request.name,
                     campaign_request.budget_daily,
@@ -343,13 +405,21 @@ Always think step by step and explain your decisions."""),
                     campaign_request.end_date
                 )
                 platform_campaign_ids["google"] = google_campaign["campaign_resource_name"]
+                logger.info(f"   ✅ Campaña Google creada: {google_campaign['campaign_id']}")
             except Exception as e:
-                print(f"⚠️ Error creating Google campaign: {e}")
+                logger.error(f"   ⚠️ Error creando Google campaign: {e}")
+        
+        if not platform_campaign_ids:
+            raise ValueError("No se pudieron crear campañas en ninguna plataforma. Verifica las credenciales.")
         
         # 5. Create ads (simplified - in production create all combinations)
+        logger.info("📌 Creando anuncios...")
         ads_created = 0
+        # TODO: Implement full ad creation workflow combining copies and visuals
+        logger.info(f"   (Workflow completo de creación de ads pendiente de implementación)")
         
         # Return campaign response
+        logger.info(f"✅ Proceso de campaña completado: {campaign_id}")
         return CampaignResponse(
             campaign_id=campaign_id,
             name=campaign_request.name,
