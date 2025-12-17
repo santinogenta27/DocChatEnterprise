@@ -639,7 +639,7 @@ Responde ÚNICAMENTE en formato JSON:
                         compliance_status=obl_data.get("compliance_status", "pending"),
                         penalties=obl_data.get("penalties", [])
                     ))
-                    except Exception as e:
+                except Exception as e:
                     print(f"⚠️ Error procesando obligación: {e}")
                     continue
             
@@ -754,7 +754,7 @@ Responde ÚNICAMENTE en formato JSON:
             if date.days_until < 0:  # Vencidas
                 if date.risk_level in [RiskLevel.CRITICAL, RiskLevel.HIGH]:
                     score += 8
-            else:
+                else:
                     score += 3
             elif date.days_until <= 30:  # Próximas
                 if date.risk_level == RiskLevel.CRITICAL:
@@ -1016,7 +1016,7 @@ Responde ÚNICAMENTE en formato JSON:
                         related_clauses=finding_data.get("related_clauses", []),
                         financial_impact=finding_data.get("financial_impact")
                     ))
-        except Exception as e:
+                except Exception as e:
                     print(f"⚠️ Error procesando hallazgo: {e}")
                     continue
             
@@ -1051,7 +1051,7 @@ Responde ÚNICAMENTE en formato JSON:
                 return {"error": "Report tool not available"}
             
             # Estructurar datos para el reporte
-                report_data = {
+            report_data = {
                 "title": "Due Diligence Report - Executive Summary",
                 "timestamp": due_diligence_results.get("timestamp"),
                 "executive_summary": due_diligence_results.get("executive_summary", ""),
@@ -1069,13 +1069,13 @@ Responde ÚNICAMENTE en formato JSON:
                 "recommendations": due_diligence_results.get("recommendations", [])
             }
             
-                result = report_tool.execute(
-                    data=report_data,
+            result = report_tool.execute(
+                data=report_data,
                 format=format,
                 title="Due Diligence Report for Investors"
-                )
+            )
             
-                if result.success:
+            if result.success:
                 return {
                     "status": "success",
                     "report_path": str(result.data) if result.data else None,
@@ -1229,7 +1229,7 @@ Responde ÚNICAMENTE en formato JSON:
                         context=kpi_data.get("context", ""),
                         data_source=kpi_data.get("data_source", "texto")
                     ))
-        except Exception as e:
+                except Exception as e:
                     print(f"⚠️ Error procesando KPI: {e}")
                     continue
             
@@ -1406,7 +1406,7 @@ Responde ÚNICAMENTE en formato JSON:
             week_ago = datetime.now() - timedelta(days=7)
             recent_alerts = [a for a in self.active_alerts if a.timestamp >= week_ago]
             
-                report_data = {
+            report_data = {
                 "title": "Weekly Monitoring Report",
                 "period": f"{week_ago.date()} to {datetime.now().date()}",
                 "total_alerts": len(recent_alerts),
@@ -1427,13 +1427,13 @@ Responde ÚNICAMENTE en formato JSON:
                 alert_type = alert.alert_type
                 report_data["alerts_by_type"][alert_type] = report_data["alerts_by_type"].get(alert_type, 0) + 1
             
-                result = report_tool.execute(
-                    data=report_data,
+            result = report_tool.execute(
+                data=report_data,
                 format="pdf",
                 title="Weekly Monitoring Report"
-                )
+            )
             
-                if result.success:
+            if result.success:
                 return {
                     "status": "success",
                     "report_path": str(result.data) if result.data else None,
