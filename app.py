@@ -38854,25 +38854,10 @@ if __name__ == "__main__":
     except:
         pass
     
-    # Verificar si el puerto base está disponible
-    # Si hay problemas, usar server_port=0 para que Gradio encuentre uno automáticamente
-    import socket
-    port = base_port
-    use_auto_port = False
-    
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            result = s.bind(("127.0.0.1", base_port))
-            s.close()
-            print(f"✅ Puerto {base_port} disponible")
-    except (OSError, socket.error):
-        # Puerto base ocupado, usar 0 para que Gradio encuentre uno automáticamente
-        use_auto_port = True
-        port = 0
-        print(f"⚠️ Puerto {base_port} ocupado, Gradio buscará un puerto disponible automáticamente")
-    
-    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port if port != 0 else 'puerto automático'}")
+    # Usar server_port=0 siempre para evitar problemas de verificación de conexión
+    # Esto permite que Gradio encuentre automáticamente un puerto disponible
+    print(f"🚀 Iniciando DocChat Enterprise en {server_name} (puerto automático)")
+    print("   Gradio encontrará automáticamente un puerto disponible")
     
     # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
     demo.queue()
@@ -38887,32 +38872,30 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Error configurando endpoints FastAPI: {e}")
     
-    # Si detectamos problemas o el puerto está ocupado, usar server_port=0 directamente
-    # Esto evita problemas de verificación de conexión de Gradio
-    final_port = 0 if use_auto_port else port
-    
-    # Intentar iniciar Gradio
-    # Si falla con el puerto especificado, no podemos reintentar porque launch() solo se puede llamar una vez
-    # Por eso usamos server_port=0 desde el principio si detectamos problemas
+    # Usar server_port=0 siempre para evitar problemas de verificación de conexión
+    # Esto es más confiable que intentar verificar puertos manualmente
     try:
         demo.launch(
             show_error=True,
             quiet=True,
             server_name=server_name,
-            server_port=final_port,
+            server_port=0,  # Siempre usar puerto automático para evitar problemas
             share=False,
             inbrowser=True,
             show_api=False
         )
+        print("✅ Gradio iniciado correctamente")
     except Exception as e:
         error_str = str(e)
-        if not use_auto_port and ("denegó expresamente" in error_str or "ConnectError" in error_str or "WinError 10061" in error_str):
-            # Si falla con el puerto base y no habíamos detectado el problema antes,
-            # es probable que haya otra instancia corriendo
-            print(f"❌ Error al iniciar Gradio: {e}")
-            print("💡 El puerto puede estar siendo usado por otra instancia de la aplicación")
-            print("💡 Intenta cerrar otras instancias o reiniciar el sistema")
-            print("💡 También puedes establecer GRADIO_SERVER_PORT=0 para usar un puerto automático")
+        # Si es un error de conexión, puede ser un problema del firewall o configuración de red
+        if "denegó expresamente" in error_str or "ConnectError" in error_str or "WinError 10061" in error_str:
+            print("❌ Error: No se pudo iniciar Gradio debido a un problema de conexión")
+            print("💡 Posibles soluciones:")
+            print("   1. Verifica el firewall de Windows y permite Python/Gradio")
+            print("   2. Cierra otras instancias de la aplicación que puedan estar usando el puerto")
+            print("   3. Reinicia el sistema si el problema persiste")
+            print("   4. Intenta ejecutar como administrador")
+            raise RuntimeError(f"No se pudo iniciar Gradio: {e}")
         else:
             print(f"❌ Error al iniciar Gradio: {e}")
             raise
