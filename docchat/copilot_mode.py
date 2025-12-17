@@ -545,8 +545,8 @@ Responde ÚNICAMENTE en formato JSON:
                         try:
                             date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
                             days_until = (date_obj - today).days
-                except:
-                    pass
+                        except:
+                            pass
             
                     dates.append(CriticalDate(
                         date=date_str,

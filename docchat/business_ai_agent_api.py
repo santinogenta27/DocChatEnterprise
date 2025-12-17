@@ -201,9 +201,12 @@ class BusinessAIAgentAPI:
                                     channel=ChannelType.WHATSAPP
                                 )
                                 
-                                # Enviar respuesta (esto requiere implementar el envío a WhatsApp)
-                                # Por ahora solo logueamos
-                                print(f"WhatsApp response: {result['response']}")
+                                # Enviar respuesta por WhatsApp
+                                self.agent.send_whatsapp_message(
+                                    company_id=company_id,
+                                    to=from_number,
+                                    message=result['response']
+                                )
                 
                 return {"status": "success"}
                 
@@ -388,17 +391,13 @@ class BusinessAIAgentAPI:
     // Función para agregar mensaje
     function addMessage(text, isUser) {{
         var msgDiv = document.createElement('div');
-        msgDiv.style.cssText = `
-            margin-bottom: 10px;
-            padding: 10px 15px;
-            border-radius: 18px;
-            max-width: 80%;
-            word-wrap: break-word;
-            ${isUser ? 
-                'background: #667eea; color: white; margin-left: auto;' :
-                'background: white; color: #333;'
-            }
-        `;
+        var styleText = 'margin-bottom: 10px; padding: 10px 15px; border-radius: 18px; max-width: 80%; word-wrap: break-word; ';
+        if (isUser) {{
+            styleText += 'background: #667eea; color: white; margin-left: auto;';
+        }} else {{
+            styleText += 'background: white; color: #333;';
+        }}
+        msgDiv.style.cssText = styleText;
         msgDiv.textContent = text;
         messagesContainer.appendChild(msgDiv);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -521,4 +520,78 @@ class BusinessAIAgentAPI:
                 content=widget_code,
                 media_type="application/javascript"
             )
+        
+        @self.app.get("/api/v1/companies")
+        async def list_companies():
+            """Lista todas las empresas."""
+            companies = self.agent.list_companies()
+            return {"companies": companies}
+        
+        @self.app.put("/api/v1/companies/{company_id}")
+        async def update_company(company_id: str, request: CompanyConfigRequest):
+            """Actualiza una empresa."""
+            success = self.agent.update_company_config(
+                company_id=company_id,
+                name=request.name,
+                description=request.description,
+                products=request.products,
+                faqs=request.faqs,
+                business_rules=request.business_rules,
+                whatsapp_config=request.whatsapp_config
+            )
+            if not success:
+                raise HTTPException(status_code=404, detail="Empresa no encontrada")
+            
+            company = self.agent.get_company(company_id)
+            return {"status": "success", "company": company}
+        
+        @self.app.get("/api/v1/companies/{company_id}/leads")
+        async def get_leads(company_id: str, status: Optional[str] = None):
+            """Obtiene leads de una empresa."""
+            leads = self.agent.get_leads(company_id, status)
+            return {"leads": leads}
+        
+        @self.app.put("/api/v1/leads/{lead_id}/status")
+        async def update_lead_status(lead_id: str, new_status: str):
+            """Actualiza el estado de un lead."""
+            success = self.agent.update_lead_status(lead_id, new_status)
+            if not success:
+                raise HTTPException(status_code=404, detail="Lead no encontrado")
+            return {"status": "success"}
+        
+        @self.app.post("/api/v1/whatsapp/send")
+        async def send_whatsapp(
+            company_id: str,
+            to: str,
+            message: str,
+            x_widget_key: Optional[str] = Header(None, alias="X-Widget-Key")
+        ):
+            """Envía un mensaje por WhatsApp."""
+            if not x_widget_key:
+                raise HTTPException(status_code=401, detail="Widget key requerida")
+            
+            company = self.agent.get_company_by_widget_key(x_widget_key)
+            if not company:
+                raise HTTPException(status_code=404, detail="Empresa no encontrada")
+            
+            success = self.agent.send_whatsapp_message(
+                company_id=company["company_id"],
+                to=to,
+                message=message
+            )
+            
+            if not success:
+                raise HTTPException(status_code=400, detail="Error enviando mensaje")
+            
+            return {"status": "success", "message": "Mensaje enviado"}
+        
+        @self.app.get("/health")
+        async def health():
+            """Health check endpoint."""
+            return {
+                "status": "healthy",
+                "service": "Business AI Agent API",
+                "database": "connected" if self.agent.engine else "disconnected",
+                "llm": "configured" if self.agent.llm else "not configured"
+            }
 

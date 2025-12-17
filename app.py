@@ -372,6 +372,7 @@ autonomous_agent = AutonomousAgent(agent_id="main_agent", config=config) if conf
 advanced_agent = AdvancedAutonomousAgent(config) if config.enable_autonomous_agents else None
 enterprise_api = EnterpriseAPIMode(config, provider="openai")  # Default: OpenAI
 copilot = CopilotMode(config, provider="openai")  # Sistema Empresarial de Rendimiento Supremo
+ai_agent_business_manager = AIAgentBusinessManagerMode(config, provider="openai")  # AI Agent para Ventas y Soporte 24/7
 advice_god = AdviceGodMode(config, provider="openai")  # Default: OpenAI
 # optimus = OptimusMode(config, provider="openai")  # ELIMINADO
 marketplace = MarketplaceMode(config, provider="openai")  # Default: OpenAI
@@ -10551,6 +10552,694 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                 outputs=[copilot_compare_output],
                 show_progress="full"
             )
+
+        # Tab: 🤖 AI AGENT BUSINESS MANAGER - Sistema SaaS Multi-Tenant para Ventas y Soporte 24/7
+        with gr.Tab("🤖 AI Agent Business Manager"):
+            gr.Markdown("### 🤖 AI Agent Business Manager - Sistema SaaS Multi-Tenant para Ventas y Soporte al Cliente 24/7")
+            gr.Markdown("""
+            **💼 Sistema que permite a empresas conectar un agente de IA a sus sitios web y WhatsApp Business**
+            
+            **🎯 Funcionalidades:**
+            - ✅ Agente de IA 24/7 para ventas y soporte
+            - ✅ Widget de chat para sitios web (copia y pega)
+            - ✅ Integración con WhatsApp Business API
+            - ✅ Detección automática de intención (productos, precios, compras, soporte)
+            - ✅ Captura automática de leads
+            - ✅ Escalación a humanos cuando es necesario
+            - ✅ Sistema multi-tenant (datos separados por empresa)
+            - ✅ Analytics y métricas en tiempo real
+            
+            **💰 Modelo de negocio:**
+            - SaaS mensual por empresa
+            - Precio: USD 99-999/mes según plan (free, pro, enterprise)
+            - Facturación por conversaciones o leads capturados
+            """)
+            
+            with gr.Tabs():
+                # Tab: Registrar Empresa
+                with gr.Tab("🏢 Registrar Empresa"):
+                    gr.Markdown("### 🏢 Crear Nueva Empresa / Tenant")
+                    gr.Markdown("""
+                    Registra tu empresa para comenzar a usar el AI Agent.
+                    Después de registrar, recibirás un código JavaScript que puedes pegar en tu sitio web.
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            company_name = gr.Textbox(
+                                label="Nombre de la Empresa",
+                                placeholder="Ej: Mi Empresa S.A.",
+                                info="Nombre que aparecerá en el widget de chat"
+                            )
+                            company_email = gr.Textbox(
+                                label="Email de Contacto",
+                                placeholder="contacto@empresa.com",
+                                info="Email principal para notificaciones"
+                            )
+                            company_description = gr.Textbox(
+                                label="Descripción de la Empresa",
+                                placeholder="Ofrecemos productos y servicios...",
+                                lines=3,
+                                info="Breve descripción para ayudar al agente a responder"
+                            )
+                            company_website = gr.Textbox(
+                                label="URL del Sitio Web",
+                                placeholder="https://www.empresa.com",
+                                info="URL donde se instalará el widget"
+                            )
+                            company_plan = gr.Radio(
+                                label="Plan",
+                                choices=[
+                                    ("Gratis (Free)", "free"),
+                                    ("Profesional (Pro)", "pro"),
+                                    ("Enterprise", "enterprise")
+                                ],
+                                value="free",
+                                info="Puedes cambiar de plan después"
+                            )
+                            
+                            create_company_btn = gr.Button(
+                                "🏢 Crear Empresa",
+                                variant="primary",
+                                size="lg"
+                            )
+                        
+                        with gr.Column():
+                            company_result = gr.Markdown(
+                                label="Resultado",
+                                value="Completa el formulario y haz clic en 'Crear Empresa'"
+                            )
+                    
+                    create_company_btn.click(
+                        fn=lambda name, email, desc, website, plan: create_company_handler(
+                            name, email, desc, website, plan
+                        ),
+                        inputs=[company_name, company_email, company_description, company_website, company_plan],
+                        outputs=[company_result]
+                    )
+                
+                # Tab: Configurar Productos
+                with gr.Tab("📦 Configurar Productos"):
+                    gr.Markdown("### 📦 Gestionar Productos y Servicios")
+                    gr.Markdown("""
+                    Agrega los productos/servicios que tu empresa ofrece.
+                    El agente usará esta información para responder preguntas sobre productos y precios.
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            product_company_id = gr.Textbox(
+                                label="ID de Empresa",
+                                placeholder="Pega aquí el company_id de tu empresa",
+                                info="Lo obtienes al crear la empresa"
+                            )
+                            product_name = gr.Textbox(
+                                label="Nombre del Producto/Servicio",
+                                placeholder="Ej: Plan Básico"
+                            )
+                            product_description = gr.Textbox(
+                                label="Descripción",
+                                placeholder="Descripción detallada del producto...",
+                                lines=3
+                            )
+                            with gr.Row():
+                                product_price = gr.Number(
+                                    label="Precio",
+                                    value=0.0,
+                                    info="0 para 'consultar precio'"
+                                )
+                                product_currency = gr.Dropdown(
+                                    label="Moneda",
+                                    choices=["USD", "EUR", "MXN", "ARS", "CLP", "COP"],
+                                    value="USD"
+                                )
+                            product_url = gr.Textbox(
+                                label="URL del Producto",
+                                placeholder="https://empresa.com/producto",
+                                info="Link para que el cliente pueda comprar"
+                            )
+                            product_category = gr.Textbox(
+                                label="Categoría",
+                                placeholder="Ej: Software, Consultoría, Producto Físico"
+                            )
+                            
+                            add_product_btn = gr.Button(
+                                "➕ Agregar Producto",
+                                variant="primary"
+                            )
+                        
+                        with gr.Column():
+                            products_list = gr.Markdown(
+                                label="Productos Registrados",
+                                value="Ingresa el ID de empresa para ver los productos existentes"
+                            )
+                    
+                    def load_products(company_id):
+                        """Carga productos de una empresa"""
+                        if not company_id:
+                            return "Ingresa un ID de empresa"
+                        try:
+                            products = ai_agent_business_manager.db_manager.get_products(company_id)
+                            if not products:
+                                return "No hay productos registrados. Agrega productos usando el formulario."
+                            
+                            output = f"### 📦 Productos ({len(products)})\n\n"
+                            for p in products:
+                                price_str = f"{p.currency} {p.price:.2f}" if p.price else "Consultar precio"
+                                url_str = f" - [Ver producto]({p.product_url})" if p.product_url else ""
+                                output += f"- **{p.product_name}**\n"
+                                output += f"  - Precio: {price_str}{url_str}\n"
+                                if p.product_description:
+                                    output += f"  - {p.product_description[:100]}...\n"
+                                output += "\n"
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    add_product_btn.click(
+                        fn=lambda cid, name, desc, price, curr, url, cat: add_product_handler(
+                            cid, name, desc, price, curr, url, cat
+                        ),
+                        inputs=[product_company_id, product_name, product_description, product_price, product_currency, product_url, product_category],
+                        outputs=[products_list]
+                    )
+                    
+                    product_company_id.change(
+                        fn=load_products,
+                        inputs=[product_company_id],
+                        outputs=[products_list]
+                    )
+                
+                # Tab: Widget y Código
+                with gr.Tab("💻 Widget y Código"):
+                    gr.Markdown("### 💻 Código del Widget para tu Sitio Web")
+                    gr.Markdown("""
+                    Después de registrar tu empresa, copia este código y pégalo antes de `</body>` en tu sitio web.
+                    El widget aparecerá automáticamente como un botón de chat flotante.
+                    """)
+                    
+                    widget_company_id = gr.Textbox(
+                        label="ID de Empresa",
+                        placeholder="Pega aquí el company_id de tu empresa"
+                    )
+                    
+                    widget_code_output = gr.Code(
+                        label="Código JavaScript del Widget",
+                        language="html",
+                        lines=15,
+                        interactive=False
+                    )
+                    
+                    widget_preview = gr.Markdown(
+                        label="Vista Previa",
+                        value="Ingresa el ID de empresa para ver el código del widget"
+                    )
+                    
+                    def get_widget_code(company_id):
+                        """Obtiene el código del widget para una empresa"""
+                        if not company_id:
+                            return "", "Ingresa un ID de empresa"
+                        try:
+                            config = ai_agent_business_manager.get_company_config(company_id)
+                            if "error" in config:
+                                return "", f"❌ Error: {config['error']}"
+                            
+                            company = config["company"]
+                            widget_code = company.get("widget_code", "")
+                            
+                            preview = f"""
+### ✅ Widget Configurado para: **{company['company_name']}**
+
+**📋 Instrucciones:**
+1. Copia el código de arriba
+2. Pégalo justo antes de `</body>` en todas las páginas de tu sitio web
+3. El widget aparecerá automáticamente como un botón de chat flotante
+
+**🔧 Configuración:**
+- Widget ID: `{company['widget_script_id']}`
+- Plan: {company['plan']}
+- Productos registrados: {len(config['products'])}
+- Total leads: {config['total_leads']}
+"""
+                            return widget_code, preview
+                        except Exception as e:
+                            return "", f"❌ Error: {str(e)}"
+                    
+                    widget_company_id.change(
+                        fn=get_widget_code,
+                        inputs=[widget_company_id],
+                        outputs=[widget_code_output, widget_preview]
+                    )
+                
+                # Tab: Analytics
+                with gr.Tab("📊 Analytics"):
+                    gr.Markdown("### 📊 Analytics y Métricas")
+                    gr.Markdown("""
+                    Visualiza métricas de tu agente: conversaciones, leads capturados, intenciones detectadas, etc.
+                    """)
+                    
+                    analytics_company_id = gr.Textbox(
+                        label="ID de Empresa",
+                        placeholder="Pega aquí el company_id de tu empresa"
+                    )
+                    
+                    analytics_days = gr.Slider(
+                        label="Período (días)",
+                        minimum=7,
+                        maximum=90,
+                        value=30,
+                        step=7
+                    )
+                    
+                    analytics_refresh_btn = gr.Button(
+                        "🔄 Actualizar Analytics",
+                        variant="primary"
+                    )
+                    
+                    analytics_output = gr.Markdown(
+                        label="Analytics",
+                        value="Ingresa el ID de empresa y haz clic en 'Actualizar Analytics'"
+                    )
+                    
+                    def get_analytics(company_id, days):
+                        """Obtiene analytics de una empresa"""
+                        if not company_id:
+                            return "Ingresa un ID de empresa"
+                        try:
+                            analytics = ai_agent_business_manager.get_analytics(company_id, days=int(days))
+                            
+                            output = f"## 📊 Analytics - Últimos {days} días\n\n"
+                            output += f"**Total Leads**: {analytics['total_leads']}\n\n"
+                            
+                            if analytics.get('leads_by_intent'):
+                                output += "### 🎯 Leads por Intención\n\n"
+                                for intent, count in analytics['leads_by_intent'].items():
+                                    intent_emoji = {
+                                        "product_inquiry": "📦",
+                                        "pricing": "💰",
+                                        "purchase": "🛒",
+                                        "support": "🆘",
+                                        "other": "📝"
+                                    }.get(intent, "📋")
+                                    output += f"- {intent_emoji} **{intent}**: {count}\n"
+                                output += "\n"
+                            
+                            if analytics.get('leads_by_channel'):
+                                output += "### 📱 Leads por Canal\n\n"
+                                for channel, count in analytics['leads_by_channel'].items():
+                                    channel_emoji = {"web_widget": "🌐", "whatsapp": "💬"}.get(channel, "📱")
+                                    output += f"- {channel_emoji} **{channel}**: {count}\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    analytics_refresh_btn.click(
+                        fn=get_analytics,
+                        inputs=[analytics_company_id, analytics_days],
+                        outputs=[analytics_output]
+                    )
+                
+                # Tab: Leads
+                with gr.Tab("👥 Leads Capturados"):
+                    gr.Markdown("### 👥 Leads Capturados")
+                    gr.Markdown("""
+                    Visualiza todos los leads que el agente ha capturado.
+                    Los leads se crean automáticamente cuando el usuario muestra interés en comprar o solicita información.
+                    """)
+                    
+                    leads_company_id = gr.Textbox(
+                        label="ID de Empresa",
+                        placeholder="Pega aquí el company_id de tu empresa"
+                    )
+                    
+                    leads_refresh_btn = gr.Button(
+                        "🔄 Cargar Leads",
+                        variant="primary"
+                    )
+                    
+                    leads_output = gr.Markdown(
+                        label="Leads",
+                        value="Ingresa el ID de empresa y haz clic en 'Cargar Leads'"
+                    )
+                    
+                    def get_leads(company_id):
+                        """Obtiene leads de una empresa"""
+                        if not company_id:
+                            return "Ingresa un ID de empresa"
+                        try:
+                            leads = ai_agent_business_manager.db_manager.get_leads(company_id, limit=50)
+                            if not leads:
+                                return "No hay leads capturados aún."
+                            
+                            output = f"## 👥 Leads Capturados ({len(leads)})\n\n"
+                            for lead in leads[:20]:
+                                intent_emoji = {
+                                    "product_inquiry": "📦",
+                                    "pricing": "💰",
+                                    "purchase": "🛒",
+                                    "support": "🆘"
+                                }.get(lead.intent, "📝")
+                                
+                                output += f"### {intent_emoji} Lead: {lead.name or 'Sin nombre'}\n"
+                                output += f"- **Email**: {lead.email or 'No proporcionado'}\n"
+                                output += f"- **Teléfono**: {lead.phone or 'No proporcionado'}\n"
+                                output += f"- **Intención**: {lead.intent}\n"
+                                output += f"- **Canal**: {lead.channel}\n"
+                                output += f"- **Estado**: {lead.status}\n"
+                                if lead.message:
+                                    output += f"- **Mensaje**: {lead.message[:150]}...\n"
+                                output += "\n"
+                            
+                            if len(leads) > 20:
+                                output += f"\n... y {len(leads) - 20} leads más\n"
+                            
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    leads_refresh_btn.click(
+                        fn=get_leads,
+                        inputs=[leads_company_id],
+                        outputs=[leads_output]
+                    )
+                
+                # Tab: Configurar API Keys
+                with gr.Tab("🔑 Configurar API Keys (LLM)"):
+                    gr.Markdown("### 🔑 Configurar API Keys para el Agente de IA")
+                    gr.Markdown("""
+                    Configura tu propia API key de OpenAI o Anthropic para que el agente use tu cuenta.
+                    
+                    **📋 Por qué configurar tu propia API key:**
+                    - Usa tu propia cuenta de OpenAI/Anthropic
+                    - Control total sobre costos y límites
+                    - Mejor rendimiento y confiabilidad
+                    
+                    **🔒 Seguridad:**
+                    - Las API keys se almacenan de forma segura
+                    - Solo se usan para procesar mensajes de tu empresa
+                    - No se comparten con otros tenants
+                    
+                    **💡 Recomendación:**
+                    - OpenAI: Más económico y rápido (GPT-4o-mini recomendado)
+                    - Anthropic: Mayor precisión y mejor para respuestas complejas
+                    """)
+                    
+                    api_key_company_id = gr.Textbox(
+                        label="ID de Empresa",
+                        placeholder="Pega aquí el company_id de tu empresa",
+                        info="Lo obtienes al crear la empresa"
+                    )
+                    
+                    api_key_provider = gr.Radio(
+                        label="Proveedor de IA",
+                        choices=[
+                            ("OpenAI (Recomendado)", "openai"),
+                            ("Anthropic (Claude)", "anthropic")
+                        ],
+                        value="openai",
+                        info="Elige el proveedor de IA que quieres usar"
+                    )
+                    
+                    openai_api_key = gr.Textbox(
+                        label="OpenAI API Key",
+                        placeholder="sk-proj-...",
+                        type="password",
+                        info="Obtén tu clave en: https://platform.openai.com/api-keys",
+                        visible=True
+                    )
+                    
+                    anthropic_api_key = gr.Textbox(
+                        label="Anthropic API Key",
+                        placeholder="sk-ant-...",
+                        type="password",
+                        info="Obtén tu clave en: https://console.anthropic.com/settings/keys",
+                        visible=False
+                    )
+                    
+                    def toggle_api_key_fields(provider):
+                        """Muestra/oculta campos según el proveedor seleccionado"""
+                        if provider == "openai":
+                            return gr.update(visible=True), gr.update(visible=False)
+                        else:
+                            return gr.update(visible=False), gr.update(visible=True)
+                    
+                    api_key_provider.change(
+                        fn=toggle_api_key_fields,
+                        inputs=[api_key_provider],
+                        outputs=[openai_api_key, anthropic_api_key]
+                    )
+                    
+                    api_key_configure_btn = gr.Button(
+                        "🔑 Configurar API Key",
+                        variant="primary"
+                    )
+                    
+                    api_key_result = gr.Markdown(
+                        label="Resultado",
+                        value="Completa el formulario y haz clic en 'Configurar API Key'"
+                    )
+                    
+                    def configure_api_key_handler(company_id, provider, openai_key, anthropic_key):
+                        """Configura API key para una empresa"""
+                        if not company_id:
+                            return "❌ ID de empresa es requerido"
+                        
+                        if provider == "openai" and not openai_key:
+                            return "❌ OpenAI API Key es requerida cuando seleccionas OpenAI"
+                        
+                        if provider == "anthropic" and not anthropic_key:
+                            return "❌ Anthropic API Key es requerida cuando seleccionas Anthropic"
+                        
+                        try:
+                            result = ai_agent_business_manager.configure_company_api_key(
+                                company_id=company_id,
+                                openai_api_key=openai_key if provider == "openai" else None,
+                                anthropic_api_key=anthropic_key if provider == "anthropic" else None,
+                                provider=provider
+                            )
+                            
+                            if "error" in result:
+                                return f"❌ Error: {result['error']}"
+                            
+                            output = f"""
+### ✅ API Key Configurada Exitosamente
+
+**📋 Configuración:**
+- **Proveedor**: {result['provider']}
+- **Estado**: {result['status']}
+
+**✅ Ahora tu agente usará esta API key para procesar mensajes de tu empresa.**
+
+**💡 Próximos pasos:**
+1. Prueba enviando un mensaje a través del widget
+2. El agente usará tu API key para generar respuestas
+3. Los costos se cargarán a tu cuenta de {result['provider']}
+
+**🔒 Seguridad:**
+- Tu API key está almacenada de forma segura
+- Solo se usa para tu empresa
+- Puedes cambiarla en cualquier momento desde aquí
+"""
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    api_key_configure_btn.click(
+                        fn=configure_api_key_handler,
+                        inputs=[api_key_company_id, api_key_provider, openai_api_key, anthropic_api_key],
+                        outputs=[api_key_result]
+                    )
+                    
+                    # Información adicional
+                    with gr.Accordion("📖 Cómo obtener API Keys", open=False):
+                        gr.Markdown("""
+                        ### 🔑 Cómo obtener tu OpenAI API Key (2 minutos):
+                        
+                        1. Ve a https://platform.openai.com/api-keys
+                        2. Inicia sesión o crea una cuenta
+                        3. Click en "Create new secret key"
+                        4. Dale un nombre (ej: "AI Agent Business")
+                        5. Copia la clave (empieza con `sk-proj-...`)
+                        6. ⚠️ **IMPORTANTE**: Guárdala bien, no la verás de nuevo
+                        7. Pégala en el campo de arriba
+                        
+                        **💰 Costos aproximados:**
+                        - GPT-4o-mini: ~$0.15 por 1M tokens de entrada
+                        - ~$0.60 por 1M tokens de salida
+                        - Una conversación típica cuesta centavos
+                        
+                        ---
+                        
+                        ### 🔑 Cómo obtener tu Anthropic API Key:
+                        
+                        1. Ve a https://console.anthropic.com/settings/keys
+                        2. Inicia sesión o crea una cuenta
+                        3. Click en "Create Key"
+                        4. Copia la clave (empieza con `sk-ant-...`)
+                        5. Pégala en el campo de arriba
+                        
+                        **💰 Costos aproximados:**
+                        - Claude 3.5 Sonnet: ~$3 por 1M tokens entrada
+                        - ~$15 por 1M tokens salida
+                        - Mayor precisión pero más costoso
+                        """)
+                
+                # Tab: WhatsApp
+                with gr.Tab("💬 Configurar WhatsApp"):
+                    gr.Markdown("### 💬 Integración con WhatsApp Business API")
+                    gr.Markdown("""
+                    Conecta tu número de WhatsApp Business para que el agente responda automáticamente.
+                    
+                    **📋 Pasos:**
+                    1. Crea una App en Meta for Developers
+                    2. Obtén tu número de WhatsApp Business
+                    3. Configura el webhook con la URL que te proporcionamos
+                    4. Ingresa tu número y token aquí
+                    """)
+                    
+                    whatsapp_company_id = gr.Textbox(
+                        label="ID de Empresa",
+                        placeholder="Pega aquí el company_id de tu empresa"
+                    )
+                    
+                    whatsapp_phone = gr.Textbox(
+                        label="Número de WhatsApp Business",
+                        placeholder="+1234567890",
+                        info="Incluye el código de país"
+                    )
+                    
+                    whatsapp_verify_token = gr.Textbox(
+                        label="Verify Token (Meta)",
+                        placeholder="Tu verify token de Meta",
+                        type="password",
+                        info="Token que configuraste en Meta for Developers"
+                    )
+                    
+                    whatsapp_configure_btn = gr.Button(
+                        "💬 Configurar WhatsApp",
+                        variant="primary"
+                    )
+                    
+                    whatsapp_result = gr.Markdown(
+                        label="Resultado",
+                        value="Completa el formulario y haz clic en 'Configurar WhatsApp'"
+                    )
+                    
+                    def configure_whatsapp_handler(company_id, phone, token):
+                        """Configura WhatsApp para una empresa"""
+                        if not company_id or not phone:
+                            return "❌ ID de empresa y número de teléfono son requeridos"
+                        try:
+                            result = ai_agent_business_manager.configure_whatsapp(
+                                company_id=company_id,
+                                phone_number=phone,
+                                verify_token=token
+                            )
+                            
+                            if "error" in result:
+                                return f"❌ Error: {result['error']}"
+                            
+                            output = f"""
+### ✅ WhatsApp Configurado
+
+**📱 Número**: {result['phone_number']}
+**🔗 Webhook URL**: `{result.get('webhook_url', 'N/A')}`
+
+**📋 Próximos pasos:**
+1. Ve a Meta for Developers → Tu App → WhatsApp → Configuration
+2. Configura el Webhook URL con la URL de arriba
+3. Usa el verify token que ingresaste
+4. Guarda los cambios
+
+✅ **Estado**: Configurado correctamente
+"""
+                            return output
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    whatsapp_configure_btn.click(
+                        fn=configure_whatsapp_handler,
+                        inputs=[whatsapp_company_id, whatsapp_phone, whatsapp_verify_token],
+                        outputs=[whatsapp_result]
+                    )
+            
+            # Funciones helper
+            def create_company_handler(name, email, description, website, plan):
+                """Crea una nueva empresa"""
+                if not name or not email:
+                    return "❌ Nombre de empresa y email son requeridos"
+                
+                try:
+                    result = ai_agent_business_manager.create_company(
+                        company_name=name,
+                        contact_email=email,
+                        company_description=description,
+                        plan=plan,
+                        website_url=website
+                    )
+                    
+                    if "error" in result:
+                        return f"❌ Error: {result['error']}"
+                    
+                    output = f"""
+### ✅ Empresa Creada Exitosamente!
+
+**📋 Información:**
+- **ID de Empresa**: `{result['company_id']}`
+- **Nombre**: {result['company_name']}
+- **Widget Script ID**: `{result['widget_script_id']}`
+
+**💻 Código del Widget:**
+Copia este código y pégalo antes de `</body>` en tu sitio web:
+
+```html
+{result['widget_code']}
+```
+
+**📝 Guarda este ID de Empresa: `{result['company_id']}`**
+Lo necesitarás para:
+- Agregar productos
+- Ver analytics
+- Configurar WhatsApp
+- Gestionar leads
+
+**🎉 ¡Listo!** El widget aparecerá automáticamente en tu sitio web.
+"""
+                    return output
+                except Exception as e:
+                    return f"❌ Error creando empresa: {str(e)}"
+            
+            def add_product_handler(company_id, name, description, price, currency, url, category):
+                """Agrega un producto"""
+                if not company_id or not name:
+                    return "❌ ID de empresa y nombre del producto son requeridos"
+                
+                try:
+                    result = ai_agent_business_manager.add_product(
+                        company_id=company_id,
+                        product_name=name,
+                        product_description=description,
+                        price=float(price) if price else None,
+                        currency=currency,
+                        product_url=url,
+                        category=category
+                    )
+                    
+                    if "error" in result:
+                        return f"❌ Error: {result['error']}"
+                    
+                    # Recargar lista de productos
+                    products = ai_agent_business_manager.db_manager.get_products(company_id)
+                    output = f"✅ **Producto agregado**: {result['product_name']}\n\n"
+                    output += "### 📦 Productos Registrados\n\n"
+                    for p in products:
+                        price_str = f"{p.currency} {p.price:.2f}" if p.price else "Consultar precio"
+                        output += f"- **{p.product_name}** - {price_str}\n"
+                    
+                    return output
+                except Exception as e:
+                    return f"❌ Error: {str(e)}"
 
         # Tab: 👑 ADVICE GOD - Clon de Enterprise API
         with gr.Tab("👑 ADVICE GOD"):
@@ -37984,6 +38673,148 @@ La aplicación está lista para usar.
     pass
 
 
+# ==================== ENDPOINTS FASTAPI PARA AI AGENT BUSINESS MANAGER ====================
+
+def setup_ai_agent_api_endpoints(demo_app):
+    """Configura endpoints FastAPI para AI Agent Business Manager"""
+    try:
+        from fastapi import Request
+        from fastapi.responses import JSONResponse, FileResponse
+        import json as json_lib
+        
+        @demo_app.post("/api/ai-agent-business/message")
+        async def process_message_api(request: Request):
+            """Endpoint para procesar mensajes del widget"""
+            try:
+                data = await request.json()
+                widget_script_id = data.get("widget_script_id")
+                message = data.get("message")
+                user_id = data.get("user_id")
+                channel = data.get("channel", "web_widget")
+                
+                if not widget_script_id or not message:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "widget_script_id and message are required"}
+                    )
+                
+                # Procesar mensaje
+                result = ai_agent_business_manager.process_message(
+                    widget_script_id=widget_script_id,
+                    message=message,
+                    user_id=user_id,
+                    channel=channel
+                )
+                
+                return JSONResponse(content=result)
+            except Exception as e:
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": str(e), "response": "Lo siento, hubo un error. Intenta de nuevo."}
+                )
+        
+        @demo_app.get("/api/ai-agent-business/whatsapp/webhook/{company_id}")
+        async def whatsapp_webhook_verify(company_id: str, request: Request):
+            """Webhook de verificación de WhatsApp (GET)"""
+            try:
+                # Meta envía estos parámetros para verificar
+                mode = request.query_params.get("hub.mode")
+                token = request.query_params.get("hub.verify_token")
+                challenge = request.query_params.get("hub.challenge")
+                
+                # TODO: Verificar token con el configurado en la empresa
+                if mode == "subscribe" and token:
+                    # Verificar token
+                    company = ai_agent_business_manager.db_manager.get_company(company_id)
+                    if company:
+                        # Aquí deberías verificar el token con el configurado
+                        # Por ahora solo retornamos el challenge
+                        return int(challenge) if challenge else 200
+                
+                return JSONResponse(status_code=403, content={"error": "Verification failed"})
+            except Exception as e:
+                return JSONResponse(status_code=500, content={"error": str(e)})
+        
+        @demo_app.post("/api/ai-agent-business/whatsapp/webhook/{company_id}")
+        async def whatsapp_webhook_receive(company_id: str, request: Request):
+            """Webhook para recibir mensajes de WhatsApp (POST)"""
+            try:
+                data = await request.json()
+                
+                # Procesar mensaje de WhatsApp según formato de Meta
+                if data.get("object") == "whatsapp_business_account":
+                    entries = data.get("entry", [])
+                    for entry in entries:
+                        changes = entry.get("changes", [])
+                        for change in changes:
+                            value = change.get("value", {})
+                            messages = value.get("messages", [])
+                            
+                            for msg in messages:
+                                if msg.get("type") == "text":
+                                    from_number = msg.get("from")
+                                    message_text = msg.get("text", {}).get("body", "")
+                                    
+                                    # Obtener widget_script_id desde company_id
+                                    company = ai_agent_business_manager.db_manager.get_company(company_id)
+                                    if not company:
+                                        continue
+                                    
+                                    # Procesar mensaje
+                                    result = ai_agent_business_manager.process_message(
+                                        widget_script_id=company.widget_script_id,
+                                        message=message_text,
+                                        user_id=f"whatsapp_{from_number}",
+                                        channel="whatsapp"
+                                    )
+                                    
+                                    # Enviar respuesta a WhatsApp
+                                    if result.get("response"):
+                                        send_result = ai_agent_business_manager.send_whatsapp_message(
+                                            company_id=company_id,
+                                            phone_number=from_number,
+                                            message=result["response"]
+                                        )
+                                        
+                                        # Si el mensaje sugiere crear lead, capturarlo
+                                        if result.get("should_create_lead"):
+                                            # Intentar extraer información del mensaje para crear lead
+                                            ai_agent_business_manager.db_manager.create_lead(
+                                                company_id=company_id,
+                                                intent=result.get("intent", "other"),
+                                                phone=from_number,
+                                                message=message_text,
+                                                channel="whatsapp"
+                                            )
+                
+                return JSONResponse(content={"status": "received"})
+            except Exception as e:
+                return JSONResponse(status_code=500, content={"error": str(e)})
+        
+        @demo_app.get("/static/ai-agent-widget.js")
+        async def serve_widget_js():
+            """Sirve el archivo JavaScript del widget"""
+            widget_path = Path(__file__).parent / "docchat" / "static" / "ai-agent-widget.js"
+            if widget_path.exists():
+                return FileResponse(widget_path, media_type="application/javascript")
+            else:
+                return JSONResponse(status_code=404, content={"error": "Widget file not found"})
+        
+        @demo_app.get("/api/ai-agent-business/health")
+        async def health_check():
+            """Health check del servicio"""
+            return JSONResponse(content={
+                "status": "ok",
+                "service": "AI Agent Business Manager",
+                "version": "1.0.0",
+                "ready": True
+            })
+        
+        print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI: {e}")
+
+
 if __name__ == "__main__":
     # CRÍTICO: Cloud Run solo permite escritura en /tmp
     cloud_port = os.environ.get("PORT")
@@ -38051,6 +38882,19 @@ if __name__ == "__main__":
     print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port}")
     
     try:
+        # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
+        demo.queue()
+        
+        # Configurar endpoints FastAPI para AI Agent Business Manager
+        try:
+            if hasattr(demo, 'app'):
+                setup_ai_agent_api_endpoints(demo.app)
+                print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
+            else:
+                print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
+        except Exception as e:
+            print(f"⚠️ Error configurando endpoints FastAPI: {e}")
+        
         demo.launch(
             show_error=True,
             quiet=True,  # Ocultar mensaje "To create a public link, set share=True"

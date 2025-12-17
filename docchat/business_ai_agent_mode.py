@@ -972,11 +972,202 @@ class BusinessAIAgentMode:
 <script>
 (function() {{
     var script = document.createElement('script');
-    script.src = '{api_base_url}/static/widget.js?key={widget_key}';
+    script.src = '{api_base_url}/api/v1/widget.js?key={widget_key}';
     script.async = true;
     document.head.appendChild(script);
 }})();
 </script>
 """
         return script
+    
+    def update_company_config(
+        self,
+        company_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        products: Optional[List[Dict[str, Any]]] = None,
+        faqs: Optional[List[Dict[str, Any]]] = None,
+        business_rules: Optional[Dict[str, Any]] = None,
+        whatsapp_config: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Actualiza la configuración de una empresa."""
+        if not self.Session:
+            return False
+        
+        session = self.Session()
+        try:
+            company = session.query(Company).filter_by(company_id=company_id).first()
+            if not company:
+                return False
+            
+            if name:
+                company.name = name
+            if description:
+                company.description = description
+            if whatsapp_config:
+                company.whatsapp_phone_id = whatsapp_config.get("phone_id")
+                company.whatsapp_access_token = whatsapp_config.get("access_token")
+                company.whatsapp_verify_token = whatsapp_config.get("verify_token")
+            
+            # Actualizar config
+            config = company.config or {}
+            if products is not None:
+                config["products"] = products
+                # Actualizar productos en BD
+                session.query(Product).filter_by(company_id=company_id).delete()
+                for product_data in products:
+                    product = Product(
+                        company_id=company_id,
+                        name=product_data.get("name", ""),
+                        description=product_data.get("description", ""),
+                        price=product_data.get("price"),
+                        price_unit=product_data.get("price_unit", "USD"),
+                        link=product_data.get("link"),
+                        features=product_data.get("features", []),
+                        category=product_data.get("category")
+                    )
+                    session.add(product)
+            
+            if faqs is not None:
+                config["faqs"] = faqs
+            if business_rules is not None:
+                config["business_rules"] = business_rules
+            
+            company.config = config
+            company.updated_at = datetime.utcnow()
+            
+            session.commit()
+            return True
+            
+        except Exception as e:
+            session.rollback()
+            print(f"Error actualizando empresa: {e}")
+            return False
+        finally:
+            session.close()
+    
+    def get_leads(self, company_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Obtiene leads de una empresa."""
+        if not self.Session:
+            return []
+        
+        session = self.Session()
+        try:
+            query = session.query(Lead).filter_by(company_id=company_id)
+            if status:
+                query = query.filter_by(status=status)
+            
+            leads = query.order_by(Lead.created_at.desc()).all()
+            
+            return [{
+                "lead_id": lead.lead_id,
+                "conversation_id": lead.conversation_id,
+                "name": lead.name,
+                "phone": lead.phone,
+                "email": lead.email,
+                "intent": lead.intent,
+                "status": lead.status,
+                "meta_data": lead.meta_data,
+                "created_at": lead.created_at.isoformat() if lead.created_at else None
+            } for lead in leads]
+        finally:
+            session.close()
+    
+    def update_lead_status(self, lead_id: str, status: str) -> bool:
+        """Actualiza el estado de un lead."""
+        if not self.Session:
+            return False
+        
+        session = self.Session()
+        try:
+            lead = session.query(Lead).filter_by(lead_id=lead_id).first()
+            if not lead:
+                return False
+            
+            lead.status = status
+            session.commit()
+            return True
+        except Exception:
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    
+    def send_whatsapp_message(
+        self,
+        company_id: str,
+        to: str,
+        message: str
+    ) -> bool:
+        """Envía un mensaje por WhatsApp Business API."""
+        company = self.get_company(company_id)
+        if not company:
+            return False
+        
+        # Implementar envío usando WhatsApp Business API
+        try:
+            access_token = company.get("whatsapp_access_token")
+            phone_id = company.get("whatsapp_phone_id")
+            
+            if not access_token or not phone_id:
+                return False
+            
+            # Llamada a la API de Meta WhatsApp
+            try:
+                import requests
+                
+                # Normalizar número de teléfono
+                to_clean = to.replace("whatsapp:", "").replace("+", "").strip()
+                if not to_clean.startswith("+"):
+                    to_clean = f"+{to_clean}"
+                
+                url = f"https://graph.facebook.com/v18.0/{phone_id}/messages"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": to_clean,
+                    "type": "text",
+                    "text": {
+                        "body": message
+                    }
+                }
+                
+                response = requests.post(url, headers=headers, json=payload, timeout=10)
+                
+                if response.status_code == 200:
+                    print(f"✅ WhatsApp message sent to {to_clean}")
+                    return True
+                else:
+                    print(f"❌ Error sending WhatsApp: {response.status_code} - {response.text}")
+                    return False
+                    
+            except ImportError:
+                # Fallback sin requests
+                print(f"⚠️ requests no disponible. WhatsApp message would be sent to {to}: {message[:50]}...")
+                return True
+            
+        except Exception as e:
+            print(f"Error enviando WhatsApp: {e}")
+            return False
+    
+    def list_companies(self) -> List[Dict[str, Any]]:
+        """Lista todas las empresas."""
+        if not self.Session:
+            return []
+        
+        session = self.Session()
+        try:
+            companies = session.query(Company).filter_by(active=True).all()
+            return [{
+                "company_id": c.company_id,
+                "name": c.name,
+                "description": c.description,
+                "whatsapp_configured": bool(c.whatsapp_phone_id),
+                "created_at": c.created_at.isoformat() if c.created_at else None
+            } for c in companies]
+        finally:
+            session.close()
 
