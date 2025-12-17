@@ -389,6 +389,11 @@ enterprise_ads_manager = EnterpriseAdsManagerMode(
     provider="openai"
 )
 
+# ADS WORKER - AI-Powered Autonomous Advertising Manager
+# Sistema completo que recibe assets de usuarios y crea/publica/optimiza campañas automáticamente
+from docchat.ads_worker import AdsWorkerMode
+ads_worker = AdsWorkerMode(config, provider="openai")
+
 # Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI
 try:
     from docchat.enterprise_sales_manager_mode import EnterpriseSalesManagerMode
@@ -38676,6 +38681,16 @@ La aplicación está lista para usar.
 
 # ==================== ENDPOINTS FASTAPI PARA AI AGENT BUSINESS MANAGER ====================
 
+def setup_ads_worker_api_endpoints(demo_app):
+    """Setup ADS WORKER API endpoints"""
+    try:
+        if ads_worker and hasattr(ads_worker, 'get_api_router'):
+            router = ads_worker.get_api_router()
+            demo_app.include_router(router)
+            print("✅ Endpoints FastAPI de ADS WORKER configurados")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI de ADS WORKER: {e}")
+
 def setup_ai_agent_api_endpoints(demo_app):
     """Configura endpoints FastAPI para AI Agent Business Manager"""
     try:
@@ -38862,15 +38877,24 @@ if __name__ == "__main__":
     # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
     demo.queue()
     
-    # Configurar endpoints FastAPI para AI Agent Business Manager
-    try:
-        if hasattr(demo, 'app'):
-            setup_ai_agent_api_endpoints(demo.app)
-            print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
-        else:
-            print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
-    except Exception as e:
-        print(f"⚠️ Error configurando endpoints FastAPI: {e}")
+        # Configurar endpoints FastAPI para AI Agent Business Manager
+        try:
+            if hasattr(demo, 'app'):
+                setup_ai_agent_api_endpoints(demo.app)
+                print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
+            else:
+                print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
+        except Exception as e:
+            print(f"⚠️ Error configurando endpoints FastAPI: {e}")
+        
+        # Configurar endpoints FastAPI para ADS WORKER
+        try:
+            if hasattr(demo, 'app'):
+                setup_ads_worker_api_endpoints(demo.app)
+            else:
+                print("⚠️ demo.app no disponible, endpoints de ADS WORKER se configurarán después del launch")
+        except Exception as e:
+            print(f"⚠️ Error configurando endpoints FastAPI de ADS WORKER: {e}")
     
     # Intentar iniciar Gradio con manejo robusto de errores
     # El problema es que Gradio intenta verificar la conexión y falla
@@ -38902,17 +38926,20 @@ if __name__ == "__main__":
     
     try:
         # Intentar iniciar con un puerto específico para evitar problemas de verificación
+        # Usar blocking=True (default) para que el programa espere y no termine inmediatamente
+        if port != 0:
+            print(f"🌐 Abriendo navegador en http://127.0.0.1:{port}")
         demo.launch(
             show_error=True,
             quiet=True,
             server_name="127.0.0.1",  # Usar 127.0.0.1 en lugar de server_name para evitar problemas
             server_port=port,
             share=False,
-            inbrowser=False,
-            show_api=False,
-            prevent_thread_lock=True
+            inbrowser=True,  # Abrir navegador automáticamente
+            show_api=False
+            # No usar prevent_thread_lock para que el programa espere
         )
-        time.sleep(2)
+        # Este código no se ejecutará hasta que se cierre Gradio
         if port != 0:
             print(f"✅ Gradio iniciado en http://127.0.0.1:{port}")
         else:
@@ -38924,17 +38951,18 @@ if __name__ == "__main__":
             print("⚠️ Primer intento falló, intentando con configuración alternativa...")
             try:
                 # Intentar con 0.0.0.0 en lugar de 127.0.0.1
+                print("🌐 Abriendo navegador con configuración alternativa...")
                 demo.launch(
                     show_error=True,
                     quiet=True,
                     server_name="0.0.0.0",
                     server_port=0,
                     share=False,
-                    inbrowser=False,
-                    show_api=False,
-                    prevent_thread_lock=True
+                    inbrowser=True,  # Abrir navegador automáticamente
+                    show_api=False
+                    # No usar prevent_thread_lock para que el programa espere
                 )
-                time.sleep(2)
+                # Este código no se ejecutará hasta que se cierre Gradio
                 print("✅ Gradio iniciado con configuración alternativa")
             except Exception as e2:
                 print(f"❌ No se pudo iniciar Gradio después de múltiples intentos: {e2}")

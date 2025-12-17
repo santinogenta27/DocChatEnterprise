@@ -1,0 +1,354 @@
+"""
+Meta Ads Service
+Integration with Meta Marketing API (Facebook/Instagram)
+"""
+from typing import Dict, Any, List, Optional
+import os
+from datetime import datetime
+
+try:
+    from facebook_business.api import FacebookAdsApi
+    from facebook_business.adobjects.adaccount import AdAccount
+    from facebook_business.adobjects.campaign import Campaign
+    from facebook_business.adobjects.adset import AdSet
+    from facebook_business.adobjects.adcreative import AdCreative
+    from facebook_business.adobjects.ad import Ad
+    from facebook_business.adobjects.adimage import AdImage
+    from facebook_business.adobjects.advideo import AdVideo
+    from facebook_business.exceptions import FacebookRequestError
+    META_AVAILABLE = True
+except ImportError:
+    META_AVAILABLE = False
+    print("⚠️ facebook-business no disponible. Instala con: pip install facebook-business")
+
+from ..models.schemas import CreativeGeneration, CampaignRequest
+
+
+class MetaAdsService:
+    """Service for managing Meta (Facebook/Instagram) ads"""
+    
+    def __init__(
+        self,
+        access_token: str,
+        app_id: str,
+        app_secret: str,
+        ad_account_id: str
+    ):
+        if not META_AVAILABLE:
+            raise ImportError("facebook-business package is required")
+        
+        self.access_token = access_token
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self.ad_account_id = ad_account_id
+        
+        # Initialize API
+        FacebookAdsApi.init(access_token=access_token, app_id=app_id, app_secret=app_secret)
+        self.account = AdAccount(f'act_{ad_account_id}')
+    
+    def create_campaign(
+        self,
+        name: str,
+        objective: str,
+        status: str = "PAUSED"
+    ) -> Dict[str, Any]:
+        """
+        Create a new campaign
+        
+        Args:
+            name: Campaign name
+            objective: Campaign objective (CONVERSIONS, TRAFFIC, etc.)
+            status: Campaign status (PAUSED, ACTIVE)
+            
+        Returns:
+            Campaign data with ID
+        """
+        try:
+            campaign = self.account.create_campaign(
+                params={
+                    'name': name,
+                    'objective': objective,
+                    'status': status,
+                    'special_ad_categories': []
+                }
+            )
+            
+            return {
+                "campaign_id": campaign.get_id(),
+                "name": name,
+                "objective": objective,
+                "status": status
+            }
+        except FacebookRequestError as e:
+            raise Exception(f"Error creating Meta campaign: {e}")
+    
+    def create_ad_set(
+        self,
+        campaign_id: str,
+        name: str,
+        daily_budget: float,
+        targeting: Optional[Dict[str, Any]] = None,
+        optimization_goal: str = "OFFSITE_CONVERSIONS"
+    ) -> Dict[str, Any]:
+        """
+        Create an ad set
+        
+        Args:
+            campaign_id: Parent campaign ID
+            name: Ad set name
+            daily_budget: Daily budget in cents
+            targeting: Targeting parameters
+            optimization_goal: Optimization goal
+            
+        Returns:
+            Ad set data with ID
+        """
+        if targeting is None:
+            targeting = {
+                "age_min": 18,
+                "age_max": 65,
+                "genders": [1, 2],  # All genders
+                "geo_locations": {"countries": ["US"]}  # Default to US
+            }
+        
+        try:
+            ad_set = self.account.create_ad_set(
+                params={
+                    'name': name,
+                    'campaign_id': campaign_id,
+                    'daily_budget': int(daily_budget * 100),  # Convert to cents
+                    'billing_event': 'IMPRESSIONS',
+                    'optimization_goal': optimization_goal,
+                    'bid_amount': 100,  # $1.00 default bid
+                    'targeting': targeting,
+                    'status': 'PAUSED'
+                }
+            )
+            
+            return {
+                "ad_set_id": ad_set.get_id(),
+                "name": name,
+                "daily_budget": daily_budget,
+                "campaign_id": campaign_id
+            }
+        except FacebookRequestError as e:
+            raise Exception(f"Error creating Meta ad set: {e}")
+    
+    def upload_image(self, image_path: str) -> str:
+        """
+        Upload image to Meta
+        
+        Args:
+            image_path: Local path to image file
+            
+        Returns:
+            Image hash (used to reference in creatives)
+        """
+        try:
+            image = AdImage(parent_id=self.ad_account_id)
+            image[AdImage.Field.filename] = image_path
+            image.remote_create()
+            
+            return image[AdImage.Field.hash]
+        except FacebookRequestError as e:
+            raise Exception(f"Error uploading image to Meta: {e}")
+    
+    def upload_video(self, video_path: str) -> str:
+        """
+        Upload video to Meta
+        
+        Args:
+            video_path: Local path to video file
+            
+        Returns:
+            Video ID
+        """
+        try:
+            video = AdVideo(parent_id=self.ad_account_id)
+            video[AdVideo.Field.filepath] = video_path
+            video.remote_create()
+            
+            return video.get_id()
+        except FacebookRequestError as e:
+            raise Exception(f"Error uploading video to Meta: {e}")
+    
+    def create_ad_creative(
+        self,
+        name: str,
+        creative: CreativeGeneration,
+        image_hash: Optional[str] = None,
+        video_id: Optional[str] = None,
+        page_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create ad creative
+        
+        Args:
+            name: Creative name
+            creative: CreativeGeneration object
+            image_hash: Image hash from upload_image
+            video_id: Video ID from upload_video
+            page_id: Facebook Page ID (required)
+            
+        Returns:
+            Creative data with ID
+        """
+        if not page_id:
+            raise ValueError("page_id is required for Meta creatives")
+        
+        creative_params = {
+            'name': name,
+            'object_story_spec': {
+                'page_id': page_id
+            }
+        }
+        
+        # Add image or video
+        if image_hash:
+            creative_params['object_story_spec']['link_data'] = {
+                'image_hash': image_hash,
+                'link': creative.generation_params.get('link_url', ''),
+                'message': creative.description or '',
+                'name': creative.headline or '',
+                'call_to_action': {
+                    'type': creative.cta or 'LEARN_MORE'
+                }
+            }
+        elif video_id:
+            creative_params['object_story_spec']['video_id'] = video_id
+            creative_params['object_story_spec']['link_data'] = {
+                'link': creative.generation_params.get('link_url', ''),
+                'message': creative.description or '',
+                'name': creative.headline or '',
+                'call_to_action': {
+                    'type': creative.cta or 'LEARN_MORE'
+                }
+            }
+        else:
+            raise ValueError("Either image_hash or video_id must be provided")
+        
+        try:
+            ad_creative = AdCreative(parent_id=self.ad_account_id)
+            for key, value in creative_params.items():
+                ad_creative[key] = value
+            ad_creative.remote_create()
+            
+            return {
+                "creative_id": ad_creative.get_id(),
+                "name": name
+            }
+        except FacebookRequestError as e:
+            raise Exception(f"Error creating Meta creative: {e}")
+    
+    def create_ad(
+        self,
+        ad_set_id: str,
+        creative_id: str,
+        name: str,
+        status: str = "PAUSED"
+    ) -> Dict[str, Any]:
+        """
+        Create an ad
+        
+        Args:
+            ad_set_id: Ad set ID
+            creative_id: Creative ID
+            name: Ad name
+            status: Ad status
+            
+        Returns:
+            Ad data with ID
+        """
+        try:
+            ad = Ad(parent_id=self.ad_account_id)
+            ad[Ad.Field.name] = name
+            ad[Ad.Field.adset_id] = ad_set_id
+            ad[Ad.Field.creative] = {'creative_id': creative_id}
+            ad[Ad.Field.status] = status
+            ad.remote_create()
+            
+            return {
+                "ad_id": ad.get_id(),
+                "name": name,
+                "ad_set_id": ad_set_id,
+                "status": status
+            }
+        except FacebookRequestError as e:
+            raise Exception(f"Error creating Meta ad: {e}")
+    
+    def get_campaign_metrics(
+        self,
+        campaign_id: str,
+        date_preset: str = "last_7d"
+    ) -> Dict[str, Any]:
+        """
+        Get campaign performance metrics
+        
+        Args:
+            campaign_id: Campaign ID
+            date_preset: Date range preset
+            
+        Returns:
+            Metrics dictionary
+        """
+        try:
+            campaign = Campaign(campaign_id)
+            insights = campaign.get_insights(
+                params={
+                    'date_preset': date_preset,
+                    'fields': [
+                        'impressions',
+                        'clicks',
+                        'spend',
+                        'ctr',
+                        'cpc',
+                        'cpm',
+                        'actions'
+                    ]
+                }
+            )
+            
+            if insights:
+                insight = insights[0]
+                return {
+                    "impressions": int(insight.get('impressions', 0)),
+                    "clicks": int(insight.get('clicks', 0)),
+                    "spend": float(insight.get('spend', 0)),
+                    "ctr": float(insight.get('ctr', 0)),
+                    "cpc": float(insight.get('cpc', 0)),
+                    "cpm": float(insight.get('cpm', 0)),
+                    "conversions": self._extract_conversions(insight.get('actions', []))
+                }
+            
+            return {}
+        except FacebookRequestError as e:
+            print(f"⚠️ Error getting Meta metrics: {e}")
+            return {}
+    
+    def _extract_conversions(self, actions: List[Dict]) -> int:
+        """Extract conversion count from actions"""
+        conversions = 0
+        for action in actions:
+            if action.get('action_type') in ['offsite_conversion', 'purchase', 'lead']:
+                conversions += int(action.get('value', 0))
+        return conversions
+    
+    def pause_ad(self, ad_id: str) -> bool:
+        """Pause an ad"""
+        try:
+            ad = Ad(ad_id)
+            ad.update({'status': 'PAUSED'})
+            return True
+        except FacebookRequestError as e:
+            print(f"⚠️ Error pausing Meta ad: {e}")
+            return False
+    
+    def activate_ad(self, ad_id: str) -> bool:
+        """Activate an ad"""
+        try:
+            ad = Ad(ad_id)
+            ad.update({'status': 'ACTIVE'})
+            return True
+        except FacebookRequestError as e:
+            print(f"⚠️ Error activating Meta ad: {e}")
+            return False

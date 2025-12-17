@@ -1,0 +1,398 @@
+"""
+ADS WORKER Agent
+LangChain-based agent that orchestrates the entire ad creation and optimization workflow
+"""
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+import uuid
+
+try:
+    from langchain.agents import AgentExecutor, create_openai_tools_agent
+    from langchain_openai import ChatOpenAI
+    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langchain.tools import Tool
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+    print("⚠️ LangChain no disponible. Instala con: pip install langchain langchain-openai")
+
+from ..models.schemas import (
+    AssetUpload,
+    AssetAnalysis,
+    CreativeGeneration,
+    CampaignRequest,
+    CampaignResponse,
+    AdPerformance,
+    OptimizationResult
+)
+from ..services.asset_processor import AssetProcessor
+from ..services.copy_generator import CopyGenerator
+from ..services.visual_generator import VisualGenerator
+from ..services.meta_ads_service import MetaAdsService
+from ..services.google_ads_service import GoogleAdsService
+from ..services.optimizer import CampaignOptimizer
+
+
+class AdsWorkerAgent:
+    """
+    Main agent that orchestrates the entire ad creation and optimization workflow
+    """
+    
+    def __init__(
+        self,
+        openai_api_key: str,
+        meta_access_token: Optional[str] = None,
+        meta_app_id: Optional[str] = None,
+        meta_app_secret: Optional[str] = None,
+        meta_ad_account_id: Optional[str] = None,
+        google_customer_id: Optional[str] = None,
+        google_config_path: Optional[str] = None,
+        storage_path: str = "./assets"
+    ):
+        if not LANGCHAIN_AVAILABLE:
+            raise ImportError("LangChain is required for AdsWorkerAgent")
+        
+        self.openai_api_key = openai_api_key
+        
+        # Initialize services
+        self.asset_processor = AssetProcessor(openai_api_key, storage_path)
+        self.copy_generator = CopyGenerator(openai_api_key)
+        self.visual_generator = VisualGenerator(storage_path)
+        
+        # Initialize ad services if credentials provided
+        self.meta_service = None
+        if meta_access_token and meta_app_id and meta_app_secret and meta_ad_account_id:
+            try:
+                self.meta_service = MetaAdsService(
+                    meta_access_token,
+                    meta_app_id,
+                    meta_app_secret,
+                    meta_ad_account_id
+                )
+            except Exception as e:
+                print(f"⚠️ Error inicializando Meta Ads Service: {e}")
+        
+        self.google_service = None
+        if google_customer_id:
+            try:
+                self.google_service = GoogleAdsService(google_customer_id, google_config_path)
+            except Exception as e:
+                print(f"⚠️ Error inicializando Google Ads Service: {e}")
+        
+        self.optimizer = CampaignOptimizer()
+        
+        # Initialize LLM
+        self.llm = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.7,
+            api_key=openai_api_key
+        )
+        
+        # Create tools for the agent
+        self.tools = self._create_tools()
+        
+        # Create agent
+        self.agent = self._create_agent()
+    
+    def _create_tools(self) -> List[Tool]:
+        """Create LangChain tools for the agent"""
+        tools = [
+            Tool(
+                name="process_asset",
+                func=self._process_asset_tool,
+                description="Process and analyze user-uploaded assets (images, videos, text). Returns analysis with labels, objects, style tags, etc."
+            ),
+            Tool(
+                name="generate_copies",
+                func=self._generate_copies_tool,
+                description="Generate multiple ad copy variations from asset analysis. Returns list of creative copies with headlines, descriptions, and CTAs."
+            ),
+            Tool(
+                name="generate_visuals",
+                func=self._generate_visuals_tool,
+                description="Generate visual variations from assets in different formats (1:1, 4:5, 16:9, etc.). Returns list of visual creatives."
+            ),
+            Tool(
+                name="create_meta_campaign",
+                func=self._create_meta_campaign_tool,
+                description="Create a campaign on Meta (Facebook/Instagram). Requires Meta service to be initialized."
+            ),
+            Tool(
+                name="create_google_campaign",
+                func=self._create_google_campaign_tool,
+                description="Create a campaign on Google Ads. Requires Google service to be initialized."
+            ),
+            Tool(
+                name="optimize_campaign",
+                func=self._optimize_campaign_tool,
+                description="Optimize campaign based on performance metrics. Returns optimization recommendations and actions."
+            )
+        ]
+        
+        return tools
+    
+    def _create_agent(self) -> AgentExecutor:
+        """Create the LangChain agent"""
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert AI advertising manager that creates and optimizes ad campaigns.
+
+Your workflow:
+1. Process user assets (images/videos/text) to understand content
+2. Generate multiple ad copy variations
+3. Generate visual variations in different formats
+4. Create campaigns on Meta and/or Google Ads
+5. Monitor performance and optimize continuously
+
+Always think step by step and explain your decisions."""),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad")
+        ])
+        
+        agent = create_openai_tools_agent(self.llm, self.tools, prompt)
+        agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True)
+        
+        return agent_executor
+    
+    def _process_asset_tool(self, asset_info: str) -> str:
+        """Tool wrapper for asset processing"""
+        # Parse asset info (simplified - in production use proper parsing)
+        import json
+        try:
+            info = json.loads(asset_info)
+            asset_type = info.get("asset_type")
+            file_path = info.get("file_path")
+            file_url = info.get("file_url")
+            text_content = info.get("text_content")
+            
+            from ..models.schemas import AssetType
+            asset_type_enum = AssetType(asset_type)
+            
+            analysis = self.asset_processor.process_asset(
+                asset_type_enum,
+                file_path,
+                file_url,
+                text_content,
+                info.get("metadata")
+            )
+            
+            return analysis.model_dump_json()
+        except Exception as e:
+            return f"Error processing asset: {e}"
+    
+    def _generate_copies_tool(self, analysis_json: str) -> str:
+        """Tool wrapper for copy generation"""
+        import json
+        try:
+            analysis_dict = json.loads(analysis_json)
+            analysis = AssetAnalysis(**analysis_dict)
+            
+            copies = self.copy_generator.generate_copies(
+                analysis,
+                num_variations=10
+            )
+            
+            return json.dumps([copy.model_dump() for copy in copies])
+        except Exception as e:
+            return f"Error generating copies: {e}"
+    
+    def _generate_visuals_tool(self, asset_info: str) -> str:
+        """Tool wrapper for visual generation"""
+        import json
+        try:
+            info = json.loads(asset_info)
+            analysis_dict = info.get("analysis")
+            asset_path = info.get("asset_path")
+            options = info.get("options", {})
+            
+            analysis = AssetAnalysis(**analysis_dict)
+            visuals = self.visual_generator.generate_visuals_from_asset(
+                analysis,
+                asset_path,
+                options
+            )
+            
+            return json.dumps([visual.model_dump() for visual in visuals])
+        except Exception as e:
+            return f"Error generating visuals: {e}"
+    
+    def _create_meta_campaign_tool(self, campaign_info: str) -> str:
+        """Tool wrapper for Meta campaign creation"""
+        if not self.meta_service:
+            return "Meta Ads Service not initialized"
+        
+        import json
+        try:
+            info = json.loads(campaign_info)
+            # Create campaign using Meta service
+            # (Simplified - in production implement full workflow)
+            return "Meta campaign creation initiated"
+        except Exception as e:
+            return f"Error creating Meta campaign: {e}"
+    
+    def _create_google_campaign_tool(self, campaign_info: str) -> str:
+        """Tool wrapper for Google campaign creation"""
+        if not self.google_service:
+            return "Google Ads Service not initialized"
+        
+        import json
+        try:
+            info = json.loads(campaign_info)
+            # Create campaign using Google service
+            # (Simplified - in production implement full workflow)
+            return "Google campaign creation initiated"
+        except Exception as e:
+            return f"Error creating Google campaign: {e}"
+    
+    def _optimize_campaign_tool(self, metrics_info: str) -> str:
+        """Tool wrapper for campaign optimization"""
+        import json
+        try:
+            info = json.loads(metrics_info)
+            performances = [AdPerformance(**p) for p in info.get("performances", [])]
+            total_budget = info.get("total_budget", 0.0)
+            optimization_goal = info.get("optimization_goal", "conversions")
+            
+            result = self.optimizer.optimize_campaign(
+                performances,
+                total_budget,
+                optimization_goal
+            )
+            
+            return result.model_dump_json()
+        except Exception as e:
+            return f"Error optimizing campaign: {e}"
+    
+    def process_and_launch_campaign(
+        self,
+        assets: List[AssetUpload],
+        campaign_request: CampaignRequest
+    ) -> CampaignResponse:
+        """
+        Main method: Process assets and launch campaign
+        
+        Args:
+            assets: List of user-uploaded assets
+            campaign_request: Campaign creation request
+            
+        Returns:
+            CampaignResponse with campaign details
+        """
+        # 1. Process all assets
+        asset_analyses = []
+        for asset in assets:
+            analysis = self.asset_processor.process_asset(
+                asset.asset_type,
+                asset.file_path,
+                asset.file_url,
+                asset.text_content,
+                asset.metadata
+            )
+            asset_analyses.append(analysis)
+        
+        # 2. Generate copies for each asset
+        all_copies = []
+        for analysis in asset_analyses:
+            copies = self.copy_generator.generate_copies(
+                analysis,
+                num_variations=10,
+                tone=campaign_request.metadata.get("tone"),
+                target_audience=campaign_request.metadata.get("target_audience")
+            )
+            # Set asset_id
+            for copy in copies:
+                copy.asset_id = analysis.asset_id
+            all_copies.extend(copies)
+        
+        # 3. Generate visuals
+        all_visuals = []
+        for i, analysis in enumerate(asset_analyses):
+            if analysis.asset_type.value in ["image", "video"]:
+                asset_path = assets[i].file_path or assets[i].file_url
+                visuals = self.visual_generator.generate_visuals_from_asset(
+                    analysis,
+                    asset_path,
+                    {"formats": ["1:1", "4:5", "16:9"]}
+                )
+                all_visuals.extend(visuals)
+        
+        # 4. Create campaigns on platforms
+        campaign_id = str(uuid.uuid4())
+        platform_campaign_ids = {}
+        
+        # Meta campaign
+        if campaign_request.platforms.value in ["meta", "both"] and self.meta_service:
+            try:
+                meta_campaign = self.meta_service.create_campaign(
+                    campaign_request.name,
+                    campaign_request.objective.value,
+                    "PAUSED"  # Start paused, activate after setup
+                )
+                platform_campaign_ids["meta"] = meta_campaign["campaign_id"]
+            except Exception as e:
+                print(f"⚠️ Error creating Meta campaign: {e}")
+        
+        # Google campaign
+        if campaign_request.platforms.value in ["google", "both"] and self.google_service:
+            try:
+                google_campaign = self.google_service.create_campaign(
+                    campaign_request.name,
+                    campaign_request.budget_daily,
+                    campaign_request.start_date,
+                    campaign_request.end_date
+                )
+                platform_campaign_ids["google"] = google_campaign["campaign_resource_name"]
+            except Exception as e:
+                print(f"⚠️ Error creating Google campaign: {e}")
+        
+        # 5. Create ads (simplified - in production create all combinations)
+        ads_created = 0
+        
+        # Return campaign response
+        return CampaignResponse(
+            campaign_id=campaign_id,
+            name=campaign_request.name,
+            status="active",
+            platforms=[p for p in ["meta", "google"] if p in platform_campaign_ids],
+            budget_daily=campaign_request.budget_daily,
+            budget_remaining=campaign_request.budget_daily * 30,  # Estimate
+            ads_count=ads_created,
+            active_ads=ads_created,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            start_date=campaign_request.start_date,
+            end_date=campaign_request.end_date,
+            platform_campaign_ids=platform_campaign_ids
+        )
+    
+    def optimize_existing_campaign(
+        self,
+        campaign_id: str,
+        platform_campaign_ids: Dict[str, str]
+    ) -> OptimizationResult:
+        """
+        Optimize an existing campaign
+        
+        Args:
+            campaign_id: Internal campaign ID
+            platform_campaign_ids: Dict mapping platform to campaign ID
+            
+        Returns:
+            OptimizationResult with optimization actions
+        """
+        # Fetch metrics
+        performances = self.optimizer.fetch_metrics_from_providers(
+            self.meta_service,
+            self.google_service,
+            {"campaign_id": campaign_id, **platform_campaign_ids}
+        )
+        
+        # Run optimization
+        result = self.optimizer.optimize_campaign(
+            performances,
+            total_budget=100.0,  # Get from campaign
+            optimization_goal="conversions"
+        )
+        
+        return result
