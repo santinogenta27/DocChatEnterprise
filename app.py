@@ -38865,25 +38865,12 @@ if __name__ == "__main__":
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((check_host, base_port))
+            # Si llegamos aquí, el puerto está disponible
+            print(f"✅ Puerto {base_port} disponible")
     except (OSError, socket.error):
-        # Puerto base ocupado, buscar uno alternativo
-        print(f"⚠️ Puerto {base_port} ocupado, buscando puerto alternativo...")
-        port = None
-        for attempt_port in range(base_port + 1, base_port + 50):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    s.bind((check_host, attempt_port))
-                    port = attempt_port
-                    print(f"✅ Puerto {attempt_port} disponible")
-                    break
-            except (OSError, socket.error):
-                continue
-        
-        if port is None:
-            # Si no encontramos puerto, usar 0 para que Gradio lo encuentre automáticamente
-            port = 0
-            print(f"⚠️ No se encontró puerto disponible en rango {base_port}-{base_port+49}, Gradio buscará uno automáticamente")
+        # Puerto base ocupado, usar 0 para que Gradio encuentre uno automáticamente
+        port = 0
+        print(f"⚠️ Puerto {base_port} ocupado, Gradio buscará un puerto disponible automáticamente")
     
     print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port if port != 0 else 'puerto automático'}")
     
@@ -38900,13 +38887,29 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️ Error configurando endpoints FastAPI: {e}")
     
-    # Usar server_port=0 si no encontramos puerto, para que Gradio lo encuentre automáticamente
-    demo.launch(
-        show_error=True,
-        quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
-        server_name=server_name,
-        server_port=port,
-        share=False,
-        inbrowser=True,
-        show_api=False  # Deshabilitar API info completamente
-    )
+    # Usar server_port=0 si el puerto base está ocupado, para que Gradio lo encuentre automáticamente
+    try:
+        demo.launch(
+            show_error=True,
+            quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
+            server_name=server_name,
+            server_port=port,
+            share=False,
+            inbrowser=True,
+            show_api=False  # Deshabilitar API info completamente
+        )
+    except OSError as e:
+        if "Cannot find empty port" in str(e):
+            # Si aún falla, usar 0 para que Gradio encuentre automáticamente
+            print("⚠️ Error al iniciar en puerto especificado, Gradio buscará uno automáticamente...")
+            demo.launch(
+                show_error=True,
+                quiet=True,
+                server_name=server_name,
+                server_port=0,  # 0 = encontrar puerto automáticamente
+                share=False,
+                inbrowser=True,
+                show_api=False
+            )
+        else:
+            raise
