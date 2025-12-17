@@ -38856,67 +38856,57 @@ if __name__ == "__main__":
     
     # Intentar encontrar un puerto disponible
     import socket
-    port = None
+    port = base_port
     # Usar "0.0.0.0" para verificar puertos en Windows
     check_host = "0.0.0.0" if server_name == "127.0.0.1" else server_name
     
-    for attempt_port in range(base_port, base_port + 10):
-        try:
-            # Verificar si el puerto está disponible
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind((check_host, attempt_port))
-                port = attempt_port
-                break
-        except (OSError, socket.error):
-            # Puerto ocupado, intentar el siguiente
-            continue
-    
-    if port is None:
-        # Si no encontramos puerto, usar el predeterminado y dejar que Gradio maneje el error
-        port = base_port
-        print(f"⚠️ No se encontró puerto disponible en rango {base_port}-{base_port+9}, intentando {port}")
-    else:
-        if port != base_port:
-            print(f"⚠️ Puerto {base_port} ocupado, usando puerto alternativo: {port}")
-    
-    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port}")
-    
+    # Verificar si el puerto base está disponible
     try:
-        # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
-        demo.queue()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind((check_host, base_port))
+    except (OSError, socket.error):
+        # Puerto base ocupado, buscar uno alternativo
+        print(f"⚠️ Puerto {base_port} ocupado, buscando puerto alternativo...")
+        port = None
+        for attempt_port in range(base_port + 1, base_port + 50):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.bind((check_host, attempt_port))
+                    port = attempt_port
+                    print(f"✅ Puerto {attempt_port} disponible")
+                    break
+            except (OSError, socket.error):
+                continue
         
-        # Configurar endpoints FastAPI para AI Agent Business Manager
-        try:
-            if hasattr(demo, 'app'):
-                setup_ai_agent_api_endpoints(demo.app)
-                print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
-            else:
-                print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
-        except Exception as e:
-            print(f"⚠️ Error configurando endpoints FastAPI: {e}")
-        
-        demo.launch(
-            show_error=True,
-            quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
-            server_name=server_name,
-            server_port=port,
-            share=False,
-            inbrowser=True,
-            show_api=False  # Deshabilitar API info completamente
-        )
-    except OSError as e:
-        if "Cannot find empty port" in str(e):
-            # Si aún falla, intentar con el siguiente puerto
-            print(f"⚠️ Error al iniciar en puerto {port}, intentando puerto {port + 1}...")
-            demo.launch(
-                show_error=True,
-                quiet=True,
-                server_name=server_name,
-                server_port=port + 1,
-                share=False,
-                inbrowser=True,
-                show_api=False
-            )
+        if port is None:
+            # Si no encontramos puerto, usar 0 para que Gradio lo encuentre automáticamente
+            port = 0
+            print(f"⚠️ No se encontró puerto disponible en rango {base_port}-{base_port+49}, Gradio buscará uno automáticamente")
+    
+    print(f"🚀 Iniciando DocChat Enterprise en {server_name}:{port if port != 0 else 'puerto automático'}")
+    
+    # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
+    demo.queue()
+    
+    # Configurar endpoints FastAPI para AI Agent Business Manager
+    try:
+        if hasattr(demo, 'app'):
+            setup_ai_agent_api_endpoints(demo.app)
+            print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
         else:
-            raise
+            print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI: {e}")
+    
+    # Usar server_port=0 si no encontramos puerto, para que Gradio lo encuentre automáticamente
+    demo.launch(
+        show_error=True,
+        quiet=True,  # Ocultar mensaje "To create a public link, set share=True"
+        server_name=server_name,
+        server_port=port,
+        share=False,
+        inbrowser=True,
+        show_api=False  # Deshabilitar API info completamente
+    )
