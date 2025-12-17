@@ -37,7 +37,7 @@ if SQLALCHEMY_AVAILABLE:
         file_path = Column(String)
         file_size = Column(Integer)
         mime_type = Column(String)
-        metadata = Column(JSON)
+        asset_metadata = Column(JSON)  # Renombrado de 'metadata' para evitar conflicto con SQLAlchemy
         created_at = Column(DateTime, default=datetime.utcnow)
         updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -56,7 +56,7 @@ if SQLALCHEMY_AVAILABLE:
         predicted_cpc = Column(Float)
         predicted_conversion_prob = Column(Float)
         quality_score = Column(Float)
-        metadata = Column(JSON)
+        variation_metadata = Column(JSON)  # Renombrado de 'metadata' para evitar conflicto con SQLAlchemy
         created_at = Column(DateTime, default=datetime.utcnow)
         
         # Relación
@@ -78,7 +78,7 @@ if SQLALCHEMY_AVAILABLE:
         status = Column(String, default="draft")  # draft, active, paused, completed
         target_audience = Column(JSON)
         platform_campaign_id = Column(String)  # ID en la plataforma externa
-        metadata = Column(JSON)
+        campaign_metadata = Column(JSON)  # Renombrado de 'metadata' para evitar conflicto con SQLAlchemy
         created_at = Column(DateTime, default=datetime.utcnow)
         updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
         launched_at = Column(DateTime)
@@ -111,7 +111,7 @@ if SQLALCHEMY_AVAILABLE:
         roas = Column(Float, default=0.0)
         conversion_rate = Column(Float, default=0.0)
         timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-        metadata = Column(JSON)
+        metrics_metadata = Column(JSON)  # Renombrado de 'metadata' para evitar conflicto con SQLAlchemy
     
     class OptimizationHistoryDB(Base):
         """Tabla de historial de optimizaciones"""
@@ -125,7 +125,7 @@ if SQLALCHEMY_AVAILABLE:
         new_value = Column(JSON)
         reward = Column(Float)
         timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-        metadata = Column(JSON)
+        history_metadata = Column(JSON)  # Renombrado de 'metadata' para evitar conflicto con SQLAlchemy
 
 
 class DatabaseManager:
@@ -222,7 +222,7 @@ class DatabaseManager:
                 file_path=file_path,
                 file_size=file_size,
                 mime_type=mime_type,
-                metadata=metadata or {}
+                asset_metadata=metadata or {}
             )
             session.add(asset)
             session.commit()
@@ -254,7 +254,7 @@ class DatabaseManager:
                     "file_path": asset.file_path,
                     "file_size": asset.file_size,
                     "mime_type": asset.mime_type,
-                    "metadata": asset.metadata or {},
+                    "metadata": asset.asset_metadata or {},
                     "created_at": asset.created_at.isoformat() if asset.created_at else None
                 }
                 session.close()
@@ -296,7 +296,7 @@ class DatabaseManager:
                 budget=budget,
                 daily_budget=daily_budget,
                 target_audience=target_audience or {},
-                metadata=metadata or {},
+                campaign_metadata=metadata or {},
                 status="draft"
             )
             session.add(campaign)
@@ -347,7 +347,7 @@ class DatabaseManager:
                 cpa=cpa,
                 roas=roas,
                 conversion_rate=conversion_rate,
-                metadata=metadata or {}
+                metrics_metadata=metadata or {}
             )
             session.add(metrics)
             session.commit()

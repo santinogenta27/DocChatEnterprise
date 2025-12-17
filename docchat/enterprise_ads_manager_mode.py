@@ -282,10 +282,13 @@ class EnterpriseAdsManagerMode:
         
         # API Client con retry y circuit breakers
         if ADS_OPTIMIZATION_AVAILABLE:
+            from .ads_optimization.retry_logic import RetryConfig
+            retry_config = RetryConfig(max_attempts=3)
+            circuit_breaker_config = {"failure_threshold": 5, "recovery_timeout": 60}
             self.api_client = APIClient(
-                service_name="meta_ads",
-                max_retries=3,
-                circuit_breaker_threshold=5
+                name="meta_ads",
+                retry_config=retry_config,
+                circuit_breaker_config=circuit_breaker_config
             )
             print("✅ API Client con retry logic y circuit breakers inicializado")
         else:

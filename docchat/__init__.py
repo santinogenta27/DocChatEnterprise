@@ -111,6 +111,26 @@ from .enterprise_ads_manager_mode import (  # noqa: F401
     CampaignMetrics,
     OptimizationAction
 )
+# Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI
+from .enterprise_sales_manager_mode import (  # noqa: F401
+    EnterpriseSalesManagerMode,
+    get_enterprise_sales_manager_mode,
+    run_enterprise_sales_manager_mode,
+    Lead,
+    LeadStatus,
+    SalesStage,
+    SalesStrategy,
+    OutreachResult,
+    SalesMetrics
+)
+# Enterprise Supreme Mode - Fusión de Enterprise API + Alien Mode + ChatPDF
+from .enterprise_supreme_mode import (  # noqa: F401
+    EnterpriseSupremeMode,
+    get_enterprise_supreme_mode,
+    run_enterprise_supreme_mode_streaming,
+    SupremeAnalysisResult,
+    SupremeQueryResult
+)
 # SNIPE SHOT Mode - Clonado de Alien Mode
 from .snipe_shot_mode import SnipeShotMode, run_snipe_shot_mode, get_snipe_shot_mode  # noqa: F401
 # Agent Builder Studio - Plataforma No-Code para Crear AI Agents
@@ -480,6 +500,22 @@ __all__ = [
     "AdCreative",
     "CampaignMetrics",
     "OptimizationAction",
+    # Enterprise Sales Manager Mode
+    "EnterpriseSalesManagerMode",
+    "get_enterprise_sales_manager_mode",
+    "run_enterprise_sales_manager_mode",
+    "Lead",
+    "LeadStatus",
+    "SalesStage",
+    "SalesStrategy",
+    "OutreachResult",
+    "SalesMetrics",
+    # Enterprise Supreme Mode
+    "EnterpriseSupremeMode",
+    "get_enterprise_supreme_mode",
+    "run_enterprise_supreme_mode_streaming",
+    "SupremeAnalysisResult",
+    "SupremeQueryResult",
     # Judge Agent Mode
     "JudgeAgentMode",
     "run_judge_agent_mode",

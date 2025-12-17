@@ -165,10 +165,6 @@ class MultimodalProcessor:
                     "processed": False
                 }
             }
-            "content": str(media_input.content),
-            "transcription": None,  # Se implementará con Whisper
-            "metadata": media_input.metadata or {}
-        }
     
     def _process_video(self, media_input: MediaInput) -> Dict[str, Any]:
         """Procesa video"""

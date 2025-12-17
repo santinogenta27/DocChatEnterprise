@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import base64
 import json
+import time
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -70,7 +71,13 @@ class CreativeGenerator:
         if OPENAI_AVAILABLE and config.openai_api_key:
             self.openai_client = OpenAI(api_key=config.openai_api_key)
         
-        self.llm = create_llm(config, provider="openai")
+        # Crear LLM usando la función factory correcta
+        self.llm = create_llm(
+            provider="openai",
+            model=getattr(config, 'openai_model', 'gpt-4o'),
+            api_key=config.openai_api_key,
+            temperature=getattr(config, 'temperature', 0.15)
+        )
         
         # Directorio para creativos generados
         self.output_dir = Path(config.memory_dir) / "generated_creatives" if config.memory_dir else Path("data/generated_creatives")
@@ -319,7 +326,13 @@ class AutonomousCampaignCreator:
     def __init__(self, config: AppConfig):
         self.config = config
         self.creative_generator = CreativeGenerator(config)
-        self.llm = create_llm(config, provider="openai")
+        # Crear LLM usando la función factory correcta
+        self.llm = create_llm(
+            provider="openai",
+            model=getattr(config, 'openai_model', 'gpt-4o'),
+            api_key=config.openai_api_key,
+            temperature=getattr(config, 'temperature', 0.15)
+        )
     
     async def create_campaign_from_objective(
         self,

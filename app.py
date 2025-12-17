@@ -162,6 +162,7 @@ from docchat.memory import MemoryStore, ContextManager
 from docchat.autonomous_agent import AutonomousAgent
 from docchat.advanced_agent import AdvancedAutonomousAgent
 from docchat.enterprise_api import EnterpriseAPIMode
+from docchat.intelligence_contract_mode import IntelligenceContractMode
 from docchat.advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode
 # from docchat.optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # ELIMINADO
 from docchat.marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier
@@ -209,6 +210,16 @@ from docchat.event_horizon_mode import run_event_horizon_mode, get_event_horizon
 from docchat.event_storage_mode import run_event_storage_mode, get_event_storage_mode
 from docchat.extasis_mode import run_extasis_mode, get_extasis_mode
 from docchat.extraction_x_mode import run_extraction_x_mode, get_extraction_x_mode
+
+# Importar sistema de agentes AI para ventas
+try:
+    from sales_agent_system import SalesAgentSystem
+    SALES_AGENT_AVAILABLE = True
+    print("✅ Sistema de Agentes AI para Ventas cargado correctamente")
+except ImportError as e:
+    SALES_AGENT_AVAILABLE = False
+    print(f"⚠️ Sistema de Agentes AI para Ventas no disponible: {e}")
+    SalesAgentSystem = None
 from docchat.data_point_mode import run_data_point_mode, get_data_point_mode
 from docchat.enterprise_connectors import EnterpriseConnectorManager, ConnectorConfig, ConnectorStatus
 from docchat.event_bus_mode import run_event_bus_mode, get_event_bus_mode
@@ -374,6 +385,38 @@ enterprise_ads_manager = EnterpriseAdsManagerMode(
     provider="openai"
 )
 
+# Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI
+try:
+    from docchat.enterprise_sales_manager_mode import EnterpriseSalesManagerMode
+    enterprise_sales_manager = EnterpriseSalesManagerMode(
+        config=config,
+        processor=processor,
+        retriever_builder=retriever_builder,
+        context_manager=context_manager,
+        provider="openai"
+    )
+    ENTERPRISE_SALES_MANAGER_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Enterprise Sales Manager no disponible: {e}")
+    enterprise_sales_manager = None
+    ENTERPRISE_SALES_MANAGER_AVAILABLE = False
+
+# Enterprise Supreme Mode - Fusión de Enterprise API + Alien Mode + ChatPDF
+try:
+    from docchat.enterprise_supreme_mode import EnterpriseSupremeMode
+    enterprise_supreme = EnterpriseSupremeMode(
+        config=config,
+        processor=processor,
+        retriever_builder=retriever_builder,
+        context_manager=context_manager,
+        provider="openai"
+    )
+    ENTERPRISE_SUPREME_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Enterprise Supreme Mode no disponible: {e}")
+    enterprise_supreme = None
+    ENTERPRISE_SUPREME_AVAILABLE = False
+
 # AI Agent Builder Enterprise - Constructor de Agentes AI sin Código
 try:
     from docchat.ai_agent_builder_mode import AIAgentBuilderMode
@@ -383,12 +426,16 @@ except ImportError as e:
     print(f"⚠️ AI Agent Builder no disponible: {e}")
     ai_agent_builder = None
     AI_AGENT_BUILDER_AVAILABLE = False
-    config=config,
-    processor=processor,
-    retriever_builder=retriever_builder,
-    context_manager=context_manager,
-    provider="openai"
-)
+
+# Enterprise Autonomous Multi-Agent Workflow Platform
+try:
+    from docchat.autonomous_multi_agent_platform import AutonomousMultiAgentWorkflowPlatform
+    multi_agent_platform = AutonomousMultiAgentWorkflowPlatform(config=config)
+    MULTI_AGENT_PLATFORM_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Autonomous Multi-Agent Platform no disponible: {e}")
+    multi_agent_platform = None
+    MULTI_AGENT_PLATFORM_AVAILABLE = False
 # Stargate PDF - clon del Enterprise API original
 stargate_pdf = StargatePDFMode(config, provider="openai")
 # Data Sight - clon del Enterprise API para análisis de datos e insights
@@ -3361,6 +3408,182 @@ def run_enterprise_api_supreme_mode_streaming(
         yield accumulated_output
 
 
+def run_intelligence_contract_mode_streaming(
+    files,
+    auto_detect: bool = True,
+    rules_json: str = "",
+    provider: str = "openai",
+):
+    """
+    Ejecuta Intelligence Contract Mode con streaming de resultados.
+    
+    Este modo está pensado para:
+    - Detección automática de problemas, oportunidades y patrones en contratos/documentos empresariales
+    - Generación de resúmenes ejecutivos y insights accionables
+    - Aplicación opcional de reglas/automatizaciones (JSON)
+    """
+    accumulated_output = ""
+
+    if not files:
+        error_msg = "❌ No hay archivos subidos.\n\nArrastra tus contratos o documentos empresariales al campo de archivos de Intelligence Contract."
+        yield error_msg
+        return
+
+    # Parsear reglas si se proporcionan
+    rules = None
+    if rules_json and rules_json.strip():
+        try:
+            rules = json.loads(rules_json)
+        except json.JSONDecodeError:
+            accumulated_output += "⚠️ **Advertencia**: El JSON de reglas no es válido. Se procesará sin reglas.\n\n"
+            rules = None
+
+    # Registrar inicio en el audit log
+    try:
+        audit_logger.log(
+            event_type="intelligence_contract",
+            action="start_processing",
+            resource="documents",
+            result="started",
+            metadata={
+                "files_count": len(files) if files else 0,
+                "auto_detect": auto_detect,
+                "provider": provider,
+            },
+        )
+    except Exception:
+        # No romper el flujo si el audit logger falla
+        pass
+
+    try:
+        # Crear instancia temporal del modo con el provider seleccionado
+        temp_intelligence_contract = IntelligenceContractMode(config=config, provider=provider)
+
+        # Ejecutar procesamiento con streaming
+        for chunk in temp_intelligence_contract.process_documents_streaming(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules,
+        ):
+            accumulated_output += chunk
+            yield accumulated_output
+
+        # Registrar éxito
+        try:
+            audit_logger.log(
+                event_type="intelligence_contract",
+                action="complete_processing",
+                resource="documents",
+                result="success",
+                metadata={"files_count": len(files) if files else 0},
+            )
+        except Exception:
+            pass
+
+    except Exception as e:
+        error_msg = f"Error en Intelligence Contract Mode: {str(e)}"
+        try:
+            audit_logger.log(
+                event_type="error",
+                action="intelligence_contract",
+                resource="documents",
+                result="error",
+                metadata={"error": str(e)},
+            )
+        except Exception:
+            pass
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
+
+def run_intelligence_contract_mode_streaming(
+    files,
+    auto_detect: bool = True,
+    rules_json: str = "",
+    provider: str = "openai",
+):
+    """
+    Ejecuta Intelligence Contract Mode con streaming de resultados.
+    
+    Este modo está pensado para:
+    - Detección automática de problemas, oportunidades y patrones en contratos/documentos empresariales
+    - Generación de resúmenes ejecutivos y insights accionables
+    - Aplicación opcional de reglas/automatizaciones (JSON)
+    """
+    accumulated_output = ""
+
+    if not files:
+        error_msg = "❌ No hay archivos subidos.\n\nArrastra tus contratos o documentos empresariales al campo de archivos de Intelligence Contract."
+        yield error_msg
+        return
+
+    # Parsear reglas si se proporcionan
+    rules = None
+    if rules_json and rules_json.strip():
+        try:
+            rules = json.loads(rules_json)
+        except json.JSONDecodeError:
+            accumulated_output += "⚠️ **Advertencia**: El JSON de reglas no es válido. Se procesará sin reglas.\n\n"
+            rules = None
+
+    # Registrar inicio en el audit log
+    try:
+        audit_logger.log(
+            event_type="intelligence_contract",
+            action="start_processing",
+            resource="documents",
+            result="started",
+            metadata={
+                "files_count": len(files) if files else 0,
+                "auto_detect": auto_detect,
+                "provider": provider,
+            },
+        )
+    except Exception:
+        # No romper el flujo si el audit logger falla
+        pass
+
+    try:
+        # Crear instancia temporal del modo con el provider seleccionado
+        temp_intelligence_contract = IntelligenceContractMode(config=config, provider=provider)
+
+        # Ejecutar procesamiento con streaming
+        for chunk in temp_intelligence_contract.process_documents_streaming(
+            files=files,
+            auto_detect=auto_detect,
+            rules=rules,
+        ):
+            accumulated_output += chunk
+            yield accumulated_output
+
+        # Registrar éxito
+        try:
+            audit_logger.log(
+                event_type="intelligence_contract",
+                action="complete_processing",
+                resource="documents",
+                result="success",
+                metadata={"files_count": len(files) if files else 0},
+            )
+        except Exception:
+            pass
+
+    except Exception as e:
+        error_msg = f"Error en Intelligence Contract Mode: {str(e)}"
+        try:
+            audit_logger.log(
+                event_type="error",
+                action="intelligence_contract",
+                resource="documents",
+                result="error",
+                metadata={"error": str(e)},
+            )
+        except Exception:
+            pass
+        accumulated_output += f"\n❌ **Error**: {error_msg}\n"
+        yield accumulated_output
+
+
 def run_enterprise_api_gold_mode_streaming(
     files, 
     auto_detect: bool = True, 
@@ -4640,8 +4863,6 @@ with gr.Blocks(title="Enterprise Data AI", theme=gr.themes.Soft(primary_hue="blu
             gr.Markdown(
                 """
                 # 🚀 Enterprise Data AI
-                
-                Sistema avanzado de análisis de documentos con agentes autónomos, memoria persistente y procesamiento masivo.
                 """
             )
         with gr.Column(scale=1, min_width=200):
@@ -24563,6 +24784,48 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                 # ==================== PERSISTENCIA DE CONFIGURACIÓN ADS ====================
                 ADS_CONFIG_FILE = Path(config.memory_dir) / "enterprise_ads_config.json"
                 
+                # Función para cargar configuración guardada (definida PRIMERO)
+                def load_ads_config():
+                    """Carga la configuración guardada de Enterprise Ads Manager."""
+                    if ADS_CONFIG_FILE.exists():
+                        try:
+                            with open(ADS_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                                saved_config = json.load(f)
+                                return {
+                                    "openai_key": saved_config.get("openai_key", ""),
+                                    "meta_access_token": saved_config.get("meta_access_token", ""),
+                                    "meta_app_id": saved_config.get("meta_app_id", ""),
+                                    "meta_app_secret": saved_config.get("meta_app_secret", ""),
+                                    "meta_account_id": saved_config.get("meta_account_id", ""),
+                                    "meta_page_id": saved_config.get("meta_page_id", ""),
+                                    "meta_landing_page": saved_config.get("meta_landing_page", ""),
+                                    "runway_api_key": saved_config.get("runway_api_key", ""),
+                                    "pika_api_key": saved_config.get("pika_api_key", ""),
+                                    "video_provider": saved_config.get("video_provider", "runway"),
+                                    "database_url": saved_config.get("database_url", ""),
+                                    "temperature": saved_config.get("temperature", 0.15),
+                                    "openai_model": saved_config.get("openai_model", "gpt-4o"),
+                                    "sentry_dsn": saved_config.get("sentry_dsn", "")
+                                }
+                        except Exception as e:
+                            print(f"[Ads Config] Error cargando config: {e}")
+                    return {
+                        "openai_key": "",
+                        "meta_access_token": "",
+                        "meta_app_id": "",
+                        "meta_app_secret": "",
+                        "meta_account_id": "",
+                        "meta_page_id": "",
+                        "meta_landing_page": "",
+                        "runway_api_key": "",
+                        "pika_api_key": "",
+                        "video_provider": "runway",
+                        "database_url": "",
+                        "temperature": 0.15,
+                        "openai_model": "gpt-4o",
+                        "sentry_dsn": ""
+                    }
+                
                 def save_ads_config(
                     openai_key: str,
                     meta_access_token: str,
@@ -25167,6 +25430,266 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                 fn=get_ads_config_status,
                 outputs=[ads_status]
             )
+        
+        # Tab: Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI
+        with gr.Tab("💼 Enterprise Sales Manager"):
+            if not ENTERPRISE_SALES_MANAGER_AVAILABLE:
+                gr.Markdown("### ⚠️ Enterprise Sales Manager no está disponible")
+                gr.Markdown("**Error:** El modo Enterprise Sales Manager no se pudo cargar. Verifica las dependencias.")
+            else:
+                gr.Markdown("### 💼 Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI")
+                gr.Markdown("""
+                **🚀 Sistema Multi-Agente para Ventas con Alto ROI**
+                
+                **🔧 Tecnologías Integradas:**
+                - **LangGraph**: Máquina de estado para workflows de ventas
+                - **CrewAI**: Agentes especializados en roles de ventas
+                - **AutoGen**: Comunicación, debate y auto-corrección entre agentes
+                - **BeeAI**: Integración con herramientas empresariales
+                
+                **👥 Agentes Especializados:**
+                1. **Lead Qualifier**: Califica y prioriza leads (BANT)
+                2. **Sales Strategist**: Define estrategias personalizadas
+                3. **Outreach Agent**: Ejecuta campañas multi-canal
+                4. **Negotiation Agent**: Maneja negociaciones complejas
+                5. **Closing Agent**: Cierra ventas efectivamente
+                6. **Sales Analyst**: Analiza y optimiza continuamente
+                
+                **📊 Workflow LangGraph:**
+                Lead Qualification → Strategy Planning → Outreach → Negotiation → Closing → Analysis
+                
+                **🎯 MVP: Ads Agent para ventas de e-commerce**
+                """)
+                
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("### 📥 Información del Lead")
+                        
+                        sales_lead_name = gr.Textbox(
+                            label="👤 Nombre del Lead",
+                            placeholder="Ej: Juan Pérez",
+                            value=""
+                        )
+                        
+                        sales_lead_email = gr.Textbox(
+                            label="📧 Email",
+                            placeholder="Ej: juan.perez@empresa.com",
+                            value=""
+                        )
+                        
+                        sales_lead_company = gr.Textbox(
+                            label="🏢 Empresa",
+                            placeholder="Ej: Tech Solutions Inc.",
+                            value=""
+                        )
+                        
+                        sales_lead_phone = gr.Textbox(
+                            label="📞 Teléfono (Opcional)",
+                            placeholder="Ej: +1 234 567 8900",
+                            value=""
+                        )
+                        
+                        sales_lead_source = gr.Dropdown(
+                            label="📊 Fuente del Lead",
+                            choices=[
+                                ("Manual", "manual"),
+                                ("Website", "website"),
+                                ("LinkedIn", "linkedin"),
+                                ("Referral", "referral"),
+                                ("Ads Campaign", "ads_campaign"),
+                                ("Event", "event")
+                            ],
+                            value="manual"
+                        )
+                        
+                        sales_provider_toggle = gr.Radio(
+                            label="🤖 AI Engine",
+                            choices=[("OpenAI GPT-4o", "openai"), ("Anthropic Claude", "anthropic")],
+                            value="openai"
+                        )
+                        
+                        process_lead_btn = gr.Button(
+                            "🚀 Procesar Lead Completo",
+                            variant="primary",
+                            size="lg"
+                        )
+                    
+                    with gr.Column(scale=1):
+                        gr.Markdown("### 📊 Resultados del Proceso")
+                        
+                        sales_output = gr.Markdown(
+                            label="💼 Estado del Proceso de Ventas",
+                            value="Esperando procesamiento de lead..."
+                        )
+                        
+                        sales_metrics = gr.JSON(
+                            label="📈 Métricas de Ventas",
+                            visible=True
+                        )
+                        
+                        with gr.Accordion("📋 Detalles del Lead", open=False):
+                            sales_lead_details = gr.JSON(
+                                label="Información del Lead",
+                                visible=True
+                            )
+                        
+                        with gr.Accordion("🎯 Estrategia Generada", open=False):
+                            sales_strategy_output = gr.Markdown(
+                                label="Estrategia de Ventas",
+                                value=""
+                            )
+                
+                # Función para procesar lead
+                def process_sales_lead(name, email, company, phone, source, provider):
+                    """Procesa un lead a través del workflow completo de ventas."""
+                    if not ENTERPRISE_SALES_MANAGER_AVAILABLE:
+                        return "❌ Enterprise Sales Manager no está disponible", {}, {}
+                    
+                    if not name or not email:
+                        return "⚠️ Por favor completa al menos nombre y email del lead", {}, {}
+                    
+                    try:
+                        # Crear datos del lead
+                        lead_data = {
+                            "name": name,
+                            "email": email,
+                            "company": company or None,
+                            "phone": phone or None,
+                            "source": source
+                        }
+                        
+                        # Crear instancia temporal si es necesario
+                        if provider != "openai":
+                            temp_sales_manager = EnterpriseSalesManagerMode(
+                                config=config,
+                                processor=processor,
+                                retriever_builder=retriever_builder,
+                                context_manager=context_manager,
+                                provider=provider
+                            )
+                        else:
+                            temp_sales_manager = enterprise_sales_manager
+                        
+                        # Procesar lead con opción de debate AutoGen
+                        use_autogen = True  # Habilitar debate AutoGen por defecto
+                        result = temp_sales_manager.process_lead(lead_data, use_autogen_debate=use_autogen)
+                        
+                        if result.get("success"):
+                            # Formatear output mejorado
+                            output = f"""
+## ✅ Lead Procesado Exitosamente
+
+**Lead ID:** `{result['lead_id']}`
+
+**Estado Final:** {result['final_status']}
+
+**Tipo de Lead:** {result.get('lead_type', 'N/A').upper()}
+
+**Score de Calificación:** {result.get('qualification_score', 0):.1f}/100
+
+**Estrategia ID:** `{result.get('strategy_id', 'N/A')}`
+
+**Enfoque de Estrategia:** {result.get('strategy_approach', 'N/A')}
+
+**Canales de Outreach:** {', '.join(result.get('outreach_channels', [])) or 'N/A'}
+
+**Iteraciones de Reflexión:** {result.get('reflection_iterations', 0)}
+
+**Tiempo de Procesamiento:** {result.get('processing_time_seconds', 0):.2f} segundos
+
+**Métricas del Proceso:**
+- Leads Totales: {result['metrics'].get('total_leads', 0)}
+- Calificados: {result['metrics'].get('qualified_leads', 0)}
+- Contactados: {result['metrics'].get('contacted_leads', 0)}
+- Cerrados (Won): {result['metrics'].get('closed_won', 0)}
+- Cerrados (Lost): {result['metrics'].get('closed_lost', 0)}
+- Revenue: ${result['metrics'].get('revenue', 0.0):.2f}
+- Tasa de Conversión: {result['metrics'].get('conversion_rate', 0.0):.2%}
+
+**Errores:** {len(result.get('errors', []))}
+"""
+                            
+                            if result.get('errors'):
+                                output += "\n**⚠️ Errores encontrados:**\n"
+                                for error in result['errors']:
+                                    output += f"- {error}\n"
+                            
+                            # Agregar información sobre frameworks usados
+                            output += f"""
+---
+**Frameworks Utilizados:**
+- ✅ LangGraph: Workflow con routing, parallelization y reflection
+- ✅ CrewAI: Agentes especializados con herramientas
+- {'✅' if use_autogen else '❌'} AutoGen: Debate y auto-corrección
+- ✅ BeeAI: Integración empresarial
+"""
+                            
+                            # Obtener detalles del lead
+                            lead_details = temp_sales_manager.get_lead(result['lead_id'])
+                            
+                            return output, result['metrics'], lead_details or {}
+                        else:
+                            return f"❌ Error procesando lead: {result.get('error', 'Error desconocido')}", {}, {}
+                    
+                    except Exception as e:
+                        error_msg = f"❌ Error: {str(e)}"
+                        print(f"[Sales Manager] {error_msg}")
+                        import traceback
+                        traceback.print_exc()
+                        return error_msg, {}, {}
+                
+                # Conectar botón
+                process_lead_btn.click(
+                    fn=process_sales_lead,
+                    inputs=[
+                        sales_lead_name,
+                        sales_lead_email,
+                        sales_lead_company,
+                        sales_lead_phone,
+                        sales_lead_source,
+                        sales_provider_toggle
+                    ],
+                    outputs=[
+                        sales_output,
+                        sales_metrics,
+                        sales_lead_details
+                    ]
+                )
+                
+                # Mostrar métricas generales
+                with gr.Accordion("📊 Métricas Generales del Sistema", open=False):
+                    def get_general_metrics():
+                        """Obtiene métricas generales del sistema de ventas."""
+                        if not ENTERPRISE_SALES_MANAGER_AVAILABLE:
+                            return "❌ Sistema no disponible"
+                        
+                        try:
+                            metrics = enterprise_sales_manager.get_metrics()
+                            return f"""
+## 📊 Métricas Generales
+
+**Total Leads:** {metrics.get('total_leads', 0)}
+**Leads Calificados:** {metrics.get('qualified_leads', 0)}
+**Leads Contactados:** {metrics.get('contacted_leads', 0)}
+**Reuniones Agendadas:** {metrics.get('meetings_booked', 0)}
+**Propuestas Enviadas:** {metrics.get('proposals_sent', 0)}
+**Cerrados (Won):** {metrics.get('closed_won', 0)}
+**Cerrados (Lost):** {metrics.get('closed_lost', 0)}
+**Revenue Total:** ${metrics.get('revenue', 0.0):.2f}
+**Tasa de Conversión:** {metrics.get('conversion_rate', 0.0):.2%}
+**Tamaño Promedio de Deal:** ${metrics.get('avg_deal_size', 0.0):.2f}
+**Ciclo de Ventas (días):** {metrics.get('sales_cycle_days', 0.0):.1f}
+"""
+                        except Exception as e:
+                            return f"❌ Error obteniendo métricas: {str(e)}"
+                    
+                    general_metrics_btn = gr.Button("🔄 Actualizar Métricas", variant="secondary")
+                    general_metrics_output = gr.Markdown(value="Haz clic en 'Actualizar Métricas' para ver estadísticas")
+                    
+                    general_metrics_btn.click(
+                        fn=get_general_metrics,
+                        outputs=[general_metrics_output]
+                    )
 
             clear_extasis_btn.click(
                 fn=clear_extasis,
@@ -25523,6 +26046,24 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                 """)
             else:
                 with gr.Tabs():
+                    # Definir componentes compartidos que se usarán en múltiples tabs
+                    # Estos deben estar definidos dentro del contexto de gr.Tabs() pero antes de los tabs individuales
+                    execute_agent_select = gr.Dropdown(
+                        label="🤖 Seleccionar Agente",
+                        choices=[],
+                        value=None,
+                        visible=False  # Se hará visible en su tab correspondiente
+                    )
+                    
+                    eval_agent_select = gr.Dropdown(
+                        label="🤖 Seleccionar Agente para Evaluar",
+                        choices=[],
+                        value=None,
+                        visible=False  # Se hará visible en su tab correspondiente
+                    )
+                    
+                    agents_list_output = gr.Markdown("", visible=False)  # Se hará visible en su tab correspondiente
+                    
                     # Tab 1: Templates y Creación Rápida
                     with gr.Tab("📋 Templates y Creación Rápida"):
                         gr.Markdown("### 🚀 Crea un Agente desde un Template")
@@ -25672,14 +26213,18 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                             if agent_id:
                                 # Actualizar dropdowns
                                 choices = load_agents_for_execution()
+                                # Actualizar los componentes compartidos
+                                execute_agent_select.choices = choices
+                                eval_agent_select.choices = choices
+                                agents_list_output.value = list_all_agents_ui()
                                 return (
                                     output,  # agent_creation_output
                                     agent_id,  # created_agent_id
-                                    gr.Dropdown(choices=choices),  # execute_agent_select
-                                    gr.Dropdown(choices=choices),  # eval_agent_select
-                                    list_all_agents_ui()  # agents_list_output
+                                    gr.update(choices=choices),  # execute_agent_select
+                                    gr.update(choices=choices),  # eval_agent_select
+                                    gr.update(value=list_all_agents_ui())  # agents_list_output
                                 )
-                            return output, agent_id, gr.Dropdown(), gr.Dropdown(), ""
+                            return output, agent_id, gr.update(), gr.update(), gr.update()
                         
                         create_from_template_btn.click(
                             fn=create_and_refresh,
@@ -25931,11 +26476,7 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                         
                         with gr.Row():
                             with gr.Column(scale=1):
-                                execute_agent_select = gr.Dropdown(
-                                    label="🤖 Seleccionar Agente",
-                                    choices=[],
-                                    value=None
-                                )
+                                # El componente execute_agent_select ya está definido arriba (compartido)
                                 
                                 execute_agent_input = gr.Textbox(
                                     label="📝 Input",
@@ -26021,11 +26562,8 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                     with gr.Tab("📊 Evaluación"):
                         gr.Markdown("### 📊 Evalúa y Compara tus Agentes")
                         
-                        eval_agent_select = gr.Dropdown(
-                            label="🤖 Seleccionar Agente para Evaluar",
-                            choices=[],
-                            value=None
-                        )
+                        # Hacer visible el componente compartido
+                        eval_agent_select.visible = True
                         
                         eval_test_select = gr.CheckboxGroup(
                             label="📋 Tests a Ejecutar",
@@ -26101,7 +26639,8 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                             variant="secondary"
                         )
                         
-                        agents_list_output = gr.Markdown("")
+                        # Usar el componente compartido, hacerlo visible aquí
+                        agents_list_output.visible = True
                         
                         def list_all_agents_ui():
                             if not AI_AGENT_BUILDER_AVAILABLE:
@@ -26292,6 +26831,343 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                         def refresh_rag_agent_select():
                             choices = filter_rag_agents()
                             return gr.Dropdown(choices=choices)
+
+        # Tab: Enterprise Autonomous Multi-Agent Workflow Platform
+        with gr.Tab("🚀 Autonomous Multi-Agent Workflows"):
+            gr.Markdown("### 🚀 Enterprise Autonomous Multi-Agent Workflow Platform")
+            gr.Markdown("""
+            **🎯 Producto Estrella: Plataforma de Workflows Multi-Agente Autónomos**
+            
+            **Sistema completo que combina TODOS los patrones avanzados de Agentic AI:**
+            - 🔄 **Orchestrator-Worker Pattern**: Descompone tareas complejas en subtareas paralelas
+            - 🧠 **Reflection Pattern**: Mejora iterativa de outputs hasta alcanzar calidad objetivo
+            - 🎯 **Routing Pattern**: Enrutamiento inteligente basado en intención
+            - ⚡ **Parallelization**: Múltiples agentes trabajando simultáneamente
+            - 🤝 **Multi-Agent Coordination**: HandoffTool para comunicación entre agentes
+            - 🛡️ **Human-in-the-Loop**: Aprobación humana para operaciones críticas
+            - 📊 **Self-Optimizing**: Auto-optimización basada en ejecuciones pasadas
+            
+            **✨ Templates Pre-construidos:**
+            - 💬 **Customer Support Automation**: Analiza tickets, busca en KB, genera respuestas, escala a humano
+            - ✍️ **Content Creation Pipeline**: Investiga, genera contenido, crea imágenes, optimiza SEO
+            - 📊 **Data Analysis & Reporting**: Extrae datos, analiza patrones, genera reportes, identifica insights
+            - 💰 **Sales & Marketing Automation**: Identifica leads, personaliza outreach, programa follow-ups, analiza conversiones
+            - 🏦 **Compliance & Risk Management**: Monitorea transacciones, detecta anomalías, genera reportes, alerta riesgos
+            
+            **💎 Características Únicas:**
+            - Multi-agente autónomo real: Colaboración inteligente sin intervención humana
+            - Agentic RAG Architecture: Agentes que deciden QUÉ buscar y CÓMO buscar
+            - Autonomous Decision Making: Decisiones autónomas basadas en contexto
+            - Self-Optimizing Workflows: Aprenden de ejecuciones pasadas y se auto-optimizan
+            - Enterprise Workflow Automation: Integración con sistemas empresariales (CRM, ERP, etc.)
+            
+            **💰 Potencial de Ingresos:**
+            - Starter: $199/mes (5 workflows, 10 agentes, 1K ejecuciones)
+            - Professional: $499/mes (ilimitado, 50 agentes, 10K ejecuciones)
+            - Enterprise: $1,999/mes (todo ilimitado, white-label, on-premise)
+            
+            **🎯 Casos de Uso Super Demandados:**
+            - Customer Support Automation ($500-2,000/mes)
+            - Content Creation Pipeline ($300-1,500/mes)
+            - Data Analysis & Reporting ($800-3,000/mes)
+            - Sales & Marketing Automation ($1,000-5,000/mes)
+            - Compliance & Risk Management ($2,000-10,000/mes)
+            """)
+            
+            if not MULTI_AGENT_PLATFORM_AVAILABLE:
+                gr.Markdown("""
+                ⚠️ **Autonomous Multi-Agent Platform no está disponible**
+                
+                Instala las dependencias requeridas:
+                ```bash
+                pip install langgraph crewai ag2[openai] beeai-framework
+                ```
+                """)
+            else:
+                with gr.Tabs():
+                    # Tab 1: Templates y Creación Rápida
+                    with gr.Tab("📋 Templates y Creación Rápida"):
+                        gr.Markdown("### 🚀 Crea un Workflow desde un Template")
+                        gr.Markdown("Selecciona un template pre-construido y personalízalo según tus necesidades")
+                        
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                workflow_template_select = gr.Dropdown(
+                                    label="📋 Seleccionar Template",
+                                    choices=[],
+                                    value=None,
+                                    info="Elige un template pre-construido"
+                                )
+                                
+                                workflow_template_info = gr.Markdown("")
+                                
+                                workflow_name_input = gr.Textbox(
+                                    label="📝 Nombre del Workflow",
+                                    placeholder="Mi Workflow Multi-Agente",
+                                    value=""
+                                )
+                                
+                                create_workflow_from_template_btn = gr.Button(
+                                    "✨ Crear Workflow desde Template",
+                                    variant="primary",
+                                    size="lg"
+                                )
+                            
+                            with gr.Column(scale=1):
+                                workflow_creation_output = gr.Markdown(
+                                    label="📊 Resultado",
+                                    value="Selecciona un template y personaliza tu workflow"
+                                )
+                                
+                                created_workflow_id = gr.Textbox(
+                                    label="🆔 Workflow ID",
+                                    visible=False
+                                )
+                        
+                        # Cargar templates disponibles
+                        def load_workflow_templates():
+                            if not MULTI_AGENT_PLATFORM_AVAILABLE:
+                                return []
+                            try:
+                                templates = multi_agent_platform.list_workflow_templates()
+                                choices = [(f"{t['name']} - {t['pattern']}", t['template_id']) for t in templates]
+                                return choices
+                            except Exception as e:
+                                return []
+                        
+                        def update_workflow_template_info(template_id):
+                            if not template_id or not MULTI_AGENT_PLATFORM_AVAILABLE:
+                                return ""
+                            try:
+                                template = multi_agent_platform.get_workflow_template(template_id)
+                                if not template:
+                                    return ""
+                                
+                                info = f"""
+### {template.name}
+
+**Patrón:** {template.pattern.value}
+**Agentes:** {len(template.agents)}
+**Nodos:** {len(template.nodes)}
+
+**Descripción:**
+{template.description}
+
+**Casos de Uso:**
+"""
+                                for use_case in template.use_cases:
+                                    info += f"- {use_case}\n"
+                                
+                                info += "\n**Agentes en el Workflow:**\n"
+                                for agent in template.agents:
+                                    info += f"- **{agent.name}** ({agent.role.value}): {agent.goal}\n"
+                                
+                                return info
+                            except Exception as e:
+                                return f"Error: {str(e)}"
+                        
+                        def create_workflow_from_template_ui(template_id, workflow_name):
+                            if not MULTI_AGENT_PLATFORM_AVAILABLE:
+                                return "❌ Autonomous Multi-Agent Platform no disponible", ""
+                            
+                            if not template_id:
+                                return "⚠️ Selecciona un template primero", ""
+                            
+                            if not workflow_name:
+                                return "⚠️ Ingresa un nombre para el workflow", ""
+                            
+                            try:
+                                workflow_id = multi_agent_platform.create_workflow_from_template(
+                                    template_id=template_id,
+                                    workflow_name=workflow_name
+                                )
+                                
+                                output = f"""
+## ✅ Workflow Creado Exitosamente
+
+**🆔 Workflow ID:** `{workflow_id}`
+**📝 Nombre:** {workflow_name}
+**📋 Template:** {template_id}
+
+### 🎯 Próximos Pasos:
+
+1. **Ejecutar el Workflow**:
+   - Ve al tab "▶️ Ejecutar Workflow"
+   - Selecciona tu workflow
+   - Ingresa datos de entrada
+   - Ejecuta y revisa resultados
+
+2. **Monitorear Performance**:
+   - Ve al tab "📊 Monitoreo"
+   - Revisa métricas de ejecución
+   - Analiza optimizaciones automáticas
+
+**🎉 Tu workflow está listo para usar!**
+"""
+                                return output, workflow_id
+                            except Exception as e:
+                                return f"❌ Error creando workflow: {str(e)}", ""
+                        
+                        # Cargar templates al inicio
+                        template_choices = load_workflow_templates()
+                        workflow_template_select.choices = template_choices
+                        
+                        # Conectar eventos
+                        workflow_template_select.change(
+                            fn=update_workflow_template_info,
+                            inputs=[workflow_template_select],
+                            outputs=[workflow_template_info]
+                        )
+                        
+                        create_workflow_from_template_btn.click(
+                            fn=create_workflow_from_template_ui,
+                            inputs=[workflow_template_select, workflow_name_input],
+                            outputs=[workflow_creation_output, created_workflow_id]
+                        )
+                    
+                    # Tab 2: Ejecutar Workflow
+                    with gr.Tab("▶️ Ejecutar Workflow"):
+                        gr.Markdown("### ▶️ Ejecuta un Workflow Multi-Agente")
+                        gr.Markdown("Selecciona un workflow y ejecútalo con tus datos de entrada")
+                        
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                execute_workflow_select = gr.Dropdown(
+                                    label="🚀 Seleccionar Workflow",
+                                    choices=[],
+                                    value=None
+                                )
+                                
+                                workflow_input_data = gr.Textbox(
+                                    label="📥 Datos de Entrada (JSON)",
+                                    placeholder='{"user_input": "Tu solicitud aquí"}',
+                                    lines=5
+                                )
+                                
+                                auto_approve_checkbox = gr.Checkbox(
+                                    label="✅ Auto-aprobar (sin human-in-the-loop)",
+                                    value=False,
+                                    info="Si está desmarcado, requerirá aprobación humana para operaciones críticas"
+                                )
+                                
+                                execute_workflow_btn = gr.Button(
+                                    "▶️ Ejecutar Workflow",
+                                    variant="primary",
+                                    size="lg"
+                                )
+                            
+                            with gr.Column(scale=1):
+                                workflow_execution_output = gr.Markdown(
+                                    label="📊 Resultado de Ejecución",
+                                    value="Selecciona un workflow y ejecútalo"
+                                )
+                        
+                        def load_workflows_for_execution():
+                            if not MULTI_AGENT_PLATFORM_AVAILABLE:
+                                return []
+                            try:
+                                workflows = multi_agent_platform.list_workflows()
+                                choices = [(f"{w['name']} ({w['pattern']})", w['workflow_id']) for w in workflows]
+                                return choices
+                            except Exception as e:
+                                return []
+                        
+                        def execute_workflow_ui(workflow_id, input_data_str, auto_approve):
+                            if not MULTI_AGENT_PLATFORM_AVAILABLE:
+                                return "❌ Autonomous Multi-Agent Platform no disponible"
+                            
+                            if not workflow_id:
+                                return "⚠️ Selecciona un workflow primero"
+                            
+                            try:
+                                # Parsear input_data
+                                import json
+                                input_data = json.loads(input_data_str) if input_data_str.strip() else {"user_input": ""}
+                                
+                                # Ejecutar workflow
+                                result = multi_agent_platform.execute_workflow(
+                                    workflow_id=workflow_id,
+                                    input_data=input_data,
+                                    auto_approve=auto_approve
+                                )
+                                
+                                if result.get("success"):
+                                    output = f"""
+## ✅ Workflow Ejecutado Exitosamente
+
+**🆔 Workflow ID:** `{workflow_id}`
+
+### 📊 Resultado:
+
+{result.get('final_output', str(result.get('result', 'Sin resultado')))}
+
+### 📈 Métricas:
+- **Estado:** ✅ Completado
+- **Iteraciones:** {result.get('result', {}).get('iteration', 'N/A')}
+"""
+                                    return output
+                                else:
+                                    return f"❌ Error ejecutando workflow: {result.get('error', 'Error desconocido')}"
+                            except json.JSONDecodeError:
+                                return "❌ Error: Datos de entrada deben ser JSON válido"
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        # Cargar workflows al inicio
+                        workflow_choices = load_workflows_for_execution()
+                        execute_workflow_select.choices = workflow_choices
+                        
+                        execute_workflow_btn.click(
+                            fn=execute_workflow_ui,
+                            inputs=[execute_workflow_select, workflow_input_data, auto_approve_checkbox],
+                            outputs=[workflow_execution_output]
+                        )
+                    
+                    # Tab 3: Mis Workflows
+                    with gr.Tab("📚 Mis Workflows"):
+                        gr.Markdown("### 📚 Lista de Workflows Creados")
+                        
+                        list_workflows_btn = gr.Button(
+                            "🔄 Actualizar Lista",
+                            variant="secondary"
+                        )
+                        
+                        workflows_list_output = gr.Markdown("")
+                        
+                        def list_all_workflows_ui():
+                            if not MULTI_AGENT_PLATFORM_AVAILABLE:
+                                return "❌ Autonomous Multi-Agent Platform no disponible"
+                            
+                            try:
+                                workflows = multi_agent_platform.list_workflows()
+                                
+                                if not workflows:
+                                    return "📭 No hay workflows creados aún. Crea uno desde el tab 'Templates y Creación Rápida'"
+                                
+                                output = f"## 📚 Workflows Creados ({len(workflows)})\n\n"
+                                
+                                for wf in workflows:
+                                    output += f"""
+### {wf['name']}
+
+- **🆔 ID:** `{wf['workflow_id']}`
+- **📋 Template:** {wf['template_id']}
+- **🔄 Patrón:** {wf['pattern']}
+- **📅 Creado:** {wf['created_at']}
+
+---
+"""
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        list_workflows_btn.click(
+                            fn=list_all_workflows_ui,
+                            outputs=[workflows_list_output]
+                        )
+                        
+                        # Cargar lista al inicio
+                        workflows_list_output.value = list_all_workflows_ui()
 
         # Tab 4.5.5.11: Data Point Mode - Clon de Event Horizon
         with gr.Tab("📊 Data Point"):
@@ -36085,6 +36961,237 @@ La aplicación está lista para usar.
         """)
         
         gr.Markdown("⚠️ **Nota:** Este modo requiere configuración adicional. Por favor, consulta la documentación para más detalles.")
+    
+    # Tab: Sistema de Agentes AI para Ventas
+    if SALES_AGENT_AVAILABLE and SalesAgentSystem is not None:
+        with gr.Tab("💰 Agentes AI Ventas"):
+            gr.Markdown("### 💰 Sistema de Agentes AI para Optimización de Ventas")
+            gr.Markdown("""
+            **🚀 Sistema de Producción Orientado a Ventas**
+            
+            Sistema completo de agentes AI que integra LangGraph, CrewAI, AutoGen y BeeAI para optimizar campañas publicitarias.
+            
+            **🎯 Capacidades:**
+            - 📊 Análisis inteligente de campañas publicitarias
+            - 💰 Optimización automática de presupuestos
+            - ✍️ Generación de creativos publicitarios
+            - 🔍 Crítica y auto-corrección de estrategias
+            - 📈 Recomendaciones basadas en datos
+            
+            **💼 Perfecto para:**
+            - E-commerce y tiendas online
+            - Marketing digital y publicidad
+            - Optimización de ROI de campañas
+            - Automatización de estrategias de ventas
+            """)
+            
+            # Inicializar sistema de ventas
+            sales_system_state = gr.State(value=None)
+            
+            def init_sales_system():
+                """Inicializa el sistema de agentes AI para ventas"""
+                try:
+                    system = SalesAgentSystem()
+                    return system, "✅ Sistema de Agentes AI para Ventas inicializado correctamente"
+                except Exception as e:
+                    return None, f"❌ Error inicializando sistema: {str(e)}"
+            
+            with gr.Row():
+                init_sales_btn = gr.Button("🚀 Inicializar Sistema de Ventas", variant="primary")
+                sales_init_status = gr.Markdown("*Haz clic en 'Inicializar Sistema de Ventas' para comenzar*")
+            
+            init_sales_btn.click(
+                fn=init_sales_system,
+                outputs=[sales_system_state, sales_init_status]
+            )
+            
+            gr.Markdown("---")
+            gr.Markdown("### 📊 Análisis de Campañas")
+            
+            with gr.Row():
+                with gr.Column():
+                    sales_query_input = gr.Textbox(
+                        label="📝 Consulta de Análisis",
+                        placeholder="Ejemplo: Analiza mis campañas publicitarias y proporciona recomendaciones para mejorar ROI",
+                        lines=3,
+                        value="Analiza mis campañas publicitarias y proporciona recomendaciones para mejorar ROI"
+                    )
+                    
+                    analyze_sales_btn = gr.Button("🔍 Analizar Campañas", variant="primary", size="lg")
+                
+                with gr.Column():
+                    sales_output = gr.Markdown(
+                        label="📊 Resultados del Análisis",
+                        value="**💡 Instrucciones:**\n\n1. Haz clic en 'Inicializar Sistema de Ventas'\n2. Ingresa tu consulta de análisis\n3. Haz clic en 'Analizar Campañas'\n4. Revisa los resultados completos"
+                    )
+            
+            def run_sales_analysis(query, system_state):
+                """Ejecuta análisis completo de ventas"""
+                if system_state is None:
+                    return "❌ **Error:** Primero debes inicializar el sistema de ventas. Haz clic en 'Inicializar Sistema de Ventas'."
+                
+                try:
+                    result = system_state.run_complete_analysis(query)
+                    
+                    # Formatear resultado
+                    output = f"""## 📊 Análisis Completo de Campañas Publicitarias
+
+### 📈 Resumen Ejecutivo
+
+- **Campañas analizadas:** {result['campaign_summary']['total_campaigns']}
+- **Gasto total:** ${result['campaign_summary']['total_spend']:,.2f}
+- **Ingresos totales:** ${result['campaign_summary']['total_revenue']:,.2f}
+- **ROAS promedio:** {result['campaign_summary']['average_roas']:.2f}
+- **Validación:** {'✅ Aprobado' if result['autogen_critique']['approved'] else '⚠️ Requiere revisión'}
+- **Iteraciones de mejora:** {result['autogen_critique']['iterations']}
+
+---
+
+### 🎯 Recomendaciones
+
+"""
+                    for rec in result['recommendations']:
+                        output += f"- **[{rec['source']}]** {rec['recommendation']} (Prioridad: {rec['priority']})\n"
+                    
+                    output += "\n---\n\n### 📋 Próximos Pasos\n\n"
+                    for action in result['next_actions']:
+                        output += f"{action}\n"
+                    
+                    output += "\n---\n\n### 📝 Reporte Detallado\n\n"
+                    output += f"**Workflow LangGraph:**\n{result['langgraph_workflow']['final_report'][:500]}...\n\n"
+                    output += f"**Análisis CrewAI:**\n{str(result['crewai_analysis']['result'])[:500]}...\n\n"
+                    output += f"**Crítica AutoGen:**\n{result['autogen_critique']['final_analysis'][:500]}...\n"
+                    
+                    return output
+                except Exception as e:
+                    import traceback
+                    error_msg = f"❌ **Error ejecutando análisis:**\n\n```\n{str(e)}\n```\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+                    return error_msg
+            
+            analyze_sales_btn.click(
+                fn=run_sales_analysis,
+                inputs=[sales_query_input, sales_system_state],
+                outputs=[sales_output]
+            )
+            
+            gr.Markdown("---")
+            gr.Markdown("### 🔧 Funciones Avanzadas")
+            
+            with gr.Row():
+                with gr.Column():
+                    campaign_id_input = gr.Textbox(
+                        label="🆔 ID de Campaña",
+                        placeholder="Ejemplo: camp_1",
+                        value="camp_1"
+                    )
+                    
+                    get_insights_btn = gr.Button("📈 Obtener Insights de Campaña", variant="secondary")
+                    optimize_campaign_btn = gr.Button("💰 Optimizar Campaña", variant="secondary")
+                
+                with gr.Column():
+                    campaign_output = gr.Markdown(
+                        label="📊 Resultados de Campaña",
+                        value="*Ingresa un ID de campaña y selecciona una acción*"
+                    )
+            
+            def get_campaign_insights_ui(campaign_id, system_state):
+                """Obtiene insights de una campaña específica"""
+                if system_state is None:
+                    return "❌ **Error:** Primero debes inicializar el sistema de ventas."
+                
+                try:
+                    insights = system_state.get_campaign_insights(campaign_id)
+                    
+                    if "error" in insights:
+                        return f"❌ **Error:** {insights['error']}"
+                    
+                    campaign = insights['campaign']
+                    output = f"""## 📈 Insights de Campaña: {campaign.get('name', 'N/A')}
+
+### 📊 Métricas de Rendimiento
+
+- **ROAS:** {campaign.get('roas', 0):.2f}
+- **CTR:** {campaign.get('ctr', 0):.2f}%
+- **CPA:** ${campaign.get('cpa', 0):.2f}
+- **CPC:** ${campaign.get('cpc', 0):.2f}
+- **Impresiones:** {campaign.get('impressions', 0):,}
+- **Clics:** {campaign.get('clicks', 0):,}
+- **Conversiones:** {campaign.get('conversions', 0):,}
+- **Gasto:** ${campaign.get('spend', 0):.2f}
+- **Ingresos:** ${campaign.get('revenue', 0):.2f}
+
+### 🎯 Análisis
+
+- **Tier de rendimiento:** {insights['insights']['performance_tier']}
+- **Recomendación:** {insights['insights']['recommendation']}
+"""
+                    return output
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            def optimize_campaign_ui(campaign_id, system_state):
+                """Optimiza una campaña específica"""
+                if system_state is None:
+                    return "❌ **Error:** Primero debes inicializar el sistema de ventas."
+                
+                try:
+                    optimization = system_state.optimize_single_campaign(campaign_id)
+                    
+                    output = f"""## 💰 Optimización de Campaña: {optimization['campaign_id']}
+
+### 💵 Cambios de Presupuesto
+
+- **Presupuesto anterior:** ${optimization['old_budget']:.2f}
+- **Presupuesto nuevo:** ${optimization['new_budget']:.2f}
+- **Cambio:** {optimization['change_percent']:.1f}%
+
+### 📝 Justificación
+
+{optimization['reason']}
+"""
+                    return output
+                except Exception as e:
+                    return f"❌ **Error:** {str(e)}"
+            
+            get_insights_btn.click(
+                fn=get_campaign_insights_ui,
+                inputs=[campaign_id_input, sales_system_state],
+                outputs=[campaign_output]
+            )
+            
+            optimize_campaign_btn.click(
+                fn=optimize_campaign_ui,
+                inputs=[campaign_id_input, sales_system_state],
+                outputs=[campaign_output]
+            )
+            
+            gr.Markdown("---")
+            gr.Markdown("""
+            ### 📚 Información del Sistema
+            
+            Este sistema utiliza:
+            - **LangGraph**: Orquestación de workflows
+            - **CrewAI**: Agentes especializados (Ads Analyst, Budget Optimizer, Creative Generator)
+            - **AutoGen**: Sistema de crítica y auto-corrección
+            - **APIs**: Integración con plataformas de publicidad (stubs para desarrollo)
+            
+            **⚠️ Nota:** En producción, los stubs de API deben ser reemplazados por integraciones reales con Google Ads, Meta Ads, etc.
+            """)
+    else:
+        # Tab deshabilitado si el sistema no está disponible
+        with gr.Tab("💰 Agentes AI Ventas (No Disponible)"):
+            gr.Markdown("### ⚠️ Sistema de Agentes AI para Ventas No Disponible")
+            gr.Markdown("""
+            El sistema de agentes AI para ventas no está disponible en este momento.
+            
+            **Posibles causas:**
+            - Las dependencias no están instaladas
+            - Hay un error en la importación del módulo
+            
+            **Solución:**
+            - Verifica que todas las dependencias estén instaladas: `pip install -r sales_agent_system/requirements.txt`
+            - Revisa los logs para más detalles del error
+            """)
         
         # Tab JARVIS ya está en la primera posición (reemplazando Consulta RAG en línea 3384)
         # Este bloque duplicado ha sido eliminado completamente
