@@ -8,7 +8,6 @@ from pathlib import Path
 import logging
 
 from .agents.support_agent import SupportAgent
-from .api.routes import router
 from .utils.logging import setup_logger
 
 logger = setup_logger("customer_support.mode")
@@ -59,10 +58,9 @@ class CustomerSupportMode:
     def get_api_router(self):
         """Get FastAPI router for integration"""
         # Set global mode instance for API
-        global mode_instance
         from .api import routes
         routes.mode_instance = self
-        return router
+        return routes.router
     
     def get_gradio_interface(self):
         """Get Gradio interface for embedding"""
