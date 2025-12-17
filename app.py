@@ -38873,29 +38873,42 @@ if __name__ == "__main__":
         print(f"⚠️ Error configurando endpoints FastAPI: {e}")
     
     # Usar server_port=0 siempre para evitar problemas de verificación de conexión
-    # Esto es más confiable que intentar verificar puertos manualmente
+    # Usar prevent_thread_lock=True para iniciar de manera asíncrona y evitar bloqueos
+    print("🔄 Iniciando servidor Gradio (modo asíncrono)...")
     try:
+        # Intentar iniciar con prevent_thread_lock para evitar que el error de verificación bloquee
         demo.launch(
             show_error=True,
             quiet=True,
             server_name=server_name,
             server_port=0,  # Siempre usar puerto automático para evitar problemas
             share=False,
-            inbrowser=True,
-            show_api=False
+            inbrowser=False,  # Deshabilitar inbrowser para evitar problemas de conexión
+            show_api=False,
+            prevent_thread_lock=True  # Iniciar de manera asíncrona
         )
-        print("✅ Gradio iniciado correctamente")
+        # Dar tiempo para que el servidor se inicie
+        import time
+        time.sleep(3)
+        print("✅ Gradio iniciado (modo asíncrono)")
+        print("💡 El servidor puede estar funcionando a pesar de advertencias de verificación")
+        print("💡 Verifica en tu navegador si la aplicación está disponible")
     except Exception as e:
         error_str = str(e)
-        # Si es un error de conexión, puede ser un problema del firewall o configuración de red
+        # Si es un error de conexión durante la verificación, el servidor puede estar funcionando
         if "denegó expresamente" in error_str or "ConnectError" in error_str or "WinError 10061" in error_str:
-            print("❌ Error: No se pudo iniciar Gradio debido a un problema de conexión")
-            print("💡 Posibles soluciones:")
+            print("⚠️ Advertencia: Error de verificación de conexión de Gradio")
+            print("💡 El servidor puede estar funcionando correctamente a pesar del error")
+            print("💡 Verifica en tu navegador si la aplicación está disponible en http://127.0.0.1")
+            print("💡 Si el problema persiste:")
             print("   1. Verifica el firewall de Windows y permite Python/Gradio")
-            print("   2. Cierra otras instancias de la aplicación que puedan estar usando el puerto")
-            print("   3. Reinicia el sistema si el problema persiste")
-            print("   4. Intenta ejecutar como administrador")
-            raise RuntimeError(f"No se pudo iniciar Gradio: {e}")
+            print("   2. Cierra otras instancias de la aplicación")
+            print("   3. Intenta ejecutar como administrador")
+            # No lanzar el error, permitir que el programa continúe
+            # El servidor puede estar funcionando a pesar del error de verificación
+            import time
+            time.sleep(2)
+            print("✅ Continuando... (el servidor puede estar funcionando)")
         else:
             print(f"❌ Error al iniciar Gradio: {e}")
             raise
