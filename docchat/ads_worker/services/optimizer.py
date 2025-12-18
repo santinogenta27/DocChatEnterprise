@@ -83,12 +83,12 @@ class CampaignOptimizer:
                             status="active",
                             created_at=datetime.now(),
                             updated_at=datetime.now(),
-                    last_performance_update=datetime.now()
-                )
-                performances.append(performance)
-                logger.debug(f"   ✅ Métricas Meta obtenidas para ad: {ad_id}")
-        except Exception as e:
-            logger.warning(f"⚠️ Error fetching Meta metrics for {ad_id}: {e}")
+                            last_performance_update=datetime.now()
+                        )
+                        performances.append(performance)
+                        logger.debug(f"   ✅ Métricas Meta obtenidas para ad: {ad_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error fetching Meta metrics for {ad_id}: {e}")
         
         # Fetch from Google
         if google_service and "google" in campaign_ids:
@@ -112,12 +112,12 @@ class CampaignOptimizer:
                             status="active",
                             created_at=datetime.now(),
                             updated_at=datetime.now(),
-                    last_performance_update=datetime.now()
-                )
-                performances.append(performance)
-                logger.debug(f"   ✅ Métricas Google obtenidas para ad: {ad_id}")
-        except Exception as e:
-            logger.warning(f"⚠️ Error fetching Google metrics for {ad_id}: {e}")
+                            last_performance_update=datetime.now()
+                        )
+                        performances.append(performance)
+                        logger.debug(f"   ✅ Métricas Google obtenidas para ad: {ad_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error fetching Google metrics for {ad_id}: {e}")
         
         logger.info(f"✅ {len(performances)} métricas obtenidas en total")
         return performances
@@ -341,4 +341,5 @@ class CampaignOptimizer:
             performance_improvement=performance_improvement,
             recommendations=recommendations
         )
+
 

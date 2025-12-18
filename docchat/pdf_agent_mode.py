@@ -1495,3 +1495,4 @@ def run_pdf_agent_mode(
     except Exception as e:
         return history, f"❌ Error: {str(e)}"
 
+

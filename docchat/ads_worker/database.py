@@ -37,7 +37,7 @@ if SQLALCHEMY_AVAILABLE:
         text_content = Column(Text)
         file_size = Column(Integer)
         mime_type = Column(String)
-        metadata = Column(JSON)
+        extra_metadata = Column(JSON)  # Renombrado de 'metadata' porque es reservado en SQLAlchemy
         analysis_result = Column(JSON)  # Resultado del análisis
         created_at = Column(DateTime, default=datetime.utcnow, index=True)
         updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -76,7 +76,7 @@ if SQLALCHEMY_AVAILABLE:
         auto_optimize = Column(Boolean, default=True)
         start_date = Column(DateTime)
         end_date = Column(DateTime)
-        metadata = Column(JSON)
+        extra_metadata = Column(JSON)  # Renombrado de 'metadata' porque es reservado en SQLAlchemy
         platform_campaign_ids = Column(JSON)  # {platform: campaign_id}
         created_at = Column(DateTime, default=datetime.utcnow, index=True)
         updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -227,7 +227,7 @@ class DatabaseManager:
                 file_size=os.path.getsize(file_path) if file_path and os.path.exists(file_path) else None,
                 mime_type=self._get_mime_type(file_path) if file_path else None,
                 analysis_result=analysis_result,
-                metadata=metadata or {}
+                extra_metadata=metadata or {}
             )
             
             session.add(asset)
@@ -258,7 +258,7 @@ class DatabaseManager:
                     "file_url": asset.file_url,
                     "text_content": asset.text_content,
                     "analysis_result": asset.analysis_result,
-                    "metadata": asset.metadata or {},
+                    "metadata": asset.extra_metadata or {},
                     "created_at": asset.created_at.isoformat() if asset.created_at else None
                 }
                 session.close()
@@ -299,7 +299,7 @@ class DatabaseManager:
                 platforms=platforms,
                 status="active",
                 platform_campaign_ids=platform_campaign_ids,
-                metadata=metadata or {}
+                extra_metadata=metadata or {}
             )
             
             session.add(campaign)
@@ -440,4 +440,5 @@ class DatabaseManager:
             '.avi': 'video/x-msvideo'
         }
         return mime_types.get(ext, 'application/octet-stream')
+
 

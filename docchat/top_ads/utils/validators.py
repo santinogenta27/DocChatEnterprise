@@ -115,3 +115,4 @@ Responde en formato JSON:
             self.logger.error(f"Error en validación LLM: {e}")
             return True, None
 
+

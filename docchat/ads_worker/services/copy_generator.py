@@ -13,6 +13,14 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+    # Definir clases dummy para evitar NameError en decoradores
+    class RateLimitError(Exception):
+        """Dummy exception class when openai is not installed"""
+        pass
+    
+    class APIError(Exception):
+        """Dummy exception class when openai is not installed"""
+        pass
 
 from ..utils.logging import setup_logger
 from ..utils.retry import retry_with_backoff
@@ -352,4 +360,5 @@ Always return valid JSON format."""
             copies.append(creative)
         
         return copies
+
 

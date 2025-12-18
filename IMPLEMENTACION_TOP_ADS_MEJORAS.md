@@ -259,3 +259,4 @@ Todas las funcionalidades solicitadas han sido implementadas y están listas par
 
 **Fecha de implementación**: 2025-01-XX
 **Commit**: (pendiente)
+

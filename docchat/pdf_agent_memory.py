@@ -1031,3 +1031,4 @@ Resumen (máximo 300 palabras):"""
             "top_k_triplets": self.top_k_triplets
         }
 
+

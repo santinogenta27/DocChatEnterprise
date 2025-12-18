@@ -18,6 +18,14 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
+    # Definir clases dummy para evitar NameError en type hints
+    class Tool:
+        """Dummy Tool class when langchain is not installed"""
+        pass
+    
+    class AgentExecutor:
+        """Dummy AgentExecutor class when langchain is not installed"""
+        pass
 
 from ..utils.logging import setup_logger
 from ..utils.retry import retry_with_backoff
@@ -593,4 +601,5 @@ Always think step by step and explain your decisions."""),
         )
         
         return result
+
 

@@ -19563,14 +19563,12 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 fn=pdf_agent_submit,
                 inputs=[pdf_agent_input, pdf_agent_bot, pdf_agent_files, pdf_agent_session_id, pdf_agent_speed_mode, pdf_agent_provider_toggle],
                 outputs=[pdf_agent_bot, pdf_agent_bot, pdf_agent_status, pdf_agent_stats_output],
-                then=lambda: "", None, pdf_agent_input
             )
             
             pdf_agent_input.submit(
                 fn=pdf_agent_submit,
                 inputs=[pdf_agent_input, pdf_agent_bot, pdf_agent_files, pdf_agent_session_id, pdf_agent_speed_mode, pdf_agent_provider_toggle],
                 outputs=[pdf_agent_bot, pdf_agent_bot, pdf_agent_status, pdf_agent_stats_output],
-                then=lambda: "", None, pdf_agent_input
             )
             
             clear_pdf_agent_btn.click(
@@ -39120,27 +39118,27 @@ if __name__ == "__main__":
     
     # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
     demo.queue()
+
+    # Configurar endpoints FastAPI para AI Agent Business Manager
+    try:
+        if hasattr(demo, 'app'):
+            setup_ai_agent_api_endpoints(demo.app)
+            print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
+        else:
+            print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI: {e}")
     
-        # Configurar endpoints FastAPI para AI Agent Business Manager
-        try:
-            if hasattr(demo, 'app'):
-                setup_ai_agent_api_endpoints(demo.app)
-                print("✅ Endpoints FastAPI de AI Agent Business Manager configurados")
-            else:
-                print("⚠️ demo.app no disponible, endpoints se configurarán después del launch")
-        except Exception as e:
-            print(f"⚠️ Error configurando endpoints FastAPI: {e}")
-        
-        # Configurar endpoints FastAPI para ADS WORKER
-        try:
-            if hasattr(demo, 'app'):
-                setup_ads_worker_api_endpoints(demo.app)
-                setup_customer_support_api_endpoints(demo.app)
-                setup_customer_service_24_7_api_endpoints(demo.app)
-            else:
-                print("⚠️ demo.app no disponible, endpoints de ADS WORKER se configurarán después del launch")
-        except Exception as e:
-            print(f"⚠️ Error configurando endpoints FastAPI de ADS WORKER: {e}")
+    # Configurar endpoints FastAPI para ADS WORKER y Customer Support
+    try:
+        if hasattr(demo, 'app'):
+            setup_ads_worker_api_endpoints(demo.app)
+            setup_customer_support_api_endpoints(demo.app)
+            setup_customer_service_24_7_api_endpoints(demo.app)
+        else:
+            print("⚠️ demo.app no disponible, endpoints de ADS WORKER se configurarán después del launch")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI de ADS WORKER: {e}")
     
     # Intentar iniciar Gradio con manejo robusto de errores
     # El problema es que Gradio intenta verificar la conexión y falla

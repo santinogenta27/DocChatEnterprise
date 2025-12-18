@@ -276,3 +276,4 @@ Estas son las funcionalidades más visibles y diferenciadoras de Meta 2026:
 
 **Fecha de análisis**: 2025-01-XX
 **Versión Top Ads Mode analizada**: Commit a2b4302
+

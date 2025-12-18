@@ -321,3 +321,4 @@ class TikTokAdsPlatform:
             self.logger.error(f"Error obteniendo métricas: {e}")
             return {}
 
+

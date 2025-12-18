@@ -193,3 +193,4 @@ class CampaignOptimizer:
         """Retorna el número de optimizaciones realizadas."""
         return self.optimization_count
 
+

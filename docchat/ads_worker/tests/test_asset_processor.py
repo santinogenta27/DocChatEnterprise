@@ -57,3 +57,4 @@ def test_process_text(asset_processor):
     assert analysis.asset_id is not None
     assert len(analysis.keywords) > 0
 
+

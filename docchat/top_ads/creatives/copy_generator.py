@@ -206,3 +206,4 @@ Responde en formato JSON:
         """Retorna el número de creativos generados."""
         return self.generation_count
 
+

@@ -39,3 +39,4 @@ class AdsWorkerConfig(BaseSettings):
         env_prefix = "ADS_WORKER_"
         case_sensitive = False
 
+

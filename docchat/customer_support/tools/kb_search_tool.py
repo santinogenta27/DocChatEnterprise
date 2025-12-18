@@ -58,3 +58,4 @@ class KBSearchTool:
         
         return search_knowledge_base_tool
 
+

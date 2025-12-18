@@ -68,3 +68,4 @@ class CustomerSupportMode:
             raise ValueError("Customer Support Manager agent not initialized")
         return self.agent.get_gradio_interface()
 
+

@@ -302,3 +302,4 @@ class CartManager:
         conn.commit()
         conn.close()
 
+

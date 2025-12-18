@@ -206,3 +206,4 @@ Todos los eventos se registran en:
 - Siempre validar políticas antes de publicar anuncios
 - Respetar rate limits de las APIs
 
+

@@ -422,3 +422,4 @@ Responde en formato JSON:
                 for c in self.combination_history
             ) / max(len(self.combination_history), 1)
         }
+

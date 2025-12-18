@@ -367,3 +367,4 @@ class MetaAdsPlatform:
                 return int(action.get('value', 0))
         return 0
 
+

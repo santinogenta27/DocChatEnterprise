@@ -13,7 +13,7 @@ import re
 
 from ...config import AppConfig
 from ..utils.logger import TopAdsLogger
-from ...top_ads_mode import AutonomyMode
+from ..types import AutonomyMode
 
 
 class DecisionEngine:
@@ -184,4 +184,5 @@ class DecisionEngine:
             },
             "autonomy_mode": autonomy_mode.value
         }
+
 

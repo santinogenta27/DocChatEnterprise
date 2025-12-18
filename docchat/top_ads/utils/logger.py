@@ -73,3 +73,4 @@ class TopAdsLogger:
         """Log nivel CRITICAL."""
         self.logger.critical(f"{message} | {kwargs}")
 
+

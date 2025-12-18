@@ -252,3 +252,4 @@ Responde SOLO con el nombre de la intención (ej: DISCOVER, BUY, etc.)"""
         
         return suggestions.get(intent, "¿En qué puedo ayudarte?")
 
+

@@ -258,3 +258,4 @@ class VisualGenerator:
         
         return img
 
+

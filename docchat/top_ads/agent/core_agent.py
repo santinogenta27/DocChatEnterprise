@@ -262,3 +262,4 @@ Responde en formato JSON con:
                 "expected_outcome": "Sin cambios"
             }
 
+

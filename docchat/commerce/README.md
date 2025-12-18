@@ -172,3 +172,4 @@ Detecta automáticamente:
 - [ ] Historial de compras del usuario
 - [ ] Cupones y descuentos automáticos
 
+

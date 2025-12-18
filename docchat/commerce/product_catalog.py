@@ -426,3 +426,4 @@ class ProductCatalog:
         related = [p for p in result.products if p.id != product_id]
         return related[:limit]
 
+

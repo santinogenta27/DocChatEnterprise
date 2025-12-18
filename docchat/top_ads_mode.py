@@ -35,79 +35,28 @@ from langchain_openai import ChatOpenAI
 
 from .config import AppConfig
 
+# Importar tipos compartidos (evita importaciones circulares)
+from .top_ads.types import (
+    AutonomyMode,
+    CampaignObjective,
+    UserInput,
+    CampaignResult,
+    CampaignMetrics
+)
+
 # Importar módulos del sistema Top Ads
 from .top_ads.agent.core_agent import TopAdsCoreAgent
 from .top_ads.agent.planner import CampaignPlanner
 from .top_ads.agent.decision_engine import DecisionEngine
 from .top_ads.creatives.copy_generator import CopyGenerator
 from .top_ads.creatives.asset_processor import AssetProcessor
+from .top_ads.creatives.dynamic_creative_optimizer import DynamicCreativeOptimizer, UserProfile
 from .top_ads.platforms.meta_ads import MetaAdsPlatform
 from .top_ads.platforms.tiktok_ads import TikTokAdsPlatform
 from .top_ads.optimization.metrics_collector import MetricsCollector
 from .top_ads.optimization.optimizer import CampaignOptimizer
 from .top_ads.utils.logger import TopAdsLogger
 from .top_ads.utils.validators import AdsPolicyValidator
-
-
-class AutonomyMode(Enum):
-    """Modos de autonomía del agente."""
-    FULL_AUTONOMOUS = "full_autonomous"  # 🔴 100% autónomo
-    APPROVAL_REQUIRED = "approval_required"  # 🟡 Human-in-the-loop
-    RECOMMENDATION_ONLY = "recommendation_only"  # 🟢 Solo recomendaciones
-
-
-class CampaignObjective(Enum):
-    """Objetivos de campaña publicitaria."""
-    CONVERSIONS = "conversions"
-    LEADS = "leads"
-    TRAFFIC = "traffic"
-    ENGAGEMENT = "engagement"
-    AWARENESS = "awareness"
-    APP_INSTALLS = "app_installs"
-    VIDEO_VIEWS = "video_views"
-
-
-@dataclass
-class UserInput:
-    """Input del usuario para crear campaña."""
-    images: List[str] = None  # Paths a imágenes
-    videos: List[str] = None  # Paths a videos
-    texts: List[str] = None  # Textos base / copys
-    business_objective: CampaignObjective = CampaignObjective.CONVERSIONS
-    budget: float = 100.0  # Presupuesto diario en USD
-    autonomy_mode: AutonomyMode = AutonomyMode.FULL_AUTONOMOUS
-    target_audience: Optional[Dict[str, Any]] = None
-    campaign_name: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class CampaignResult:
-    """Resultado de creación de campaña."""
-    campaign_id: str
-    platform: str  # "meta" o "tiktok"
-    ad_set_ids: List[str]
-    ad_ids: List[str]
-    status: str
-    created_at: str
-    estimated_reach: Optional[int] = None
-    estimated_impressions: Optional[int] = None
-
-
-@dataclass
-class CampaignMetrics:
-    """Métricas de performance de campaña."""
-    campaign_id: str
-    platform: str
-    impressions: int
-    clicks: int
-    ctr: float  # Click-through rate
-    cpc: float  # Cost per click
-    cpa: float  # Cost per acquisition
-    roas: float  # Return on ad spend
-    conversions: int
-    spend: float
-    timestamp: str
 
 
 class TopAdsMode:
@@ -714,4 +663,5 @@ def run_top_ads_mode(
         "campaigns_created": len(results),
         "results": [asdict(r) for r in results]
     }
+
 

@@ -494,3 +494,4 @@ Responde en formato JSON."""
             self.logger.error(f"Error en smart crop: {e}")
             return image_path
 
+

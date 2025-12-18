@@ -21,6 +21,10 @@ try:
     META_AVAILABLE = True
 except ImportError:
     META_AVAILABLE = False
+    # Definir clase dummy para evitar NameError en decoradores
+    class FacebookRequestError(Exception):
+        """Dummy exception class when facebook_business is not installed"""
+        pass
 
 from ..utils.logging import setup_logger
 from ..utils.retry import retry_with_backoff
@@ -380,4 +384,5 @@ class MetaAdsService:
         except FacebookRequestError as e:
             print(f"⚠️ Error activating Meta ad: {e}")
             return False
+
 

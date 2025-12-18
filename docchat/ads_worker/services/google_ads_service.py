@@ -22,6 +22,10 @@ try:
     GOOGLE_ADS_AVAILABLE = True
 except ImportError:
     GOOGLE_ADS_AVAILABLE = False
+    # Definir clase dummy para evitar NameError en decoradores
+    class GoogleAdsException(Exception):
+        """Dummy exception class when google-ads is not installed"""
+        pass
 
 from ..utils.logging import setup_logger
 from ..utils.retry import retry_with_backoff
@@ -395,4 +399,5 @@ class GoogleAdsService:
         except GoogleAdsException as e:
             print(f"⚠️ Error activating Google Ads ad: {e}")
             return False
+
 
