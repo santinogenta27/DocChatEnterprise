@@ -440,3 +440,4 @@ class DatabaseManager:
             '.avi': 'video/x-msvideo'
         }
         return mime_types.get(ext, 'application/octet-stream')
+

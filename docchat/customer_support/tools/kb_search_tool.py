@@ -57,3 +57,4 @@ class KBSearchTool:
             return json.dumps(results, indent=2)
         
         return search_knowledge_base_tool
+

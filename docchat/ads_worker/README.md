@@ -148,3 +148,4 @@ pytest docchat/ads_worker/tests/
 - Usa variables de entorno para secrets
 - Valida todos los inputs de usuario
 - Implementa rate limiting en producción
+

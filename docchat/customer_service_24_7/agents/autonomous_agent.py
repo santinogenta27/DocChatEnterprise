@@ -382,3 +382,4 @@ RESPONSE STYLE:
         logger.info("✅ Interfaz Gradio creada")
         
         return interface
+

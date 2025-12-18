@@ -279,3 +279,4 @@ async def health_check():
         "service": "ads-worker",
         "version": "1.0.0"
     }
+

@@ -47,6 +47,7 @@ from .test_time_training import TestTimeTrainer
 from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
+from .pdf_agent_memory import PDFAgentMemory
 
 
 class PDFAgentMode:
@@ -144,6 +145,16 @@ class PDFAgentMode:
         # MCP Manager potenciado
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
+        
+        # Sistema de Memoria Avanzado (Memoria Framework)
+        memory_dir = Path(config.memory_dir) / "pdf_agent_memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        self.memory_system = PDFAgentMemory(
+            memory_dir=memory_dir,
+            config=config,
+            llm=self.llm,
+            embedding_model=None  # Se inicializará automáticamente
+        )
     
     def _get_llm_for_provider(self, provider: str = "openai"):
         """Crea un LLM dinámico según el provider especificado."""
@@ -193,6 +204,8 @@ class PDFAgentMode:
             self.reinforcement_planner.llm = llm
         if hasattr(self.mcp_manager, 'llm'):
             self.mcp_manager.llm = llm
+        if hasattr(self.memory_system, 'llm'):
+            self.memory_system.llm = llm
         
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
@@ -329,8 +342,23 @@ class PDFAgentMode:
         chain_id = self.chain_reasoner.create_chain(message)
         session["chain_id"] = chain_id
         
-        # 2. Construir contexto con Context Folding
+        # 2. Recuperar contexto de memoria (Memoria Framework)
+        user_name = session.get("user_name")  # Puede ser None
+        memory_context = self.memory_system.get_memory_context(
+            query=message,
+            session_id=session_id,
+            user_name=user_name
+        )
+        
+        # Formatear contexto de memoria para el prompt
+        memory_context_text = self.memory_system.format_memory_context_for_prompt(memory_context)
+        
+        # 3. Construir contexto con Context Folding
         conversation_context = self._build_folded_context(session, history)
+        
+        # Agregar contexto de memoria al principio
+        if memory_context_text:
+            conversation_context = f"{memory_context_text}\n\n---\n\n{conversation_context}"
         
         # 3. Agregar pasos de razonamiento (con manejo de errores)
         try:
@@ -566,7 +594,21 @@ class PDFAgentMode:
                 "timestamp": datetime.now().isoformat()
             })
             
-            # Guardar en memoria persistente
+            # Guardar en memoria persistente (Memoria Framework)
+            self.memory_system.add_conversation(
+                session_id=session_id,
+                user_message=message,
+                assistant_message=answer,
+                metadata={
+                    "mode": "pdf_agent_mode",
+                    "conversation_turn": len(session["history"]),
+                    "provenance_record_id": record_id,
+                    "chain_id": chain_id,
+                    "sources": [prov.source_name for prov in source_provenances]
+                }
+            )
+            
+            # Guardar también en context_manager si existe (compatibilidad)
             if self.context_manager:
                 self.context_manager.add_query(
                     query=message,
@@ -1296,6 +1338,43 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         
         return tuple_history, None, metadata
     
+    def update_user_preference(
+        self,
+        preference_type: str,
+        preference_value: str,
+        session_id: Optional[str] = None
+    ):
+        """
+        Actualiza una preferencia del usuario (Memoria Procedural).
+        
+        Tipos de preferencias:
+        - "format": Formato de respuesta (tabla, lista, párrafo, etc.)
+        - "tone": Tono de respuesta (formal, casual, técnico, etc.)
+        - "style": Estilo de respuesta (breve, detallado, etc.)
+        - "language": Idioma preferido
+        """
+        user_name = None
+        if session_id and session_id in self.sessions:
+            user_name = self.sessions[session_id].get("user_name")
+        
+        if hasattr(self, 'memory_system'):
+            self.memory_system.add_user_preference(
+                preference_type=preference_type,
+                preference_value=preference_value,
+                user_name=user_name
+            )
+            print(f"✅ [PDF Agent Memory] Preferencia actualizada: {preference_type} = {preference_value}")
+    
+    def get_user_preferences(self, session_id: Optional[str] = None) -> Dict[str, str]:
+        """Obtiene las preferencias del usuario."""
+        user_name = None
+        if session_id and session_id in self.sessions:
+            user_name = self.sessions[session_id].get("user_name")
+        
+        if hasattr(self, 'memory_system'):
+            return self.memory_system.get_user_preferences(user_name=user_name)
+        return {}
+    
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
         stats = {
@@ -1309,7 +1388,8 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             "mcp_integration": {
                 "connections": len(self.mcp_manager.connections) if self.mcp_manager else 0,
                 "enabled_connections": len([c for c in self.mcp_manager.connections.values() if c.enabled]) if self.mcp_manager else 0
-            }
+            },
+            "memory_system": self.memory_system.get_statistics() if hasattr(self, 'memory_system') else {}
         }
         
         if session_id and session_id in self.sessions:
@@ -1319,6 +1399,12 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
                 "history_count": len(session["history"]),
                 "processed_files": len(session["processed_files"])
             }
+            
+            # Agregar estadísticas de memoria de sesión
+            if hasattr(self, 'memory_system'):
+                session_summary = self.memory_system.get_session_summary(session_id)
+                if session_summary:
+                    stats["session"]["memory_summary"] = session_summary[:200] + "..." if len(session_summary) > 200 else session_summary
         
         return stats
 
@@ -1379,6 +1465,17 @@ def run_pdf_agent_mode(
         result = pdf_agent_mode.process_documents(session_id, files)
         if result.get("status") == "error":
             return history, f"❌ Error procesando documentos: {result.get('error')}"
+        
+        # Guardar metadatos de documentos en memoria
+        if hasattr(pdf_agent_mode, 'memory_system'):
+            for file_obj in files:
+                file_name = getattr(file_obj, "name", "")
+                file_path = getattr(file_obj, "path", None)
+                if file_name:
+                    pdf_agent_mode.memory_system.add_document_metadata(
+                        file_name=file_name,
+                        file_path=file_path
+                    )
     
     # Ejecutar query (async wrapper)
     try:
@@ -1397,3 +1494,4 @@ def run_pdf_agent_mode(
         return new_history, error
     except Exception as e:
         return history, f"❌ Error: {str(e)}"
+

@@ -395,3 +395,4 @@ class GoogleAdsService:
         except GoogleAdsException as e:
             print(f"⚠️ Error activating Google Ads ad: {e}")
             return False
+

@@ -99,3 +99,4 @@ class SimpleTaskQueue:
         """Shutdown the executor"""
         self.executor.shutdown(wait=wait)
         logger.info("Task queue cerrado")
+

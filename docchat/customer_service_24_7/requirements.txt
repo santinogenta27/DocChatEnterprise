@@ -32,3 +32,4 @@ python-dotenv>=1.0.0
 
 # Output Parsing
 pydantic>=2.0.0
+

@@ -257,3 +257,4 @@ class VisualGenerator:
         draw.text((x, y), text, fill=(255, 255, 255), font=font)
         
         return img
+

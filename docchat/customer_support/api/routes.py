@@ -63,3 +63,4 @@ async def health_check():
         "service": "customer-support-manager",
         "version": "1.0.0"
     }
+

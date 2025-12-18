@@ -982,3 +982,4 @@ RESPUESTAS:
             logger.info("✅ Documento agregado a la base de conocimiento")
         except Exception as e:
             logger.error(f"Error agregando documento: {e}")
+

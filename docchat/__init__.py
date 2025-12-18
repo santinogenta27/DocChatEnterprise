@@ -82,6 +82,9 @@ from .chat_conversational_2 import ChatConversational2, run_chat_conversational_
 from .alien_mode import AlienMode, run_alien_mode, get_alien_mode  # noqa: F401
 # PDF Agent Mode - Clonado de Alien Mode
 from .pdf_agent_mode import PDFAgentMode, run_pdf_agent_mode, get_pdf_agent_mode  # noqa: F401
+from .pdf_agent_memory import PDFAgentMemory, MemoryTriplet, SessionSummary, UserPreference  # noqa: F401
+# Top Ads Mode - Autonomous AI Agent for Advertising
+from .top_ads_mode import TopAdsMode, run_top_ads_mode, get_top_ads_mode, AutonomyMode, CampaignObjective, UserInput, CampaignResult, CampaignMetrics  # noqa: F401
 # Advantage Mode - Clonado de Alien Mode
 from .advantage_mode import AdvantageMode, run_advantage_mode, get_advantage_mode  # noqa: F401
 # ChatPDF Mode - Clonado de Alien Mode
@@ -474,6 +477,19 @@ __all__ = [
     "PDFAgentMode",
     "run_pdf_agent_mode",
     "get_pdf_agent_mode",
+    "PDFAgentMemory",
+    "MemoryTriplet",
+    "SessionSummary",
+    "UserPreference",
+    # Top Ads Mode
+    "TopAdsMode",
+    "run_top_ads_mode",
+    "get_top_ads_mode",
+    "AutonomyMode",
+    "CampaignObjective",
+    "UserInput",
+    "CampaignResult",
+    "CampaignMetrics",
     # Advantage Mode
     "AdvantageMode",
     "run_advantage_mode",

@@ -69,3 +69,4 @@ class CustomerService247Mode:
         if not self.agent:
             raise ValueError("Customer Service 24/7 agent not initialized")
         return self.agent.get_gradio_interface()
+

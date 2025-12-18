@@ -273,3 +273,4 @@ class AdsWorkerMode:
         global mode_instance
         mode_instance = self
         return router
+
