@@ -5,10 +5,17 @@ Generates visual variations from user assets
 from typing import List, Dict, Any, Optional
 import uuid
 from pathlib import Path
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import os
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    cv2 = None
+    print("⚠️ OpenCV (cv2) no disponible. Algunas funcionalidades de procesamiento de video estarán deshabilitadas.")
 
 try:
     from diffusers import StableDiffusionPipeline, ControlNetModel
@@ -141,6 +148,15 @@ class VisualGenerator:
         visuals = []
         
         # Extract key frames
+        if not CV2_AVAILABLE:
+            # Fallback sin cv2: usar metadata básica
+            return {
+                "fps": 30.0,
+                "frame_count": 0,
+                "duration": 0.0,
+                "keyframes": []
+            }
+        
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -158,7 +174,11 @@ class VisualGenerator:
             
             if frame_idx % frame_interval == 0:
                 # Convert BGR to RGB
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                if CV2_AVAILABLE:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                else:
+                    # Fallback: convertir usando PIL
+                    frame_rgb = Image.fromarray(frame).convert('RGB')
                 frame_img = Image.fromarray(frame_rgb)
                 extracted_frames.append(frame_img)
             

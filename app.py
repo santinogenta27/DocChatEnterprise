@@ -39117,7 +39117,12 @@ if __name__ == "__main__":
     print("   Gradio encontrará automáticamente un puerto disponible")
     
     # En Gradio, necesitamos hacer queue() primero para que demo.app esté disponible
-    demo.queue()
+    # Hacer queue opcional para evitar errores en algunas versiones
+    try:
+        demo.queue()
+    except Exception as queue_error:
+        print(f"⚠️ No se pudo inicializar queue de Gradio: {queue_error}")
+        print("   Continuando sin queue (puede afectar algunas funcionalidades)")
 
     # Configurar endpoints FastAPI para AI Agent Business Manager
     try:
