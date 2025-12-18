@@ -38853,6 +38853,28 @@ def setup_ai_agent_api_endpoints(demo_app):
         print(f"⚠️ Error configurando endpoints FastAPI: {e}")
 
 
+def setup_customer_support_api_endpoints(demo_app):
+    """Setup Customer Support Manager API endpoints"""
+    try:
+        if customer_support and hasattr(customer_support, 'get_api_router'):
+            router = customer_support.get_api_router()
+            demo_app.include_router(router)
+            print("✅ Endpoints FastAPI de Customer Support Manager configurados")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI de Customer Support Manager: {e}")
+
+
+def setup_customer_service_24_7_api_endpoints(demo_app):
+    """Setup Customer Service 24/7 API endpoints"""
+    try:
+        if customer_service_24_7 and hasattr(customer_service_24_7, 'get_api_router'):
+            router = customer_service_24_7.get_api_router()
+            demo_app.include_router(router)
+            print("✅ Endpoints FastAPI de Customer Service 24/7 configurados")
+    except Exception as e:
+        print(f"⚠️ Error configurando endpoints FastAPI de Customer Service 24/7: {e}")
+
+
 if __name__ == "__main__":
     # CRÍTICO: Cloud Run solo permite escritura en /tmp
     cloud_port = os.environ.get("PORT")
