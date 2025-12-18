@@ -38915,7 +38915,6 @@ if __name__ == "__main__":
                 setup_ads_worker_api_endpoints(demo.app)
                 setup_customer_support_api_endpoints(demo.app)
                 setup_customer_service_24_7_api_endpoints(demo.app)
-                setup_customer_service_24_7_api_endpoints(demo.app)
             else:
                 print("⚠️ demo.app no disponible, endpoints de ADS WORKER se configurarán después del launch")
         except Exception as e:

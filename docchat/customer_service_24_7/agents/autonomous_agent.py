@@ -10,7 +10,8 @@ import json
 
 try:
     from langchain_openai import ChatOpenAI
-    from langchain_community.chat_models import ChatGrok
+    # Note: ChatGrok may not be available in all langchain versions
+    # Using OpenAI as primary with Grok API key support
     from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langgraph.graph import StateGraph, END
