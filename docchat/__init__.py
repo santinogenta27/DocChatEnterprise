@@ -80,6 +80,8 @@ from .goal_decomposition import GoalDecomposer, Goal, Subtask  # noqa: F401
 from .chat_conversational_2 import ChatConversational2, run_chat_conversational_2, get_chat_conversational_2  # noqa: F401
 # Alien Mode - Clonado de Chat Conversational 2 Enterprise
 from .alien_mode import AlienMode, run_alien_mode, get_alien_mode  # noqa: F401
+# PDF Agent Mode - Clonado de Alien Mode
+from .pdf_agent_mode import PDFAgentMode, run_pdf_agent_mode, get_pdf_agent_mode  # noqa: F401
 # Advantage Mode - Clonado de Alien Mode
 from .advantage_mode import AdvantageMode, run_advantage_mode, get_advantage_mode  # noqa: F401
 # ChatPDF Mode - Clonado de Alien Mode
@@ -469,6 +471,9 @@ __all__ = [
     "AlienMode",
     "run_alien_mode",
     "get_alien_mode",
+    "PDFAgentMode",
+    "run_pdf_agent_mode",
+    "get_pdf_agent_mode",
     # Advantage Mode
     "AdvantageMode",
     "run_advantage_mode",

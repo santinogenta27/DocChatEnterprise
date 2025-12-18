@@ -191,6 +191,7 @@ from docchat.ai_agent_business_manager_mode import AIAgentBusinessManagerMode
 from docchat.iterative_learning_agent import IterativeLearningAgent
 from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
 from docchat.alien_mode import run_alien_mode, get_alien_mode
+from docchat.pdf_agent_mode import run_pdf_agent_mode, get_pdf_agent_mode
 from docchat.advantage_mode import run_advantage_mode, get_advantage_mode
 from docchat.chat_pdf_mode import run_chat_pdf_mode, get_chat_pdf_mode
 from docchat.snipe_shot_mode import run_snipe_shot_mode, get_snipe_shot_mode
@@ -19391,6 +19392,205 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 outputs=[alien_stats_output],
             )
 
+        # Tab 4.5.5.5.1: PDF Agent Mode - Clon de Alien Mode
+        with gr.Tab("📄 PDF Agent"):
+            gr.Markdown("### 📄 PDF Agent - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            
+            **💡 Ejemplo del Proceso Multi-Agente:**
+            1. Subes 500 PDFs de documentos legales
+            2. Preguntas: "¿Cuáles son los valores de eficiencia PUE del centro de datos en Singapur?"
+            3. **Relevance Checker** verifica que los documentos contengan información relevante
+            4. **Hybrid Retriever** busca usando BM25 (keywords) + Vector Search (semántica)
+            5. **Research Agent** genera respuesta inicial basada en documentos recuperados
+            6. **Verification Agent** verifica que la respuesta esté soportada por los documentos
+            7. Si hay contradicciones o claims sin soporte, **Self-Correction** re-ejecuta research
+            8. El sistema retorna respuesta verificada con reporte completo de verificación
+            9. **RL & Planning** aprende qué estrategias funcionan mejor para futuras consultas similares
+            10. **Data Provenance** rastrea cada fuente para compliance y auditoría
+            
+            **🎯 Ventajas sobre ChatGPT/DeepSeek:**
+            - ✅ **Sin alucinaciones**: Cada respuesta es verificada contra los documentos
+            - ✅ **Precisión en tablas**: Lee correctamente tablas complejas y datos estructurados
+            - ✅ **Múltiples documentos**: Encuentra inteligentemente el documento correcto entre muchos
+            - ✅ **Auto-corrección**: Re-ejecuta research si detecta problemas
+            - ✅ **Trazabilidad completa**: Rastrea cada pieza de información hasta su fuente
+            """)
+            
+            # Generar session_id único
+            pdf_agent_session_id = gr.State(value=str(uuid.uuid4()))
+            
+            with gr.Row():
+                pdf_agent_files = gr.Files(
+                    label="📂 PDF Agent Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                pdf_agent_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                pdf_agent_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            pdf_agent_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                pdf_agent_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                pdf_agent_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_pdf_agent_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_pdf_agent_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                pdf_agent_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            pdf_agent_status = gr.Markdown(label="ℹ️ Chat Status")
+            pdf_agent_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def pdf_agent_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_pdf_agent_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                
+                if error:
+                    status_msg = f"❌ {error}"
+                else:
+                    status_msg = f"✅ Query processed. Documents: {len(files)}"
+                
+                return new_history, new_history, status_msg, gr.Markdown(visible=False)
+            
+            def clear_pdf_agent(history, session_id):
+                # Reset session ID
+                new_session_id = str(uuid.uuid4())
+                return [], f"✅ Chat cleared. New session: {new_session_id[:8]}", gr.Markdown(visible=False), new_session_id
+            
+            def clear_pdf_agent_files(files, session_id):
+                return None, f"✅ Documents cleared for session: {session_id[:8]}", gr.Markdown(visible=False)
+            
+            def show_pdf_agent_stats(session_id):
+                if not config or not processor or not retriever_builder:
+                    return gr.Markdown(visible=True), "❌ Statistics not available"
+                
+                pdf_agent_mode = get_pdf_agent_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                
+                stats = pdf_agent_mode.get_statistics(session_id)
+                
+                stats_text = "## 📊 PDF Agent Mode Statistics\n\n"
+                stats_text += f"### 📦 Context Folding\n{json.dumps(stats.get('context_folding', {}), indent=2)}\n\n"
+                stats_text += f"### 🔍 Data Provenance\n{json.dumps(stats.get('data_provenance', {}), indent=2)}\n\n"
+                stats_text += f"### 🧠 Chain of Thought\n{json.dumps(stats.get('chain_of_thought', {}), indent=2)}\n\n"
+                stats_text += f"### 🛤️ Path Reasoning\n{json.dumps(stats.get('path_reasoning', {}), indent=2)}\n\n"
+                stats_text += f"### 📈 Test Time Training\n{json.dumps(stats.get('test_time_training', {}), indent=2)}\n\n"
+                stats_text += f"### 👤 Person in the Loop\n{json.dumps(stats.get('person_in_loop', {}), indent=2)}\n\n"
+                stats_text += f"### 🌳 Reinforcement Planning\n{json.dumps(stats.get('reinforcement_planning', {}), indent=2)}\n\n"
+                stats_text += f"### 🔌 MCP Integration\n{json.dumps(stats.get('mcp_integration', {}), indent=2)}\n\n"
+                
+                if "session" in stats:
+                    stats_text += f"### 📊 Session Info\n{json.dumps(stats['session'], indent=2)}\n\n"
+                
+                return gr.Markdown(visible=True), stats_text
+            
+            pdf_agent_submit_btn.click(
+                fn=pdf_agent_submit,
+                inputs=[pdf_agent_input, pdf_agent_bot, pdf_agent_files, pdf_agent_session_id, pdf_agent_speed_mode, pdf_agent_provider_toggle],
+                outputs=[pdf_agent_bot, pdf_agent_bot, pdf_agent_status, pdf_agent_stats_output],
+                then=lambda: "", None, pdf_agent_input
+            )
+            
+            pdf_agent_input.submit(
+                fn=pdf_agent_submit,
+                inputs=[pdf_agent_input, pdf_agent_bot, pdf_agent_files, pdf_agent_session_id, pdf_agent_speed_mode, pdf_agent_provider_toggle],
+                outputs=[pdf_agent_bot, pdf_agent_bot, pdf_agent_status, pdf_agent_stats_output],
+                then=lambda: "", None, pdf_agent_input
+            )
+            
+            clear_pdf_agent_btn.click(
+                fn=clear_pdf_agent,
+                inputs=[pdf_agent_bot, pdf_agent_session_id],
+                outputs=[pdf_agent_bot, pdf_agent_status, pdf_agent_stats_output, pdf_agent_session_id],
+            )
+            
+            clear_pdf_agent_files_btn.click(
+                fn=clear_pdf_agent_files,
+                inputs=[pdf_agent_files, pdf_agent_session_id],
+                outputs=[pdf_agent_files, pdf_agent_status, pdf_agent_stats_output],
+            )
+            
+            pdf_agent_stats_btn.click(
+                fn=show_pdf_agent_stats,
+                inputs=[pdf_agent_session_id],
+                outputs=[pdf_agent_stats_output, pdf_agent_stats_output],
+            )
+        
         # Tab 4.5.5.5.1: Advantage Mode - Clon de Alien Mode
         with gr.Tab("⚡ Advantage Mode"):
             gr.Markdown("### ⚡ Advantage Mode - Sistema Multi-Agente RAG de Máxima Calidad")
