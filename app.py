@@ -405,6 +405,17 @@ except Exception as e:
     print(f"⚠️ Customer Support Manager no disponible: {e}")
     customer_support = None
 
+# Customer Service 24/7 - Autonomous Resolution Agent
+try:
+    from docchat.customer_service_24_7 import CustomerService247Mode
+    customer_service_24_7 = CustomerService247Mode(config, provider="grok")
+    CUSTOMER_SERVICE_24_7_AVAILABLE = True
+    print("✅ Customer Service 24/7 cargado correctamente")
+except Exception as e:
+    CUSTOMER_SERVICE_24_7_AVAILABLE = False
+    print(f"⚠️ Customer Service 24/7 no disponible: {e}")
+    customer_service_24_7 = None
+
 # Enterprise Sales Manager - Sistema Autónomo de Ventas Orientado a ROI
 try:
     from docchat.enterprise_sales_manager_mode import EnterpriseSalesManagerMode
@@ -38903,6 +38914,8 @@ if __name__ == "__main__":
             if hasattr(demo, 'app'):
                 setup_ads_worker_api_endpoints(demo.app)
                 setup_customer_support_api_endpoints(demo.app)
+                setup_customer_service_24_7_api_endpoints(demo.app)
+                setup_customer_service_24_7_api_endpoints(demo.app)
             else:
                 print("⚠️ demo.app no disponible, endpoints de ADS WORKER se configurarán después del launch")
         except Exception as e:

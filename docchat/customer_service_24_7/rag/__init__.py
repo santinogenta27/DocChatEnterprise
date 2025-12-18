@@ -1,0 +1,5 @@
+"""RAG components for Customer Service 24/7"""
+
+from .knowledge_base import AdvancedKnowledgeBase
+
+__all__ = ['AdvancedKnowledgeBase']
