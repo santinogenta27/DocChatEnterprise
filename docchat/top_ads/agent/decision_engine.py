@@ -44,6 +44,9 @@ class DecisionEngine:
         """
         Decide la estructura final de campaña basada en el plan.
         
+        Similar a Meta Ads Manager 2026: elimina controles manuales en modo autónomo,
+        forzando broad targeting y optimización por IA.
+        
         Args:
             plan: Plan de campaña generado por el planner
             autonomy_mode: Modo de autonomía
@@ -53,8 +56,12 @@ class DecisionEngine:
         """
         self.logger.info(f"Decidiendo estructura de campaña (autonomy: {autonomy_mode.value})")
         
-        # Si es full autonomous, usar el plan directamente
+        # Si es full autonomous, forzar broad targeting y eliminar controles manuales
         if autonomy_mode == AutonomyMode.FULL_AUTONOMOUS:
+            plan = self._force_broad_targeting(plan)
+            plan["autonomy_mode"] = "full_autonomous"
+            plan["manual_controls_removed"] = True
+            self.logger.info("Modo FULL_AUTONOMOUS: Broad targeting forzado, controles manuales eliminados")
             return plan
         
         # Si es approval required, marcar para aprobación
@@ -69,6 +76,58 @@ class DecisionEngine:
             return plan
         
         return plan
+    
+    def _force_broad_targeting(self, plan: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Fuerza broad targeting en todos los ad sets, eliminando targeting manual detallado.
+        
+        Similar a Meta's Advantage+ Audience: permite que la IA expanda audiencias
+        automáticamente más allá de los parámetros básicos.
+        
+        Args:
+            plan: Plan de campaña original
+        
+        Returns:
+            Plan modificado con broad targeting forzado
+        """
+        modified_plan = plan.copy()
+        
+        # Modificar cada ad set para usar broad targeting
+        if "ad_sets" in modified_plan:
+            for ad_set in modified_plan["ad_sets"]:
+                # Crear targeting broad (solo parámetros básicos, sin intereses/behaviors detallados)
+                broad_targeting = {
+                    "age_min": 18,
+                    "age_max": 65,
+                    "genders": [1, 2],  # All genders
+                    "geo_locations": {
+                        "countries": ["US"]  # Por defecto, se puede expandir
+                    },
+                    # Eliminar targeting detallado
+                    "interests": [],  # Vacío - IA decidirá
+                    "behaviors": [],  # Vacío - IA decidirá
+                    "custom_audiences": [],  # Vacío - IA decidirá
+                    "lookalike_audiences": [],  # Vacío - IA decidirá
+                    # Marcar como broad targeting
+                    "targeting_type": "broad",
+                    "advantage_plus_audience": True,  # Similar a Meta's Advantage+ Audience
+                    "ai_expansion": True  # Permitir expansión por IA
+                }
+                
+                # Si había targeting manual, guardarlo como referencia pero no usarlo
+                if "targeting" in ad_set:
+                    original_targeting = ad_set["targeting"]
+                    ad_set["original_targeting"] = original_targeting  # Guardar como referencia
+                    self.logger.info(f"Targeting manual guardado como referencia para {ad_set.get('name', 'ad_set')}")
+                
+                # Aplicar broad targeting
+                ad_set["targeting"] = broad_targeting
+                ad_set["targeting_notes"] = "Broad targeting forzado por modo FULL_AUTONOMOUS. IA expandirá audiencia automáticamente."
+        
+        modified_plan["targeting_strategy"] = "broad_ai_expanded"
+        modified_plan["manual_targeting_removed"] = True
+        
+        return modified_plan
     
     def decide_optimization_action(
         self,

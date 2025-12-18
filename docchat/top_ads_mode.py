@@ -184,6 +184,13 @@ class TopAdsMode:
             logger=self.logger
         )
         
+        # Dynamic Creative Optimizer (DCO)
+        self.dco = DynamicCreativeOptimizer(
+            config=config,
+            llm=self.llm,
+            logger=self.logger
+        )
+        
         # Ads Platforms
         self.meta_ads = MetaAdsPlatform(
             config=config,
@@ -254,6 +261,29 @@ class TopAdsMode:
                 texts=user_input.texts or []
             )
             
+            # 1.5. Image Expansion (si hay imágenes y es modo autónomo)
+            if user_input.images and user_input.autonomy_mode == AutonomyMode.FULL_AUTONOMOUS:
+                self.logger.info("Aplicando Image Expansion a imágenes...")
+                expanded_images = {}
+                for img_path in user_input.images:
+                    try:
+                        expanded = self.asset_processor.expand_image_for_formats(
+                            image_path=img_path,
+                            formats=["1:1", "16:9", "9:16", "4:5"]
+                        )
+                        expanded_images[img_path] = expanded
+                        # Agregar imágenes expandidas a processed_assets
+                        for format_ratio, expanded_path in expanded.items():
+                            processed_assets["images"].append({
+                                "path": expanded_path,
+                                "type": "image",
+                                "format": format_ratio,
+                                "original_path": img_path,
+                                "is_expanded": True
+                            })
+                    except Exception as e:
+                        self.logger.warning(f"Error en Image Expansion para {img_path}: {e}")
+            
             # 2. Generar creativos
             self.logger.info("Generando creativos publicitarios...")
             creatives = self.copy_generator.generate_creatives(
@@ -277,18 +307,40 @@ class TopAdsMode:
             
             # 4. Planear estrategia de campaña
             self.logger.info("Planificando estrategia de campaña...")
+            force_broad = user_input.autonomy_mode == AutonomyMode.FULL_AUTONOMOUS
             campaign_plan = self.planner.plan_campaign(
                 business_objective=user_input.business_objective.value,
                 budget=user_input.budget,
                 creatives=validated_creatives,
-                target_audience=user_input.target_audience
+                target_audience=user_input.target_audience,
+                force_broad_targeting=force_broad
             )
             
             # 5. Tomar decisión sobre estructura de campaña
+            # (Esto fuerza broad targeting si es FULL_AUTONOMOUS)
             campaign_structure = self.decision_engine.decide_campaign_structure(
                 plan=campaign_plan,
                 autonomy_mode=user_input.autonomy_mode
             )
+            
+            # 5.5. Preparar componentes para DCO (si se requiere personalización dinámica)
+            # Nota: DCO se aplicará en tiempo real cuando se sirva el ad al usuario
+            # Aquí preparamos los componentes disponibles
+            if validated_creatives:
+                image_paths = [img.get("path") for img in processed_assets.get("images", []) if img.get("path")]
+                headlines = [c.get("headline", "") for c in validated_creatives]
+                primary_texts = [c.get("primary_text", "") for c in validated_creatives]
+                descriptions = [c.get("description", "") for c in validated_creatives if c.get("description")]
+                ctas = [c.get("cta", "Learn More") for c in validated_creatives]
+                
+                self.dco.load_components(
+                    images=image_paths,
+                    headlines=headlines,
+                    primary_texts=primary_texts,
+                    descriptions=descriptions if descriptions else None,
+                    ctas=list(set(ctas)) if ctas else None  # CTAs únicos
+                )
+                self.logger.info("Componentes cargados en DCO para personalización dinámica")
             
             # 6. Publicar en cada plataforma
             for platform in platforms:
@@ -547,8 +599,40 @@ class TopAdsMode:
         else:
             raise ValueError(f"Plataforma no soportada: {platform}")
     
+    def create_dynamic_creative_for_user(
+        self,
+        user_profile: UserProfile
+    ) -> Dict[str, Any]:
+        """
+        Crea un creative dinámico optimizado para un usuario específico (DCO).
+        
+        Similar a Meta's Dynamic Creative Optimization: combina componentes
+        automáticamente según perfil del usuario.
+        
+        Args:
+            user_profile: Perfil del usuario
+        
+        Returns:
+            Creative dinámico optimizado
+        """
+        self.logger.info(f"Creando creative dinámico para usuario: {user_profile.age} años")
+        
+        dynamic_creative = self.dco.create_dynamic_creative(user_profile)
+        
+        return {
+            "creative": dynamic_creative,
+            "image_path": dynamic_creative.image_path,
+            "headline": dynamic_creative.headline,
+            "primary_text": dynamic_creative.primary_text,
+            "description": dynamic_creative.description,
+            "cta": dynamic_creative.cta,
+            "combination_score": dynamic_creative.combination_score,
+            "reasoning": "Creative optimizado dinámicamente según perfil de usuario"
+        }
+    
     def get_statistics(self) -> Dict[str, Any]:
         """Obtiene estadísticas del sistema."""
+        dco_stats = self.dco.get_statistics()
         return {
             "active_campaigns": len(self.active_campaigns),
             "total_campaigns": len(self.campaign_history),
@@ -557,7 +641,12 @@ class TopAdsMode:
                 "tiktok": self.tiktok_ads.is_connected()
             },
             "optimization_runs": self.optimizer.get_optimization_count(),
-            "creatives_generated": self.copy_generator.get_generation_count()
+            "creatives_generated": self.copy_generator.get_generation_count(),
+            "dco": {
+                "combinations_created": dco_stats.get("combinations_created", 0),
+                "total_components": dco_stats.get("total_components", {}),
+                "average_score": dco_stats.get("average_score", 0.0)
+            }
         }
 
 
