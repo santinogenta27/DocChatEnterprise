@@ -20624,6 +20624,372 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 business_ai_input.submit(fn=business_ai_submit, inputs=[business_ai_input, business_ai_bot, business_ai_session_id], outputs=[business_ai_bot, business_ai_bot, business_ai_status, business_ai_stats_output]).then(lambda: "", None, business_ai_input)
                 clear_business_ai_btn.click(fn=clear_business_ai, inputs=[business_ai_bot, business_ai_session_id], outputs=[business_ai_bot, business_ai_status, business_ai_stats_output, business_ai_session_id])
                 business_ai_stats_btn.click(fn=show_business_ai_stats, inputs=[business_ai_session_id], outputs=[business_ai_stats_output, business_ai_stats_output])
+                
+                # NUEVO: Generador de Código Widget Embeddable
+                gr.Markdown("---")
+                gr.Markdown("### 📦 Widget Embeddable para tu Website")
+                gr.Markdown("**Genera código HTML/JS que tus clientes pueden pegar en su website para desplegar el chatbot automáticamente.**")
+                
+                with gr.Tabs():
+                    with gr.Tab("🔧 Generar Código"):
+                        with gr.Row():
+                            with gr.Column():
+                                widget_api_url = gr.Textbox(
+                                    label="🌐 URL del Servidor",
+                                    value="https://tu-servidor.com",
+                                    placeholder="https://tu-servidor.com",
+                                    info="URL donde está corriendo tu servidor DocChat Enterprise"
+                                )
+                                widget_id = gr.Textbox(
+                                    label="🆔 Widget ID",
+                                    placeholder="widget_abc123",
+                                    info="ID único para este widget (se genera automáticamente si lo dejas vacío)"
+                                )
+                                widget_brand_name = gr.Textbox(
+                                    label="🏷️ Nombre de Marca",
+                                    placeholder="Mi Empresa",
+                                    value="Tu Marca",
+                                    info="Nombre que aparecerá en el widget"
+                                )
+                                widget_primary_color = gr.Textbox(
+                                    label="🎨 Color Principal",
+                                    value="#007bff",
+                                    placeholder="#007bff",
+                                    info="Color hexadecimal para el widget"
+                                )
+                                widget_position = gr.Radio(
+                                    label="📍 Posición",
+                                    choices=[("Esquina inferior derecha", "bottom-right"), ("Esquina inferior izquierda", "bottom-left")],
+                                    value="bottom-right"
+                                )
+                                widget_welcome_message = gr.Textbox(
+                                    label="💬 Mensaje de Bienvenida",
+                                    value="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?",
+                                    lines=2,
+                                    info="Mensaje que verá el usuario al abrir el chat"
+                                )
+                                
+                                generate_widget_code_btn = gr.Button("📋 Generar Código", variant="primary", size="lg")
+                            
+                            with gr.Column():
+                                widget_code_output = gr.Code(
+                                    label="📋 Código HTML para Copiar y Pegar",
+                                    language="html",
+                                    lines=15,
+                                    value="**💡 Configura los campos de la izquierda y haz click en 'Generar Código'**"
+                                )
+                                widget_preview = gr.Markdown(
+                                    label="👁️ Preview",
+                                    value="**El código generado aparecerá arriba**"
+                                )
+                        
+                        def generate_widget_code(api_url, widget_id_input, brand_name, primary_color, position, welcome_message):
+                            """Genera código HTML/JS para el widget embeddable"""
+                            try:
+                                import uuid
+                                
+                                # Generar widget_id si no se proporciona
+                                if not widget_id_input or not widget_id_input.strip():
+                                    widget_id_final = f"widget_{uuid.uuid4().hex[:12]}"
+                                else:
+                                    widget_id_final = widget_id_input.strip()
+                                
+                                # Validar URL
+                                if not api_url or not api_url.strip():
+                                    return "⚠️ **URL del servidor es requerida**", "❌ Error: URL requerida"
+                                
+                                api_url_clean = api_url.strip().rstrip('/')
+                                
+                                # Generar código HTML
+                                code = f'''<!-- Business AI Omnicanal Widget -->
+<!-- Copia y pega este código antes de </body> en tu website -->
+<script src="{api_url_clean}/static/business-ai-widget.js" 
+        data-api-url="{api_url_clean}"
+        data-widget-id="{widget_id_final}"
+        data-brand-name="{brand_name}"
+        data-primary-color="{primary_color}"
+        data-position="{position}"
+        data-welcome-message="{welcome_message}"
+        async></script>
+
+<!-- Ejemplo de uso completo: -->
+<!-- 
+<script src="{api_url_clean}/static/business-ai-widget.js" 
+        data-api-url="{api_url_clean}"
+        data-widget-id="{widget_id_final}"
+        data-brand-name="{brand_name}"
+        data-primary-color="{primary_color}"
+        data-position="{position}"
+        data-welcome-message="{welcome_message}"
+        async></script>
+-->
+'''
+                                
+                                preview = f"""## ✅ Código Generado Exitosamente
+
+**Widget ID:** `{widget_id_final}`
+
+**Instrucciones:**
+1. Copia el código HTML de arriba
+2. Pégalo antes de `</body>` en tu website
+3. El widget aparecerá automáticamente en la esquina {position.replace('bottom-', 'inferior ').replace('right', 'derecha').replace('left', 'izquierda')}
+
+**Características del Widget:**
+- ✅ Chat flotante con interfaz moderna
+- ✅ Conectado con Business AI Omnicanal
+- ✅ Ventas + Soporte 24/7
+- ✅ Carrito de compras integrado
+- ✅ Detección de sentimiento
+- ✅ Handoff humano automático
+- ✅ Procesamiento de imágenes
+
+**URL del Widget:** `{api_url_clean}/static/business-ai-widget.js`
+"""
+                                
+                                return code, preview
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error generando código: {str(e)}\n\n```\n{traceback.format_exc()}\n```", f"❌ Error: {str(e)}"
+                        
+                        generate_widget_code_btn.click(
+                            fn=generate_widget_code,
+                            inputs=[widget_api_url, widget_id, widget_brand_name, widget_primary_color, widget_position, widget_welcome_message],
+                            outputs=[widget_code_output, widget_preview]
+                        )
+                    
+                    with gr.Tab("⚙️ Configuración Enterprise"):
+                        gr.Markdown("### ⚙️ Configuración Enterprise (Groq + PostgreSQL + n8n)")
+                        gr.Markdown("""
+                        **Para velocidad extrema y memoria de largo plazo:**
+                        - **Groq:** Responde en <0.5 segundos (Llama 3.3 70B)
+                        - **PostgreSQL:** Recuerda clientes meses después
+                        - **n8n:** Conecta con WhatsApp/Instagram automáticamente
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                gr.Markdown("### 🔥 Groq Cloud (Velocidad Extrema)")
+                                groq_api_key_input = gr.Textbox(
+                                    label="🔑 Groq API Key",
+                                    type="password",
+                                    placeholder="gsk_...",
+                                    info="Obtén tu API key gratis en https://console.groq.com"
+                                )
+                                use_groq_checkbox = gr.Checkbox(
+                                    label="✅ Usar Groq (Llama 3.3 70B)",
+                                    value=False,
+                                    info="Activa para respuestas <0.5 segundos"
+                                )
+                                groq_model_select = gr.Dropdown(
+                                    label="🤖 Modelo Groq",
+                                    choices=[
+                                        ("llama-3.3-70b-versatile", "Llama 3.3 70B (Recomendado)"),
+                                        ("llama-3.1-70b-versatile", "Llama 3.1 70B"),
+                                        ("llama-3.1-8b-instant", "Llama 3.1 8B (Más rápido)")
+                                    ],
+                                    value="llama-3.3-70b-versatile"
+                                )
+                                save_groq_btn = gr.Button("💾 Guardar Configuración Groq", variant="primary")
+                                groq_status = gr.Markdown(label="📊 Estado Groq")
+                            
+                            with gr.Column():
+                                gr.Markdown("### 🗄️ PostgreSQL (Memoria de Largo Plazo)")
+                                postgresql_url_input = gr.Textbox(
+                                    label="🔗 Database URL",
+                                    placeholder="postgresql://user:pass@host:port/db",
+                                    type="password",
+                                    info="URL de conexión PostgreSQL"
+                                )
+                                use_postgresql_checkbox = gr.Checkbox(
+                                    label="✅ Usar PostgreSQL",
+                                    value=False,
+                                    info="Activa para recordar clientes meses después"
+                                )
+                                save_postgresql_btn = gr.Button("💾 Guardar Configuración PostgreSQL", variant="primary")
+                                postgresql_status = gr.Markdown(label="📊 Estado PostgreSQL")
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### 🔗 n8n (WhatsApp/Instagram)")
+                        gr.Markdown("""
+                        **Para conectar con Meta (WhatsApp/Instagram):**
+                        1. Instala n8n (self-hosted o cloud)
+                        2. Configura webhook de Meta
+                        3. Crea workflow que llame a: `https://tu-servidor.com/business-ai/n8n/webhook`
+                        4. Ver guía completa en: `GUIA_N8N_INTEGRACION.md`
+                        """)
+                        
+                        n8n_webhook_url_display = gr.Markdown(
+                            value="**Endpoint n8n:** `POST https://tu-servidor.com/business-ai/n8n/webhook`"
+                        )
+                        
+                        def save_groq_config(api_key, use_groq, model):
+                            """Guarda configuración de Groq en .env"""
+                            try:
+                                import os
+                                from pathlib import Path
+                                
+                                env_path = Path(".env")
+                                
+                                # Leer .env actual
+                                env_vars = {}
+                                if env_path.exists():
+                                    with open(env_path, "r", encoding="utf-8") as f:
+                                        for line in f:
+                                            if "=" in line and not line.strip().startswith("#"):
+                                                key, value = line.strip().split("=", 1)
+                                                env_vars[key] = value
+                                
+                                # Actualizar variables
+                                if api_key:
+                                    env_vars["GROQ_API_KEY"] = api_key
+                                env_vars["DOCCHAT_USE_GROQ"] = "true" if use_groq else "false"
+                                env_vars["DOCCHAT_GROQ_MODEL"] = model
+                                
+                                # Escribir .env
+                                with open(env_path, "w", encoding="utf-8") as f:
+                                    for key, value in env_vars.items():
+                                        f.write(f"{key}={value}\n")
+                                
+                                status = f"""✅ **Configuración Groq guardada**
+
+**Estado:**
+- API Key: {'✅ Configurada' if api_key else '❌ No configurada'}
+- Usar Groq: {'✅ Activado' if use_groq else '❌ Desactivado'}
+- Modelo: {model}
+
+**⚠️ IMPORTANTE:** Reinicia el servidor para aplicar cambios.
+```bash
+# Reinicia api_server.py o app.py
+```
+"""
+                                return status
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def save_postgresql_config(db_url, use_postgresql):
+                            """Guarda configuración de PostgreSQL en .env"""
+                            try:
+                                import os
+                                from pathlib import Path
+                                
+                                env_path = Path(".env")
+                                
+                                # Leer .env actual
+                                env_vars = {}
+                                if env_path.exists():
+                                    with open(env_path, "r", encoding="utf-8") as f:
+                                        for line in f:
+                                            if "=" in line and not line.strip().startswith("#"):
+                                                key, value = line.strip().split("=", 1)
+                                                env_vars[key] = value
+                                
+                                # Actualizar variables
+                                if db_url:
+                                    env_vars["DATABASE_URL"] = db_url
+                                env_vars["DOCCHAT_POSTGRESQL_ENABLED"] = "true" if use_postgresql else "false"
+                                
+                                # Escribir .env
+                                with open(env_path, "w", encoding="utf-8") as f:
+                                    for key, value in env_vars.items():
+                                        f.write(f"{key}={value}\n")
+                                
+                                status = f"""✅ **Configuración PostgreSQL guardada**
+
+**Estado:**
+- Database URL: {'✅ Configurada' if db_url else '❌ No configurada'}
+- Usar PostgreSQL: {'✅ Activado' if use_postgresql else '❌ Desactivado'}
+
+**⚠️ IMPORTANTE:** 
+1. Instala psycopg2: `pip install psycopg2-binary`
+2. Reinicia el servidor para aplicar cambios.
+3. Las tablas se crearán automáticamente al iniciar.
+"""
+                                return status
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        save_groq_btn.click(
+                            fn=save_groq_config,
+                            inputs=[groq_api_key_input, use_groq_checkbox, groq_model_select],
+                            outputs=[groq_status]
+                        )
+                        
+                        save_postgresql_btn.click(
+                            fn=save_postgresql_config,
+                            inputs=[postgresql_url_input, use_postgresql_checkbox],
+                            outputs=[postgresql_status]
+                        )
+                    
+                    with gr.Tab("📖 Instrucciones"):
+                        gr.Markdown("""
+                        ### 📖 Cómo Usar el Widget en tu Website
+                        
+                        **Paso 1: Genera tu Código**
+                        1. Ve a la pestaña "🔧 Generar Código"
+                        2. Configura:
+                           - URL de tu servidor DocChat Enterprise
+                           - Nombre de tu marca
+                           - Color principal del widget
+                           - Posición (derecha o izquierda)
+                           - Mensaje de bienvenida
+                        3. Haz click en "📋 Generar Código"
+                        
+                        **Paso 2: Copia el Código**
+                        - Copia el código HTML que se genera
+                        
+                        **Paso 3: Pega en tu Website**
+                        - Abre el código HTML de tu website
+                        - Busca la etiqueta `</body>`
+                        - Pega el código ANTES de `</body>`
+                        - Guarda y publica tu website
+                        
+                        **Paso 4: ¡Listo!**
+                        - El widget aparecerá automáticamente en tu website
+                        - Los usuarios podrán chatear directamente
+                        - El agente responderá usando Business AI Omnicanal
+                        
+                        ---
+                        
+                        ### 🎯 Características del Widget
+                        
+                        **Basado en los mejores papers de e-commerce:**
+                        - ✅ **Mix-ECom**: Manejo de diálogos mixtos (QA, recomendación, ventas, chit-chat)
+                        - ✅ **Retail-GPT**: RAG para recomendaciones de productos
+                        - ✅ **CSALES**: Personalización y persuasión estratégica
+                        - ✅ **MegaChat**: Generación de respuestas de alta calidad
+                        
+                        **Funcionalidades:**
+                        - 💬 Chat en tiempo real
+                        - 🛒 Carrito de compras integrado
+                        - 💳 Procesamiento de pagos
+                        - 📦 Gestión de pedidos
+                        - 🎯 Cross-selling inteligente
+                        - 📊 Análisis de sentimiento
+                        - 🔗 Handoff humano automático
+                        - 🖼️ Procesamiento de imágenes
+                        - 📍 Pixel tracking (sabe qué productos vio el usuario)
+                        
+                        ---
+                        
+                        ### 🔧 Configuración Avanzada
+                        
+                        **Personalización:**
+                        - Cambia el color con `data-primary-color`
+                        - Cambia la posición con `data-position`
+                        - Personaliza el mensaje con `data-welcome-message`
+                        
+                        **Ejemplo completo:**
+                        ```html
+                        <script src="https://tu-servidor.com/static/business-ai-widget.js" 
+                                data-api-url="https://tu-servidor.com"
+                                data-widget-id="mi-widget-123"
+                                data-brand-name="Mi Empresa"
+                                data-primary-color="#ff6b6b"
+                                data-position="bottom-left"
+                                data-welcome-message="¡Hola! ¿Cómo puedo ayudarte?"
+                                async></script>
+                        ```
+                        """)
 
         # Tab: 📢 Top Ads Mode - AI Agent Autónomo para Publicidad
         with gr.Tab("📢 Top Ads Mode"):
@@ -21433,7 +21799,631 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             outputs=[aw_targeting_countries, aw_targeting_age_min, aw_targeting_age_max, aw_targeting_gender, aw_targeting_interests]
                         )
                     
-                    # Tab 4: Lanzar Campaña
+                    # Tab 4: Wizard Paso a Paso (NUEVO - NIVEL META ADS MANAGER)
+                    with gr.Tab("✨ Wizard de Campaña"):
+                        gr.Markdown("### ✨ Crea tu Campaña Paso a Paso")
+                        gr.Markdown("**Guía interactiva como Meta Ads Manager** - Te guiamos de principio a fin con preview y estimaciones en tiempo real.")
+                        
+                        # Estado del wizard (paso actual)
+                        wizard_step = gr.State(value=1)  # Paso 1-5
+                        
+                        with gr.Row():
+                            with gr.Column(scale=2):
+                                # Paso 1: Objetivo y Nombre
+                                wizard_step1 = gr.Group(visible=True)
+                                with wizard_step1:
+                                    gr.Markdown("### 📍 Paso 1: ¿Qué quieres lograr?")
+                                    wizard_name = gr.Textbox(
+                                        label="📝 Nombre de Campaña",
+                                        placeholder="Ej: Campaña de Verano 2025",
+                                        info="Elige un nombre descriptivo para tu campaña"
+                                    )
+                                    wizard_objective = gr.Dropdown(
+                                        label="🎯 Objetivo de Campaña",
+                                        choices=[
+                                            ("💼 Conversiones", "CONVERSIONS"),
+                                            ("🚗 Tráfico al Sitio Web", "TRAFFIC"),
+                                            ("❤️ Engagement", "ENGAGEMENT"),
+                                            ("📢 Brand Awareness", "AWARENESS"),
+                                            ("📋 Generación de Leads", "LEAD_GENERATION"),
+                                            ("💰 Ventas", "SALES")
+                                        ],
+                                        value="CONVERSIONS",
+                                        info="¿Qué quieres lograr con esta campaña?"
+                                    )
+                                    wizard_step1_next = gr.Button("➡️ Siguiente: Presupuesto", variant="primary")
+                                
+                                # Paso 2: Presupuesto
+                                wizard_step2 = gr.Group(visible=False)
+                                with wizard_step2:
+                                    gr.Markdown("### 📍 Paso 2: ¿Cuál es tu presupuesto?")
+                                    wizard_budget = gr.Number(
+                                        label="💰 Presupuesto Diario (USD)",
+                                        value=50.0,
+                                        minimum=1.0,
+                                        maximum=100000.0,
+                                        info="Presupuesto diario para esta campaña"
+                                    )
+                                    wizard_platforms = gr.Radio(
+                                        label="🌐 Plataformas",
+                                        choices=[
+                                            ("📘 Meta Ads (Facebook/Instagram)", "meta"),
+                                            ("🔵 Google Ads", "google"),
+                                            ("🌐 Ambas Plataformas", "both")
+                                        ],
+                                        value="meta",
+                                        info="¿Dónde quieres publicar?"
+                                    )
+                                    wizard_step2_back = gr.Button("⬅️ Atrás", variant="secondary")
+                                    wizard_step2_next = gr.Button("➡️ Siguiente: Audiencia", variant="primary")
+                                
+                                # Paso 3: Targeting con Estimación de Audiencia
+                                wizard_step3 = gr.Group(visible=False)
+                                with wizard_step3:
+                                    gr.Markdown("### 📍 Paso 3: ¿Quién es tu audiencia?")
+                                    
+                                    with gr.Row():
+                                        with gr.Column():
+                                            wizard_countries = gr.CheckboxGroup(
+                                                label="🌍 Países",
+                                                choices=[
+                                                    ("🇺🇸 Estados Unidos", "US"),
+                                                    ("🇲🇽 México", "MX"),
+                                                    ("🇦🇷 Argentina", "AR"),
+                                                    ("🇧🇷 Brasil", "BR"),
+                                                    ("🇨🇱 Chile", "CL"),
+                                                    ("🇨🇴 Colombia", "CO"),
+                                                    ("🇵🇪 Perú", "PE"),
+                                                    ("🇪🇸 España", "ES"),
+                                                    ("🇫🇷 Francia", "FR"),
+                                                    ("🇩🇪 Alemania", "DE"),
+                                                    ("🇮🇹 Italia", "IT"),
+                                                    ("🇬🇧 Reino Unido", "UK"),
+                                                    ("🇨🇦 Canadá", "CA"),
+                                                    ("🇦🇺 Australia", "AU"),
+                                                ],
+                                                value=["US"],
+                                                info="Selecciona países para tu audiencia"
+                                            )
+                                            
+                                            with gr.Row():
+                                                wizard_age_min = gr.Slider(
+                                                    label="Edad Mínima",
+                                                    minimum=13,
+                                                    maximum=65,
+                                                    value=18,
+                                                    step=1
+                                                )
+                                                wizard_age_max = gr.Slider(
+                                                    label="Edad Máxima",
+                                                    minimum=13,
+                                                    maximum=65,
+                                                    value=65,
+                                                    step=1
+                                                )
+                                            
+                                            wizard_gender = gr.Radio(
+                                                label="Género",
+                                                choices=[
+                                                    ("👥 Todos", "all"),
+                                                    ("👨 Hombres", "male"),
+                                                    ("👩 Mujeres", "female")
+                                                ],
+                                                value="all"
+                                            )
+                                            
+                                            wizard_interests = gr.Textbox(
+                                                label="💡 Intereses (Opcional)",
+                                                placeholder="tecnología, negocios, fitness",
+                                                lines=2,
+                                                info="Separa por comas"
+                                            )
+                                        
+                                        with gr.Column():
+                                            wizard_audience_estimate = gr.Markdown(
+                                                label="📊 Estimación de Audiencia",
+                                                value="**💡 Configura tu targeting arriba y haz click en '📊 Estimar Audiencia' para ver cuántas personas alcanzarás.**"
+                                            )
+                                            wizard_estimate_btn = gr.Button("📊 Estimar Audiencia", variant="secondary")
+                                    
+                                    wizard_step3_back = gr.Button("⬅️ Atrás", variant="secondary")
+                                    wizard_step3_next = gr.Button("➡️ Siguiente: Assets y Preview", variant="primary")
+                                
+                                # Paso 4: Assets y Preview
+                                wizard_step4 = gr.Group(visible=False)
+                                with wizard_step4:
+                                    gr.Markdown("### 📍 Paso 4: Assets y Preview")
+                                    
+                                    wizard_asset_ids = gr.Textbox(
+                                        label="🆔 Asset IDs (separados por coma)",
+                                        placeholder="asset_123, asset_456",
+                                        info="IDs de assets procesados previamente. Ve a '📦 Procesar Assets' si no tienes assets."
+                                    )
+                                    
+                                    # Preview de Ads
+                                    with gr.Row():
+                                        with gr.Column():
+                                            wizard_preview_platform = gr.Radio(
+                                                label="👁️ Preview en",
+                                                choices=[
+                                                    ("📘 Facebook Feed", "facebook"),
+                                                    ("📷 Instagram Feed", "instagram"),
+                                                    ("📱 Instagram Stories", "instagram_stories")
+                                                ],
+                                                value="facebook",
+                                                info="Selecciona plataforma para preview"
+                                            )
+                                            wizard_preview_btn = gr.Button("👁️ Generar Preview", variant="secondary")
+                                        
+                                        with gr.Column():
+                                            wizard_preview_output = gr.Markdown(
+                                                label="👁️ Preview del Ad",
+                                                value="**💡 Ingresa Asset IDs y haz click en 'Generar Preview' para ver cómo se verá tu ad.**"
+                                            )
+                                    
+                                    wizard_step4_back = gr.Button("⬅️ Atrás", variant="secondary")
+                                    wizard_step4_next = gr.Button("➡️ Siguiente: Revisar y Publicar", variant="primary")
+                                
+                                # Paso 5: Revisar y Publicar
+                                wizard_step5 = gr.Group(visible=False)
+                                with wizard_step5:
+                                    gr.Markdown("### 📍 Paso 5: Revisar y Publicar")
+                                    
+                                    wizard_review = gr.Markdown(
+                                        label="📋 Resumen de Campaña",
+                                        value="**Cargando resumen...**"
+                                    )
+                                    
+                                    wizard_auto_activate = gr.Checkbox(
+                                        label="🚀 Activar campaña automáticamente",
+                                        value=True,
+                                        info="Si está marcado, la campaña se publicará inmediatamente (como Meta Ads Manager)"
+                                    )
+                                    
+                                    wizard_step5_back = gr.Button("⬅️ Atrás", variant="secondary")
+                                    wizard_publish_btn = gr.Button("🚀 Publicar Campaña", variant="primary", size="lg")
+                                    
+                                    wizard_publish_output = gr.Markdown(label="📊 Resultado")
+                            
+                            with gr.Column(scale=1):
+                                # Barra de progreso del wizard
+                                wizard_progress = gr.Markdown(
+                                    value="""
+                                    ### 📍 Progreso
+                                    
+                                    **Paso 1/5: Objetivo** ✅
+                                    - Paso 2/5: Presupuesto
+                                    - Paso 3/5: Audiencia
+                                    - Paso 4/5: Assets y Preview
+                                    - Paso 5/5: Revisar y Publicar
+                                    """
+                                )
+                                
+                                gr.Markdown("""
+                                ### 💡 Guía del Wizard
+                                
+                                Este wizard te guía paso a paso para crear tu campaña:
+                                
+                                1. **Objetivo**: ¿Qué quieres lograr?
+                                2. **Presupuesto**: ¿Cuánto quieres invertir?
+                                3. **Audiencia**: ¿A quién quieres alcanzar? (con estimación en tiempo real)
+                                4. **Assets y Preview**: Sube creativos y ve cómo se verán
+                                5. **Revisar y Publicar**: Revisa todo y publica
+                                
+                                **✨ Características:**
+                                - 📊 Estimación de audiencia en tiempo real
+                                - 👁️ Preview visual de ads antes de publicar
+                                - ✅ Validación en cada paso
+                                - 🚀 Publicación automática opcional
+                                """)
+                        
+                        # Funciones del wizard
+                        def update_wizard_step(step, direction):
+                            """Actualiza el paso del wizard"""
+                            if direction == "next":
+                                new_step = min(step + 1, 5)
+                            else:  # back
+                                new_step = max(step - 1, 1)
+                            
+                            # Actualizar visibilidad de pasos
+                            step1_visible = (new_step == 1)
+                            step2_visible = (new_step == 2)
+                            step3_visible = (new_step == 3)
+                            step4_visible = (new_step == 4)
+                            step5_visible = (new_step == 5)
+                            
+                            # Actualizar progreso
+                            progress_md = "### 📍 Progreso\n\n"
+                            for i in range(1, 6):
+                                if i < new_step:
+                                    progress_md += f"**Paso {i}/5** ✅\n"
+                                elif i == new_step:
+                                    progress_md += f"**Paso {i}/5** 🔄\n"
+                                else:
+                                    progress_md += f"- Paso {i}/5\n"
+                            
+                            return (
+                                new_step,
+                                gr.update(visible=step1_visible),
+                                gr.update(visible=step2_visible),
+                                gr.update(visible=step3_visible),
+                                gr.update(visible=step4_visible),
+                                gr.update(visible=step5_visible),
+                                progress_md
+                            )
+                        
+                        def estimate_audience_wizard(countries, age_min, age_max, gender, interests, budget, objective):
+                            """Estima audiencia desde el wizard"""
+                            try:
+                                from docchat.ads_worker.credentials_manager import AdsCredentialsManager
+                                from docchat.ads_worker.services.meta_ads_service import MetaAdsService
+                                
+                                creds_manager = AdsCredentialsManager()
+                                meta_creds = creds_manager.load_meta_credentials()
+                                
+                                if not meta_creds:
+                                    return "⚠️ **Configura tus credenciales de Meta Ads primero** (ve a '⚙️ Configurar Credenciales')"
+                                
+                                # Preparar targeting
+                                gender_map = {"all": [1, 2], "male": [1], "female": [2]}
+                                genders = gender_map.get(gender, [1, 2])
+                                
+                                targeting = {
+                                    "age_min": int(age_min),
+                                    "age_max": int(age_max),
+                                    "genders": genders,
+                                    "geo_locations": {"countries": countries if countries else ["US"]}
+                                }
+                                
+                                if interests and interests.strip():
+                                    interests_list = [i.strip() for i in interests.split(',') if i.strip()]
+                                    if interests_list:
+                                        targeting["interests"] = interests_list
+                                
+                                # Inicializar servicio Meta
+                                meta_service = MetaAdsService(
+                                    access_token=meta_creds["access_token"],
+                                    app_id=meta_creds["app_id"],
+                                    app_secret=meta_creds["app_secret"],
+                                    ad_account_id=meta_creds["ad_account_id"]
+                                )
+                                
+                                # Estimar audiencia
+                                optimization_goal_map = {
+                                    "CONVERSIONS": "OFFSITE_CONVERSIONS",
+                                    "TRAFFIC": "LINK_CLICKS",
+                                    "ENGAGEMENT": "POST_ENGAGEMENT",
+                                    "AWARENESS": "REACH",
+                                    "LEAD_GENERATION": "LEAD_GENERATION",
+                                    "SALES": "OFFSITE_CONVERSIONS"
+                                }
+                                opt_goal = optimization_goal_map.get(objective, "OFFSITE_CONVERSIONS")
+                                
+                                estimate = meta_service.estimate_audience_size(
+                                    targeting=targeting,
+                                    optimization_goal=opt_goal,
+                                    daily_budget=float(budget) if budget else None
+                                )
+                                
+                                # Formatear resultado
+                                output = f"## 📊 Estimación de Audiencia\n\n"
+                                
+                                if estimate["status"] == "success":
+                                    audience_size = estimate["audience_size"]
+                                    daily_reach = estimate["daily_reach"]
+                                    
+                                    # Formatear números
+                                    if audience_size >= 1000000:
+                                        audience_str = f"{audience_size / 1000000:.1f}M"
+                                    elif audience_size >= 1000:
+                                        audience_str = f"{audience_size / 1000:.1f}K"
+                                    else:
+                                        audience_str = f"{audience_size:,}"
+                                    
+                                    if daily_reach >= 1000000:
+                                        reach_str = f"{daily_reach / 1000000:.1f}M"
+                                    elif daily_reach >= 1000:
+                                        reach_str = f"{daily_reach / 1000:.1f}K"
+                                    else:
+                                        reach_str = f"{daily_reach:,}"
+                                    
+                                    output += f"**👥 Tamaño de Audiencia**: ~{audience_str} personas\n\n"
+                                    
+                                    if daily_reach > 0:
+                                        output += f"**📈 Alcance Diario Estimado**: ~{reach_str} personas\n\n"
+                                    
+                                    # Evaluar tamaño
+                                    if audience_size < 1000:
+                                        output += "⚠️ **Audiencia muy pequeña** - Considera expandir países o intereses.\n\n"
+                                    elif audience_size < 10000:
+                                        output += "💡 **Audiencia pequeña** - Podrías considerar expandir targeting.\n\n"
+                                    elif audience_size > 50000000:
+                                        output += "💡 **Audiencia muy grande** - Considera refinar targeting para mejor ROI.\n\n"
+                                    else:
+                                        output += "✅ **Tamaño de audiencia óptimo**\n\n"
+                                    
+                                    # Recomendaciones
+                                    if estimate.get("recommendations"):
+                                        output += "### 💡 Recomendaciones:\n\n"
+                                        for rec in estimate["recommendations"]:
+                                            output += f"- {rec}\n"
+                                else:
+                                    output += f"⚠️ **Error obteniendo estimación**: {estimate.get('error', 'Error desconocido')}\n\n"
+                                    output += "**💡 Asegúrate de tener credenciales de Meta Ads configuradas correctamente.**"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ **Error**: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        def generate_preview_wizard(asset_ids_str, platform):
+                            """Genera preview del ad"""
+                            try:
+                                if not asset_ids_str or not asset_ids_str.strip():
+                                    return "⚠️ **Ingresa Asset IDs primero** (ve a '📦 Procesar Assets' si no tienes)"
+                                
+                                asset_ids = [aid.strip() for aid in asset_ids_str.split(',') if aid.strip()]
+                                if not asset_ids:
+                                    return "⚠️ **Asset IDs inválidos**"
+                                
+                                # Obtener información de assets
+                                if not ads_worker:
+                                    return "❌ **ADS WORKER no está disponible**"
+                                
+                                assets_info = []
+                                for asset_id in asset_ids[:3]:  # Máximo 3 para preview
+                                    try:
+                                        assets = ads_worker.list_assets(asset_type=None, limit=100)
+                                        asset = next((a for a in assets if a.get('asset_id') == asset_id), None)
+                                        if asset:
+                                            assets_info.append(asset)
+                                    except:
+                                        pass
+                                
+                                if not assets_info:
+                                    return "⚠️ **No se encontraron assets con esos IDs**"
+                                
+                                # Generar preview HTML
+                                preview_html = f"### 👁️ Preview - {platform.upper()}\n\n"
+                                
+                                platform_icons = {
+                                    "facebook": "📘",
+                                    "instagram": "📷",
+                                    "instagram_stories": "📱"
+                                }
+                                
+                                preview_html += f"**{platform_icons.get(platform, '👁️')} {platform.replace('_', ' ').title()}**\n\n"
+                                preview_html += "---\n\n"
+                                
+                                for i, asset in enumerate(assets_info[:1], 1):  # Preview de primer asset
+                                    asset_type = asset.get('asset_type', 'unknown')
+                                    asset_id = asset.get('asset_id', 'unknown')
+                                    
+                                    preview_html += f"**📎 Asset {i}** (`{asset_id}`): {asset_type.upper()}\n\n"
+                                    
+                                    if asset_type in ['image', 'video']:
+                                        file_path = asset.get('file_path', '')
+                                        file_url = asset.get('file_url', '')
+                                        
+                                        if file_path and os.path.exists(file_path):
+                                            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                                            preview_html += f"**📁 Archivo**: `{os.path.basename(file_path)}` ({file_size_mb:.2f} MB)\n\n"
+                                            preview_html += f"**💡 Este asset se mostrará como {asset_type} en {platform.replace('_', ' ').title()}**\n\n"
+                                        elif file_url:
+                                            preview_html += f"**🔗 URL**: {file_url}\n\n"
+                                            preview_html += f"**💡 Este asset se mostrará como {asset_type} en {platform.replace('_', ' ').title()}**\n\n"
+                                        else:
+                                            preview_html += f"⚠️ **Archivo no encontrado**\n\n"
+                                    else:
+                                        text_content = asset.get('text_content', '')
+                                        if not text_content:
+                                            metadata = asset.get('extra_metadata', {}) or asset.get('metadata', {})
+                                            text_content = metadata.get('text', '') or metadata.get('content', '')
+                                        
+                                        if text_content:
+                                            preview_html += f"**📝 Contenido de Texto**:\n\n"
+                                            preview_html += f"```\n{text_content[:300]}{'...' if len(text_content) > 300 else ''}\n```\n\n"
+                                            preview_html += f"**💡 Este texto aparecerá en el ad de {platform.replace('_', ' ').title()}**\n\n"
+                                        else:
+                                            preview_html += "⚠️ **Sin contenido de texto**\n\n"
+                                    
+                                    # Metadata adicional
+                                    labels = asset.get('labels', [])
+                                    keywords = asset.get('keywords', [])
+                                    if labels or keywords:
+                                        preview_html += "**🏷️ Etiquetas**: "
+                                        if labels:
+                                            preview_html += f"{', '.join(labels[:5])} "
+                                        if keywords:
+                                            preview_html += f"| Keywords: {', '.join(keywords[:5])}"
+                                        preview_html += "\n\n"
+                                
+                                preview_html += "---\n\n"
+                                preview_html += "**💡 Este es un preview aproximado. El ad real puede verse ligeramente diferente en la plataforma.**"
+                                
+                                return preview_html
+                            except Exception as e:
+                                import traceback
+                                return f"❌ **Error generando preview**: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        def update_review_wizard(name, objective, budget, platforms, countries, age_min, age_max, gender, asset_ids_str):
+                            """Actualiza el resumen de revisión"""
+                            try:
+                                review = f"## 📋 Resumen de Campaña\n\n"
+                                
+                                review += f"**📝 Nombre**: {name or 'Sin nombre'}\n\n"
+                                
+                                objective_map = {
+                                    "CONVERSIONS": "💼 Conversiones",
+                                    "TRAFFIC": "🚗 Tráfico",
+                                    "ENGAGEMENT": "❤️ Engagement",
+                                    "AWARENESS": "📢 Brand Awareness",
+                                    "LEAD_GENERATION": "📋 Generación de Leads",
+                                    "SALES": "💰 Ventas"
+                                }
+                                review += f"**🎯 Objetivo**: {objective_map.get(objective, objective)}\n\n"
+                                
+                                review += f"**💰 Presupuesto Diario**: ${float(budget):.2f} USD\n\n"
+                                
+                                platform_map = {
+                                    "meta": "📘 Meta Ads (Facebook/Instagram)",
+                                    "google": "🔵 Google Ads",
+                                    "both": "🌐 Ambas Plataformas"
+                                }
+                                review += f"**🌐 Plataformas**: {platform_map.get(platforms, platforms)}\n\n"
+                                
+                                review += f"**👥 Audiencia**:\n"
+                                review += f"- **Países**: {', '.join(countries) if countries else 'US (default)'}\n"
+                                review += f"- **Edad**: {int(age_min)} - {int(age_max)} años\n"
+                                gender_map = {"all": "👥 Todos", "male": "👨 Hombres", "female": "👩 Mujeres"}
+                                review += f"- **Género**: {gender_map.get(gender, gender)}\n\n"
+                                
+                                asset_ids = [aid.strip() for aid in asset_ids_str.split(',') if aid.strip()] if asset_ids_str else []
+                                review += f"**📦 Assets**: {len(asset_ids)} asset(s)\n"
+                                if asset_ids:
+                                    review += f"- IDs: {', '.join(asset_ids[:5])}\n"
+                                
+                                return review
+                            except Exception as e:
+                                return f"❌ Error generando resumen: {str(e)}"
+                        
+                        def publish_campaign_wizard(name, objective, budget, platforms, countries, age_min, age_max, gender, interests, asset_ids_str, auto_activate):
+                            """Publica campaña desde wizard"""
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible"
+                            
+                            if not name or not name.strip():
+                                return "❌ Nombre de campaña es requerido"
+                            
+                            if not asset_ids_str or not asset_ids_str.strip():
+                                return "❌ Asset IDs son requeridos"
+                            
+                            try:
+                                # Preparar targeting
+                                gender_map = {"all": [1, 2], "male": [1], "female": [2]}
+                                genders = gender_map.get(gender, [1, 2])
+                                
+                                targeting_dict = {
+                                    "age_min": int(age_min),
+                                    "age_max": int(age_max),
+                                    "genders": genders,
+                                    "geo_locations": {"countries": countries if countries else ["US"]}
+                                }
+                                
+                                if interests and interests.strip():
+                                    interests_list = [i.strip() for i in interests.split(',') if i.strip()]
+                                    if interests_list:
+                                        targeting_dict["interests"] = interests_list
+                                
+                                asset_ids = [aid.strip() for aid in asset_ids_str.split(',') if aid.strip()]
+                                
+                                campaign_request = CampaignRequest(
+                                    name=name.strip(),
+                                    objective=CampaignObjective(objective),
+                                    budget_daily=float(budget),
+                                    asset_ids=asset_ids,
+                                    platforms=Platform(platforms),
+                                    optimization_goal="conversions",
+                                    auto_optimize=True,
+                                    auto_activate=bool(auto_activate),
+                                    target_audience=targeting_dict
+                                )
+                                
+                                campaign = ads_worker.launch_campaign(campaign_request, user_id="gradio_user")
+                                
+                                output = f"## ✅ Campaña Publicada Exitosamente\n\n"
+                                output += f"**🆔 Campaign ID**: `{campaign.campaign_id}`\n"
+                                output += f"**📝 Nombre**: {campaign.name}\n"
+                                status_emoji = "🟢" if campaign.status == "active" else "⏸️"
+                                output += f"**📊 Status**: {status_emoji} {campaign.status.upper()}\n"
+                                output += f"**💰 Presupuesto Diario**: ${campaign.budget_daily:.2f}\n"
+                                output += f"**🌐 Plataformas**: {', '.join(campaign.platforms)}\n"
+                                
+                                if campaign.status == "active":
+                                    output += f"\n✨ **Campaña ACTIVA y publicada automáticamente** - Ya está corriendo en las plataformas seleccionadas!\n"
+                                
+                                if campaign.platform_campaign_ids:
+                                    output += f"\n### 🔗 IDs en Plataformas:\n"
+                                    for platform, platform_id in campaign.platform_campaign_ids.items():
+                                        output += f"- **{platform.upper()}**: `{platform_id}`\n"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error publicando campaña: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        # Event handlers del wizard
+                        wizard_step1_next.click(
+                            fn=lambda s: update_wizard_step(s, "next"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_step2_back.click(
+                            fn=lambda s: update_wizard_step(s, "back"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_step2_next.click(
+                            fn=lambda s: update_wizard_step(s, "next"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_step3_back.click(
+                            fn=lambda s: update_wizard_step(s, "back"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_estimate_btn.click(
+                            fn=estimate_audience_wizard,
+                            inputs=[wizard_countries, wizard_age_min, wizard_age_max, wizard_gender, wizard_interests, wizard_budget, wizard_objective],
+                            outputs=[wizard_audience_estimate]
+                        )
+                        
+                        wizard_step3_next.click(
+                            fn=lambda s: update_wizard_step(s, "next"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_step4_back.click(
+                            fn=lambda s: update_wizard_step(s, "back"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_preview_btn.click(
+                            fn=generate_preview_wizard,
+                            inputs=[wizard_asset_ids, wizard_preview_platform],
+                            outputs=[wizard_preview_output]
+                        )
+                        
+                        wizard_step4_next.click(
+                            fn=lambda s: update_wizard_step(s, "next"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        ).then(
+                            fn=update_review_wizard,
+                            inputs=[wizard_name, wizard_objective, wizard_budget, wizard_platforms, wizard_countries, wizard_age_min, wizard_age_max, wizard_gender, wizard_asset_ids],
+                            outputs=[wizard_review]
+                        )
+                        
+                        wizard_step5_back.click(
+                            fn=lambda s: update_wizard_step(s, "back"),
+                            inputs=[wizard_step],
+                            outputs=[wizard_step, wizard_step1, wizard_step2, wizard_step3, wizard_step4, wizard_step5, wizard_progress]
+                        )
+                        
+                        wizard_publish_btn.click(
+                            fn=publish_campaign_wizard,
+                            inputs=[wizard_name, wizard_objective, wizard_budget, wizard_platforms, wizard_countries, wizard_age_min, wizard_age_max, wizard_gender, wizard_interests, wizard_asset_ids, wizard_auto_activate],
+                            outputs=[wizard_publish_output]
+                        )
+                    
+                    # Tab 5: Lanzar Campaña (Método Tradicional)
                     with gr.Tab("🚀 Lanzar Campaña"):
                         gr.Markdown("### 🚀 Crea y Lanza una Nueva Campaña Publicitaria")
                         gr.Markdown("Usa assets procesados para crear una campaña en Meta Ads y/o Google Ads.")

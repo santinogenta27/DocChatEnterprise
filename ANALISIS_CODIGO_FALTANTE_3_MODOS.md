@@ -95,3 +95,4 @@ Los siguientes métodos existen pero NO están integrados:
 ---
 
 **¿Quieres que integre el código faltante de estos 3 modos?**
+

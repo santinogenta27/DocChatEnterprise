@@ -49,21 +49,69 @@ class BusinessAIMode:
     def __init__(self, config: Optional[AppConfig] = None, llm: Optional[BaseLanguageModel] = None) -> None:
         self.config = config or load_config()
 
-        # LLM
+        # LLM - Soporte para Groq (Enterprise - Velocidad Extrema)
         if llm is not None:
             self.llm = llm
         else:
-            if not self.config.openai_api_key:
-                raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal")
-            self.llm = ChatOpenAI(
-                model=self.config.agentic_model or "gpt-4o",
-                temperature=0.3,
-                api_key=self.config.openai_api_key,
-                max_tokens=2000,
-            )
+            # Prioridad: Groq si está habilitado y configurado
+            if self.config.use_groq and self.config.groq_api_key:
+                try:
+                    from langchain_groq import ChatGroq
+                    self.llm = ChatGroq(
+                        model=self.config.groq_model or "llama-3.3-70b-versatile",
+                        temperature=0.3,
+                        groq_api_key=self.config.groq_api_key,
+                        max_tokens=2000,
+                    )
+                    print("✅ Business AI usando Groq (Llama 3.3 70B) - Velocidad <0.5 seg")
+                except ImportError:
+                    print("⚠️ langchain-groq no instalado. Instala con: pip install langchain-groq")
+                    print("⚠️ Usando OpenAI como fallback")
+                    if not self.config.openai_api_key:
+                        raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal")
+                    self.llm = ChatOpenAI(
+                        model=self.config.agentic_model or "gpt-4o",
+                        temperature=0.3,
+                        api_key=self.config.openai_api_key,
+                        max_tokens=2000,
+                    )
+                except Exception as e:
+                    print(f"⚠️ Error inicializando Groq: {e}. Usando OpenAI como fallback")
+                    if not self.config.openai_api_key:
+                        raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal")
+                    self.llm = ChatOpenAI(
+                        model=self.config.agentic_model or "gpt-4o",
+                        temperature=0.3,
+                        api_key=self.config.openai_api_key,
+                        max_tokens=2000,
+                    )
+            else:
+                # Fallback a OpenAI
+                if not self.config.openai_api_key:
+                    raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal (o configura GROQ_API_KEY y DOCCHAT_USE_GROQ=true)")
+                self.llm = ChatOpenAI(
+                    model=self.config.agentic_model or "gpt-4o",
+                    temperature=0.3,
+                    api_key=self.config.openai_api_key,
+                    max_tokens=2000,
+                )
 
-        # Estado de sesiones
-        self.session_manager = CustomerSessionManager()
+        # Estado de sesiones - Soporte para PostgreSQL (memoria de largo plazo)
+        if self.config.postgresql_enabled and self.config.postgresql_url:
+            try:
+                from .state.postgresql_session_manager import PostgreSQLSessionManager
+                self.session_manager = PostgreSQLSessionManager(
+                    database_url=self.config.postgresql_url,
+                    pool_size=self.config.postgresql_pool_size
+                )
+                print("✅ Business AI usando PostgreSQL - Memoria de largo plazo activa")
+            except Exception as e:
+                print(f"⚠️ Error inicializando PostgreSQL: {e}. Usando memoria en RAM")
+                from .state.customer_session import CustomerSessionManager
+                self.session_manager = CustomerSessionManager()
+        else:
+            from .state.customer_session import CustomerSessionManager
+            self.session_manager = CustomerSessionManager()
 
         # Sentiment
         self.sentiment_analyzer = SentimentAnalyzer(llm=self.llm)
@@ -117,11 +165,50 @@ class BusinessAIMode:
         # Obtener/crear sesión
         session = self.session_manager.get_or_create(session_id=internal_msg.session_id, profile=profile)
 
-        # Pasar al agente principal
-        result = self.agent.handle_message(session=session, user_message=internal_msg.content)
+        # Extraer imagen si viene en el payload (para procesamiento con visión)
+        image_data = payload.get("image_data") or payload.get("image")
+        if not image_data and "[Image]" in internal_msg.content:
+            # Intentar extraer de mensaje si viene en formato [Image] base64
+            try:
+                parts = internal_msg.content.split("[Image]")
+                if len(parts) > 1:
+                    image_data = parts[1].strip()
+                    # Limpiar mensaje de la parte de imagen
+                    internal_msg.content = parts[0].strip() + (parts[2] if len(parts) > 2 else "")
+            except:
+                pass
 
-        # Actualizar sesión
+        # Pasar al agente principal (con imagen si existe)
+        result = self.agent.handle_message(
+            session=session, 
+            user_message=internal_msg.content,
+            image_data=image_data
+        )
+
+        # Actualizar sesión (en PostgreSQL si está habilitado)
         self.session_manager.update(session)
+        
+        # Si hay orden completada, guardar en historial de compras
+        if result.get("tools", {}).get("order") and hasattr(self.session_manager, 'save_purchase'):
+            try:
+                order = result["tools"]["order"]
+                cart_data = result.get("tools", {}).get("cart", {})
+                products = cart_data.get("items", []) if isinstance(cart_data, dict) else []
+                total = sum(
+                    item.get("price", 0) * item.get("quantity", 1) 
+                    for item in products 
+                    if isinstance(item, dict)
+                )
+                
+                self.session_manager.save_purchase(
+                    session_id=session.session_id,
+                    user_id=session.profile.user_id if session.profile else "unknown",
+                    order_id=str(order.get("order_id", "")),
+                    products=products,
+                    total_amount=float(total)
+                )
+            except:
+                pass  # Si falla, continuar sin guardar
 
         # Convertir respuesta a formato genérico de canal
         external = adapter.to_external_response(response_text=result["text"], extra={
@@ -129,6 +216,9 @@ class BusinessAIMode:
             "sentiment": result.get("sentiment"),
             "frustration_score": result.get("frustration_score"),
             "needs_handoff": result.get("needs_handoff"),
+            "cart": result.get("cart"),  # Para actualizar badge en widget
+            "user_profile": result.get("user_profile"),  # Perfil inferido
+            "tools": result.get("tools"),  # Productos, cross-selling, etc.
         })
         return external
 
@@ -157,5 +247,6 @@ class BusinessAIMode:
             return str(resp.get("text") or "")
 
         return gr.Interface(fn=_chat_fn, inputs=["text", "text"], outputs="text", title="Business AI Omnicanal")
+
 
 

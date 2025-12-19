@@ -207,3 +207,4 @@ class AdsCredentialsManager:
         """Verifica si hay credenciales de Google configuradas"""
         credentials = self.load_google_credentials()
         return credentials is not None and credentials.get("customer_id")
+

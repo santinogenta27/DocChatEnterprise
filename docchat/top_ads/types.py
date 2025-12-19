@@ -69,3 +69,4 @@ class CampaignMetrics:
     timestamp: str
 
 
+

@@ -83,3 +83,4 @@ class CustomerSessionManager:
         self._sessions.pop(session_id, None)
 
 
+

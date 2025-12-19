@@ -183,3 +183,4 @@ if all_ads_created_successfully:
 ---
 
 **¿Quieres que modifique ADS WORKER para que active automáticamente las campañas?** 🚀
+

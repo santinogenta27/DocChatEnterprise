@@ -58,15 +58,34 @@ config = load_config()
 # Inicializar modos principales
 chatbot_mode = ChatbotMode(config)
 
+# Inicializar Business AI Omnicanal (para widget embeddable)
+business_ai_mode = None
+try:
+    from docchat.business_ai_omnicanal import BusinessAIMode
+    business_ai_mode = BusinessAIMode(config=config)
+    print("✅ Business AI Omnicanal inicializado para widget embeddable")
+except Exception as e:
+    print(f"⚠️ Business AI Omnicanal no disponible: {e}")
+
 # Crear aplicación FastAPI
 app = FastAPI(
-    title="DocChat Enterprise - Backend RAG + Deep Research",
+    title="DocChat Enterprise - Backend RAG + Deep Research + Business AI Widget",
     description=(
         "Backend Enterprise que expone:\n"
         "- Modo Chatbot (RAG sobre data privada)\n"
-        "- Modo Deep Research (multi-agente, inspirado en Enterprise Deep Research)"
+        "- Modo Deep Research (multi-agente, inspirado en Enterprise Deep Research)\n"
+        "- Business AI Omnicanal Widget (chatbot embeddable para websites)"
     ),
-    version="1.1.0",
+    version="1.2.0",
+)
+
+# CORS middleware para permitir requests desde cualquier dominio (necesario para widget)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, especifica dominios permitidos
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Crear endpoints de chatbot (modo existente)
@@ -74,6 +93,99 @@ create_chatbot_api(app, chatbot_mode)
 
 # Crear endpoints de Deep Research (nuevo modo)
 create_deep_research_api(app, config)
+
+# Endpoints para Business AI Omnicanal Widget
+if business_ai_mode:
+    # Incluir router de Business AI
+    app.include_router(business_ai_mode.get_api_router())
+    
+    # Endpoint para servir el widget.js estático
+    @app.get("/static/business-ai-widget.js")
+    async def serve_widget_js():
+        """Sirve el archivo JavaScript del widget embeddable"""
+        widget_path = Path(__file__).parent / "docchat" / "static" / "business-ai-widget.js"
+        if widget_path.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(
+                widget_path,
+                media_type="application/javascript",
+                headers={"Cache-Control": "public, max-age=3600"}
+            )
+        else:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Widget file not found")
+    
+    # Endpoint específico para n8n webhooks (WhatsApp/Instagram)
+    @app.post("/business-ai/n8n/webhook")
+    async def n8n_webhook(payload: Dict[str, Any]):
+        """Endpoint para recibir webhooks de n8n (WhatsApp/Instagram).
+        
+        n8n envía mensajes aquí cuando llegan por WhatsApp/Instagram.
+        """
+        try:
+            # Extraer datos del webhook de n8n
+            message = payload.get("message") or payload.get("text") or ""
+            from_number = payload.get("from") or payload.get("phone_number") or payload.get("wa_id")
+            channel = payload.get("channel", "whatsapp")  # whatsapp, instagram, messenger
+            
+            # Crear payload para Business AI
+            business_ai_payload = {
+                "session_id": f"{channel}_{from_number}",
+                "user_id": from_number,
+                "message": message,
+                "channel": channel,
+                "metadata": {
+                    "from": from_number,
+                    "channel": channel,
+                    "n8n_webhook": True,
+                    "raw_payload": payload
+                }
+            }
+            
+            # Procesar con Business AI
+            result = business_ai_mode.process_message(business_ai_payload, channel=channel)
+            
+            # Retornar respuesta para que n8n la envíe de vuelta
+            return {
+                "success": True,
+                "response": result.get("text", ""),
+                "metadata": {
+                    "intent": result.get("intent"),
+                    "sentiment": result.get("sentiment"),
+                    "needs_handoff": result.get("needs_handoff", False),
+                    "cart": result.get("cart"),
+                    "tools": result.get("tools")
+                }
+            }
+        except Exception as e:
+            import traceback
+            return {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+    
+    # Endpoint para n8n: obtener historial de usuario (memoria de largo plazo)
+    @app.get("/business-ai/n8n/user-history/{user_id}")
+    async def get_user_history_n8n(user_id: str, days: int = 180):
+        """Obtiene historial de usuario para n8n (últimos N días)."""
+        try:
+            if hasattr(business_ai_mode.session_manager, 'get_user_history'):
+                history = business_ai_mode.session_manager.get_user_history(user_id=user_id, days=days)
+                return {
+                    "success": True,
+                    "history": history
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "PostgreSQL no está habilitado. Configura DATABASE_URL y DOCCHAT_POSTGRESQL_ENABLED=true"
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
 @app.get("/")
 async def root():

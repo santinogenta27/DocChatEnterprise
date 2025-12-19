@@ -53,6 +53,21 @@ class AppConfig:
     # API Keys
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "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")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    
+    # Groq Settings (Enterprise - Velocidad Extrema)
+    use_groq: bool = os.getenv("DOCCHAT_USE_GROQ", "false").lower() == "true"
+    groq_model: str = os.getenv("DOCCHAT_GROQ_MODEL", "llama-3.3-70b-versatile")  # Llama 3.3 70B en Groq
+    groq_base_url: str = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    
+    # PostgreSQL Settings (Memoria de Largo Plazo)
+    postgresql_enabled: bool = os.getenv("DOCCHAT_POSTGRESQL_ENABLED", "false").lower() == "true"
+    postgresql_url: str = os.getenv("DATABASE_URL", "")  # Formato: postgresql://user:pass@host:port/db
+    postgresql_pool_size: int = int(os.getenv("DOCCHAT_POSTGRESQL_POOL_SIZE", "10"))
+    
+    # n8n Integration Settings
+    n8n_webhook_url: str = os.getenv("N8N_WEBHOOK_URL", "")  # URL del webhook de n8n para recibir eventos
+    n8n_enabled: bool = os.getenv("DOCCHAT_N8N_ENABLED", "false").lower() == "true"
 
     # Agentic AI Settings
     enable_autonomous_agents: bool = os.getenv("DOCCHAT_ENABLE_AGENTS", "true").lower() == "true"

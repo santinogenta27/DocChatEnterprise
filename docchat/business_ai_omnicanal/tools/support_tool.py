@@ -38,3 +38,4 @@ class SupportTool:
         return [t for t in self._tickets.values() if t.get("session_id") == session_id]
 
 
+

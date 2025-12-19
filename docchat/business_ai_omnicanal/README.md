@@ -67,3 +67,4 @@ pero reutiliza internamente módulos de comercio (catálogo, carrito, pagos) y d
 para conectar con sistemas de soporte y pedidos externos.
 
 
+

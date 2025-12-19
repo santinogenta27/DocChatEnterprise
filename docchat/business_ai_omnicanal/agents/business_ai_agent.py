@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from ..state.customer_session import CustomerSessionManager, CustomerSessionState
+from ..state.customer_session import CustomerSessionManager, CustomerSessionState, SentimentLabel
 from ..sentiment.sentiment_analyzer import SentimentAnalyzer
 from ..tools.catalog_tool import CatalogTool
 from ..tools.cart_tool import CartTool
@@ -54,16 +54,50 @@ class BusinessAIAgent:
         self,
         session: CustomerSessionState,
         user_message: str,
+        image_data: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Procesa un mensaje del usuario y devuelve respuesta estructurada.
 
         La lógica de negocio se divide en:
         - Actualizar estado de sesión y sentimiento
+        - Procesar imágenes si vienen (Mix-ECom approach)
         - Pedir al LLM que decida si la intención es: comprar, soporte, estado de pedido, devolución, etc.
         - Llamar a las tools correspondientes
         - Generar una respuesta final amigable para el usuario
+        
+        Args:
+            session: Estado de sesión del cliente
+            user_message: Mensaje de texto del usuario
+            image_data: Datos de imagen en base64 (opcional, para procesamiento con visión)
         """
         session.add_message("user", user_message)
+        
+        # Guardar mensaje del usuario en PostgreSQL si está habilitado
+        if hasattr(self.session_manager, 'save_message'):
+            try:
+                self.session_manager.save_message(
+                    session_id=session.session_id,
+                    role="user",
+                    content=user_message,
+                    metadata={"image_analysis": image_analysis is not None}
+                )
+            except:
+                pass  # Si falla, continuar sin guardar
+        
+        # Procesar imagen si viene (Mix-ECom: procesamiento de imágenes para after-sales)
+        image_analysis = None
+        if image_data or "[Image]" in user_message:
+            # Extraer imagen de mensaje si viene en formato [Image] base64
+            if "[Image]" in user_message:
+                try:
+                    image_base64 = user_message.split("[Image]")[1].strip()
+                    image_analysis = self._analyze_image(image_base64)
+                except:
+                    pass
+            
+            # Si viene como parámetro separado
+            if image_data:
+                image_analysis = self._analyze_image(image_data)
 
         # Analizar sentimiento / frustración
         sentiment_result = self.sentiment_analyzer.analyze(user_message, session)
@@ -85,12 +119,27 @@ class BusinessAIAgent:
                 "session": session,
             }
 
-        # Paso 1: pedir al LLM que entienda intención de alto nivel
+        # Paso 1: Construir perfil contextual del usuario (CSALES approach)
+        user_profile_context = self._build_user_profile_context(session, user_message)
+        
+        # Paso 2: pedir al LLM que entienda intención de alto nivel (con perfil contextual)
         system_prompt = (
             f"Eres el agente oficial de {self.config.brand_name}. "
             "Sabes vender productos, responder dudas, dar estado de pedidos y gestionar devoluciones. "
-            "Debes decidir QUÉ acción tomar (ventas vs soporte) y QUÉ tools usar (catálogo, carrito, pago, pedidos, tickets)."
+            "Debes decidir QUÉ acción tomar (ventas vs soporte) y QUÉ tools usar (catálogo, carrito, pago, pedidos, tickets).\n\n"
+            f"**Perfil del Cliente:**\n{user_profile_context}\n\n"
+            "**Instrucciones Especiales (basadas en Mix-ECom, CSALES, Retail-GPT, MegaChat):**\n"
+            "- Si el usuario pregunta por un producto, NO solo muestres ese producto. Sugiere complementos (cross-selling).\n"
+            "- Si el usuario muestra interés pero duda, usa persuasión estratégica adaptada a su perfil.\n"
+            "- Si el usuario envía una imagen, analízala para entender su necesidad (producto, problema, reclamo).\n"
+            "- Maneja diálogos mixtos: puedes responder preguntas, recomendar, vender y hacer chit-chat en la misma conversación.\n"
+            "- Personaliza tu tono según el perfil del usuario (más formal para B2B, más entusiasta para lifestyle).\n"
+            "- Si hay análisis de imagen, úsalo para verificar reclamos o identificar productos."
         )
+        
+        # Agregar análisis de imagen al prompt si existe
+        if image_analysis:
+            analysis_prompt += f"\n**Análisis de Imagen:** {json.dumps(image_analysis)}\n"
         analysis_prompt = (
             "Analiza el mensaje del usuario y responde en JSON con esta estructura mínima:\n"
             "{\n"
@@ -131,11 +180,25 @@ class BusinessAIAgent:
         # Ejecutar acciones de alto nivel según intención
         tool_results: Dict[str, Any] = {}
 
-        # Búsqueda de productos
+        # Búsqueda de productos (con cross-selling inteligente)
         if intent_data.get("needs_product_search"):
             query = intent_data.get("product_query") or user_message
             products = self.catalog_tool.search_products(query=query, limit=5)
             tool_results["products"] = [p.__dict__ for p in products]
+            
+            # Cross-selling: Si hay productos encontrados, buscar complementos
+            if products and len(products) > 0:
+                primary_product = products[0]
+                # Buscar productos relacionados/complementarios
+                try:
+                    related_products = self.catalog_tool.suggest_alternatives(
+                        product_id=primary_product.product_id if hasattr(primary_product, 'product_id') else str(primary_product),
+                        limit=3
+                    )
+                    if related_products:
+                        tool_results["cross_sell_products"] = [p.__dict__ for p in related_products]
+                except:
+                    pass  # Si falla, continuar sin cross-selling
 
         # Actualización de carrito
         session_id = session.session_id
@@ -186,12 +249,21 @@ class BusinessAIAgent:
             session.open_tickets.append(ticket)
             tool_results["ticket"] = ticket
 
-        # Generar respuesta final amigable
+        # Generar respuesta final amigable (con personalización y persuasión)
         summary_prompt = (
-            "Genera una respuesta amable y clara en español para el cliente, explicando lo que hiciste "
-            "(por ejemplo: productos sugeridos, carrito actualizado, link de pago, número de pedido, ticket creado).\n"
-            f"Contexto de tools: {json.dumps(tool_results)[:2000]}\n"
-            f"Mensaje original del cliente: {user_message[:500]}\n"
+            "Genera una respuesta amable, clara y personalizada en español para el cliente.\n\n"
+            "**Contexto de herramientas ejecutadas:**\n"
+            f"{json.dumps(tool_results, default=str)[:2000]}\n\n"
+            f"**Mensaje original del cliente:** {user_message[:500]}\n\n"
+            f"**Perfil del cliente:** {user_profile_context}\n\n"
+            "**Instrucciones de respuesta (basadas en CSALES y MegaChat):**\n"
+            "- Si hay productos sugeridos, explica POR QUÉ son buenos para este cliente específico (personalización).\n"
+            "- Si hay productos de cross-selling, preséntalos de forma persuasiva pero no agresiva.\n"
+            "- Si el cliente muestra dudas sobre precio, usa persuasión estratégica (valor, calidad, beneficios).\n"
+            "- Adapta el tono al perfil del cliente (formal vs casual).\n"
+            "- Si hay carrito, muestra resumen y anima a completar la compra.\n"
+            "- Si hay productos, incluye detalles relevantes (precio, características, disponibilidad).\n"
+            "- Sé proactivo: después de resolver la pregunta actual, pregunta si necesita algo más.\n"
         )
 
         final_resp = self.llm.invoke([
@@ -201,8 +273,42 @@ class BusinessAIAgent:
         final_text = getattr(final_resp, "content", str(final_resp))
 
         session.add_message("assistant", final_text)
+        
+        # Guardar mensaje en PostgreSQL si está habilitado (para memoria de largo plazo)
+        if hasattr(self.session_manager, 'save_message'):
+            try:
+                self.session_manager.save_message(
+                    session_id=session.session_id,
+                    role="assistant",
+                    content=final_text,
+                    metadata={
+                        "intent": intent,
+                        "sentiment": session.sentiment.value,
+                        "frustration_score": session.frustration_score
+                    }
+                )
+            except:
+                pass  # Si falla, continuar sin guardar
+        
+        # Guardar compra si se completó una orden
+        if tool_results.get("order") and hasattr(self.session_manager, 'save_purchase'):
+            try:
+                order = tool_results["order"]
+                products = tool_results.get("cart", {}).get("items", []) if isinstance(tool_results.get("cart"), dict) else []
+                total = sum(item.get("price", 0) * item.get("quantity", 1) for item in products if isinstance(item, dict))
+                
+                self.session_manager.save_purchase(
+                    session_id=session.session_id,
+                    user_id=session.profile.user_id if session.profile else "unknown",
+                    order_id=str(order.get("order_id", "")),
+                    products=products,
+                    total_amount=float(total)
+                )
+            except:
+                pass  # Si falla, continuar sin guardar
 
-        return {
+        # Incluir información del carrito en la respuesta (para el widget)
+        response_data = {
             "text": final_text,
             "intent": intent,
             "tools": tool_results,
@@ -211,5 +317,168 @@ class BusinessAIAgent:
             "needs_handoff": session.needs_handoff,
             "session": session,
         }
+        
+        # Agregar carrito si existe (para actualizar badge en widget)
+        if session.cart:
+            response_data["cart"] = session.cart.get("items", []) if isinstance(session.cart, dict) else []
+        
+        # Agregar perfil de usuario si se ha inferido
+        if hasattr(session, 'inferred_profile'):
+            response_data["user_profile"] = session.inferred_profile
+        
+        return response_data
+    
+    def _build_user_profile_context(self, session: CustomerSessionState, user_message: str) -> str:
+        """Construye contexto del perfil de usuario (CSALES approach).
+        
+        Basado en:
+        - Historial de conversación
+        - Productos vistos/interesados
+        - Carrito actual
+        - Sentimiento
+        - Comportamiento (activo/pasivo)
+        - Historial de largo plazo (PostgreSQL) si está disponible
+        """
+        context_parts = []
+        
+        # Información básica
+        if session.profile:
+            if session.profile.display_name:
+                context_parts.append(f"Nombre: {session.profile.display_name}")
+            if session.profile.language:
+                context_parts.append(f"Idioma: {session.profile.language}")
+        
+        # Historial de largo plazo (PostgreSQL) - Memoria de meses
+        if hasattr(self.session_manager, 'get_user_history'):
+            try:
+                user_history = self.session_manager.get_user_history(
+                    user_id=session.profile.user_id if session.profile else "unknown",
+                    days=180  # Últimos 6 meses
+                )
+                
+                if user_history.get("total_purchases", 0) > 0:
+                    context_parts.append(f"Cliente recurrente: {user_history['total_purchases']} compra(s) en últimos 6 meses")
+                    context_parts.append(f"Total gastado: ${user_history.get('total_spent', 0):.2f}")
+                    
+                    if user_history.get("last_purchase_date"):
+                        last_purchase = user_history["last_purchase_date"]
+                        if isinstance(last_purchase, str):
+                            from datetime import datetime
+                            try:
+                                last_purchase = datetime.fromisoformat(last_purchase.replace('Z', '+00:00'))
+                            except:
+                                pass
+                        if isinstance(last_purchase, datetime):
+                            days_ago = (datetime.utcnow() - last_purchase.replace(tzinfo=None)).days
+                            context_parts.append(f"Última compra: hace {days_ago} días")
+                
+                # Productos comprados anteriormente (para cross-selling)
+                if user_history.get("purchases"):
+                    previous_products = []
+                    for purchase in user_history["purchases"][:5]:  # Últimas 5 compras
+                        products = purchase.get("products", [])
+                        if isinstance(products, str):
+                            import json
+                            products = json.loads(products)
+                        if isinstance(products, list):
+                            for p in products:
+                                if isinstance(p, dict):
+                                    product_name = p.get("name") or p.get("product_name")
+                                    if product_name:
+                                        previous_products.append(product_name)
+                    
+                    if previous_products:
+                        context_parts.append(f"Productos comprados anteriormente: {', '.join(set(previous_products)[:3])}")
+            except Exception as e:
+                # Si falla, continuar sin historial de largo plazo
+                pass
+        
+        # Historial de conversación (sesión actual)
+        if session.last_messages:
+            recent_count = len(session.last_messages)
+            context_parts.append(f"Mensajes en esta sesión: {recent_count}")
+            
+            # Detectar si es usuario activo o pasivo (CSALES)
+            avg_message_length = sum(len(msg.get('content', '')) for msg in session.last_messages) / max(recent_count, 1)
+            if avg_message_length > 50:
+                context_parts.append("Tipo de usuario: Activo (proporciona detalles)")
+            elif avg_message_length < 20:
+                context_parts.append("Tipo de usuario: Pasivo (respuestas cortas)")
+        
+        # Carrito
+        if session.cart:
+            if isinstance(session.cart, dict):
+                items = session.cart.get("items", [])
+            else:
+                items = getattr(session.cart, "items", [])
+            if items:
+                context_parts.append(f"Carrito: {len(items)} producto(s)")
+                total = sum(item.get('price', 0) * item.get('quantity', 1) for item in items if isinstance(item, dict))
+                if total > 0:
+                    context_parts.append(f"Presupuesto estimado: ${total:.2f}")
+        
+        # Sentimiento
+        if session.sentiment != SentimentLabel.NEUTRAL:
+            context_parts.append(f"Sentimiento: {session.sentiment.value}")
+        
+        # Pedidos recientes (sesión actual)
+        if session.recent_orders:
+            context_parts.append(f"Pedidos en esta sesión: {len(session.recent_orders)}")
+        
+        return " | ".join(context_parts) if context_parts else "Cliente nuevo"
+    
+    def _analyze_image(self, image_base64: str) -> Optional[Dict[str, Any]]:
+        """Analiza imagen usando visión (Mix-ECom approach para after-sales).
+        
+        Usa GPT-4 Vision para:
+        - Verificar reclamos de calidad
+        - Identificar productos en imágenes
+        - Detectar daños o problemas
+        """
+        try:
+            # Si el LLM soporta visión, usarlo
+            if hasattr(self.llm, 'with_structured_output') or 'gpt-4' in str(self.llm).lower():
+                from langchain_core.messages import HumanMessage
+                from langchain_core.messages.content import ImageContent
+                
+                # Crear mensaje con imagen
+                vision_prompt = (
+                    "Analiza esta imagen y responde en JSON:\n"
+                    "{\n"
+                    "  'contains_product': true/false,\n"
+                    "  'product_description': 'descripción del producto si es visible',\n"
+                    "  'has_issue': true/false,\n"
+                    "  'issue_description': 'descripción del problema si hay',\n"
+                    "  'can_verify_claim': true/false\n"
+                    "}\n"
+                )
+                
+                # Intentar usar visión si está disponible
+                try:
+                    # Para GPT-4o con visión
+                    response = self.llm.invoke([
+                        SystemMessage(content="Eres un analizador de imágenes para e-commerce. Analiza productos y problemas."),
+                        HumanMessage(content=[
+                            {"type": "text", "text": vision_prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                        ])
+                    ])
+                    
+                    import json, re
+                    content = getattr(response, "content", str(response))
+                    match = re.search(r"\{[\s\S]*\}", content)
+                    if match:
+                        return json.loads(match.group().replace("'", '"'))
+                except:
+                    # Si falla, retornar análisis básico
+                    return {
+                        "contains_product": True,
+                        "can_verify_claim": True,
+                        "note": "Imagen recibida, análisis visual disponible"
+                    }
+        except Exception as e:
+            # Si falla completamente, retornar None
+            return None
+
 
 

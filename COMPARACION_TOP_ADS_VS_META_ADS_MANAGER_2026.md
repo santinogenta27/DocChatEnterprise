@@ -278,3 +278,4 @@ Estas son las funcionalidades más visibles y diferenciadoras de Meta 2026:
 **Versión Top Ads Mode analizada**: Commit a2b4302
 
 
+

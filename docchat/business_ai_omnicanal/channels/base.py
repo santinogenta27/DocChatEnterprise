@@ -41,6 +41,12 @@ class BaseChannelAdapter:
         payload = {"text": response_text}
         if extra:
             payload.update(extra)
+        
+        # Asegurar que 'tools' esté disponible si viene en extra
+        if extra and "tools" in extra:
+            payload["tools"] = extra["tools"]
+        
         return payload
+
 
 

@@ -384,5 +384,127 @@ class MetaAdsService:
         except FacebookRequestError as e:
             print(f"⚠️ Error activating Meta ad: {e}")
             return False
+    
+    @retry_with_backoff(max_retries=3, exceptions=(FacebookRequestError,))
+    def estimate_audience_size(
+        self,
+        targeting: Dict[str, Any],
+        optimization_goal: str = "OFFSITE_CONVERSIONS",
+        daily_budget: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Estimate audience size using Meta Ads API delivery_estimate
+        
+        Args:
+            targeting: Targeting parameters (age_min, age_max, genders, geo_locations, interests)
+            optimization_goal: Optimization goal (OFFSITE_CONVERSIONS, LINK_CLICKS, etc.)
+            daily_budget: Optional daily budget in USD for more accurate estimates
+            
+        Returns:
+            Dictionary with audience_size, daily_reach, and recommendations
+        """
+        logger.info(f"📊 Estimando tamaño de audiencia con targeting: {targeting}")
+        
+        try:
+            # Prepare targeting spec
+            targeting_spec = {
+                "age_min": targeting.get("age_min", 18),
+                "age_max": targeting.get("age_max", 65),
+                "genders": targeting.get("genders", [1, 2]),
+                "geo_locations": targeting.get("geo_locations", {"countries": ["US"]})
+            }
+            
+            # Add interests if provided
+            if "interests" in targeting and targeting["interests"]:
+                interests_list = targeting["interests"]
+                if isinstance(interests_list, list) and len(interests_list) > 0:
+                    # Use flexible_spec for interests
+                    targeting_spec["flexible_spec"] = [
+                        {"interests": [{"name": interest} for interest in interests_list[:5]]}
+                    ]
+            
+            # Prepare delivery estimate params
+            estimate_params = {
+                "optimization_goal": optimization_goal,
+                "targeting_spec": targeting_spec
+            }
+            
+            # Add budget if provided (in cents)
+            if daily_budget:
+                estimate_params["daily_budget"] = int(daily_budget * 100)
+            
+            # Get delivery estimate
+            delivery_estimate = self.account.get_delivery_estimate(params=estimate_params)
+            
+            # Parse response
+            estimate_data = delivery_estimate.get('data', [{}])[0] if delivery_estimate.get('data') else {}
+            
+            # Extract audience size
+            estimate_dau = estimate_data.get('estimate_dau', {})
+            audience_size_min = estimate_dau.get('lower_bound', 0)
+            audience_size_max = estimate_dau.get('upper_bound', 0)
+            audience_size_avg = (audience_size_min + audience_size_max) // 2 if (audience_size_min + audience_size_max) > 0 else 0
+            
+            # Extract daily reach estimate
+            estimate_ready = estimate_data.get('estimate_ready', {})
+            daily_reach_min = estimate_ready.get('lower_bound', 0)
+            daily_reach_max = estimate_ready.get('upper_bound', 0)
+            daily_reach_avg = (daily_reach_min + daily_reach_max) // 2 if (daily_reach_min + daily_reach_max) > 0 else 0
+            
+            # Generate recommendations
+            recommendations = []
+            
+            if audience_size_avg < 1000:
+                recommendations.append("⚠️ Audiencia muy pequeña (<1K). Considera expandir países o intereses.")
+            elif audience_size_avg < 10000:
+                recommendations.append("💡 Audiencia pequeña (1K-10K). Podrías considerar expandir targeting.")
+            elif audience_size_avg > 50000000:
+                recommendations.append("💡 Audiencia muy grande (>50M). Considera refinar targeting para mejor ROI.")
+            
+            if daily_budget and daily_reach_avg > 0:
+                cpm_estimate = (daily_budget * 1000) / daily_reach_avg if daily_reach_avg > 0 else 0
+                if cpm_estimate > 10:
+                    recommendations.append(f"💰 CPM estimado: ${cpm_estimate:.2f}. Considera aumentar presupuesto para mejor alcance.")
+            
+            result = {
+                "audience_size": audience_size_avg,
+                "audience_size_min": audience_size_min,
+                "audience_size_max": audience_size_max,
+                "daily_reach": daily_reach_avg,
+                "daily_reach_min": daily_reach_min,
+                "daily_reach_max": daily_reach_max,
+                "recommendations": recommendations,
+                "status": "success"
+            }
+            
+            logger.info(f"✅ Estimación de audiencia: ~{audience_size_avg:,} personas")
+            return result
+            
+        except FacebookRequestError as e:
+            logger.error(f"Error estimando audiencia: {e}")
+            return {
+                "audience_size": 0,
+                "audience_size_min": 0,
+                "audience_size_max": 0,
+                "daily_reach": 0,
+                "daily_reach_min": 0,
+                "daily_reach_max": 0,
+                "recommendations": [f"⚠️ No se pudo obtener estimación de Meta API: {str(e)}"],
+                "status": "error",
+                "error": str(e)
+            }
+        except Exception as e:
+            logger.error(f"Error inesperado estimando audiencia: {e}")
+            return {
+                "audience_size": 0,
+                "audience_size_min": 0,
+                "audience_size_max": 0,
+                "daily_reach": 0,
+                "daily_reach_min": 0,
+                "daily_reach_max": 0,
+                "recommendations": [f"⚠️ Error: {str(e)}"],
+                "status": "error",
+                "error": str(e)
+            }
 
 

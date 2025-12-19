@@ -112,3 +112,4 @@ Faltan 2-3 funciones menores.
 ---
 
 **¿Quieres que integre TODO el código faltante de estos 3 modos?**
+

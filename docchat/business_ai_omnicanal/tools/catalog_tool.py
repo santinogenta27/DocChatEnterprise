@@ -38,3 +38,4 @@ class CatalogTool:
         return self.catalog.get_related_products(product_id=product_id, limit=limit)
 
 
+

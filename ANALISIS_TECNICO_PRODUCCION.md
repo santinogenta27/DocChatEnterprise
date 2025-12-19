@@ -342,3 +342,4 @@ if self.use_fallback:
 ---
 
 **¿Quieres que detalle los problemas técnicos específicos de cada modo o que cree un plan de fixes prioritarios?**
+
