@@ -157,6 +157,12 @@ class CampaignRequest(BaseModel):
     optimization_goal: Literal["conversions", "ctr", "roas", "cpa"] = "conversions"
     auto_optimize: bool = True
     
+    # Publication settings - CRÍTICO para publicación autónoma
+    auto_activate: bool = Field(
+        default=True, 
+        description="Activar campaña automáticamente después de crearla (como Meta Ads Manager)"
+    )
+
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict)
     
@@ -311,5 +317,6 @@ class OptimizationResult(BaseModel):
                 ]
             }
         }
+
 
 

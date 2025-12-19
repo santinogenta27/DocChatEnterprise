@@ -26,10 +26,13 @@ except ImportError:
         sequential = "sequential"
         hierarchical = "hierarchical"
     import sys
-    if sys.version_info >= (3, 14):
-        print("⚠️ CrewAI no está disponible: Requiere Python 3.10-3.13 (tienes Python 3.14)")
-    else:
-        print("⚠️ CrewAI no está instalado. Instala con: py -3.12 -m pip install crewai")
+    try:
+        if sys.version_info >= (3, 14):
+            print("CrewAI no esta disponible: Requiere Python 3.10-3.13 (tienes Python 3.14)")
+        else:
+            print("CrewAI no esta instalado. Instala con: py -3.12 -m pip install crewai")
+    except UnicodeEncodeError:
+        pass  # Ignorar error de codificacion en Windows
 
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic

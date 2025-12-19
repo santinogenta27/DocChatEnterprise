@@ -207,3 +207,4 @@ Responde en formato JSON:
         return self.generation_count
 
 
+

@@ -82,3 +82,4 @@ class CustomerSessionManager:
     def clear(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
 
+

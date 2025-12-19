@@ -10946,6 +10946,184 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                         outputs=[analytics_output]
                     )
                 
+                # Tab: Gestión de FAQs
+                with gr.Tab("❓ Gestión de FAQs"):
+                    gr.Markdown("### ❓ Gestionar Preguntas Frecuentes (FAQs)")
+                    gr.Markdown("""
+                    Agrega y gestiona FAQs para que el agente pueda responder automáticamente a preguntas comunes.
+                    Las FAQs ayudan al agente a dar respuestas más precisas y rápidas.
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            faq_company_id = gr.Textbox(
+                                label="ID de Empresa",
+                                placeholder="Pega aquí el company_id de tu empresa"
+                            )
+                            faq_question = gr.Textbox(
+                                label="Pregunta",
+                                placeholder="¿Cuál es el precio del producto?",
+                                lines=2
+                            )
+                            faq_answer = gr.Textbox(
+                                label="Respuesta",
+                                placeholder="El precio del producto es $99 USD...",
+                                lines=4
+                            )
+                            faq_category = gr.Dropdown(
+                                label="Categoría",
+                                choices=[
+                                    ("Producto", "product"),
+                                    ("Precio", "pricing"),
+                                    ("Soporte", "support"),
+                                    ("General", "general")
+                                ],
+                                value="general"
+                            )
+                            faq_priority = gr.Slider(
+                                label="Prioridad",
+                                minimum=0,
+                                maximum=10,
+                                value=5,
+                                step=1,
+                                info="Mayor prioridad = se muestra primero"
+                            )
+                            add_faq_btn = gr.Button("➕ Agregar FAQ", variant="primary")
+                        
+                        with gr.Column():
+                            faqs_list_output = gr.Markdown(
+                                label="FAQs Registradas",
+                                value="Ingresa el ID de empresa para ver las FAQs existentes"
+                            )
+                    
+                    def load_faqs(company_id):
+                        """Carga FAQs de una empresa"""
+                        if not company_id:
+                            return "Ingresa un ID de empresa"
+                        try:
+                            # Intentar obtener FAQs desde db_manager
+                            if hasattr(ai_agent_business_manager.db_manager, 'get_session'):
+                                from docchat.ai_agent_business_manager_mode import FAQDB
+                                session = ai_agent_business_manager.db_manager.get_session()
+                                if session:
+                                    try:
+                                        faqs = session.query(FAQDB).filter_by(company_id=company_id).order_by(FAQDB.priority.desc(), FAQDB.created_at.desc()).all()
+                                        if not faqs:
+                                            return "No hay FAQs registradas. Agrega FAQs usando el formulario."
+                                        
+                                        output = f"### ❓ FAQs ({len(faqs)})\n\n"
+                                        for faq in faqs:
+                                            output += f"**Q:** {faq.question}\n"
+                                            output += f"**A:** {faq.answer[:150]}{'...' if len(faq.answer) > 150 else ''}\n"
+                                            output += f"*Categoría: {faq.category}, Prioridad: {faq.priority}*\n\n"
+                                        session.close()
+                                        return output
+                                    except Exception as e:
+                                        session.close()
+                                        return f"⚠️ No se pudieron cargar FAQs desde base de datos: {str(e)}\n\nNota: Las FAQs se almacenan en la base de datos cuando está disponible."
+                            return "⚠️ Sistema de FAQs requiere base de datos configurada"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def add_faq_handler(company_id, question, answer, category, priority):
+                        """Agrega un FAQ"""
+                        if not company_id or not question or not answer:
+                            return "❌ ID de empresa, pregunta y respuesta son requeridos", "FAQs actualizadas"
+                        try:
+                            # Usar db_manager directamente para agregar FAQ
+                            if hasattr(ai_agent_business_manager.db_manager, 'get_session'):
+                                import uuid
+                                from docchat.ai_agent_business_manager_mode import FAQDB
+                                from datetime import datetime
+                                
+                                session = ai_agent_business_manager.db_manager.get_session()
+                                if session:
+                                    try:
+                                        faq_id = str(uuid.uuid4())
+                                        faq_db = FAQDB(
+                                            faq_id=faq_id,
+                                            company_id=company_id,
+                                            question=question,
+                                            answer=answer,
+                                            category=category,
+                                            priority=int(priority)
+                                        )
+                                        session.add(faq_db)
+                                        session.commit()
+                                        session.close()
+                                        
+                                        # Recargar lista
+                                        return f"✅ FAQ agregado exitosamente (ID: `{faq_id}`)", load_faqs(company_id)
+                                    except Exception as e:
+                                        session.close()
+                                        return f"❌ Error agregando FAQ: {str(e)}", faqs_list_output.value
+                            return "⚠️ Sistema de FAQs requiere base de datos configurada", faqs_list_output.value
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", faqs_list_output.value
+                    
+                    add_faq_btn.click(
+                        fn=add_faq_handler,
+                        inputs=[faq_company_id, faq_question, faq_answer, faq_category, faq_priority],
+                        outputs=[faq_company_id, faqs_list_output]
+                    )
+                    
+                    faq_company_id.change(
+                        fn=load_faqs,
+                        inputs=[faq_company_id],
+                        outputs=[faqs_list_output]
+                    )
+                
+                # Tab: Conversaciones
+                with gr.Tab("💬 Conversaciones"):
+                    gr.Markdown("### 💬 Historial de Conversaciones")
+                    gr.Markdown("""
+                    Visualiza el historial completo de conversaciones con mensajes entre usuarios y el agente.
+                    """)
+                    
+                    conv_company_id = gr.Textbox(
+                        label="ID de Empresa",
+                        placeholder="Pega aquí el company_id de tu empresa"
+                    )
+                    conv_conversation_id = gr.Textbox(
+                        label="Conversation ID (opcional)",
+                        placeholder="Dejar vacío para ver todas las conversaciones",
+                        info="Si especificas un Conversation ID, verás solo esa conversación"
+                    )
+                    conv_refresh_btn = gr.Button("🔄 Cargar Conversaciones", variant="primary")
+                    conv_output = gr.Markdown(label="Conversaciones")
+                    
+                    def get_conversations_handler(company_id, conversation_id):
+                        """Obtiene conversaciones de una empresa"""
+                        if not company_id:
+                            return "Ingresa un ID de empresa"
+                        try:
+                            if conversation_id and conversation_id.strip():
+                                # Mostrar solo una conversación específica
+                                messages = ai_agent_business_manager.db_manager.get_conversation_messages(conversation_id.strip())
+                                if not messages:
+                                    return f"⚠️ No se encontraron mensajes para la conversación {conversation_id}"
+                                
+                                output = f"### 💬 Conversación: `{conversation_id}`\n\n"
+                                output += f"**Total de mensajes**: {len(messages)}\n\n"
+                                
+                                for i, msg in enumerate(messages, 1):
+                                    role_emoji = "👤" if msg.get('role') == 'user' else "🤖"
+                                    output += f"**{role_emoji} {msg.get('role', 'unknown').upper()}** ({msg.get('created_at', 'N/A')}):\n"
+                                    output += f"{msg.get('content', 'N/A')}\n\n"
+                                
+                                return output
+                            else:
+                                # Mostrar resumen de conversaciones (necesitaríamos método adicional)
+                                return "💡 Ingresa un Conversation ID específico para ver los mensajes completos.\n\nPara obtener Conversation IDs, revisa los leads capturados o los logs del sistema."
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    conv_refresh_btn.click(
+                        fn=get_conversations_handler,
+                        inputs=[conv_company_id, conv_conversation_id],
+                        outputs=[conv_output]
+                    )
+                
                 # Tab: Leads
                 with gr.Tab("👥 Leads Capturados"):
                     gr.Markdown("### 👥 Leads Capturados")
@@ -11248,6 +11426,54 @@ curl -X POST http://localhost:5001/api/jarvis/webhook/ingest \\
                         fn=configure_whatsapp_handler,
                         inputs=[whatsapp_company_id, whatsapp_phone, whatsapp_verify_token],
                         outputs=[whatsapp_result]
+                    )
+                    
+                    # Agregar función para enviar mensaje de prueba
+                    gr.Markdown("---\n### 📤 Enviar Mensaje de Prueba")
+                    whatsapp_test_phone = gr.Textbox(
+                        label="Número de Teléfono Destino",
+                        placeholder="+1234567890",
+                        info="Número donde quieres recibir el mensaje de prueba (con código de país)"
+                    )
+                    whatsapp_test_message = gr.Textbox(
+                        label="Mensaje",
+                        placeholder="Hola, este es un mensaje de prueba desde AI Agent Business Manager",
+                        lines=3
+                    )
+                    whatsapp_send_test_btn = gr.Button("📤 Enviar Mensaje de Prueba", variant="secondary")
+                    whatsapp_test_result = gr.Markdown(label="Resultado del Envío")
+                    
+                    def send_whatsapp_test_handler(company_id, phone_number, message):
+                        """Envía un mensaje de prueba por WhatsApp"""
+                        if not company_id or not phone_number or not message:
+                            return "❌ ID de empresa, número de teléfono y mensaje son requeridos"
+                        try:
+                            result = ai_agent_business_manager.send_whatsapp_message(
+                                company_id=company_id,
+                                phone_number=phone_number,
+                                message=message
+                            )
+                            
+                            if result.get("success"):
+                                output = f"""
+### ✅ Mensaje Enviado Exitosamente
+
+**📱 Destino**: {phone_number}
+**💬 Mensaje**: {message[:100]}...
+**🆔 Message ID**: `{result.get('message_id', 'N/A')}`
+
+✅ **El mensaje debería llegar en breve al número especificado.**
+"""
+                                return output
+                            else:
+                                return f"❌ Error enviando mensaje: {result.get('error', 'Unknown error')}"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    whatsapp_send_test_btn.click(
+                        fn=send_whatsapp_test_handler,
+                        inputs=[whatsapp_company_id, whatsapp_test_phone, whatsapp_test_message],
+                        outputs=[whatsapp_test_result]
                     )
             
             # Funciones helper
@@ -20500,6 +20726,1089 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                 return f"❌ Error: {str(e)}"
                         
                         top_ads_metrics_btn.click(fn=get_top_ads_metrics, inputs=[top_ads_metrics_campaign_id, top_ads_metrics_platform], outputs=[top_ads_metrics_output])
+                    
+                    # Tab: ⚙️ Gestionar Campañas - Agregar funciones faltantes
+                    with gr.Tab("⚙️ Gestionar Campañas"):
+                        gr.Markdown("### ⚙️ Gestionar Campañas Existentes")
+                        gr.Markdown("Pausa, reanuda u optimiza tus campañas publicitarias.")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                manage_campaign_id = gr.Textbox(label="🆔 Campaign ID", placeholder="Ingresa el ID de la campaña")
+                                manage_platform = gr.Dropdown(label="🌐 Plataforma", choices=[("Meta Ads", "meta"), ("TikTok Ads", "tiktok")], value="meta")
+                                
+                                with gr.Row():
+                                    pause_campaign_btn = gr.Button("⏸️ Pausar Campaña", variant="secondary")
+                                    resume_campaign_btn = gr.Button("▶️ Reanudar Campaña", variant="secondary")
+                                    optimize_campaign_btn = gr.Button("🔄 Optimizar Campaña", variant="primary")
+                                
+                                manage_result = gr.Markdown(label="📊 Resultado")
+                        
+                        def pause_top_ads_campaign(campaign_id, platform):
+                            if not top_ads_mode or not campaign_id.strip():
+                                return "⚠️ Ingresa un Campaign ID válido"
+                            try:
+                                success = top_ads_mode.pause_campaign(campaign_id, platform)
+                                if success:
+                                    return f"✅ Campaña **{campaign_id}** pausada exitosamente en {platform.upper()}"
+                                else:
+                                    return f"❌ Error al pausar la campaña {campaign_id}"
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def resume_top_ads_campaign(campaign_id, platform):
+                            if not top_ads_mode or not campaign_id.strip():
+                                return "⚠️ Ingresa un Campaign ID válido"
+                            try:
+                                success = top_ads_mode.resume_campaign(campaign_id, platform)
+                                if success:
+                                    return f"✅ Campaña **{campaign_id}** reanudada exitosamente en {platform.upper()}"
+                                else:
+                                    return f"❌ Error al reanudar la campaña {campaign_id}"
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def optimize_top_ads_campaign(campaign_id, platform):
+                            if not top_ads_mode or not campaign_id.strip():
+                                return "⚠️ Ingresa un Campaign ID válido"
+                            try:
+                                result = top_ads_mode.optimize_campaign(campaign_id, platform)
+                                output = f"## 🔄 Optimización de Campaña\n\n"
+                                output += f"**Campaign ID**: {result.get('campaign_id')}\n"
+                                output += f"**Plataforma**: {result.get('platform')}\n\n"
+                                output += "### 📊 Métricas:\n"
+                                metrics = result.get('metrics', {})
+                                output += f"- Impresiones: {metrics.get('impressions', 0):,}\n"
+                                output += f"- Clics: {metrics.get('clicks', 0):,}\n"
+                                output += f"- CTR: {metrics.get('ctr', 0):.2f}%\n"
+                                output += f"- CPC: ${metrics.get('cpc', 0):.2f}\n\n"
+                                output += "### ⚡ Optimizaciones Aplicadas:\n"
+                                optimizations = result.get('optimizations_applied', [])
+                                if optimizations:
+                                    for opt in optimizations[:5]:
+                                        output += f"- {opt}\n"
+                                else:
+                                    output += "- No se aplicaron optimizaciones en este momento\n"
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        pause_campaign_btn.click(fn=pause_top_ads_campaign, inputs=[manage_campaign_id, manage_platform], outputs=[manage_result])
+                        resume_campaign_btn.click(fn=resume_top_ads_campaign, inputs=[manage_campaign_id, manage_platform], outputs=[manage_result])
+                        optimize_campaign_btn.click(fn=optimize_top_ads_campaign, inputs=[manage_campaign_id, manage_platform], outputs=[manage_result])
+                    
+                    # Tab: 🎨 Creativos Dinámicos (DCO)
+                    with gr.Tab("🎨 Creativos Dinámicos"):
+                        gr.Markdown("### 🎨 Dynamic Creative Optimization (DCO)")
+                        gr.Markdown("Crea creativos personalizados según el perfil del usuario (estilo Meta DCO).")
+                        
+                        from docchat.top_ads.creatives.dynamic_creative_optimizer import UserProfile
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                dco_age = gr.Number(label="Edad", value=25, minimum=13, maximum=100)
+                                dco_gender = gr.Dropdown(label="Género", choices=[("Masculino", "male"), ("Femenino", "female"), ("Otro", "other")], value="male")
+                                dco_location = gr.Textbox(label="Ubicación", placeholder="Estados Unidos", value="Estados Unidos")
+                                dco_interests = gr.Textbox(label="Intereses (separados por coma)", placeholder="tecnología, deportes, música", value="tecnología")
+                                
+                                create_dco_btn = gr.Button("🎨 Crear Creative Dinámico", variant="primary")
+                                dco_result = gr.Markdown(label="📊 Creative Generado")
+                        
+                        def create_dco_creative(age, gender, location, interests_str):
+                            if not top_ads_mode:
+                                return "❌ Top Ads Mode no está disponible"
+                            try:
+                                interests = [i.strip() for i in interests_str.split(',') if i.strip()] if interests_str else []
+                                user_profile = UserProfile(
+                                    age=int(age),
+                                    gender=gender,
+                                    location=location,
+                                    interests=interests
+                                )
+                                result = top_ads_mode.create_dynamic_creative_for_user(user_profile)
+                                
+                                output = f"## 🎨 Creative Dinámico Generado\n\n"
+                                creative = result.get('creative', {})
+                                output += f"### 📝 Contenido:\n"
+                                output += f"- **Headline**: {result.get('headline', 'N/A')}\n"
+                                output += f"- **Primary Text**: {result.get('primary_text', 'N/A')}\n"
+                                output += f"- **Description**: {result.get('description', 'N/A')}\n"
+                                output += f"- **CTA**: {result.get('cta', 'N/A')}\n"
+                                output += f"- **Score de Combinación**: {result.get('combination_score', 0):.2f}\n"
+                                output += f"\n**Razonamiento**: {result.get('reasoning', 'N/A')}\n"
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        create_dco_btn.click(fn=create_dco_creative, inputs=[dco_age, dco_gender, dco_location, dco_interests], outputs=[dco_result])
+                    
+                    # Tab: 📊 Estadísticas Generales
+                    with gr.Tab("📊 Estadísticas Generales"):
+                        gr.Markdown("### 📊 Estadísticas del Sistema Top Ads")
+                        gr.Markdown("Visualiza estadísticas generales del sistema de publicidad.")
+                        
+                        stats_refresh_btn = gr.Button("🔄 Actualizar Estadísticas", variant="primary")
+                        stats_output = gr.Markdown(label="📊 Estadísticas")
+                        
+                        def get_top_ads_statistics():
+                            if not top_ads_mode:
+                                return "❌ Top Ads Mode no está disponible"
+                            try:
+                                stats = top_ads_mode.get_statistics()
+                                output = "## 📊 Estadísticas Generales\n\n"
+                                output += f"### 📢 Campañas:\n"
+                                output += f"- **Campañas Activas**: {stats.get('active_campaigns', 0)}\n"
+                                output += f"- **Total de Campañas**: {stats.get('total_campaigns', 0)}\n\n"
+                                output += "### 🌐 Plataformas:\n"
+                                platforms = stats.get('platforms', {})
+                                output += f"- **Meta Ads**: {'✅ Conectado' if platforms.get('meta') else '❌ No conectado'}\n"
+                                output += f"- **TikTok Ads**: {'✅ Conectado' if platforms.get('tiktok') else '❌ No conectado'}\n\n"
+                                output += f"### 🔄 Optimizaciones:\n"
+                                output += f"- **Optimizaciones Ejecutadas**: {stats.get('optimization_runs', 0)}\n\n"
+                                output += f"### 🎨 Creativos:\n"
+                                output += f"- **Creativos Generados**: {stats.get('creatives_generated', 0)}\n\n"
+                                dco_stats = stats.get('dco', {})
+                                if dco_stats:
+                                    output += "### 🎨 DCO (Dynamic Creative Optimization):\n"
+                                    output += f"- **Combinaciones Creadas**: {dco_stats.get('combinations_created', 0)}\n"
+                                    output += f"- **Score Promedio**: {dco_stats.get('average_score', 0):.2f}\n"
+                                return output
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        stats_refresh_btn.click(fn=get_top_ads_statistics, outputs=[stats_output])
+                        stats_output.value = get_top_ads_statistics()
+                    
+                    # Tab: 📋 Listar Campañas - Funcionalidad crítica
+                    with gr.Tab("📋 Mis Campañas"):
+                        gr.Markdown("### 📋 Lista de Todas tus Campañas")
+                        gr.Markdown("Visualiza y gestiona todas tus campañas publicitarias activas y completadas.")
+                        
+                        top_ads_list_status = gr.Dropdown(
+                            label="Filtrar por Status",
+                            choices=[("Todas", None), ("Activas", "active"), ("Pausadas", "paused"), ("Completadas", "completed")],
+                            value=None
+                        )
+                        top_ads_list_btn = gr.Button("🔄 Actualizar Lista", variant="primary")
+                        top_ads_list_output = gr.Markdown(label="📋 Campañas")
+                        
+                        def list_top_ads_campaigns(status):
+                            if not top_ads_mode:
+                                return "❌ Top Ads Mode no está disponible"
+                            try:
+                                campaigns = top_ads_mode.list_campaigns(status=status if status else None)
+                                
+                                if not campaigns:
+                                    return "📭 No se encontraron campañas. Crea tu primera campaña en el tab '🎯 Crear Campaña'."
+                                
+                                output = f"## 📋 Campañas ({len(campaigns)})\n\n"
+                                
+                                for campaign in campaigns:
+                                    status_emoji = {
+                                        "active": "🟢",
+                                        "paused": "⏸️",
+                                        "completed": "✅",
+                                        "draft": "📝"
+                                    }.get(campaign.get('status', '').lower(), "📋")
+                                    
+                                    output += f"### {status_emoji} {campaign.get('name', 'Sin nombre')}\n"
+                                    output += f"- **🆔 Campaign ID**: `{campaign.get('campaign_id')}`\n"
+                                    output += f"- **📊 Status**: {campaign.get('status', 'N/A')}\n"
+                                    output += f"- **🌐 Plataforma**: {campaign.get('platform', 'N/A').upper()}\n"
+                                    output += f"- **🎯 Objetivo**: {campaign.get('objective', 'N/A')}\n"
+                                    if campaign.get('budget'):
+                                        output += f"- **💰 Presupuesto**: ${campaign.get('budget', 0):.2f}\n"
+                                    if campaign.get('created_at'):
+                                        output += f"- **📅 Creada**: {campaign.get('created_at')[:10] if len(campaign.get('created_at', '')) > 10 else campaign.get('created_at')}\n"
+                                    output += "\n"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error listando campañas: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        top_ads_list_btn.click(
+                            fn=list_top_ads_campaigns,
+                            inputs=[top_ads_list_status],
+                            outputs=[top_ads_list_output]
+                        )
+                        top_ads_list_output.value = list_top_ads_campaigns(None)
+
+        # Tab: 🤖 ADS WORKER - AI-Powered Autonomous Advertising Manager
+        with gr.Tab("🤖 ADS WORKER"):
+            gr.Markdown("### 🤖 ADS WORKER - AI-Powered Autonomous Advertising Manager")
+            gr.Markdown("""
+            **🚀 Sistema Completo de Gestión Autónoma de Anuncios**
+            
+            **✨ CARACTERÍSTICAS:**
+            - 📦 Procesa assets (imágenes, videos, textos) con análisis avanzado
+            - 🚀 Lanza campañas automáticamente en Meta y Google Ads
+            - 🔄 Optimiza campañas existentes basado en métricas
+            - 📊 Monitorea performance y métricas en tiempo real
+            
+            **💼 Perfecto para:**
+            - Gestión completa de campañas publicitarias
+            - Optimización automática de anuncios
+            - Análisis de assets creativos
+            """)
+            
+            if not ads_worker or not ads_worker.agent:
+                gr.Markdown("⚠️ **ADS WORKER no está disponible.**")
+                gr.Markdown("""
+                **Para habilitarlo completamente:**
+                1. Instala LangChain: `pip install langchain langchain-openai`
+                2. Configura credenciales en el tab '⚙️ Configurar Credenciales'
+                
+                **💡 Nota:** Puedes configurar credenciales y targeting incluso sin LangChain instalado. 
+                Solo necesitas LangChain para crear campañas automáticamente.
+                """)
+            else:
+                from docchat.ads_worker.models.schemas import AssetUpload, AssetType, CampaignRequest, CampaignObjective, Platform
+                
+                with gr.Tabs():
+                    # Tab 1: Procesar Assets
+                    with gr.Tab("📦 Procesar Assets"):
+                        gr.Markdown("### 📦 Sube y Procesa tus Assets Creativos")
+                        gr.Markdown("Sube imágenes, videos o textos para que sean analizados y preparados para campañas.")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                aw_asset_type = gr.Dropdown(
+                                    label="Tipo de Asset",
+                                    choices=[("Imagen", "image"), ("Video", "video"), ("Texto", "text")],
+                                    value="image"
+                                )
+                                aw_asset_files = gr.Files(
+                                    label="📂 Archivos (Imágenes/Videos)",
+                                    file_count="multiple",
+                                    file_types=[".jpg", ".jpeg", ".png", ".mp4", ".mov", ".txt"],
+                                    visible=True
+                                )
+                                aw_asset_text = gr.Textbox(
+                                    label="📝 Contenido de Texto",
+                                    placeholder="Escribe el texto de tu anuncio aquí...",
+                                    lines=5,
+                                    visible=False
+                                )
+                                aw_asset_metadata = gr.JSON(
+                                    label="Metadata (opcional)",
+                                    value={},
+                                    visible=False
+                                )
+                                
+                                def toggle_asset_inputs(asset_type):
+                                    if asset_type == "text":
+                                        return gr.update(visible=False), gr.update(visible=True), gr.update(visible=True)
+                                    else:
+                                        return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
+                                
+                                aw_asset_type.change(
+                                    fn=toggle_asset_inputs,
+                                    inputs=[aw_asset_type],
+                                    outputs=[aw_asset_files, aw_asset_text, aw_asset_metadata]
+                                )
+                                
+                                aw_process_btn = gr.Button("📦 Procesar Assets", variant="primary")
+                            
+                            with gr.Column():
+                                aw_process_output = gr.Markdown(label="📊 Resultado del Procesamiento")
+                                aw_processed_assets = gr.JSON(label="Assets Procesados", visible=False)
+                        
+                        def process_assets_handler(asset_type, files, text_content, metadata):
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible", None
+                            try:
+                                assets = []
+                                
+                                if asset_type == "text":
+                                    if not text_content or not text_content.strip():
+                                        return "❌ Ingresa contenido de texto", None
+                                    asset = AssetUpload(
+                                        asset_type=AssetType(asset_type),
+                                        text_content=text_content.strip(),
+                                        metadata=metadata or {}
+                                    )
+                                    assets.append(asset)
+                                else:
+                                    if not files:
+                                        return "❌ Sube al menos un archivo", None
+                                    for file in files:
+                                        asset = AssetUpload(
+                                            asset_type=AssetType(asset_type),
+                                            file_path=file.name,
+                                            metadata=metadata or {}
+                                        )
+                                        assets.append(asset)
+                                
+                                # Procesar assets
+                                results = ads_worker.process_assets(assets, user_id="gradio_user")
+                                
+                                # Formatear resultado
+                                output = f"## ✅ {len(results)} Asset(s) Procesado(s) Exitosamente\n\n"
+                                asset_ids = []
+                                for i, result in enumerate(results, 1):
+                                    asset_id = result.get('asset_id', f'asset_{i}')
+                                    asset_ids.append(asset_id)
+                                    output += f"### Asset {i}: `{asset_id}`\n"
+                                    output += f"- **Tipo**: {result.get('asset_type', 'N/A')}\n"
+                                    if result.get('labels'):
+                                        output += f"- **Labels**: {', '.join(result.get('labels', [])[:5])}\n"
+                                    if result.get('keywords'):
+                                        output += f"- **Keywords**: {', '.join(result.get('keywords', [])[:5])}\n"
+                                    output += "\n"
+                                
+                                output += f"\n**💡 Usa estos Asset IDs al crear una campaña:**\n"
+                                output += f"`{', '.join(asset_ids)}`"
+                                
+                                return output, results
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error procesando assets: {str(e)}\n\n```\n{traceback.format_exc()}\n```", None
+                        
+                        aw_process_btn.click(
+                            fn=process_assets_handler,
+                            inputs=[aw_asset_type, aw_asset_files, aw_asset_text, aw_asset_metadata],
+                            outputs=[aw_process_output, aw_processed_assets]
+                        )
+                    
+                    # Tab 2: Configurar Credenciales - COMO META ADS MANAGER
+                    with gr.Tab("⚙️ Configurar Credenciales"):
+                        gr.Markdown("### ⚙️ Configuración de Credenciales API")
+                        gr.Markdown("Configura tus credenciales de Meta Ads y Google Ads para publicar automáticamente.")
+                        
+                        with gr.Tabs():
+                            # Meta Credentials Tab
+                            with gr.Tab("📘 Meta Ads (Facebook/Instagram)"):
+                                gr.Markdown("### 📘 Credenciales de Meta Ads")
+                                gr.Markdown("Obtén tus credenciales desde [Facebook Developers](https://developers.facebook.com)")
+                                
+                                with gr.Row():
+                                    with gr.Column():
+                                        aw_meta_access_token = gr.Textbox(
+                                            label="🔑 Access Token",
+                                            type="password",
+                                            placeholder="Tu Access Token de Meta",
+                                            info="Token de acceso de Meta Marketing API"
+                                        )
+                                        aw_meta_app_id = gr.Textbox(
+                                            label="🆔 App ID",
+                                            placeholder="Tu App ID",
+                                            info="ID de tu aplicación de Facebook"
+                                        )
+                                        aw_meta_app_secret = gr.Textbox(
+                                            label="🔐 App Secret",
+                                            type="password",
+                                            placeholder="Tu App Secret",
+                                            info="Secret de tu aplicación de Facebook"
+                                        )
+                                        aw_meta_ad_account_id = gr.Textbox(
+                                            label="💼 Ad Account ID",
+                                            placeholder="123456789",
+                                            info="ID de tu cuenta publicitaria (sin 'act_')"
+                                        )
+                                        aw_meta_page_id = gr.Textbox(
+                                            label="📄 Page ID (Opcional)",
+                                            placeholder="123456789",
+                                            info="ID de tu página de Facebook (opcional pero recomendado)"
+                                        )
+                                        
+                                        with gr.Row():
+                                            aw_meta_test_btn = gr.Button("🧪 Probar Conexión", variant="secondary")
+                                            aw_meta_save_btn = gr.Button("💾 Guardar Credenciales", variant="primary")
+                                    
+                                    with gr.Column():
+                                        aw_meta_status = gr.Markdown(label="📊 Estado de Conexión")
+                                
+                                def test_meta_connection(access_token, app_id, app_secret, ad_account_id):
+                                    try:
+                                        from docchat.ads_worker.credentials_manager import AdsCredentialsManager
+                                        creds_manager = AdsCredentialsManager()
+                                        
+                                        # Guardar temporalmente para probar
+                                        if access_token and app_id and app_secret and ad_account_id:
+                                            creds_manager.save_meta_credentials(
+                                                access_token=access_token,
+                                                app_id=app_id,
+                                                app_secret=app_secret,
+                                                ad_account_id=ad_account_id
+                                            )
+                                        
+                                        success, message = creds_manager.test_meta_connection()
+                                        return message
+                                    except Exception as e:
+                                        return f"❌ Error: {str(e)}"
+                                
+                                def save_meta_credentials(access_token, app_id, app_secret, ad_account_id, page_id):
+                                    try:
+                                        from docchat.ads_worker.credentials_manager import AdsCredentialsManager
+                                        creds_manager = AdsCredentialsManager()
+                                        
+                                        if not all([access_token, app_id, app_secret, ad_account_id]):
+                                            return "❌ Todos los campos son requeridos (excepto Page ID)"
+                                        
+                                        success = creds_manager.save_meta_credentials(
+                                            access_token=access_token.strip(),
+                                            app_id=app_id.strip(),
+                                            app_secret=app_secret.strip(),
+                                            ad_account_id=ad_account_id.strip(),
+                                            page_id=page_id.strip() if page_id else None
+                                        )
+                                        
+                                        if success:
+                                            # Probar conexión después de guardar
+                                            test_success, test_msg = creds_manager.test_meta_connection()
+                                            return f"✅ Credenciales guardadas exitosamente\n\n{test_msg}"
+                                        else:
+                                            return "❌ Error guardando credenciales"
+                                    except Exception as e:
+                                        import traceback
+                                        return f"❌ Error: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                                
+                                def load_meta_credentials():
+                                    try:
+                                        from docchat.ads_worker.credentials_manager import AdsCredentialsManager
+                                        creds_manager = AdsCredentialsManager()
+                                        creds = creds_manager.load_meta_credentials()
+                                        
+                                        if creds:
+                                            return (
+                                                creds.get("access_token", ""),
+                                                creds.get("app_id", ""),
+                                                creds.get("app_secret", ""),
+                                                creds.get("ad_account_id", ""),
+                                                creds.get("page_id", "")
+                                            )
+                                        return "", "", "", "", ""
+                                    except:
+                                        return "", "", "", "", ""
+                                
+                                aw_meta_test_btn.click(
+                                    fn=test_meta_connection,
+                                    inputs=[aw_meta_access_token, aw_meta_app_id, aw_meta_app_secret, aw_meta_ad_account_id],
+                                    outputs=[aw_meta_status]
+                                )
+                                
+                                aw_meta_save_btn.click(
+                                    fn=save_meta_credentials,
+                                    inputs=[aw_meta_access_token, aw_meta_app_id, aw_meta_app_secret, aw_meta_ad_account_id, aw_meta_page_id],
+                                    outputs=[aw_meta_status]
+                                )
+                                
+                                # Botón para cargar credenciales guardadas
+                                aw_meta_load_btn = gr.Button("🔄 Cargar Credenciales Guardadas", variant="secondary")
+                                aw_meta_load_btn.click(
+                                    fn=load_meta_credentials,
+                                    outputs=[aw_meta_access_token, aw_meta_app_id, aw_meta_app_secret, aw_meta_ad_account_id, aw_meta_page_id]
+                                )
+                            
+                            # Google Credentials Tab
+                            with gr.Tab("🔵 Google Ads"):
+                                gr.Markdown("### 🔵 Credenciales de Google Ads")
+                                gr.Markdown("Configura tus credenciales de Google Ads API")
+                                
+                                with gr.Row():
+                                    with gr.Column():
+                                        aw_google_customer_id = gr.Textbox(
+                                            label="💼 Customer ID",
+                                            placeholder="123-456-7890",
+                                            info="ID de cliente de Google Ads (formato: XXX-XXX-XXXX)"
+                                        )
+                                        aw_google_developer_token = gr.Textbox(
+                                            label="🔑 Developer Token",
+                                            type="password",
+                                            placeholder="Tu Developer Token",
+                                            info="Token de desarrollador de Google Ads"
+                                        )
+                                        aw_google_save_btn = gr.Button("💾 Guardar Credenciales", variant="primary")
+                                    
+                                    with gr.Column():
+                                        aw_google_status = gr.Markdown(label="📊 Estado")
+                                
+                                def save_google_credentials(customer_id, developer_token):
+                                    try:
+                                        from docchat.ads_worker.credentials_manager import AdsCredentialsManager
+                                        creds_manager = AdsCredentialsManager()
+                                        
+                                        if not customer_id:
+                                            return "❌ Customer ID es requerido"
+                                        
+                                        success = creds_manager.save_google_credentials(
+                                            customer_id=customer_id.strip(),
+                                            developer_token=developer_token.strip() if developer_token else None
+                                        )
+                                        
+                                        if success:
+                                            return f"✅ Credenciales de Google guardadas exitosamente\n\nCustomer ID: {customer_id}"
+                                        else:
+                                            return "❌ Error guardando credenciales"
+                                    except Exception as e:
+                                        return f"❌ Error: {str(e)}"
+                                
+                                def load_google_credentials():
+                                    try:
+                                        from docchat.ads_worker.credentials_manager import AdsCredentialsManager
+                                        creds_manager = AdsCredentialsManager()
+                                        creds = creds_manager.load_google_credentials()
+                                        
+                                        if creds:
+                                            return creds.get("customer_id", ""), creds.get("developer_token", "")
+                                        return "", ""
+                                    except:
+                                        return "", ""
+                                
+                                aw_google_save_btn.click(
+                                    fn=save_google_credentials,
+                                    inputs=[aw_google_customer_id, aw_google_developer_token],
+                                    outputs=[aw_google_status]
+                                )
+                                
+                                aw_google_load_btn.click(
+                                    fn=load_google_credentials,
+                                    outputs=[aw_google_customer_id, aw_google_developer_token]
+                                )
+                    
+                    # Tab 3: Configurar Targeting - COMO META ADS MANAGER
+                    with gr.Tab("🎯 Targeting de Audiencia"):
+                        gr.Markdown("### 🎯 Configuración de Audiencia Objetivo")
+                        gr.Markdown("Define tu audiencia objetivo como en Meta Ads Manager. Estos valores se usarán al crear campañas.")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                # Ubicaciones (Países)
+                                gr.Markdown("#### 🌍 Ubicaciones")
+                                aw_targeting_countries = gr.CheckboxGroup(
+                                    label="Países",
+                                    choices=[
+                                        ("🇺🇸 Estados Unidos", "US"),
+                                        ("🇲🇽 México", "MX"),
+                                        ("🇦🇷 Argentina", "AR"),
+                                        ("🇧🇷 Brasil", "BR"),
+                                        ("🇨🇱 Chile", "CL"),
+                                        ("🇨🇴 Colombia", "CO"),
+                                        ("🇵🇪 Perú", "PE"),
+                                        ("🇪🇸 España", "ES"),
+                                        ("🇫🇷 Francia", "FR"),
+                                        ("🇩🇪 Alemania", "DE"),
+                                        ("🇮🇹 Italia", "IT"),
+                                        ("🇬🇧 Reino Unido", "UK"),
+                                        ("🇨🇦 Canadá", "CA"),
+                                        ("🇦🇺 Australia", "AU"),
+                                        ("🇯🇵 Japón", "JP"),
+                                        ("🇨🇳 China", "CN"),
+                                        ("🇮🇳 India", "IN"),
+                                        ("🇰🇷 Corea del Sur", "KR"),
+                                        ("🇸🇬 Singapur", "SG"),
+                                    ],
+                                    value=["US"],
+                                    info="Selecciona uno o más países para tu audiencia"
+                                )
+                                
+                                # Demografía
+                                gr.Markdown("#### 👥 Demografía")
+                                
+                                with gr.Row():
+                                    aw_targeting_age_min = gr.Slider(
+                                        label="Edad Mínima",
+                                        minimum=13,
+                                        maximum=65,
+                                        value=18,
+                                        step=1,
+                                        info="Edad mínima de la audiencia (13-65)"
+                                    )
+                                    aw_targeting_age_max = gr.Slider(
+                                        label="Edad Máxima",
+                                        minimum=13,
+                                        maximum=65,
+                                        value=65,
+                                        step=1,
+                                        info="Edad máxima de la audiencia (13-65)"
+                                    )
+                                
+                                aw_targeting_gender = gr.Radio(
+                                    label="Género",
+                                    choices=[
+                                        ("👥 Todos", "all"),
+                                        ("👨 Hombres", "male"),
+                                        ("👩 Mujeres", "female")
+                                    ],
+                                    value="all",
+                                    info="Género de la audiencia objetivo"
+                                )
+                                
+                                # Intereses
+                                gr.Markdown("#### 💡 Intereses (Opcional)")
+                                aw_targeting_interests = gr.Textbox(
+                                    label="Intereses",
+                                    placeholder="tecnología, negocios, emprendimiento",
+                                    lines=3,
+                                    info="Separa los intereses por comas. Ejemplo: tecnología, negocios, fitness"
+                                )
+                                gr.Markdown("*💡 Separa los intereses por comas. Ejemplo: tecnología, negocios, fitness*")
+                                
+                                aw_targeting_save_btn = gr.Button("💾 Guardar Configuración de Targeting", variant="primary")
+                            
+                            with gr.Column():
+                                aw_targeting_status = gr.Markdown(label="📊 Estado")
+                                gr.Markdown("""
+                                ### 💡 Información sobre Targeting
+                                
+                                **Ubicaciones:**
+                                - Selecciona los países donde quieres que aparezcan tus anuncios
+                                - Puedes seleccionar múltiples países
+                                
+                                **Demografía:**
+                                - **Edad**: Define el rango de edad de tu audiencia objetivo
+                                - **Género**: Selecciona el género o todos
+                                
+                                **Intereses:**
+                                - Ingresa palabras clave relacionadas con los intereses de tu audiencia
+                                - Meta usa estos intereses para encontrar usuarios relevantes
+                                
+                                **💾 Esta configuración se aplicará a todas las campañas que crees.**
+                                """)
+                        
+                        def save_targeting_config(countries, age_min, age_max, gender, interests):
+                            try:
+                                import json
+                                from pathlib import Path
+                                
+                                targeting_config = {
+                                    "countries": countries if countries else ["US"],
+                                    "age_min": int(age_min),
+                                    "age_max": int(age_max),
+                                    "gender": gender,
+                                    "interests": [i.strip() for i in interests.split(',') if i.strip()] if interests else []
+                                }
+                                
+                                # Guardar configuración
+                                config_dir = Path("./.docchat_memory") / "ads_worker"
+                                config_dir.mkdir(parents=True, exist_ok=True)
+                                config_file = config_dir / "targeting_config.json"
+                                
+                                with open(config_file, 'w', encoding='utf-8') as f:
+                                    json.dump(targeting_config, f, indent=2)
+                                
+                                output = "✅ Configuración de targeting guardada exitosamente\n\n"
+                                output += f"**Países**: {', '.join(countries) if countries else 'US (default)'}\n"
+                                output += f"**Edad**: {int(age_min)} - {int(age_max)} años\n"
+                                output += f"**Género**: {gender}\n"
+                                if interests:
+                                    output += f"**Intereses**: {interests}\n"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error guardando configuración: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        def load_targeting_config():
+                            try:
+                                import json
+                                from pathlib import Path
+                                
+                                config_file = Path("./.docchat_memory") / "ads_worker" / "targeting_config.json"
+                                if config_file.exists():
+                                    with open(config_file, 'r', encoding='utf-8') as f:
+                                        config = json.load(f)
+                                    return (
+                                        config.get("countries", ["US"]),
+                                        config.get("age_min", 18),
+                                        config.get("age_max", 65),
+                                        config.get("gender", "all"),
+                                        ", ".join(config.get("interests", []))
+                                    )
+                                return ["US"], 18, 65, "all", ""
+                            except:
+                                return ["US"], 18, 65, "all", ""
+                        
+                        aw_targeting_save_btn.click(
+                            fn=save_targeting_config,
+                            inputs=[aw_targeting_countries, aw_targeting_age_min, aw_targeting_age_max, aw_targeting_gender, aw_targeting_interests],
+                            outputs=[aw_targeting_status]
+                        )
+                        
+                        # Botón para cargar configuración guardada
+                        aw_targeting_load_btn = gr.Button("🔄 Cargar Configuración Guardada", variant="secondary")
+                        aw_targeting_load_btn.click(
+                            fn=load_targeting_config,
+                            outputs=[aw_targeting_countries, aw_targeting_age_min, aw_targeting_age_max, aw_targeting_gender, aw_targeting_interests]
+                        )
+                    
+                    # Tab 4: Lanzar Campaña
+                    with gr.Tab("🚀 Lanzar Campaña"):
+                        gr.Markdown("### 🚀 Crea y Lanza una Nueva Campaña Publicitaria")
+                        gr.Markdown("Usa assets procesados para crear una campaña en Meta Ads y/o Google Ads.")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                aw_campaign_name = gr.Textbox(label="📝 Nombre de Campaña", placeholder="Campaña de Verano 2025")
+                                aw_campaign_objective = gr.Dropdown(
+                                    label="🎯 Objetivo",
+                                    choices=[
+                                        ("Conversiones", "CONVERSIONS"),
+                                        ("Tráfico", "TRAFFIC"),
+                                        ("Engagement", "ENGAGEMENT"),
+                                        ("Awareness", "AWARENESS"),
+                                        ("Generación de Leads", "LEAD_GENERATION"),
+                                        ("Ventas", "SALES")
+                                    ],
+                                    value="CONVERSIONS"
+                                )
+                                aw_campaign_asset_ids = gr.Textbox(
+                                    label="🆔 Asset IDs (separados por coma)",
+                                    placeholder="asset_123, asset_456",
+                                    info="IDs de assets procesados previamente"
+                                )
+                                aw_campaign_budget_daily = gr.Number(label="💰 Presupuesto Diario (USD)", value=50.0, minimum=1.0)
+                                aw_campaign_platforms = gr.Radio(
+                                    label="🌐 Plataformas",
+                                    choices=[("Meta Ads", "meta"), ("Google Ads", "google"), ("Ambas", "both")],
+                                    value="both"
+                                )
+                                aw_campaign_optimization = gr.Dropdown(
+                                    label="🎯 Objetivo de Optimización",
+                                    choices=[("Conversiones", "conversions"), ("CTR", "ctr"), ("ROAS", "roas"), ("CPA", "cpa")],
+                                    value="conversions"
+                                )
+                                
+                                aw_launch_btn = gr.Button("🚀 Lanzar Campaña", variant="primary")
+                            
+                            with gr.Column():
+                                aw_launch_output = gr.Markdown(label="📊 Resultado")
+                        
+                        def launch_campaign_handler(name, objective, asset_ids_str, budget_daily, platforms, optimization, auto_activate):
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible"
+                            if not name or not asset_ids_str:
+                                return "❌ Nombre de campaña y Asset IDs son requeridos"
+                            try:
+                                # Cargar configuración de targeting
+                                import json
+                                from pathlib import Path
+                                
+                                targeting_config_file = Path("./.docchat_memory") / "ads_worker" / "targeting_config.json"
+                                targeting_dict = None
+                                
+                                if targeting_config_file.exists():
+                                    with open(targeting_config_file, 'r', encoding='utf-8') as f:
+                                        targeting_config = json.load(f)
+                                    
+                                    # Convertir a formato de Meta Ads API
+                                    gender_map = {"all": [1, 2], "male": [1], "female": [2]}
+                                    genders = gender_map.get(targeting_config.get("gender", "all"), [1, 2])
+                                    
+                                    targeting_dict = {
+                                        "age_min": targeting_config.get("age_min", 18),
+                                        "age_max": targeting_config.get("age_max", 65),
+                                        "genders": genders,
+                                        "geo_locations": {
+                                            "countries": targeting_config.get("countries", ["US"])
+                                        }
+                                    }
+                                    
+                                    # Agregar intereses si existen
+                                    interests_list = targeting_config.get("interests", [])
+                                    if interests_list:
+                                        targeting_dict["interests"] = interests_list
+                                
+                                asset_ids = [aid.strip() for aid in asset_ids_str.split(',') if aid.strip()]
+                                if not asset_ids:
+                                    return "❌ Ingresa al menos un Asset ID válido"
+                                
+                                campaign_request = CampaignRequest(
+                                    name=name,
+                                    objective=CampaignObjective(objective),
+                                    budget_daily=float(budget_daily),
+                                    asset_ids=asset_ids,
+                                    platforms=Platform(platforms),
+                                    optimization_goal=optimization,
+                                    auto_optimize=True,
+                                    auto_activate=bool(auto_activate),  # Nueva opción: publicación autónoma
+                                    target_audience=targeting_dict  # Usar targeting configurado
+                                )
+                                
+                                campaign = ads_worker.launch_campaign(campaign_request, user_id="gradio_user")
+                                
+                                output = f"## ✅ Campaña Lanzada Exitosamente\n\n"
+                                output += f"**🆔 Campaign ID**: `{campaign.campaign_id}`\n"
+                                output += f"**📝 Nombre**: {campaign.name}\n"
+                                status_emoji = "🟢" if campaign.status == "active" else "⏸️"
+                                output += f"**📊 Status**: {status_emoji} {campaign.status.upper()}\n"
+                                output += f"**💰 Presupuesto Diario**: ${campaign.budget_daily:.2f}\n"
+                                output += f"**🌐 Plataformas**: {', '.join(campaign.platforms)}\n"
+                                if campaign.status == "active":
+                                    output += f"\n✨ **Campaña publicada automáticamente y ACTIVA** - Ya está corriendo en las plataformas seleccionadas!\n"
+                                if campaign.platform_campaign_ids:
+                                    output += f"\n### 🔗 IDs en Plataformas:\n"
+                                    for platform, platform_id in campaign.platform_campaign_ids.items():
+                                        output += f"- **{platform.upper()}**: `{platform_id}`\n"
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error lanzando campaña: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        aw_launch_btn.click(
+                            fn=launch_campaign_handler,
+                            inputs=[aw_campaign_name, aw_campaign_objective, aw_campaign_asset_ids, aw_campaign_budget_daily, aw_campaign_platforms, aw_campaign_optimization, aw_campaign_auto_activate],
+                            outputs=[aw_launch_output]
+                        )
+                    
+                    # Tab 3: Optimizar Campaña
+                    with gr.Tab("🔄 Optimizar Campaña"):
+                        gr.Markdown("### 🔄 Optimiza una Campaña Existente")
+                        gr.Markdown("Mejora el performance de tus campañas basado en métricas reales.")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                aw_optimize_campaign_id = gr.Textbox(label="🆔 Campaign ID", placeholder="Ingresa el ID de la campaña")
+                                aw_optimize_btn = gr.Button("🔄 Optimizar Campaña", variant="primary")
+                            
+                            with gr.Column():
+                                aw_optimize_output = gr.Markdown(label="📊 Resultado de Optimización")
+                        
+                        def optimize_campaign_handler(campaign_id):
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible"
+                            if not campaign_id or not campaign_id.strip():
+                                return "⚠️ Ingresa un Campaign ID válido"
+                            try:
+                                result = ads_worker.optimize_campaign(campaign_id.strip())
+                                
+                                output = f"## 🔄 Optimización Completada\n\n"
+                                output += f"**🆔 Optimization ID**: `{result.optimization_id}`\n"
+                                output += f"**📢 Campaign ID**: `{result.campaign_id}`\n\n"
+                                output += f"### ⚡ Acciones Tomadas:\n"
+                                output += f"- **Ads Pausados**: {len(result.ads_paused)}\n"
+                                if result.ads_paused:
+                                    output += f"  - IDs: {', '.join(result.ads_paused[:5])}\n"
+                                output += f"- **Ads Escalados**: {len(result.ads_scaled)}\n"
+                                if result.ads_scaled:
+                                    output += f"  - IDs: {', '.join(result.ads_scaled[:5])}\n"
+                                if result.budget_reallocated:
+                                    output += f"\n### 💰 Reasignación de Presupuesto:\n"
+                                    for ad_id, new_budget in list(result.budget_reallocated.items())[:5]:
+                                        output += f"- **{ad_id}**: ${new_budget:.2f}\n"
+                                if result.recommendations:
+                                    output += f"\n### 💡 Recomendaciones:\n"
+                                    for rec in result.recommendations[:5]:
+                                        output += f"- {rec}\n"
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error optimizando campaña: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        aw_optimize_btn.click(
+                            fn=optimize_campaign_handler,
+                            inputs=[aw_optimize_campaign_id],
+                            outputs=[aw_optimize_output]
+                        )
+                    
+                    # Tab 4: Ver Métricas
+                    with gr.Tab("📊 Ver Métricas"):
+                        gr.Markdown("### 📊 Métricas de Performance de Campaña")
+                        gr.Markdown("Visualiza métricas de tus campañas publicitarias.")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                aw_metrics_campaign_id = gr.Textbox(label="🆔 Campaign ID", placeholder="Ingresa el ID de la campaña")
+                                aw_metrics_hours = gr.Number(label="⏰ Horas hacia atrás", value=24, minimum=1, maximum=168)
+                                aw_metrics_btn = gr.Button("📊 Obtener Métricas", variant="primary")
+                            
+                            with gr.Column():
+                                aw_metrics_output = gr.Markdown(label="📊 Métricas")
+                        
+                        def get_campaign_metrics_handler(campaign_id, hours):
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible"
+                            if not campaign_id or not campaign_id.strip():
+                                return "⚠️ Ingresa un Campaign ID válido"
+                            try:
+                                metrics_list = ads_worker.get_campaign_metrics(campaign_id.strip(), hours=int(hours))
+                                
+                                if not metrics_list:
+                                    return f"⚠️ No se encontraron métricas para la campaña {campaign_id} en las últimas {hours} horas"
+                                
+                                output = f"## 📊 Métricas - Últimas {hours} horas\n\n"
+                                
+                                # Agregar métricas
+                                total_impressions = sum(m.get('impressions', 0) for m in metrics_list)
+                                total_clicks = sum(m.get('clicks', 0) for m in metrics_list)
+                                total_conversions = sum(m.get('conversions', 0) for m in metrics_list)
+                                total_spend = sum(m.get('spend', 0.0) for m in metrics_list)
+                                
+                                avg_ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
+                                avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0
+                                avg_cpa = (total_spend / total_conversions) if total_conversions > 0 else 0
+                                
+                                output += f"### 📈 Resumen:\n"
+                                output += f"- **Impresiones**: {total_impressions:,}\n"
+                                output += f"- **Clics**: {total_clicks:,}\n"
+                                output += f"- **Conversiones**: {total_conversions:,}\n"
+                                output += f"- **Gasto**: ${total_spend:.2f}\n"
+                                output += f"- **CTR**: {avg_ctr:.2f}%\n"
+                                output += f"- **CPC**: ${avg_cpc:.2f}\n"
+                                output += f"- **CPA**: ${avg_cpa:.2f}\n"
+                                
+                                if len(metrics_list) > 1:
+                                    output += f"\n### 📊 Métricas Detalladas ({len(metrics_list)} registros):\n"
+                                    for i, m in enumerate(metrics_list[:10], 1):
+                                        output += f"\n**Registro {i}** ({m.get('timestamp', 'N/A')}):\n"
+                                        output += f"- Impresiones: {m.get('impressions', 0):,}, Clics: {m.get('clicks', 0):,}, Conversiones: {m.get('conversions', 0):,}\n"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error obteniendo métricas: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        aw_metrics_btn.click(
+                            fn=get_campaign_metrics_handler,
+                            inputs=[aw_metrics_campaign_id, aw_metrics_hours],
+                            outputs=[aw_metrics_output]
+                        )
+                    
+                    # Tab 5: Listar Campañas - Funcionalidad crítica
+                    with gr.Tab("📋 Mis Campañas"):
+                        gr.Markdown("### 📋 Lista de Todas tus Campañas")
+                        gr.Markdown("Visualiza y gestiona todas tus campañas publicitarias.")
+                        
+                        aw_list_campaigns_user_id = gr.Textbox(
+                            label="👤 User ID (opcional)",
+                            placeholder="Dejar vacío para ver todas las campañas",
+                            value="gradio_user"
+                        )
+                        aw_list_campaigns_limit = gr.Slider(
+                            label="Límite de resultados",
+                            minimum=10,
+                            maximum=500,
+                            value=50,
+                            step=10
+                        )
+                        aw_list_campaigns_btn = gr.Button("🔄 Actualizar Lista", variant="primary")
+                        aw_list_campaigns_output = gr.Markdown(label="📋 Campañas")
+                        
+                        def list_campaigns_handler(user_id, limit):
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible"
+                            try:
+                                user_id_filter = user_id.strip() if user_id and user_id.strip() else None
+                                campaigns = ads_worker.list_campaigns(user_id=user_id_filter or "gradio_user", limit=int(limit))
+                                
+                                if not campaigns:
+                                    return "📭 No se encontraron campañas. Crea tu primera campaña en el tab '🚀 Lanzar Campaña'."
+                                
+                                output = f"## 📋 Campañas ({len(campaigns)})\n\n"
+                                
+                                for campaign in campaigns:
+                                    status_emoji = {
+                                        "active": "🟢",
+                                        "paused": "⏸️",
+                                        "completed": "✅",
+                                        "draft": "📝"
+                                    }.get(campaign.get('status', 'draft'), "📋")
+                                    
+                                    output += f"### {status_emoji} {campaign.get('name', 'Sin nombre')}\n"
+                                    output += f"- **🆔 Campaign ID**: `{campaign.get('campaign_id')}`\n"
+                                    output += f"- **📊 Status**: {campaign.get('status', 'N/A')}\n"
+                                    output += f"- **🎯 Objetivo**: {campaign.get('objective', 'N/A')}\n"
+                                    output += f"- **💰 Presupuesto Diario**: ${campaign.get('budget_daily', 0):.2f}\n"
+                                    output += f"- **💸 Gasto**: ${campaign.get('budget_spent', 0):.2f}\n"
+                                    output += f"- **🌐 Plataformas**: {campaign.get('platforms', 'N/A')}\n"
+                                    if campaign.get('created_at'):
+                                        output += f"- **📅 Creada**: {campaign.get('created_at')[:10]}\n"
+                                    if campaign.get('platform_campaign_ids'):
+                                        output += f"- **🔗 IDs Plataformas**: {', '.join([f'{k}={v[:20]}...' for k, v in list(campaign.get('platform_campaign_ids', {}).items())[:2]])}\n"
+                                    output += "\n"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error listando campañas: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        aw_list_campaigns_btn.click(
+                            fn=list_campaigns_handler,
+                            inputs=[aw_list_campaigns_user_id, aw_list_campaigns_limit],
+                            outputs=[aw_list_campaigns_output]
+                        )
+                        # Cargar lista inicial
+                        aw_list_campaigns_output.value = list_campaigns_handler("gradio_user", 50)
+                    
+                    # Tab 6: Listar Assets - Funcionalidad crítica
+                    with gr.Tab("📦 Mis Assets"):
+                        gr.Markdown("### 📦 Assets Procesados")
+                        gr.Markdown("Visualiza todos los assets que has procesado previamente.")
+                        
+                        aw_list_assets_user_id = gr.Textbox(
+                            label="👤 User ID (opcional)",
+                            placeholder="Dejar vacío para ver todos los assets",
+                            value="gradio_user"
+                        )
+                        aw_list_assets_type = gr.Dropdown(
+                            label="Tipo de Asset (filtro opcional)",
+                            choices=[("Todos", None), ("Imagen", "image"), ("Video", "video"), ("Texto", "text")],
+                            value=None
+                        )
+                        aw_list_assets_limit = gr.Slider(
+                            label="Límite de resultados",
+                            minimum=10,
+                            maximum=500,
+                            value=50,
+                            step=10
+                        )
+                        aw_list_assets_btn = gr.Button("🔄 Actualizar Lista", variant="primary")
+                        aw_list_assets_output = gr.Markdown(label="📦 Assets")
+                        
+                        def list_assets_handler(user_id, asset_type, limit):
+                            if not ads_worker or not ads_worker.agent:
+                                return "❌ ADS WORKER no está disponible"
+                            try:
+                                user_id_filter = user_id.strip() if user_id and user_id.strip() else None
+                                asset_type_filter = asset_type if asset_type != "None" else None
+                                assets = ads_worker.list_assets(
+                                    user_id=user_id_filter or "gradio_user",
+                                    asset_type=asset_type_filter,
+                                    limit=int(limit)
+                                )
+                                
+                                if not assets:
+                                    return "📭 No se encontraron assets. Procesa tus primeros assets en el tab '📦 Procesar Assets'."
+                                
+                                output = f"## 📦 Assets ({len(assets)})\n\n"
+                                
+                                for asset in assets:
+                                    type_emoji = {
+                                        "image": "🖼️",
+                                        "video": "🎥",
+                                        "text": "📝"
+                                    }.get(asset.get('asset_type', ''), "📦")
+                                    
+                                    output += f"### {type_emoji} Asset: `{asset.get('asset_id')}`\n"
+                                    output += f"- **Tipo**: {asset.get('asset_type', 'N/A')}\n"
+                                    if asset.get('file_path'):
+                                        output += f"- **Archivo**: {Path(asset.get('file_path', '')).name}\n"
+                                    if asset.get('file_size'):
+                                        size_mb = asset.get('file_size', 0) / (1024 * 1024)
+                                        output += f"- **Tamaño**: {size_mb:.2f} MB\n"
+                                    if asset.get('analysis_result'):
+                                        analysis = asset.get('analysis_result', {})
+                                        if analysis.get('labels'):
+                                            output += f"- **Labels**: {', '.join(analysis.get('labels', [])[:5])}\n"
+                                        if analysis.get('keywords'):
+                                            output += f"- **Keywords**: {', '.join(analysis.get('keywords', [])[:5])}\n"
+                                    if asset.get('created_at'):
+                                        output += f"- **📅 Procesado**: {asset.get('created_at')[:10]}\n"
+                                    output += "\n"
+                                
+                                return output
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error listando assets: {str(e)}\n\n```\n{traceback.format_exc()}\n```"
+                        
+                        aw_list_assets_btn.click(
+                            fn=list_assets_handler,
+                            inputs=[aw_list_assets_user_id, aw_list_assets_type, aw_list_assets_limit],
+                            outputs=[aw_list_assets_output]
+                        )
+                        # Cargar lista inicial
+                        aw_list_assets_output.value = list_assets_handler("gradio_user", None, 50)
 
         # Tab: 🤖 OPTIMUS PRIME - Clon de Alien Mode
         with gr.Tab("🤖 OPTIMUS PRIME"):
@@ -27732,9 +29041,9 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                         
                         ads_opt_target_audience = gr.JSON(
                             label="Audiencia Objetivo (opcional)",
-                            value={},
-                            info='Ejemplo: {"age_range": "25-45", "interests": ["technology", "business"]}'
+                            value={}
                         )
+                        gr.Markdown('*💡 Ejemplo: {"age_range": "25-45", "interests": ["technology", "business"]}*')
                         
                         ads_opt_generate_btn = gr.Button("🎨 Generar Variaciones", variant="primary")
                         ads_opt_variations_output = gr.JSON(label="Variaciones Generadas")
@@ -27907,9 +29216,9 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                         
                         ads_opt_target_audience_launch = gr.JSON(
                             label="Audiencia Objetivo",
-                            value={},
-                            info='Ejemplo: {"age_range": "25-45", "interests": ["technology"]}'
+                            value={}
                         )
+                        gr.Markdown('*💡 Ejemplo: {"age_range": "25-45", "interests": ["technology"]}*')
                         
                         ads_opt_launch_btn = gr.Button("🚀 Crear y Lanzar Campaña", variant="primary")
                         ads_opt_launch_output = gr.JSON(label="Resultado de Lanzamiento")

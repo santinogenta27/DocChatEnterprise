@@ -26,3 +26,4 @@ class CartTool:
     def clear_cart(self, session_id: str) -> Cart:
         return self.cart_manager.clear_cart(session_id=session_id)
 
+

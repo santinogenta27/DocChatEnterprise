@@ -50,14 +50,28 @@ class AdsWorkerMode:
         # Get API keys from config or environment
         openai_api_key = os.getenv("OPENAI_API_KEY") or getattr(config, "openai_api_key", None)
         
-        # Meta credentials
-        meta_access_token = os.getenv("META_ACCESS_TOKEN")
-        meta_app_id = os.getenv("META_APP_ID")
-        meta_app_secret = os.getenv("META_APP_SECRET")
-        meta_ad_account_id = os.getenv("META_AD_ACCOUNT_ID")
+        # Meta credentials - Try credentials manager first, then environment
+        from .credentials_manager import AdsCredentialsManager
+        creds_manager = AdsCredentialsManager()
+        meta_creds = creds_manager.load_meta_credentials()
         
-        # Google credentials
-        google_customer_id = os.getenv("GOOGLE_ADS_CUSTOMER_ID")
+        if meta_creds:
+            meta_access_token = meta_creds.get("access_token")
+            meta_app_id = meta_creds.get("app_id")
+            meta_app_secret = meta_creds.get("app_secret")
+            meta_ad_account_id = meta_creds.get("ad_account_id")
+        else:
+            meta_access_token = os.getenv("META_ACCESS_TOKEN")
+            meta_app_id = os.getenv("META_APP_ID")
+            meta_app_secret = os.getenv("META_APP_SECRET")
+            meta_ad_account_id = os.getenv("META_AD_ACCOUNT_ID")
+        
+        # Google credentials - Try credentials manager first, then environment
+        google_creds = creds_manager.load_google_credentials()
+        if google_creds:
+            google_customer_id = google_creds.get("customer_id")
+        else:
+            google_customer_id = os.getenv("GOOGLE_ADS_CUSTOMER_ID")
         google_config_path = os.getenv("GOOGLE_ADS_CONFIG_PATH", "google-ads.yaml")
         
         # Storage path
@@ -106,7 +120,8 @@ class AdsWorkerMode:
     def process_assets(
         self,
         assets: List[AssetUpload],
-        user_id: str = "default"
+        user_id: str = "default",
+        max_assets: int = 50
     ) -> List[Dict[str, Any]]:
         """
         Process user-uploaded assets
@@ -114,12 +129,25 @@ class AdsWorkerMode:
         Args:
             assets: List of assets to process
             user_id: User ID for tracking
+            max_assets: Maximum number of assets to process (default: 50)
             
         Returns:
             List of analysis results
         """
         if not self.agent:
             raise ValueError("ADS WORKER agent not initialized")
+        
+        # Validación: límite de assets
+        if len(assets) > max_assets:
+            raise ValueError(f"Demasiados assets. Máximo permitido: {max_assets}. Recibidos: {len(assets)}")
+        
+        # Validación: tamaño de archivos (max 100MB por archivo)
+        max_file_size = 100 * 1024 * 1024  # 100MB
+        for asset in assets:
+            if asset.file_path and os.path.exists(asset.file_path):
+                file_size = os.path.getsize(asset.file_path)
+                if file_size > max_file_size:
+                    raise ValueError(f"Archivo demasiado grande: {asset.file_path} ({file_size / (1024*1024):.2f}MB). Máximo: 100MB")
         
         logger.info(f"📦 Procesando {len(assets)} assets para usuario: {user_id}")
         
@@ -174,6 +202,25 @@ class AdsWorkerMode:
         """
         if not self.agent:
             raise ValueError("ADS WORKER agent not initialized")
+        
+        # Validaciones básicas
+        if not campaign_request.name or not campaign_request.name.strip():
+            raise ValueError("Nombre de campaña es requerido")
+        
+        if campaign_request.budget_daily <= 0:
+            raise ValueError("Presupuesto diario debe ser mayor a 0")
+        
+        if campaign_request.budget_daily > 100000:
+            raise ValueError("Presupuesto diario no puede exceder $100,000")
+        
+        if not campaign_request.asset_ids:
+            raise ValueError("Se requiere al menos un asset_id")
+        
+        if len(campaign_request.asset_ids) > 100:
+            raise ValueError("Demasiados assets. Máximo: 100")
+        
+        # Sanitizar nombre (básico)
+        campaign_request.name = campaign_request.name.strip()[:200]  # Limitar longitud
         
         logger.info(f"🚀 Lanzando campaña: {campaign_request.name} para usuario: {user_id}")
         
@@ -267,11 +314,48 @@ class AdsWorkerMode:
         """
         return self.db.get_campaign_metrics(campaign_id, hours)
     
+    def list_campaigns(
+        self,
+        user_id: str = "default",
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        List all campaigns for a user
+        
+        Args:
+            user_id: User ID
+            limit: Maximum number of campaigns to return
+            
+        Returns:
+            List of campaign dictionaries
+        """
+        return self.db.list_campaigns(user_id=user_id, limit=limit)
+    
+    def list_assets(
+        self,
+        user_id: str = "default",
+        asset_type: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        List all assets for a user
+        
+        Args:
+            user_id: User ID
+            asset_type: Optional filter by asset type (image, video, text)
+            limit: Maximum number of assets to return
+            
+        Returns:
+            List of asset dictionaries
+        """
+        return self.db.list_assets(user_id=user_id, asset_type=asset_type, limit=limit)
+    
     def get_api_router(self):
         """Get FastAPI router for integration"""
         # Set global mode instance for API
         global mode_instance
         mode_instance = self
         return router
+
 
 

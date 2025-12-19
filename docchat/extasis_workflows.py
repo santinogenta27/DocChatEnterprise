@@ -23,7 +23,10 @@ try:
     CREWAI_AVAILABLE = True
 except ImportError:
     CREWAI_AVAILABLE = False
-    print("⚠️ CrewAI no está instalado. Instala con: pip install crewai")
+    try:
+        print("CrewAI no esta instalado. Instala con: pip install crewai")
+    except UnicodeEncodeError:
+        pass  # Ignorar error de codificacion en Windows
 
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic

@@ -158,3 +158,4 @@ class BusinessAIMode:
 
         return gr.Interface(fn=_chat_fn, inputs=["text", "text"], outputs="text", title="Business AI Omnicanal")
 
+

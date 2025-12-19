@@ -29,6 +29,17 @@ import os
 import sys
 from pathlib import Path
 
+# FIX PARA WINDOWS: Configurar codificación UTF-8 para evitar errores con emojis
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except AttributeError:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+
 # Agregar el directorio raíz al path
 sys.path.insert(0, str(Path(__file__).parent))
 

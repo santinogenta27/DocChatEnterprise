@@ -74,3 +74,4 @@ class TopAdsLogger:
         self.logger.critical(f"{message} | {kwargs}")
 
 
+

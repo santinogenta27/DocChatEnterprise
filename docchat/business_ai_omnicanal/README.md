@@ -66,3 +66,4 @@ Este modo es **independiente** de `PrimeAgentsMode`, `COMMERCE_AGENT` y `custome
 pero reutiliza internamente módulos de comercio (catálogo, carrito, pagos) y deja hooks/listos
 para conectar con sistemas de soporte y pedidos externos.
 
+

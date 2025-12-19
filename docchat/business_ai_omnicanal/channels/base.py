@@ -43,3 +43,4 @@ class BaseChannelAdapter:
             payload.update(extra)
         return payload
 
+

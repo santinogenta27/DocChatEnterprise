@@ -67,3 +67,5 @@ class CampaignMetrics:
     conversions: int
     spend: float
     timestamp: str
+
+

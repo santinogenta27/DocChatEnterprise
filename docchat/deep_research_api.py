@@ -22,6 +22,7 @@ NOTA: Esta versión es deliberadamente ligera:
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File

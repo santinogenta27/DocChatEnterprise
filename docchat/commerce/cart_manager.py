@@ -103,10 +103,12 @@ class CartManager:
                 session_id TEXT NOT NULL,
                 items TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                INDEX idx_session (session_id)
+                updated_at TEXT NOT NULL
             )
         """)
+        
+        # Crear índice por separado (SQLite no soporta INDEX en CREATE TABLE)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_session ON carts(session_id)")
         
         conn.commit()
         conn.close()
@@ -301,5 +303,6 @@ class CartManager:
         
         conn.commit()
         conn.close()
+
 
 

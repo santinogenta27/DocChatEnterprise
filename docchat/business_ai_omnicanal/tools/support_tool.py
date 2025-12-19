@@ -37,3 +37,4 @@ class SupportTool:
     def list_tickets_for_session(self, session_id: str) -> List[Dict[str, Any]]:
         return [t for t in self._tickets.values() if t.get("session_id") == session_id]
 
+

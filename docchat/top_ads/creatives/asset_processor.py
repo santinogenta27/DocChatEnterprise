@@ -5,6 +5,7 @@ Asset Processor - Procesamiento multimodal de assets del usuario
 
 from __future__ import annotations
 
+import os
 import base64
 from pathlib import Path
 from typing import List, Dict, Optional, Any
@@ -493,5 +494,6 @@ Responde en formato JSON."""
         except Exception as e:
             self.logger.error(f"Error en smart crop: {e}")
             return image_path
+
 
 

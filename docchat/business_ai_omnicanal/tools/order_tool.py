@@ -33,3 +33,4 @@ class OrderTool:
     def list_orders_for_session(self, session_id: str) -> List[Dict[str, Any]]:
         return [o for o in self._orders.values() if o.get("session_id") == session_id]
 
+

@@ -37,3 +37,4 @@ class CatalogTool:
     def suggest_alternatives(self, product_id: str, limit: int = 5) -> List[ProductSearchResult]:
         return self.catalog.get_related_products(product_id=product_id, limit=limit)
 
+

@@ -169,6 +169,10 @@ class TopAdsMode:
         self.active_campaigns: Dict[str, Dict[str, Any]] = {}
         self.campaign_history: List[Dict[str, Any]] = []
         
+        # Cache de métricas (evita llamadas repetidas a APIs)
+        self.metrics_cache: Dict[str, Dict[str, Any]] = {}  # {campaign_id: {metrics, timestamp}}
+        self.metrics_cache_ttl: int = 300  # 5 minutos
+        
         self.logger.info("Top Ads Mode inicializado correctamente")
     
     def create_campaign(
@@ -312,14 +316,29 @@ class TopAdsMode:
                     
                     results.append(result)
                     
-                    # Guardar campaña activa
+                    # Guardar campaña activa con información completa
                     self.active_campaigns[result.campaign_id] = {
+                        "campaign_id": result.campaign_id,
+                        "name": user_input.campaign_name or f"Campaign {result.campaign_id[:8]}",
                         "platform": platform,
                         "created_at": result.created_at,
                         "status": result.status,
+                        "objective": user_input.business_objective.value,
+                        "budget": user_input.budget,
                         "user_input": asdict(user_input),
                         "structure": campaign_structure
                     }
+                    
+                    # Agregar al historial también
+                    self.campaign_history.append({
+                        "campaign_id": result.campaign_id,
+                        "name": user_input.campaign_name or f"Campaign {result.campaign_id[:8]}",
+                        "platform": platform,
+                        "status": result.status,
+                        "objective": user_input.business_objective.value,
+                        "budget": user_input.budget,
+                        "created_at": result.created_at
+                    })
                     
                 except Exception as e:
                     self.logger.error(f"Error publicando en {platform}: {e}")
@@ -495,28 +514,76 @@ class TopAdsMode:
         self,
         campaign_id: str,
         platform: str,
-        date_range: Optional[Tuple[str, str]] = None
+        date_range: Optional[Tuple[str, str]] = None,
+        use_cache: bool = True
     ) -> CampaignMetrics:
-        """Obtiene métricas de una campaña."""
-        metrics = self.metrics_collector.collect_campaign_metrics(
-            campaign_id=campaign_id,
-            platform=platform,
-            date_range=date_range
-        )
+        """
+        Obtiene métricas de una campaña con cache para evitar llamadas repetidas.
         
-        return CampaignMetrics(
-            campaign_id=campaign_id,
-            platform=platform,
-            impressions=metrics.get("impressions", 0),
-            clicks=metrics.get("clicks", 0),
-            ctr=metrics.get("ctr", 0.0),
-            cpc=metrics.get("cpc", 0.0),
-            cpa=metrics.get("cpa", 0.0),
-            roas=metrics.get("roas", 0.0),
-            conversions=metrics.get("conversions", 0),
-            spend=metrics.get("spend", 0.0),
-            timestamp=datetime.now().isoformat()
-        )
+        Args:
+            campaign_id: ID de la campaña
+            platform: Plataforma (meta, tiktok)
+            date_range: Rango de fechas opcional
+            use_cache: Si usar cache (default: True)
+        """
+        cache_key = f"{campaign_id}_{platform}"
+        
+        # Verificar cache
+        if use_cache and cache_key in self.metrics_cache:
+            cached = self.metrics_cache[cache_key]
+            cache_time = cached.get("timestamp", 0)
+            current_time = time.time()
+            
+            # Si el cache es válido (menos de TTL segundos), retornar cacheado
+            if current_time - cache_time < self.metrics_cache_ttl:
+                self.logger.info(f"📊 Métricas de {campaign_id} desde cache")
+                return cached.get("metrics")
+        
+        # Obtener métricas desde API
+        try:
+            metrics = self.metrics_collector.collect_campaign_metrics(
+                campaign_id=campaign_id,
+                platform=platform,
+                date_range=date_range
+            )
+            
+            campaign_metrics = CampaignMetrics(
+                campaign_id=campaign_id,
+                platform=platform,
+                impressions=metrics.get("impressions", 0),
+                clicks=metrics.get("clicks", 0),
+                ctr=metrics.get("ctr", 0.0),
+                cpc=metrics.get("cpc", 0.0),
+                cpa=metrics.get("cpa", 0.0),
+                roas=metrics.get("roas", 0.0),
+                conversions=metrics.get("conversions", 0),
+                spend=metrics.get("spend", 0.0),
+                timestamp=datetime.now().isoformat()
+            )
+            
+            # Guardar en cache
+            self.metrics_cache[cache_key] = {
+                "metrics": campaign_metrics,
+                "timestamp": time.time()
+            }
+            
+            return campaign_metrics
+        except Exception as e:
+            self.logger.error(f"Error obteniendo métricas: {e}")
+            # Retornar métricas vacías en caso de error
+            return CampaignMetrics(
+                campaign_id=campaign_id,
+                platform=platform,
+                impressions=0,
+                clicks=0,
+                ctr=0.0,
+                cpc=0.0,
+                cpa=0.0,
+                roas=0.0,
+                conversions=0,
+                spend=0.0,
+                timestamp=datetime.now().isoformat()
+            )
     
     def pause_campaign(
         self,
@@ -597,6 +664,51 @@ class TopAdsMode:
                 "average_score": dco_stats.get("average_score", 0.0)
             }
         }
+    
+    def list_campaigns(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Lista todas las campañas, opcionalmente filtradas por status.
+        
+        Args:
+            status: Filtrar por status ("active", "paused", None para todas)
+        
+        Returns:
+            Lista de diccionarios con información de campañas
+        """
+        campaigns = []
+        
+        # Agregar campañas activas
+        for campaign_id, campaign_data in self.active_campaigns.items():
+            if status is None or campaign_data.get("status", "").lower() == status.lower():
+                campaigns.append({
+                    "campaign_id": campaign_id,
+                    "name": campaign_data.get("name", "Sin nombre"),
+                    "status": campaign_data.get("status", "active"),
+                    "platform": campaign_data.get("platform", "unknown"),
+                    "created_at": campaign_data.get("created_at"),
+                    "budget": campaign_data.get("budget", 0.0),
+                    "objective": campaign_data.get("objective", "unknown")
+                })
+        
+        # Agregar campañas del historial que no estén activas
+        for campaign in self.campaign_history:
+            campaign_id = campaign.get("campaign_id") or campaign.get("id")
+            if campaign_id and campaign_id not in self.active_campaigns:
+                if status is None or campaign.get("status", "").lower() == status.lower():
+                    campaigns.append({
+                        "campaign_id": campaign_id,
+                        "name": campaign.get("name", "Sin nombre"),
+                        "status": campaign.get("status", "completed"),
+                        "platform": campaign.get("platform", "unknown"),
+                        "created_at": campaign.get("created_at"),
+                        "budget": campaign.get("budget", 0.0),
+                        "objective": campaign.get("objective", "unknown")
+                    })
+        
+        # Ordenar por fecha de creación (más recientes primero)
+        campaigns.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        return campaigns
 
 
 # Funciones de conveniencia para Gradio

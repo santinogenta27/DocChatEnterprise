@@ -423,3 +423,4 @@ Responde en formato JSON:
             ) / max(len(self.combination_history), 1)
         }
 
+

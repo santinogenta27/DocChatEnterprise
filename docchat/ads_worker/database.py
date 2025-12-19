@@ -344,6 +344,83 @@ class DatabaseManager:
             print(f"⚠️ Error obteniendo campaña: {e}")
             return None
     
+    def list_campaigns(self, user_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """List campaigns from database, optionally filtered by user_id"""
+        if self.use_fallback or not SQLALCHEMY_AVAILABLE:
+            return []
+        
+        try:
+            session = self.get_session()
+            if not session:
+                return []
+            
+            query = session.query(CampaignDB)
+            if user_id:
+                query = query.filter(CampaignDB.user_id == user_id)
+            
+            campaigns = query.order_by(CampaignDB.created_at.desc()).limit(limit).all()
+            
+            results = []
+            for campaign in campaigns:
+                results.append({
+                    "campaign_id": campaign.campaign_id,
+                    "user_id": campaign.user_id,
+                    "name": campaign.name,
+                    "objective": campaign.objective,
+                    "budget_daily": campaign.budget_daily,
+                    "budget_spent": campaign.budget_spent or 0.0,
+                    "platforms": campaign.platforms,
+                    "status": campaign.status,
+                    "platform_campaign_ids": campaign.platform_campaign_ids or {},
+                    "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+                    "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+                })
+            
+            session.close()
+            return results
+        except Exception as e:
+            print(f"⚠️ Error listando campañas: {e}")
+            return []
+    
+    def list_assets(self, user_id: Optional[str] = None, asset_type: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """List assets from database, optionally filtered by user_id and asset_type"""
+        if self.use_fallback or not SQLALCHEMY_AVAILABLE:
+            return []
+        
+        try:
+            session = self.get_session()
+            if not session:
+                return []
+            
+            query = session.query(AssetDB)
+            if user_id:
+                query = query.filter(AssetDB.user_id == user_id)
+            if asset_type:
+                query = query.filter(AssetDB.asset_type == asset_type)
+            
+            assets = query.order_by(AssetDB.created_at.desc()).limit(limit).all()
+            
+            results = []
+            for asset in assets:
+                results.append({
+                    "asset_id": asset.asset_id,
+                    "user_id": asset.user_id,
+                    "asset_type": asset.asset_type,
+                    "file_path": asset.file_path,
+                    "file_url": asset.file_url,
+                    "file_size": asset.file_size,
+                    "mime_type": asset.mime_type,
+                    "analysis_result": asset.analysis_result,
+                    "metadata": asset.extra_metadata or {},
+                    "created_at": asset.created_at.isoformat() if asset.created_at else None
+                })
+            
+            session.close()
+            return results
+        except Exception as e:
+            print(f"⚠️ Error listando assets: {e}")
+            return []
+    
     def save_metrics(
         self,
         ad_id: str,

@@ -120,12 +120,14 @@ class ProductCatalog:
                 in_stock INTEGER DEFAULT 1,
                 metadata TEXT,
                 updated_at TEXT NOT NULL,
-                shopify_id TEXT,
-                INDEX idx_title (title),
-                INDEX idx_type (product_type),
-                INDEX idx_vendor (vendor)
+                shopify_id TEXT
             )
         """)
+        
+        # Crear índices por separado (SQLite no soporta INDEX en CREATE TABLE)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_title ON products(title)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_type ON products(product_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_vendor ON products(vendor)")
         
         conn.commit()
         conn.close()
@@ -425,5 +427,6 @@ class ProductCatalog:
         # Filtrar el producto actual
         related = [p for p in result.products if p.id != product_id]
         return related[:limit]
+
 
 

@@ -393,13 +393,16 @@ Always think step by step and explain your decisions."""),
         # Meta campaign
         if campaign_request.platforms.value in ["meta", "both"] and self.meta_service:
             try:
+                # Activar automáticamente si auto_activate=True (publicación autónoma)
+                initial_status = "ACTIVE" if campaign_request.auto_activate else "PAUSED"
                 meta_campaign = self.meta_service.create_campaign(
                     campaign_request.name,
                     campaign_request.objective.value,
-                    "PAUSED"  # Start paused, activate after setup
+                    initial_status  # ACTIVE para publicación autónoma
                 )
                 platform_campaign_ids["meta"] = meta_campaign["campaign_id"]
-                logger.info(f"   ✅ Campaña Meta creada: {meta_campaign['campaign_id']}")
+                status_msg = "🟢 ACTIVA" if campaign_request.auto_activate else "⏸️ PAUSADA"
+                logger.info(f"   ✅ Campaña Meta creada: {meta_campaign['campaign_id']} ({status_msg})")
             except Exception as e:
                 logger.error(f"   ⚠️ Error creando Meta campaign: {e}")
         
@@ -473,10 +476,15 @@ Always think step by step and explain your decisions."""),
                     
                     # 2. Create ad set (one per campaign for simplicity)
                     ad_set_name = f"{campaign_request.name} - Ad Set 1"
+                    
+                    # Usar targeting del CampaignRequest si está disponible
+                    targeting = campaign_request.target_audience
+                    
                     ad_set = self.meta_service.create_ad_set(
                         campaign_id=platform_campaign_ids["meta"],
                         name=ad_set_name,
                         daily_budget=campaign_request.budget_daily,
+                        targeting=targeting,  # Pasar targeting configurado
                         optimization_goal=campaign_request.objective.value
                     )
                     
@@ -508,7 +516,7 @@ Always think step by step and explain your decisions."""),
                         "platform": "meta",
                         "ad_id": ad["ad_id"],
                         "creative_id": copy.creative_id,
-                        "status": "paused"
+                        "status": "active" if campaign_request.auto_activate else "paused"
                     })
                     ads_created += 1
                     logger.info(f"   ✅ Ad Meta creado: {ad['ad_id']}")
@@ -558,7 +566,7 @@ Always think step by step and explain your decisions."""),
         return CampaignResponse(
             campaign_id=campaign_id,
             name=campaign_request.name,
-            status="active",
+            status="active" if campaign_request.auto_activate else "paused",
             platforms=[p for p in ["meta", "google"] if p in platform_campaign_ids],
             budget_daily=campaign_request.budget_daily,
             budget_remaining=campaign_request.budget_daily * 30,  # Estimate
