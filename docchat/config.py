@@ -68,6 +68,31 @@ class AppConfig:
     # n8n Integration Settings
     n8n_webhook_url: str = os.getenv("N8N_WEBHOOK_URL", "")  # URL del webhook de n8n para recibir eventos
     n8n_enabled: bool = os.getenv("DOCCHAT_N8N_ENABLED", "false").lower() == "true"
+    
+    # Chatbot Personalization (Business AI Omnicanal)
+    chatbot_tone: str = os.getenv("DOCCHAT_CHATBOT_TONE", "friendly")  # friendly, professional, casual, formal, enthusiastic
+    chatbot_personality: str = os.getenv("DOCCHAT_CHATBOT_PERSONALITY", "")  # Descripción libre de personalidad
+    chatbot_custom_instructions: str = os.getenv("DOCCHAT_CHATBOT_CUSTOM_INSTRUCTIONS", "")  # Instrucciones personalizadas adicionales
+    
+    # RAG Configuration
+    chatbot_rag_enabled: bool = os.getenv("DOCCHAT_CHATBOT_RAG_ENABLED", "false").lower() == "true"
+    chatbot_documents_dir: str = os.getenv("DOCCHAT_CHATBOT_DOCUMENTS_DIR", "")  # Directorio de documentos para RAG
+    
+    # Lead Scoring Configuration
+    chatbot_lead_scoring_enabled: bool = os.getenv("DOCCHAT_CHATBOT_LEAD_SCORING_ENABLED", "false").lower() == "true"
+    chatbot_lead_questions: str = os.getenv("DOCCHAT_CHATBOT_LEAD_QUESTIONS", "")  # JSON con preguntas de calificación
+    chatbot_lead_hot_threshold: int = int(os.getenv("DOCCHAT_CHATBOT_LEAD_HOT_THRESHOLD", "7"))  # Score mínimo para "Lead Caliente"
+    
+    # Handoff Configuration
+    chatbot_handoff_keywords: str = os.getenv("DOCCHAT_CHATBOT_HANDOFF_KEYWORDS", "queja,fraude,hablar con humano,supervisor")  # Palabras clave para handoff
+    chatbot_handoff_sentiment_threshold: float = float(os.getenv("DOCCHAT_CHATBOT_HANDOFF_SENTIMENT", "0.7"))  # Threshold de frustración
+    
+    # Language Configuration
+    chatbot_default_language: str = os.getenv("DOCCHAT_CHATBOT_DEFAULT_LANGUAGE", "es")
+    chatbot_multilingual_enabled: bool = os.getenv("DOCCHAT_CHATBOT_MULTILINGUAL", "false").lower() == "true"
+    
+    # Objection Handling
+    chatbot_objection_responses: str = os.getenv("DOCCHAT_CHATBOT_OBJECTION_RESPONSES", "")  # JSON con respuestas a objeciones comunes
 
     # Agentic AI Settings
     enable_autonomous_agents: bool = os.getenv("DOCCHAT_ENABLE_AGENTS", "true").lower() == "true"

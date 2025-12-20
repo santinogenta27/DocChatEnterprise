@@ -235,3 +235,6 @@ google_config_path = os.getenv("GOOGLE_ADS_CONFIG_PATH", "google-ads.yaml")
 
 **¿Quieres que agregue la UI para configurar credenciales y targeting?** 🚀
 
+
+
+

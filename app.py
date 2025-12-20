@@ -20787,7 +20787,8 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                         ("llama-3.1-70b-versatile", "Llama 3.1 70B"),
                                         ("llama-3.1-8b-instant", "Llama 3.1 8B (Más rápido)")
                                     ],
-                                    value="llama-3.3-70b-versatile"
+                                    value="llama-3.3-70b-versatile",
+                                    allow_custom_value=True
                                 )
                                 save_groq_btn = gr.Button("💾 Guardar Configuración Groq", variant="primary")
                                 groq_status = gr.Markdown(label="📊 Estado Groq")
@@ -20918,6 +20919,231 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             fn=save_postgresql_config,
                             inputs=[postgresql_url_input, use_postgresql_checkbox],
                             outputs=[postgresql_status]
+                        )
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### 🎨 Configuración Completa del Chatbot")
+                        gr.Markdown("""
+                        **Configura todas las características avanzadas del chatbot:**
+                        - Personalización (tono, personalidad)
+                        - RAG con documentos (PDFs, URLs)
+                        - Lead Scoring (calificación de leads)
+                        - Handoff humano (palabras clave)
+                        - Multilingüismo
+                        - Manejo de objeciones
+                        """)
+                        
+                        with gr.Tabs():
+                            # Tab 1: Personalización Básica
+                            with gr.Tab("🎭 Personalización"):
+                                chatbot_tone_select = gr.Dropdown(
+                                    label="🎭 Tono de Comunicación - Define cómo se comunica el chatbot con los clientes",
+                                    choices=[
+                                        ("friendly", "Amigable y cercano"),
+                                        ("professional", "Profesional pero accesible"),
+                                        ("casual", "Relajado y conversacional"),
+                                        ("formal", "Formal y respetuoso"),
+                                        ("enthusiastic", "Entusiasta y energético")
+                                    ],
+                                    value="friendly",
+                                    allow_custom_value=True
+                                )
+                                
+                                chatbot_personality_input = gr.Textbox(
+                                    label="🧠 Personalidad Personalizada - Descripción libre de la personalidad del chatbot",
+                                    placeholder="Ej: Eres un experto en moda que siempre está al día con las últimas tendencias...",
+                                    lines=3
+                                )
+                                
+                                chatbot_custom_instructions_input = gr.Textbox(
+                                    label="📋 Instrucciones Personalizadas - Instrucciones adicionales específicas para tu negocio",
+                                    placeholder="Ej: Siempre menciona garantías al recomendar productos. Nunca presiones si el cliente dice 'no'...",
+                                    lines=5
+                                )
+                            
+                            # Tab 2: RAG - Documentos
+                            with gr.Tab("📚 RAG - Conocimiento del Negocio"):
+                                chatbot_rag_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Habilitar RAG (Retrieval-Augmented Generation) - El chatbot usará documentos para evitar alucinaciones",
+                                    value=False
+                                )
+                                
+                                chatbot_rag_documents_files = gr.Files(
+                                    label="📄 Subir Documentos (PDF, DOCX, TXT, MD) - Sube manuales, catálogos, objeciones, políticas, etc.",
+                                    file_count="multiple",
+                                    file_types=[".pdf", ".docx", ".txt", ".md"]
+                                )
+                                
+                                chatbot_rag_urls_input = gr.Textbox(
+                                    label="🌐 URLs para Rastrear (una por línea) - El chatbot rastreará estas URLs semanalmente para actualizar conocimiento",
+                                    placeholder="https://tu-empresa.com/manual-ventas\nhttps://tu-empresa.com/catalogo\nhttps://tu-empresa.com/politicas",
+                                    lines=5
+                                )
+                                
+                                chatbot_rag_process_btn = gr.Button("🔄 Procesar Documentos y URLs", variant="secondary")
+                                chatbot_rag_status = gr.Markdown(label="📊 Estado RAG")
+                            
+                            # Tab 3: Lead Scoring
+                            with gr.Tab("🎯 Lead Scoring"):
+                                chatbot_lead_scoring_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Habilitar Calificación de Leads - El chatbot calificará leads automáticamente (Lead Caliente, Lead Frío, Cliente VIP)",
+                                    value=False
+                                )
+                                
+                                chatbot_lead_questions_input = gr.Textbox(
+                                    label="❓ Preguntas de Calificación (JSON) - Preguntas que el bot hará para calificar leads. Formato JSON con 'question' y 'weight' (1-5)",
+                                    placeholder='[{"question": "¿Cuál es tu presupuesto?", "weight": 3}, {"question": "¿Cuándo planeas comprar?", "weight": 2}]',
+                                    lines=8
+                                )
+                                
+                                chatbot_lead_hot_threshold_slider = gr.Slider(
+                                    label="🔥 Threshold para 'Lead Caliente' - Score mínimo para considerar un lead como 'caliente'",
+                                    minimum=1,
+                                    maximum=20,
+                                    value=7,
+                                    step=1
+                                )
+                            
+                            # Tab 4: Handoff Humano
+                            with gr.Tab("👤 Handoff Humano"):
+                                chatbot_handoff_keywords_input = gr.Textbox(
+                                    label="🔑 Palabras Clave para Handoff - Si el cliente usa estas palabras, el chatbot transferirá a un humano",
+                                    placeholder="queja,fraude,hablar con humano,supervisor,reclamo"
+                                )
+                                
+                                chatbot_handoff_sentiment_slider = gr.Slider(
+                                    label="😡 Threshold de Frustración - Si el sentimiento negativo supera este valor, activa handoff automático",
+                                    minimum=0.0,
+                                    maximum=1.0,
+                                    value=0.7,
+                                    step=0.1
+                                )
+                            
+                            # Tab 5: Idioma
+                            with gr.Tab("🌍 Idioma"):
+                                chatbot_default_language_select = gr.Dropdown(
+                                    label="🌐 Idioma Por Defecto - Idioma por defecto del chatbot",
+                                    choices=[
+                                        ("es", "Español"),
+                                        ("en", "English"),
+                                        ("pt", "Português"),
+                                        ("fr", "Français"),
+                                        ("de", "Deutsch"),
+                                        ("it", "Italiano"),
+                                        ("ja", "日本語"),
+                                        ("zh", "中文")
+                                    ],
+                                    value="es",
+                                    allow_custom_value=True
+                                )
+                                
+                                chatbot_multilingual_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Multilingüismo Automático - El chatbot detectará automáticamente el idioma del cliente y responderá en ese idioma",
+                                    value=False
+                                )
+                            
+                            # Tab 6: Objeciones
+                            with gr.Tab("💬 Manejo de Objeciones"):
+                                chatbot_objection_responses_input = gr.Textbox(
+                                    label="💬 Respuestas a Objeciones Comunes (JSON) - Respuestas personalizadas a objeciones comunes. Formato JSON: {'objeción': 'respuesta'}",
+                                    placeholder='{"está caro": "Entiendo tu preocupación. ¿Sabías que...", "lo voy a pensar": "Por supuesto, ¿hay algo específico en lo que pueda ayudarte a decidir?"}',
+                                    lines=10
+                                )
+                        
+                        save_chatbot_config_complete_btn = gr.Button("💾 Guardar Configuración Completa", variant="primary", size="lg")
+                        chatbot_config_complete_status = gr.Markdown(label="📊 Estado de Configuración")
+                        
+                        def save_chatbot_config_complete(
+                            tone, personality, custom_instructions,
+                            rag_enabled, rag_files, rag_urls,
+                            lead_scoring_enabled, lead_questions, lead_hot_threshold,
+                            handoff_keywords, handoff_sentiment,
+                            default_language, multilingual_enabled,
+                            objection_responses
+                        ):
+                            """Guarda configuración completa del chatbot en JSON (y .env como backup)"""
+                            try:
+                                import json
+                                from pathlib import Path
+                                from docchat.business_ai_omnicanal.config.chatbot_config_manager import ChatbotConfigManager, ChatbotConfig
+                                
+                                # Crear objeto de configuración
+                                chatbot_config = ChatbotConfig()
+                                
+                                # Personalización básica
+                                chatbot_config.tone = tone if tone else "friendly"
+                                chatbot_config.personality = personality if personality else ""
+                                chatbot_config.custom_instructions = custom_instructions if custom_instructions else ""
+                                
+                                # RAG
+                                chatbot_config.rag_enabled = rag_enabled
+                                # TODO: Procesar archivos y URLs aquí (guardar en directorio y procesar)
+                                # Por ahora, usar directorio por defecto
+                                chatbot_config.documents_dir = str(Path("docchat/business_ai_omnicanal/documents").absolute())
+                                
+                                # Lead Scoring
+                                chatbot_config.lead_scoring_enabled = lead_scoring_enabled
+                                try:
+                                    chatbot_config.lead_questions = json.loads(lead_questions) if lead_questions else []
+                                except:
+                                    chatbot_config.lead_questions = []
+                                chatbot_config.lead_hot_threshold = int(lead_hot_threshold)
+                                
+                                # Handoff
+                                chatbot_config.handoff_keywords = [k.strip() for k in handoff_keywords.split(",") if k.strip()] if handoff_keywords else ["queja", "fraude", "hablar con humano"]
+                                chatbot_config.handoff_sentiment_threshold = float(handoff_sentiment)
+                                
+                                # Idioma
+                                chatbot_config.default_language = default_language if default_language else "es"
+                                chatbot_config.multilingual_enabled = multilingual_enabled
+                                
+                                # Objeciones
+                                try:
+                                    chatbot_config.objection_responses = json.loads(objection_responses) if objection_responses else {}
+                                except:
+                                    chatbot_config.objection_responses = {}
+                                
+                                # Guardar usando ChatbotConfigManager (guarda en JSON principalmente)
+                                config_manager = ChatbotConfigManager()
+                                success = config_manager.save(chatbot_config, also_update_env=True)
+                                
+                                if success:
+                                    config_path = config_manager.config_json_path
+                                    status = f"""✅ **Configuración Completa del Chatbot guardada**
+
+**📁 Ubicación:** `{config_path}` (formato JSON - fácil de editar)
+
+**Estado:**
+- ✅ Personalización: Tono={tone or 'friendly'}, Personalidad={'Configurada' if personality else 'No configurada'}
+- ✅ RAG: {'Habilitado' if rag_enabled else 'Deshabilitado'}
+- ✅ Lead Scoring: {'Habilitado' if lead_scoring_enabled else 'Deshabilitado'} (Threshold: {lead_hot_threshold})
+- ✅ Handoff: Palabras clave configuradas, Threshold: {handoff_sentiment}
+- ✅ Idioma: {default_language}, Multilingüe: {'Sí' if multilingual_enabled else 'No'}
+- ✅ Objeciones: {'Configuradas' if objection_responses else 'No configuradas'}
+
+**⚠️ IMPORTANTE:** 
+1. Reinicia el servidor para aplicar cambios: `python api_server.py` o `python app.py`
+2. Si subiste documentos, se procesarán en el siguiente inicio
+3. La configuración se guarda en JSON (más fácil de editar si es necesario)
+"""
+                                    return status
+                                else:
+                                    return "❌ Error: No se pudo guardar la configuración"
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}"
+                        
+                        save_chatbot_config_complete_btn.click(
+                            fn=save_chatbot_config_complete,
+                            inputs=[
+                                chatbot_tone_select, chatbot_personality_input, chatbot_custom_instructions_input,
+                                chatbot_rag_enabled_checkbox, chatbot_rag_documents_files, chatbot_rag_urls_input,
+                                chatbot_lead_scoring_enabled_checkbox, chatbot_lead_questions_input, chatbot_lead_hot_threshold_slider,
+                                chatbot_handoff_keywords_input, chatbot_handoff_sentiment_slider,
+                                chatbot_default_language_select, chatbot_multilingual_enabled_checkbox,
+                                chatbot_objection_responses_input
+                            ],
+                            outputs=[chatbot_config_complete_status]
                         )
                     
                     with gr.Tab("📖 Instrucciones"):
@@ -33520,5 +33746,9 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                         inputs=[company_knowledge_session_id],
                         outputs=[company_knowledge_stats_output],
                     )
+
+# Nota: El endpoint para el widget embeddable está disponible en api_server.py
+# Para usar el widget, ejecuta: python api_server.py
+# El widget estará disponible en: http://localhost:7864/static/business-ai-widget.js
 
 demo.launch(share=False, server_name="0.0.0.0")

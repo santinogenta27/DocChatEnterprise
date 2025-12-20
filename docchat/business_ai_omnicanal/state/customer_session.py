@@ -44,6 +44,9 @@ class CustomerSessionState:
     sentiment: SentimentLabel = SentimentLabel.NEUTRAL
     frustration_score: float = 0.0
     needs_handoff: bool = False
+    lead_score: int = 0  # Score de lead (para lead scoring)
+    lead_label: str = ""  # Label del lead (Lead Caliente, Lead Frío, etc.)
+    lead_responses: List[Dict[str, Any]] = field(default_factory=list)  # Respuestas a preguntas de calificación
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
 
@@ -81,6 +84,13 @@ class CustomerSessionManager:
 
     def clear(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+
+
+
+
+
+
+
 
 
 

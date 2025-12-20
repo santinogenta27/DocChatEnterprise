@@ -57,13 +57,18 @@ class BusinessAIMode:
             if self.config.use_groq and self.config.groq_api_key:
                 try:
                     from langchain_groq import ChatGroq
-                    self.llm = ChatGroq(
+                    # Intentar crear instancia de Groq
+                    groq_llm = ChatGroq(
                         model=self.config.groq_model or "llama-3.3-70b-versatile",
                         temperature=0.3,
                         groq_api_key=self.config.groq_api_key,
                         max_tokens=2000,
                     )
+                    # No hacer test inmediato (puede ser lento), solo asignar
+                    # Si falla después, el agente hará fallback automático
+                    self.llm = groq_llm
                     print("✅ Business AI usando Groq (Llama 3.3 70B) - Velocidad <0.5 seg")
+                    # Si hay error de autenticación después, el agente usará fallback automático
                 except ImportError:
                     print("⚠️ langchain-groq no instalado. Instala con: pip install langchain-groq")
                     print("⚠️ Usando OpenAI como fallback")
@@ -128,7 +133,20 @@ class BusinessAIMode:
         self.order_tool = OrderTool()
         self.support_tool = SupportTool()
 
-        # Agente principal
+        # Crear LLM de fallback (OpenAI) por si Groq falla
+        fallback_llm = None
+        if self.config.openai_api_key:
+            try:
+                fallback_llm = ChatOpenAI(
+                    model=self.config.agentic_model or "gpt-4o",
+                    temperature=0.3,
+                    api_key=self.config.openai_api_key,
+                    max_tokens=2000,
+                )
+            except:
+                pass
+        
+        # Agente principal (con fallback LLM si está disponible)
         self.agent = BusinessAIAgent(
             llm=self.llm,
             session_manager=self.session_manager,
@@ -138,7 +156,15 @@ class BusinessAIMode:
             payment_tool=self.payment_tool,
             order_tool=self.order_tool,
             support_tool=self.support_tool,
-            config=BusinessAIConfig(brand_name=self.config.app_name if hasattr(self.config, "app_name") else "Your Brand"),
+            config=BusinessAIConfig(
+                brand_name=self.config.app_name if hasattr(self.config, "app_name") else "Your Brand",
+                # Leer personalización desde variables de entorno (configurado en config.py)
+                tone=self.config.chatbot_tone if hasattr(self.config, "chatbot_tone") else "friendly",
+                personality=self.config.chatbot_personality if hasattr(self.config, "chatbot_personality") else "",
+                custom_instructions=self.config.chatbot_custom_instructions if hasattr(self.config, "chatbot_custom_instructions") else "",
+            ),
+            fallback_llm=fallback_llm,  # Pasar fallback directamente al constructor
+            app_config=self.config,  # Pasar AppConfig para RAG y traducción
         )
 
         # Adaptador por defecto (web). Para WhatsApp/IG se pueden añadir otros.
@@ -229,7 +255,46 @@ class BusinessAIMode:
 
         @router.post("/chat")
         async def chat(payload: Dict[str, Any]) -> Dict[str, Any]:
-            return self.process_message(payload, channel=str(payload.get("channel", "web")))
+            """Endpoint de chat para Business AI Omnicanal Widget"""
+            try:
+                response_data = self.process_message(payload, channel=str(payload.get("channel", "web")))
+            except Exception as e:
+                # Manejar errores y devolver respuesta de error con CORS
+                import traceback
+                error_detail = str(e)
+                print(f"❌ Error procesando mensaje: {error_detail}")
+                traceback.print_exc()
+                response_data = {
+                    "text": f"Lo siento, hubo un error procesando tu mensaje: {error_detail}",
+                    "error": True,
+                    "error_detail": error_detail
+                }
+            
+            # Los headers CORS ya están manejados por el middleware, pero los agregamos explícitamente
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                content=response_data,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                }
+            )
+
+        # Agregar endpoint OPTIONS para CORS preflight (requerido para file://)
+        @router.options("/chat")
+        async def chat_options():
+            """Handle CORS preflight requests - CRÍTICO para file://"""
+            from fastapi.responses import Response
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Max-Age": "3600",
+                }
+            )
 
         return router
 
@@ -247,6 +312,9 @@ class BusinessAIMode:
             return str(resp.get("text") or "")
 
         return gr.Interface(fn=_chat_fn, inputs=["text", "text"], outputs="text", title="Business AI Omnicanal")
+
+
+
 
 
 

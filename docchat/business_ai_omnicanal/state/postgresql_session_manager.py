@@ -367,3 +367,7 @@ class PostgreSQLSessionManager:
             conn.commit()
         finally:
             self.pool.putconn(conn)
+
+
+
+

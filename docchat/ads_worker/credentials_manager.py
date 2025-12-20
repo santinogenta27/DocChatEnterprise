@@ -208,3 +208,6 @@ class AdsCredentialsManager:
         credentials = self.load_google_credentials()
         return credentials is not None and credentials.get("customer_id")
 
+
+
+

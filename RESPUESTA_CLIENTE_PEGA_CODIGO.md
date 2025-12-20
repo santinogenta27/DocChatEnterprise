@@ -287,3 +287,7 @@ Recuerda historial (PostgreSQL)
 ---
 
 **✅ RESPUESTA COMPLETA - LISTO PARA CLARIFICAR A CLIENTES**
+
+
+
+

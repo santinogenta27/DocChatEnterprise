@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from docchat import AppConfig, load_config
@@ -80,12 +81,18 @@ app = FastAPI(
 )
 
 # CORS middleware para permitir requests desde cualquier dominio (necesario para widget)
+# IMPORTANTE: Para file:// (origen null), necesitamos configuración especial
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configuración CORS más permisiva para file:// y localhost
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, especifica dominios permitidos
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],  # Permite cualquier origen (incluyendo null y localhost:8080)
+    allow_credentials=False,  # CRÍTICO: False para permitir origen null y diferentes puertos
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # Crear endpoints de chatbot (modo existente)
@@ -94,26 +101,43 @@ create_chatbot_api(app, chatbot_mode)
 # Crear endpoints de Deep Research (nuevo modo)
 create_deep_research_api(app, config)
 
+# Montar archivos estáticos (para servir el widget.js)
+static_dir = Path(__file__).parent / "docchat" / "static"
+if static_dir.exists():
+    try:
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        print(f"✅ Archivos estáticos montados desde: {static_dir}")
+    except Exception as e:
+        print(f"⚠️ Error montando archivos estáticos: {e}")
+        # Fallback: endpoint manual
+        @app.get("/static/business-ai-widget.js")
+        async def serve_widget_js():
+            widget_path = static_dir / "business-ai-widget.js"
+            if widget_path.exists():
+                from fastapi.responses import FileResponse
+                return FileResponse(
+                    widget_path,
+                    media_type="application/javascript",
+                    headers={"Cache-Control": "public, max-age=3600"}
+                )
+            else:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail=f"Widget file not found at: {widget_path}")
+else:
+    print(f"⚠️ Directorio estático no encontrado: {static_dir}")
+    # Crear endpoint manual como fallback
+    @app.get("/static/business-ai-widget.js")
+    async def serve_widget_js_fallback():
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Static directory not found. Expected at: {static_dir}"
+        )
+
 # Endpoints para Business AI Omnicanal Widget
 if business_ai_mode:
     # Incluir router de Business AI
     app.include_router(business_ai_mode.get_api_router())
-    
-    # Endpoint para servir el widget.js estático
-    @app.get("/static/business-ai-widget.js")
-    async def serve_widget_js():
-        """Sirve el archivo JavaScript del widget embeddable"""
-        widget_path = Path(__file__).parent / "docchat" / "static" / "business-ai-widget.js"
-        if widget_path.exists():
-            from fastapi.responses import FileResponse
-            return FileResponse(
-                widget_path,
-                media_type="application/javascript",
-                headers={"Cache-Control": "public, max-age=3600"}
-            )
-        else:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Widget file not found")
     
     # Endpoint específico para n8n webhooks (WhatsApp/Instagram)
     @app.post("/business-ai/n8n/webhook")
@@ -224,13 +248,14 @@ async def root():
     }
 
 if __name__ == "__main__":
-    # Obtener puerto de variable de entorno o usar 8000 por defecto
-    port = int(os.environ.get("PORT", 8000))
+    # Obtener puerto de variable de entorno o usar 7864 por defecto (mismo que Gradio/widget)
+    port = int(os.environ.get("PORT", 7864))
     host = os.environ.get("HOST", "0.0.0.0")
     
     print(f"🚀 Iniciando Chatbot Mode API en http://{host}:{port}")
     print(f"📚 Documentación disponible en http://{host}:{port}/docs")
     print(f"🔍 Health check: http://{host}:{port}/api/chatbot/health")
+    print(f"📦 Widget JS disponible en http://{host}:{port}/static/business-ai-widget.js")
     
     uvicorn.run(
         app,

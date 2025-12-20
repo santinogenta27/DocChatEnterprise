@@ -107,3 +107,12 @@ Debería incluir:
 Agregar un **Tab completo de "🔔 Monitoreo y Alertas"** dentro del tab "🚀 COPILOT" para exponer todas las funcionalidades de monitoreo que están implementadas en `CopilotMode` pero no están disponibles en la interfaz de Gradio.
 
 
+
+
+
+
+
+
+
+
+

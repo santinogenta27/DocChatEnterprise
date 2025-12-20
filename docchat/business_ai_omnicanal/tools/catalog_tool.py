@@ -22,7 +22,8 @@ class CatalogTool:
     def __init__(self, catalog: ProductCatalog) -> None:
         self.catalog = catalog
 
-    def search_products(self, query: str, limit: int = 10) -> List[ProductSearchResult]:
+    def search_products(self, query: str, limit: int = 10) -> ProductSearchResult:
+        """Busca productos y devuelve ProductSearchResult."""
         return self.catalog.search_products(query=query, limit=limit)
 
     def get_product(self, product_id: str) -> Optional[Product]:
@@ -34,8 +35,17 @@ class CatalogTool:
             return False
         return product.stock >= quantity
 
-    def suggest_alternatives(self, product_id: str, limit: int = 5) -> List[ProductSearchResult]:
+    def suggest_alternatives(self, product_id: str, limit: int = 5) -> List[Product]:
+        """Sugiere productos alternativos/relacionados."""
         return self.catalog.get_related_products(product_id=product_id, limit=limit)
+
+
+
+
+
+
+
+
 
 
 

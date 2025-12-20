@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Business AI Widget</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #007bff;
+        }
+        .info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }A
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Test Business AI Widget</h1>
+        
+        <div class="info">
+            <h2>📋 Instrucciones:</h2>
+            <ol>
+                <li>Asegúrate de que tu servidor esté corriendo en <code>http://localhost:7864</code></li>
+                <li>El widget debería aparecer automáticamente en la esquina inferior derecha</li>
+                <li>Haz click en el botón del widget para abrir el chat</li>
+                <li>¡Empieza a chatear! 🎉</li>
+            </ol>
+        </div>
+
+        <div class="status success">
+            ✅ <strong>Widget cargado:</strong> El script del widget está incluido abajo
+        </div>
+
+        <div class="status warning">
+            ⚠️ <strong>Nota:</strong> Si el widget no aparece, verifica:
+            <ul>
+                <li>Que el servidor esté corriendo (<code>python app.py</code> o <code>python api_server.py</code>)</li>
+                <li>Que la URL <code>http://localhost:7864/static/business-ai-widget.js</code> sea accesible</li>
+                <li>Que no haya errores en la consola del navegador (F12)</li>
+            </ul>
+        </div>
+
+        <h2>🎨 Contenido de Prueba</h2>
+        <p>Este es un ejemplo de página web. El widget debería aparecer como un botón flotante en la esquina inferior derecha.</p>
+        
+        <p>Puedes probar el chatbot haciendo preguntas como:</p>
+        <ul>
+            <li>"¿Tienen zapatillas Nike?"</li>
+            <li>"¿Qué productos recomiendan?"</li>
+            <li>"¿Cómo puedo hacer una devolución?"</li>
+            <li>"Muéstrame productos de menos de $50"</li>
+        </ul>
+
+        <h2>🔧 Para Usar en tu Website Real:</h2>
+        <p>Copia el código del script de abajo y pégalo antes de <code>&lt;/body&gt;</code> en tu website HTML.</p>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- BUSINESS AI OMNICANAL WIDGET -->
+    <!-- Copia y pega este código antes de </body> en tu website -->
+    <!-- ============================================ -->
+    <script src="http://localhost:7864/static/business-ai-widget.js" 
+            data-api-url="http://localhost:7864"
+            data-widget-id="alien"
+            data-brand-name="x"
+            data-primary-color="#007bff"
+            data-position="bottom-right"
+            data-welcome-message="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
+            async></script>
+    <!-- ============================================ -->
+    
+</body>
+</html>
+
+
+
