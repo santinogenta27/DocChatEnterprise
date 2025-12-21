@@ -187,3 +187,13 @@ if all_ads_created_successfully:
 
 
 
+
+
+
+
+
+
+
+
+
+

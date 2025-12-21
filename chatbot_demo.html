@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo - Business AI Omnicanal Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 2em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .code-block code {
+            color: #d4d4d4;
+        }
+
+        .note {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .note strong {
+            color: #856404;
+        }
+
+        footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Business AI Omnicanal Chatbot</h1>
+            <p>Chatbot inteligente integrado en tu website</p>
+        </header>
+
+        <div class="content">
+            <section class="section">
+                <h2>✨ Características</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>💬 Ventas 24/7</h3>
+                        <p>Tu agente de ventas siempre disponible para atender a tus clientes en cualquier momento del día.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🛒 Carrito de Compras</h3>
+                        <p>Los clientes pueden agregar productos al carrito directamente desde el chat.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🧠 Inteligencia Artificial</h3>
+                        <p>Respuestas inteligentes basadas en IA con comprensión de contexto y sentimientos.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📊 Lead Scoring</h3>
+                        <p>Identificación automática de leads calientes basada en interacciones.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>👤 Handoff Humano</h3>
+                        <p>Transferencia automática a agentes humanos cuando es necesario.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🌍 Multilingüe</h3>
+                        <p>Detección automática de idioma y respuestas en el idioma del cliente.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2>🚀 Instrucciones de Integración</h2>
+                
+                <div class="code-block">
+<code>&lt;!-- Business AI Omnicanal Widget --&gt;
+&lt;!-- Copia y pega este código antes de &lt;/body&gt; en tu website --&gt;
+&lt;script src="http://localhost:7864/static/business-ai-widget.js" 
+        data-api-url="http://localhost:7864"
+        data-widget-id="X"
+        data-brand-name="X"
+        data-primary-color="#007bff"
+        data-position="bottom-right"
+        data-welcome-message="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
+        async&gt;&lt;/script&gt;</code>
+                </div>
+
+                <div style="background: #e7f3ff; border-left: 5px solid #2196F3; padding: 20px; margin: 20px 0; border-radius: 5px;">
+                    <h3 style="color: #1976D2; margin-bottom: 15px; font-size: 1.3em;">📋 Instrucciones:</h3>
+                    <ol style="margin-left: 20px; line-height: 2; font-size: 1.1em;">
+                        <li>Copia el código HTML de arriba</li>
+                        <li>Pégalo antes de <code>&lt;/body&gt;</code> en tu website</li>
+                        <li>El widget aparecerá automáticamente en la esquina inferior derecha</li>
+                    </ol>
+                </div>
+
+                <div class="note">
+                    <strong>⚠️ Importante:</strong> Asegúrate de que tu servidor esté corriendo en <code>http://localhost:7864</code> 
+                    para que el widget funcione correctamente. En producción, reemplaza <code>localhost:7864</code> 
+                    con la URL de tu servidor.
+                </div>
+            </section>
+
+            <section class="section">
+                <h2>⚙️ Configuración</h2>
+                <p>Puedes personalizar el widget modificando los siguientes atributos:</p>
+                <ul style="margin-left: 20px; margin-top: 15px;">
+                    <li><strong>data-api-url:</strong> URL de tu servidor (ej: http://localhost:7864)</li>
+                    <li><strong>data-widget-id:</strong> ID único del widget</li>
+                    <li><strong>data-brand-name:</strong> Nombre de tu marca</li>
+                    <li><strong>data-primary-color:</strong> Color principal (formato hexadecimal, ej: #007bff)</li>
+                    <li><strong>data-position:</strong> Posición del widget (bottom-right, bottom-left, top-right, top-left)</li>
+                    <li><strong>data-welcome-message:</strong> Mensaje de bienvenida que verá el usuario</li>
+                </ul>
+            </section>
+
+            <section class="section">
+                <h2>✅ Estado del Chatbot</h2>
+                <p>
+                    <span class="badge">✅ Activo</span>
+                    <span class="badge">✅ Conectado</span>
+                    <span class="badge">✅ Listo para usar</span>
+                </p>
+                <p style="margin-top: 15px;">
+                    El chatbot aparecerá como un botón flotante en la esquina inferior derecha de esta página.
+                    ¡Haz clic en él para empezar a chatear!
+                </p>
+            </section>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Business AI Omnicanal. Chatbot inteligente para tu negocio.</p>
+        </footer>
+    </div>
+
+    <!-- Business AI Omnicanal Widget -->
+    <!-- Copia y pega este código antes de </body> en tu website -->
+    <script src="http://localhost:7864/static/business-ai-widget.js" 
+            data-api-url="http://localhost:7864"
+            data-widget-id="demo_widget_001"
+            data-brand-name="Business AI Demo"
+            data-primary-color="#007bff"
+            data-position="bottom-right"
+            data-welcome-message="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
+            async></script>
+</body>
+</html>
+
+
+
+
+
+

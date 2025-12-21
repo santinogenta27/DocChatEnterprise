@@ -52,6 +52,7 @@ from docchat import AppConfig, load_config
 from docchat.chatbot_mode import ChatbotMode
 from docchat.chatbot_api import create_chatbot_api
 from docchat.deep_research_api import create_deep_research_api
+from typing import Dict, Any
 
 # Cargar configuración
 config = load_config()
@@ -134,10 +135,244 @@ else:
             detail=f"Static directory not found. Expected at: {static_dir}"
         )
 
+# Inicializar OmnicanalBridge (para integración real con WhatsApp/Facebook/Instagram)
+omnicanal_bridge = None
+if business_ai_mode:
+    try:
+        from docchat.business_ai_omnicanal.integrations.omnicanal_bridge import OmnicanalBridge, Channel, IncomingMessage, OutgoingMessage
+        omnicanal_bridge = OmnicanalBridge()
+        
+        # Cargar configuración desde variables de entorno
+        import os
+        
+        # Configurar WhatsApp (Twilio o Meta)
+        whatsapp_provider = os.getenv("WHATSAPP_PROVIDER", "twilio")
+        if whatsapp_provider == "twilio":
+            account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+            auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+            from_number = os.getenv("TWILIO_WHATSAPP_NUMBER")
+            if account_sid and auth_token and from_number:
+                omnicanal_bridge.configure_whatsapp(
+                    provider="twilio",
+                    account_sid=account_sid,
+                    auth_token=auth_token,
+                    from_number=from_number
+                )
+        elif whatsapp_provider == "meta":
+            phone_number_id = os.getenv("META_WHATSAPP_PHONE_NUMBER_ID")
+            access_token = os.getenv("META_WHATSAPP_ACCESS_TOKEN")
+            if phone_number_id and access_token:
+                omnicanal_bridge.configure_whatsapp(
+                    provider="meta",
+                    phone_number_id=phone_number_id,
+                    access_token=access_token
+                )
+        
+        # Configurar Facebook Messenger
+        facebook_token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
+        facebook_verify_token = os.getenv("FACEBOOK_VERIFY_TOKEN", "verify_token")
+        if facebook_token:
+            omnicanal_bridge.configure_facebook(
+                page_access_token=facebook_token,
+                verify_token=facebook_verify_token
+            )
+        
+        # Configurar Instagram Direct
+        instagram_token = os.getenv("INSTAGRAM_ACCESS_TOKEN")
+        instagram_user_id = os.getenv("INSTAGRAM_USER_ID")
+        if instagram_token:
+            omnicanal_bridge.configure_instagram(
+                access_token=instagram_token,
+                ig_user_id=instagram_user_id
+            )
+        
+        print("✅ OmnicanalBridge inicializado y configurado")
+    except Exception as e:
+        print(f"⚠️ Error inicializando OmnicanalBridge: {e}")
+
 # Endpoints para Business AI Omnicanal Widget
 if business_ai_mode:
     # Incluir router de Business AI
     app.include_router(business_ai_mode.get_api_router())
+    
+    # ==================== WEBHOOKS OMNICANALES ====================
+    
+    # WhatsApp Webhook (Twilio)
+    @app.post("/webhook/whatsapp/twilio")
+    async def whatsapp_twilio_webhook(payload: Dict[str, Any]):
+        """Webhook de Twilio para WhatsApp Business.
+        
+        Configura en Twilio Console: https://console.twilio.com
+        Webhook URL: https://tu-servidor.com/webhook/whatsapp/twilio
+        """
+        if not omnicanal_bridge or not business_ai_mode:
+            return {"error": "OmnicanalBridge o BusinessAIMode no inicializado"}
+        
+        try:
+            incoming = omnicanal_bridge.process_webhook(Channel.WHATSAPP, payload)
+            if not incoming:
+                return {"status": "ignored"}
+            
+            # Procesar con Business AI
+            result = business_ai_mode.handle_omnicanal_message(incoming)
+            
+            # Enviar respuesta por WhatsApp
+            if result and result.get("text"):
+                outgoing = OutgoingMessage(
+                    channel=Channel.WHATSAPP,
+                    recipient_id=incoming.sender_id,
+                    message_text=result["text"]
+                )
+                omnicanal_bridge.send_message(outgoing)
+            
+            return {"status": "processed"}
+        except Exception as e:
+            import traceback
+            print(f"❌ Error procesando webhook de WhatsApp/Twilio: {e}")
+            print(traceback.format_exc())
+            return {"error": str(e)}
+    
+    # WhatsApp Webhook (Meta) - Verificación
+    @app.get("/webhook/whatsapp/meta")
+    async def whatsapp_meta_webhook_verify(
+        hub_mode: str = None,
+        hub_verify_token: str = None,
+        hub_challenge: str = None
+    ):
+        """Verificación de webhook de Meta WhatsApp (GET request)."""
+        verify_token = os.getenv("META_WHATSAPP_VERIFY_TOKEN", "verify_token")
+        if hub_mode == "subscribe" and hub_verify_token == verify_token:
+            return int(hub_challenge)
+        return {"error": "Invalid verification"}
+    
+    # WhatsApp Webhook (Meta) - Mensajes
+    @app.post("/webhook/whatsapp/meta")
+    async def whatsapp_meta_webhook(payload: Dict[str, Any]):
+        """Webhook de Meta para WhatsApp Business API.
+        
+        Configura en Meta Developers: https://developers.facebook.com
+        Webhook URL: https://tu-servidor.com/webhook/whatsapp/meta
+        """
+        if not omnicanal_bridge or not business_ai_mode:
+            return {"error": "OmnicanalBridge o BusinessAIMode no inicializado"}
+        
+        try:
+            incoming = omnicanal_bridge.process_webhook(Channel.WHATSAPP, payload)
+            if not incoming:
+                return {"status": "ignored"}
+            
+            # Procesar con Business AI
+            result = business_ai_mode.handle_omnicanal_message(incoming)
+            
+            # Enviar respuesta por WhatsApp
+            if result and result.get("text"):
+                outgoing = OutgoingMessage(
+                    channel=Channel.WHATSAPP,
+                    recipient_id=incoming.sender_id,
+                    message_text=result["text"]
+                )
+                omnicanal_bridge.send_message(outgoing)
+            
+            return {"status": "processed"}
+        except Exception as e:
+            import traceback
+            print(f"❌ Error procesando webhook de WhatsApp/Meta: {e}")
+            print(traceback.format_exc())
+            return {"error": str(e)}
+    
+    # Facebook Messenger Webhook - Verificación
+    @app.get("/webhook/facebook")
+    async def facebook_webhook_verify(mode: str = None, token: str = None, challenge: str = None):
+        """Verificación de webhook de Facebook Messenger (GET request).
+        
+        Configura en Meta Developers: https://developers.facebook.com
+        Webhook URL: https://tu-servidor.com/webhook/facebook
+        """
+        verify_token = os.getenv("FACEBOOK_VERIFY_TOKEN", "verify_token")
+        if mode == "subscribe" and token == verify_token:
+            return int(challenge)
+        return {"error": "Invalid verification"}
+    
+    # Facebook Messenger Webhook - Mensajes
+    @app.post("/webhook/facebook")
+    async def facebook_webhook(payload: Dict[str, Any]):
+        """Webhook de Facebook Messenger.
+        
+        Configura en Meta Developers: https://developers.facebook.com
+        """
+        if not omnicanal_bridge or not business_ai_mode:
+            return {"error": "OmnicanalBridge o BusinessAIMode no inicializado"}
+        
+        try:
+            incoming = omnicanal_bridge.process_webhook(Channel.FACEBOOK, payload)
+            if not incoming:
+                return {"status": "ignored"}
+            
+            # Procesar con Business AI
+            result = business_ai_mode.handle_omnicanal_message(incoming)
+            
+            # Enviar respuesta por Facebook Messenger
+            if result and result.get("text"):
+                outgoing = OutgoingMessage(
+                    channel=Channel.FACEBOOK,
+                    recipient_id=incoming.sender_id,
+                    message_text=result["text"]
+                )
+                omnicanal_bridge.send_message(outgoing)
+            
+            return {"status": "processed"}
+        except Exception as e:
+            import traceback
+            print(f"❌ Error procesando webhook de Facebook: {e}")
+            print(traceback.format_exc())
+            return {"error": str(e)}
+    
+    # Instagram Direct Webhook - Verificación
+    @app.get("/webhook/instagram")
+    async def instagram_webhook_verify(mode: str = None, token: str = None, challenge: str = None):
+        """Verificación de webhook de Instagram Direct (GET request).
+        
+        Configura en Meta Developers: https://developers.facebook.com
+        Webhook URL: https://tu-servidor.com/webhook/instagram
+        """
+        verify_token = os.getenv("INSTAGRAM_VERIFY_TOKEN", "verify_token")
+        if mode == "subscribe" and token == verify_token:
+            return int(challenge)
+        return {"error": "Invalid verification"}
+    
+    # Instagram Direct Webhook - Mensajes
+    @app.post("/webhook/instagram")
+    async def instagram_webhook(payload: Dict[str, Any]):
+        """Webhook de Instagram Direct Messages.
+        
+        Configura en Meta Developers: https://developers.facebook.com
+        """
+        if not omnicanal_bridge or not business_ai_mode:
+            return {"error": "OmnicanalBridge o BusinessAIMode no inicializado"}
+        
+        try:
+            incoming = omnicanal_bridge.process_webhook(Channel.INSTAGRAM, payload)
+            if not incoming:
+                return {"status": "ignored"}
+            
+            # Procesar con Business AI
+            result = business_ai_mode.handle_omnicanal_message(incoming)
+            
+            # Enviar respuesta por Instagram
+            if result and result.get("text"):
+                outgoing = OutgoingMessage(
+                    channel=Channel.INSTAGRAM,
+                    recipient_id=incoming.sender_id,
+                    message_text=result["text"]
+                )
+                omnicanal_bridge.send_message(outgoing)
+            
+            return {"status": "processed"}
+        except Exception as e:
+            import traceback
+            print(f"❌ Error procesando webhook de Instagram: {e}")
+            print(traceback.format_exc())
+            return {"error": str(e)}
     
     # Endpoint específico para n8n webhooks (WhatsApp/Instagram)
     @app.post("/business-ai/n8n/webhook")

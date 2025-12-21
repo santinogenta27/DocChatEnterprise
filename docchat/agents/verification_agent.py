@@ -34,9 +34,14 @@ class VerificationAgent:
         self.provider = provider
         self.config = config
         
-        # Usar create_llm para soportar ambos proveedores
+        # Usar create_llm para soportar múltiples proveedores (OpenAI, Claude, Groq)
         if config:
-            api_key = config.openai_api_key if provider == "openai" else config.anthropic_api_key
+            if provider == "groq":
+                api_key = config.groq_api_key
+            elif provider == "claude":
+                api_key = config.anthropic_api_key
+            else:
+                api_key = config.openai_api_key
             self.llm = create_llm(
                 provider=provider,
                 model=model_name,

@@ -158,3 +158,13 @@ Ahora los usuarios:
 - ✅ Pueden editar JSON si quieren (opcional)
 - ✅ El sistema funciona automáticamente
 
+
+
+
+
+
+
+
+
+
+

@@ -250,3 +250,13 @@ Este documento analiza si **TODO el código completo** de los siguientes modos e
 
 
 
+
+
+
+
+
+
+
+
+
+

@@ -5,12 +5,12 @@ Agente unificado de ventas + soporte 24/7 para todos los canales.
 
 from __future__ import annotations
 
+import os
 from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, Depends
 
 from langchain_core.language_models import BaseLanguageModel
-from langchain_openai import ChatOpenAI
 
 from ..config import AppConfig, load_config
 from ..commerce.product_catalog import ProductCatalog
@@ -53,53 +53,26 @@ class BusinessAIMode:
         if llm is not None:
             self.llm = llm
         else:
-            # Prioridad: Groq si está habilitado y configurado
-            if self.config.use_groq and self.config.groq_api_key:
-                try:
-                    from langchain_groq import ChatGroq
-                    # Intentar crear instancia de Groq
-                    groq_llm = ChatGroq(
-                        model=self.config.groq_model or "llama-3.3-70b-versatile",
-                        temperature=0.3,
-                        groq_api_key=self.config.groq_api_key,
-                        max_tokens=2000,
-                    )
-                    # No hacer test inmediato (puede ser lento), solo asignar
-                    # Si falla después, el agente hará fallback automático
-                    self.llm = groq_llm
-                    print("✅ Business AI usando Groq (Llama 3.3 70B) - Velocidad <0.5 seg")
-                    # Si hay error de autenticación después, el agente usará fallback automático
-                except ImportError:
-                    print("⚠️ langchain-groq no instalado. Instala con: pip install langchain-groq")
-                    print("⚠️ Usando OpenAI como fallback")
-                    if not self.config.openai_api_key:
-                        raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal")
-                    self.llm = ChatOpenAI(
-                        model=self.config.agentic_model or "gpt-4o",
-                        temperature=0.3,
-                        api_key=self.config.openai_api_key,
-                        max_tokens=2000,
-                    )
-                except Exception as e:
-                    print(f"⚠️ Error inicializando Groq: {e}. Usando OpenAI como fallback")
-                    if not self.config.openai_api_key:
-                        raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal")
-                    self.llm = ChatOpenAI(
-                        model=self.config.agentic_model or "gpt-4o",
-                        temperature=0.3,
-                        api_key=self.config.openai_api_key,
-                        max_tokens=2000,
-                    )
-            else:
-                # Fallback a OpenAI
-                if not self.config.openai_api_key:
-                    raise ValueError("OPENAI_API_KEY requerida para Business AI Omnicanal (o configura GROQ_API_KEY y DOCCHAT_USE_GROQ=true)")
-                self.llm = ChatOpenAI(
-                    model=self.config.agentic_model or "gpt-4o",
+            # SIEMPRE usar Groq para Business AI Omnicanal (como solicitado)
+            groq_api_key = self.config.groq_api_key or os.getenv("GROQ_API_KEY")
+            if not groq_api_key:
+                raise ValueError("GROQ_API_KEY requerida para Business AI Omnicanal. Configura en .env: GROQ_API_KEY=tu-clave")
+            
+            try:
+                from langchain_groq import ChatGroq
+                # SIEMPRE usar Groq 3.3 70B para Business AI Omnicanal
+                groq_llm = ChatGroq(
+                    model="llama-3.3-70b-versatile",  # SIEMPRE usar este modelo
                     temperature=0.3,
-                    api_key=self.config.openai_api_key,
+                    groq_api_key=groq_api_key,
                     max_tokens=2000,
                 )
+                self.llm = groq_llm
+                print("✅ Business AI usando Groq (Llama 3.3 70B Versatile) - Velocidad <0.5 seg")
+            except ImportError:
+                raise ImportError("langchain-groq no está instalado. Instala con: pip install langchain-groq")
+            except Exception as e:
+                raise ValueError(f"Error inicializando Groq: {e}. Verifica que GROQ_API_KEY sea válida.")
 
         # Estado de sesiones - Soporte para PostgreSQL (memoria de largo plazo)
         if self.config.postgresql_enabled and self.config.postgresql_url:
@@ -133,20 +106,7 @@ class BusinessAIMode:
         self.order_tool = OrderTool()
         self.support_tool = SupportTool()
 
-        # Crear LLM de fallback (OpenAI) por si Groq falla
-        fallback_llm = None
-        if self.config.openai_api_key:
-            try:
-                fallback_llm = ChatOpenAI(
-                    model=self.config.agentic_model or "gpt-4o",
-                    temperature=0.3,
-                    api_key=self.config.openai_api_key,
-                    max_tokens=2000,
-                )
-            except:
-                pass
-        
-        # Agente principal (con fallback LLM si está disponible)
+        # Agente principal (SIEMPRE usando Groq - sin fallback)
         self.agent = BusinessAIAgent(
             llm=self.llm,
             session_manager=self.session_manager,
@@ -163,7 +123,7 @@ class BusinessAIMode:
                 personality=self.config.chatbot_personality if hasattr(self.config, "chatbot_personality") else "",
                 custom_instructions=self.config.chatbot_custom_instructions if hasattr(self.config, "chatbot_custom_instructions") else "",
             ),
-            fallback_llm=fallback_llm,  # Pasar fallback directamente al constructor
+            fallback_llm=None,  # No hay fallback - siempre usamos Groq
             app_config=self.config,  # Pasar AppConfig para RAG y traducción
         )
 
@@ -247,6 +207,49 @@ class BusinessAIMode:
             "tools": result.get("tools"),  # Productos, cross-selling, etc.
         })
         return external
+    
+    def handle_omnicanal_message(self, incoming_message) -> Dict[str, Any]:
+        """
+        Procesa un mensaje entrante desde OmnicanalBridge (IncomingMessage).
+        
+        Args:
+            incoming_message: IncomingMessage del OmnicanalBridge
+            
+        Returns:
+            Dict con la respuesta del agente
+        """
+        try:
+            # Mapear canal de OmnicanalBridge a formato interno
+            channel_map = {
+                "whatsapp": "whatsapp",
+                "facebook": "messenger",
+                "messenger": "messenger",
+                "instagram": "instagram",
+                "web": "web"
+            }
+            channel_name = channel_map.get(incoming_message.channel.value, "web")
+            
+            # Crear payload para process_message
+            payload = {
+                "session_id": f"{channel_name}_{incoming_message.sender_id}",
+                "user_id": incoming_message.sender_id,
+                "message": incoming_message.message_text,
+                "channel": channel_name,
+                "metadata": incoming_message.metadata or {}
+            }
+            
+            # Procesar con el método existente
+            result = self.process_message(payload, channel=channel_name)
+            
+            return result
+        except Exception as e:
+            import traceback
+            print(f"❌ Error procesando mensaje omnicanal: {e}")
+            print(traceback.format_exc())
+            return {
+                "text": "Lo siento, estoy teniendo problemas para procesar tu mensaje. Por favor, inténtalo de nuevo.",
+                "error": str(e)
+            }
 
     # --- Integración FastAPI ---
 
@@ -312,6 +315,17 @@ class BusinessAIMode:
             return str(resp.get("text") or "")
 
         return gr.Interface(fn=_chat_fn, inputs=["text", "text"], outputs="text", title="Business AI Omnicanal")
+
+
+
+
+
+
+
+
+
+
+
 
 
 

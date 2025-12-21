@@ -80,6 +80,49 @@ class BusinessAIAgent:
                 self.translator = MultiLanguageTranslator(app_config)
             except Exception as e:
                 print(f"⚠️ No se pudo inicializar traductor multilingüe: {e}")
+        
+        # Integraciones en tiempo real (Shopify/WooCommerce) - Nivel Meta
+        self.shopify_integration = None
+        self.woocommerce_integration = None
+        self._initialize_ecommerce_integrations()
+        
+        # Sistemas de Inteligencia Avanzada (Nivel Dios Alien) 🚀
+        from pathlib import Path
+        memory_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "business_ai" / "conversation_memory"
+        
+        # 1. Memoria Conversacional Profunda
+        from ..memory.conversation_memory import ConversationMemory
+        self.conversation_memory = ConversationMemory(storage_dir=memory_storage_dir)
+        
+        # 2. Análisis de Comportamiento Avanzado
+        from ..intelligence.behavior_analyzer import BehaviorAnalyzer
+        self.behavior_analyzer = BehaviorAnalyzer()
+        
+        # 3. Sugerencias Proactivas
+        from ..intelligence.proactive_suggestions import ProactiveSuggestionsEngine
+        self.proactive_engine = ProactiveSuggestionsEngine()
+        
+        # 4. Técnicas de Cierre Avanzadas
+        from ..intelligence.closing_techniques import ClosingTechniquesManager
+        self.closing_manager = ClosingTechniquesManager()
+        
+        # 5. Servicio de Carritos Abandonados
+        from ..services.abandoned_cart_service import AbandonedCartService
+        cart_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "business_ai" / "abandoned_carts"
+        self.abandoned_cart_service = AbandonedCartService(storage_dir=cart_storage_dir)
+        
+        # 6. Tracking de Conversiones (PRIORIDAD 1) 📊
+        from ..analytics.conversion_tracker import ConversionTracker
+        analytics_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "business_ai" / "analytics"
+        self.conversion_tracker = ConversionTracker(
+            storage_dir=analytics_storage_dir,
+            enable_ga=False,  # Configurar en .env si se necesita
+            enable_meta_pixel=False  # Configurar en .env si se necesita
+        )
+        
+        # 7. Recomendador de Productos (PRIORIDAD 2) 🎯
+        from ..intelligence.product_recommender import ProductRecommender
+        self.product_recommender = ProductRecommender()
     
     def _invoke_llm_with_fallback(self, messages):
         """Invoca el LLM con fallback automático si falla la autenticación"""
@@ -105,15 +148,279 @@ class BusinessAIAgent:
                 raise
 
     def _initialize_rag(self):
-        """Inicializa el sistema RAG si está habilitado."""
+        """Inicializa el sistema RAG - carga chunks guardados (embeddings se generan al consultar - lazy loading)."""
         try:
-            from ...semantic_data_engine import SemanticDataEngine
-            if self.app_config and self.chatbot_config.documents_dir:
-                # TODO: Cargar documentos desde documents_dir
-                # Por ahora, se inicializará cuando se carguen documentos
-                print("✅ RAG habilitado - Listo para consultar documentos")
+            from pathlib import Path
+            import pickle
+            
+            storage_dir = Path("docchat/business_ai_omnicanal/rag_storage")
+            chunks_path = storage_dir / "document_chunks.pkl"
+            metadata_path = storage_dir / "retriever_metadata.pkl"
+            
+            # Guardar referencia a chunks_path para lazy loading
+            self._rag_chunks_path = chunks_path
+            self._rag_metadata_path = metadata_path
+            self._rag_chunks = None  # Se cargan cuando se necesiten
+            self._rag_retriever_built = False
+            
+            if chunks_path.exists() and metadata_path.exists():
+                try:
+                    # Cargar metadata (no cargamos chunks aún - lazy loading)
+                    with open(metadata_path, "rb") as f:
+                        retriever_metadata = pickle.load(f)
+                    
+                    chunks_count = retriever_metadata.get("chunks_count", 0)
+                    embeddings_generated = retriever_metadata.get("embeddings_generated", False)
+                    
+                    print(f"✅ RAG inicializado - {chunks_count} chunks disponibles (embeddings: {'generados' if embeddings_generated else 'lazy loading'})")
+                    print(f"   Los embeddings se generarán automáticamente cuando se consulte")
+                except Exception as e:
+                    print(f"⚠️ Error cargando metadata RAG: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print("⚠️ No hay documentos RAG procesados. Procesa documentos primero en el tab RAG.")
+                print(f"   Buscando en: {chunks_path}")
         except Exception as e:
             print(f"⚠️ Error inicializando RAG: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _initialize_ecommerce_integrations(self):
+        """Inicializa las integraciones de e-commerce (Shopify/WooCommerce)."""
+        try:
+            # Cargar configuración del chatbot para obtener credenciales
+            chatbot_config = self.chatbot_config_manager.load()
+            
+            # Inicializar Shopify si está configurado
+            if chatbot_config.ecommerce_enabled and chatbot_config.shopify_api_key:
+                try:
+                    from ..integrations.shopify_integration import ShopifyIntegration
+                    shop_url = chatbot_config.shopify_shop_name or ""
+                    if shop_url:
+                        self.shopify_integration = ShopifyIntegration(
+                            shop_url=shop_url,
+                            access_token=chatbot_config.shopify_api_key  # En Shopify, el API key es el access_token
+                        )
+                        print("✅ Shopify integration inicializada")
+                except Exception as e:
+                    print(f"⚠️ Error inicializando Shopify: {e}")
+            
+            # Inicializar WooCommerce si está configurado
+            if chatbot_config.ecommerce_enabled and chatbot_config.woocommerce_url and chatbot_config.woocommerce_consumer_key:
+                try:
+                    from ..integrations.woocommerce_integration import WooCommerceIntegration
+                    self.woocommerce_integration = WooCommerceIntegration(
+                        store_url=chatbot_config.woocommerce_url,
+                        consumer_key=chatbot_config.woocommerce_consumer_key,
+                        consumer_secret=chatbot_config.woocommerce_consumer_secret or ""
+                    )
+                    print("✅ WooCommerce integration inicializada")
+                except Exception as e:
+                    print(f"⚠️ Error inicializando WooCommerce: {e}")
+            
+        except Exception as e:
+            print(f"⚠️ Error inicializando integraciones de e-commerce: {e}")
+            # Continuar sin integraciones de e-commerce
+            self.shopify_integration = None
+            self.woocommerce_integration = None
+    
+    def _query_ecommerce_catalog_realtime(self, search_query: str, limit: int = 5) -> str:
+        """
+        Consulta productos en tiempo real desde Shopify/WooCommerce.
+        
+        Args:
+            search_query: Término de búsqueda
+            limit: Número máximo de productos a retornar
+            
+        Returns:
+            String formateado con información de productos para el prompt
+        """
+        if not self.chatbot_config or not self.chatbot_config.ecommerce_enabled:
+            return ""
+        
+        results = []
+        
+        # Consultar Shopify
+        if self.shopify_integration:
+            try:
+                shopify_products = self.shopify_integration.search_products(search_query, limit=limit)
+                if shopify_products and isinstance(shopify_products, list):
+                    for product in shopify_products:
+                        shop_url = getattr(self.shopify_integration, 'shop_url', '')
+                        product_handle = getattr(product, 'handle', '')
+                        product_url = f"https://{shop_url}/products/{product_handle}" if shop_url and product_handle else ""
+                        results.append({
+                            "title": getattr(product, 'title', 'N/A'),
+                            "price": getattr(product, 'price', 0),
+                            "currency": getattr(product, 'currency', '$'),
+                            "availability": getattr(product, 'in_stock', False),
+                            "url": product_url
+                        })
+            except Exception as e:
+                print(f"⚠️ Error consultando Shopify: {e}")
+        
+        # Consultar WooCommerce
+        if self.woocommerce_integration:
+            try:
+                wc_products = self.woocommerce_integration.search_products(search_query, limit=limit)
+                if wc_products:
+                    # WooCommerce puede devolver lista o objeto con .products
+                    if isinstance(wc_products, list):
+                        products_list = wc_products
+                    elif hasattr(wc_products, 'products'):
+                        products_list = wc_products.products
+                    else:
+                        products_list = []
+                    
+                    for product in products_list:
+                        # WooCommerce usa 'name' en lugar de 'title', y 'permalink' en lugar de 'url'
+                        title = getattr(product, 'name', None) or getattr(product, 'title', 'N/A')
+                        if isinstance(product, dict):
+                            title = product.get('name') or product.get('title', 'N/A')
+                        
+                        url = getattr(product, 'permalink', None) or getattr(product, 'url', '')
+                        if isinstance(product, dict):
+                            url = product.get('permalink') or product.get('url', '')
+                        
+                        results.append({
+                            "title": title if title else 'N/A',
+                            "price": getattr(product, 'price', 0) if hasattr(product, 'price') else (product.get('price', 0) if isinstance(product, dict) else 0),
+                            "currency": getattr(product, 'currency', '$') if hasattr(product, 'currency') else (product.get('currency', '$') if isinstance(product, dict) else '$'),
+                            "availability": getattr(product, 'in_stock', False) if hasattr(product, 'in_stock') else (product.get('in_stock', False) if isinstance(product, dict) else False),
+                            "url": url
+                        })
+            except Exception as e:
+                print(f"⚠️ Error consultando WooCommerce: {e}")
+        
+        # Formatear resultados para el prompt
+        if not results:
+            return ""
+        
+        formatted = "**PRODUCTOS DISPONIBLES (CONSULTA EN TIEMPO REAL):**\n"
+        for i, product in enumerate(results[:limit], 1):
+            availability_text = "✅ Disponible" if product.get("availability") else "❌ Agotado"
+            formatted += f"{i}. **{product.get('title', 'N/A')}** - {product.get('currency', '$')}{product.get('price', 'N/A')} - {availability_text}\n"
+            if product.get("url"):
+                formatted += f"   URL: {product['url']}\n"
+        
+        return formatted
+    
+    def _build_rag_retriever_lazy(self):
+        """Construye el retriever RAG cuando se necesita (lazy loading) - genera embeddings si es necesario."""
+        if self._rag_retriever_built and self.rag_retriever:
+            return self.rag_retriever
+        
+        try:
+            from pathlib import Path
+            import pickle
+            from langchain_chroma import Chroma
+            from langchain_openai import OpenAIEmbeddings
+            from langchain_community.retrievers import BM25Retriever
+            from langchain.retrievers import EnsembleRetriever
+            from ...retriever_builder import HybridRetriever
+            
+            # Cargar chunks guardados
+            if not self._rag_chunks_path or not self._rag_chunks_path.exists():
+                print("⚠️ No hay chunks RAG disponibles")
+                return None
+            
+            if self._rag_chunks is None:
+                with open(self._rag_chunks_path, "rb") as f:
+                    self._rag_chunks = pickle.load(f)
+                print(f"📂 Cargados {len(self._rag_chunks)} chunks para RAG")
+            
+            # Obtener API key para embeddings (OpenAI para embeddings, Groq para LLM)
+            api_key = None
+            if self.app_config:
+                api_key = getattr(self.app_config, "openai_api_key", None)
+            if not api_key:
+                import os
+                api_key = os.getenv("OPENAI_API_KEY", "")
+            
+            if not api_key:
+                print("⚠️ OpenAI API key no configurada para embeddings")
+                return None
+            
+            # Cargar metadata
+            metadata_path = self._rag_metadata_path or Path("docchat/business_ai_omnicanal/rag_storage/retriever_metadata.pkl")
+            persist_dir = None
+            
+            if metadata_path.exists():
+                with open(metadata_path, "rb") as f:
+                    retriever_metadata = pickle.load(f)
+                
+                persist_dir = retriever_metadata.get("persist_dir")
+                embeddings_generated = retriever_metadata.get("embeddings_generated", False)
+                
+                if persist_dir:
+                    persist_dir = Path(persist_dir)
+            
+            # Crear embeddings
+            embeddings = OpenAIEmbeddings(
+                model="text-embedding-3-small",
+                openai_api_key=api_key
+            )
+            
+            # Si ya hay embeddings persistidos, cargarlos
+            if persist_dir and persist_dir.exists() and embeddings_generated:
+                print(f"📂 Cargando embeddings desde: {persist_dir}")
+                vector_store = Chroma(
+                    persist_directory=str(persist_dir),
+                    embedding_function=embeddings
+                )
+                vector_retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+            else:
+                # Generar embeddings ahora (lazy loading)
+                print(f"🔄 Generando embeddings para {len(self._rag_chunks)} chunks (esto puede tardar unos minutos)...")
+                from ...config import AppConfig
+                from ... import load_config
+                config = self.app_config or load_config()
+                persist_dir = Path(config.persist_dir) / "business_ai_rag"
+                
+                vector_store = Chroma.from_documents(
+                    documents=self._rag_chunks,
+                    embedding=embeddings,
+                    persist_directory=str(persist_dir)
+                )
+                vector_retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+                
+                # Actualizar metadata
+                if metadata_path.exists():
+                    with open(metadata_path, "rb") as f:
+                        retriever_metadata = pickle.load(f)
+                else:
+                    retriever_metadata = {}
+                
+                retriever_metadata["persist_dir"] = str(persist_dir)
+                retriever_metadata["embeddings_generated"] = True
+                
+                with open(metadata_path, "wb") as f:
+                    pickle.dump(retriever_metadata, f)
+                
+                print(f"✅ Embeddings generados y guardados en: {persist_dir}")
+            
+            # Crear BM25 retriever
+            bm25_retriever = BM25Retriever.from_documents(self._rag_chunks)
+            bm25_retriever.k = 5
+            
+            # Crear Hybrid Retriever
+            self.rag_retriever = HybridRetriever(
+                bm25_retriever=bm25_retriever,
+                vector_retriever=vector_retriever,
+                weights=(0.4, 0.6)  # 40% BM25, 60% Vector
+            )
+            
+            self._rag_retriever_built = True
+            print(f"✅ Hybrid Retriever construido (BM25 + Vector Search)")
+            
+            return self.rag_retriever
+            
+        except Exception as e:
+            print(f"⚠️ Error construyendo retriever RAG: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     def _detect_language(self, text: str) -> str:
         """Detecta el idioma del texto."""
@@ -143,17 +450,67 @@ class BusinessAIAgent:
         return None
     
     def _query_rag(self, query: str, top_k: int = 5) -> str:
-        """Consulta el índice RAG para obtener información relevante."""
-        if not self.chatbot_config.rag_enabled or not self.rag_retriever:
+        """Consulta el índice RAG usando sistema multi-agente completo (Relevance Checker + Research + Verification)."""
+        if not self.chatbot_config.rag_enabled:
+            return ""
+        
+        # Construir retriever lazy (genera embeddings si es necesario)
+        retriever = self._build_rag_retriever_lazy()
+        if not retriever:
             return ""
         
         try:
-            # TODO: Implementar consulta real a RAG
-            # Por ahora retorna vacío
-            return ""
+            # Usar sistema multi-agente completo (como Meta/DocChat)
+            from ...workflow import AgentWorkflow
+            
+            # Crear workflow con Groq (provider="groq")
+            workflow = AgentWorkflow(
+                config=self.app_config,
+                provider="groq"  # SIEMPRE usar Groq para Business AI
+            )
+            
+            # Obtener todos los documentos para el workflow
+            all_documents = self._rag_chunks if self._rag_chunks else []
+            
+            # Ejecutar workflow completo (Relevance Checker + Research + Verification)
+            result = workflow.run(
+                question=query,
+                retriever=retriever,
+                all_documents=all_documents,
+                conversational_mode=False
+            )
+            
+            # Obtener respuesta del workflow
+            answer = result.get("answer") or result.get("draft_answer", "")
+            
+            if not answer:
+                return ""
+            
+            # Retornar respuesta procesada por el sistema multi-agente
+            return answer
+            
         except Exception as e:
-            print(f"⚠️ Error consultando RAG: {e}")
-            return ""
+            print(f"⚠️ Error consultando RAG con sistema multi-agente: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback: usar método simple si falla el workflow
+            try:
+                retrieved_docs = retriever.invoke(query)
+                if not retrieved_docs:
+                    return ""
+                
+                retrieved_docs = retrieved_docs[:top_k]
+                context_parts = []
+                for i, doc in enumerate(retrieved_docs, 1):
+                    content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
+                    source = doc.metadata.get('source', 'Documento') if hasattr(doc, 'metadata') else 'Documento'
+                    context_parts.append(f"[Documento {i} - {source}]\n{content}")
+                
+                return "\n\n---\n\n".join(context_parts)
+            except Exception as fallback_error:
+                print(f"⚠️ Error también en fallback: {fallback_error}")
+                return ""
     
     def _check_handoff_keywords(self, user_message: str) -> bool:
         """Verifica si el mensaje contiene palabras clave para handoff."""
@@ -213,6 +570,67 @@ class BusinessAIAgent:
         print(f"🚨 HANDOFF ACTIVADO: {reason} - Session: {session.session_id}")
         
         return ticket
+    
+    def _send_lead_to_crm(self, session: CustomerSessionState, lead_score: int, lead_label: str, booking_url: str):
+        """Envía datos del lead al CRM vía webhook."""
+        if not REQUESTS_AVAILABLE:
+            print("⚠️ requests no disponible. Instala con: pip install requests")
+            return
+        
+        crm_type = self.chatbot_config.crm_type.lower()
+        webhook_url = self.chatbot_config.crm_webhook_url
+        
+        # Preparar datos del lead
+        lead_data = {
+            "session_id": session.session_id,
+            "lead_score": lead_score,
+            "lead_label": lead_label,
+            "booking_url": booking_url,
+            "timestamp": session.created_at.isoformat() if hasattr(session, 'created_at') else None,
+            "message_count": len(session.messages) if hasattr(session, 'messages') else 0,
+        }
+        
+        # Agregar información adicional si está disponible
+        if hasattr(session, 'cart') and session.cart:
+            lead_data["has_cart"] = True
+            lead_data["cart_items_count"] = len(session.cart.get('items', []))
+        
+        # Formatear según tipo de CRM
+        if crm_type == "hubspot":
+            payload = {
+                "properties": [
+                    {"property": "lead_score", "value": lead_score},
+                    {"property": "lead_label", "value": lead_label},
+                    {"property": "booking_url", "value": booking_url},
+                ]
+            }
+        elif crm_type == "salesforce":
+            payload = {
+                "Lead_Score__c": lead_score,
+                "Lead_Label__c": lead_label,
+                "Booking_URL__c": booking_url,
+            }
+        elif crm_type == "pipedrive":
+            payload = {
+                "lead_score": lead_score,
+                "lead_label": lead_label,
+                "booking_url": booking_url,
+            }
+        else:
+            payload = lead_data
+        
+        # Enviar webhook
+        try:
+            response = requests.post(
+                webhook_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=5
+            )
+            response.raise_for_status()
+            print(f"✅ Lead enviado a CRM ({crm_type}): {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ Error enviando lead a CRM ({crm_type}): {e}")
     
     def handle_message(
         self,
@@ -314,7 +732,43 @@ class BusinessAIAgent:
             except:
                 pass
         
-        # === PASO 4: Procesar imagen si viene ===
+        # === PASO 4: Análisis de Comportamiento Avanzado (Nivel Dios Alien) 🚀 ===
+        conversation_history = list(self.conversation_memory._conversation_histories.get(session.session_id, []))
+        conversation_context_obj = self.conversation_memory.get_conversation_context(session.session_id)
+        conversation_context_dict = {
+            "preferences": conversation_context_obj.preferences if conversation_context_obj else {},
+            "needs_mentioned": conversation_context_obj.needs_mentioned if conversation_context_obj else [],
+            "objections_raised": conversation_context_obj.objections_raised if conversation_context_obj else [],
+            "products_viewed": conversation_context_obj.products_viewed if conversation_context_obj else [],
+            "products_interested": conversation_context_obj.products_interested if conversation_context_obj else [],
+        }
+        
+        products_viewed = conversation_context_dict.get("products_viewed", [])
+        time_in_session = None  # TODO: Calcular tiempo real de sesión
+        
+        behavior_analysis = self.behavior_analyzer.analyze(
+            message=user_message,
+            conversation_history=conversation_history,
+            user_profile={"is_returning": False},  # TODO: Detectar clientes recurrentes
+            time_in_session=time_in_session,
+            products_viewed=products_viewed
+        )
+        
+        print(f"🧠 Análisis de Comportamiento: {behavior_analysis.segment.value} | Señal: {behavior_analysis.purchase_signal.value} | Urgencia: {behavior_analysis.urgency_level.value}")
+        
+        # Generar sugerencias proactivas
+        cart_items = []  # TODO: Obtener items del carrito real
+        time_since_last_message = None  # TODO: Calcular tiempo real
+        
+        proactive_suggestions = self.proactive_engine.generate_suggestions(
+            behavior_analysis=behavior_analysis,
+            conversation_context=conversation_context_dict,
+            products_viewed=products_viewed,
+            time_since_last_message=time_since_last_message,
+            cart_items=cart_items
+        )
+        
+        # === PASO 5: Procesar imagen si viene ===
         image_analysis = None
         if image_data or "[Image]" in user_message:
             if "[Image]" in user_message:
@@ -326,7 +780,26 @@ class BusinessAIAgent:
             if image_data:
                 image_analysis = self._analyze_image(image_data)
 
-        # === PASO 5: Motor RAG Activo ===
+        # === PASO 5: Consultar Catálogo E-commerce en Tiempo Real (Nivel Meta) ===
+        ecommerce_context = ""
+        
+        # Detectar si la pregunta es sobre productos
+        product_keywords = ["producto", "precio", "stock", "disponible", "comprar", "catalogo", 
+                           "product", "price", "stock", "available", "buy", "catalog",
+                           "cuánto cuesta", "tienen", "venden", "ofrecen"]
+        is_product_query = any(keyword in user_message.lower() for keyword in product_keywords)
+        
+        if is_product_query:
+            # Extraer término de búsqueda del mensaje
+            # Intentar extraer nombre de producto del mensaje
+            search_query = user_message  # Por ahora usar todo el mensaje
+            
+            # Consultar catálogo en tiempo real
+            ecommerce_context = self._query_ecommerce_catalog_realtime(search_query, limit=5)
+            if ecommerce_context:
+                print(f"✅ Productos encontrados en tiempo real para: {search_query}")
+        
+        # === PASO 6: Motor RAG Activo ===
         rag_context = ""
         if self.chatbot_config.rag_enabled:
             rag_context = self._query_rag(user_message, top_k=5)
@@ -341,13 +814,44 @@ class BusinessAIAgent:
         session.lead_score = lead_score
         session.lead_label = lead_label
         
-        # Si es Lead Caliente, priorizar cierre de venta
-        if lead_label == "Lead Caliente":
-            # Añadir instrucciones de cierre al prompt
-            pass  # Se añadirá más abajo
+        # SINCRONIZACIÓN: BehaviorAnalyzer → ClosingTechniquesManager (NIVEL DIOS) 🚀
+        # El BehaviorAnalyzer ahora envía un TRIGGER directo cuando detecta que es momento de cerrar
+        closing_strategy = None
+        should_activate_closing = behavior_analysis.should_activate_closing
+        
+        if should_activate_closing:
+            print(f"🎯 [TRIGGER DE CIERRE] Activado: {behavior_analysis.closing_trigger_reason}")
+            # Seleccionar técnica de cierre apropiada
+            closing_strategy = self.closing_manager.select_technique(
+                behavior_analysis=behavior_analysis,
+                conversation_context=conversation_context_dict,
+                stock_available=None  # TODO: Obtener stock real del producto de interés
+            )
+            
+            if closing_strategy:
+                print(f"🎯 [Cierre Proactivo ACTIVADO] Técnica: {closing_strategy.technique.value} | Confianza: {closing_strategy.confidence:.0%}")
+                system_prompt += f"**🚀 CIERRE PROACTIVO ACTIVADO (TRIGGER AUTOMÁTICO):**\n"
+                system_prompt += f"- **Razón del trigger:** {behavior_analysis.closing_trigger_reason}\n"
+                system_prompt += f"- **Técnica seleccionada:** {closing_strategy.technique.value}\n"
+                system_prompt += f"- **Mensaje de cierre OBLIGATORIO:** {closing_strategy.message_template}\n"
+                system_prompt += f"- **Justificación:** {closing_strategy.rationale}\n"
+                system_prompt += f"- **INSTRUCCIÓN CRÍTICA:** DEBES INTEGRAR este mensaje de cierre DIRECTAMENTE en tu respuesta. "
+                system_prompt += f"NO solo lo sugieras - ÚSALO. El cliente está listo para comprar AHORA. "
+                system_prompt += f"Este es el momento de cerrar la venta, no de seguir explicando.\n\n"
         
         # Paso 1: Construir perfil contextual del usuario (CSALES approach)
         user_profile_context = self._build_user_profile_context(session, user_message)
+        
+        # Obtener user_id para memoria
+        user_id = session.customer_id if hasattr(session, 'customer_id') else session.session_id
+        
+        # Paso 1.5: Añadir Memoria Conversacional Profunda (Nivel Dios Alien) 🚀
+        full_conversation_context = self.conversation_memory.get_full_context_for_prompt(
+            session_id=session.session_id,
+            user_id=user_id,
+            include_history=True,
+            include_long_term=True
+        )
         
         # Paso 2: pedir al LLM que entienda intención de alto nivel (con perfil contextual)
         
@@ -386,26 +890,146 @@ class BusinessAIAgent:
             f"**Perfil del Cliente:**\n{user_profile_context}\n\n"
         )
         
+        # CUSTOMER DNA (NIVEL DIOS) - "Ficha Médica" del Comprador 🧬
+        conversation_context_obj = self.conversation_memory.get_accumulated_context(session.session_id)
+        customer_dna = conversation_context_obj.customer_dna if conversation_context_obj else None
+        
+        if customer_dna:
+            system_prompt += f"**🧬 CUSTOMER DNA (Perfil del Cliente - NIVEL DIOS):**\n"
+            system_prompt += f"- **Resumen:** {customer_dna.get('summary', 'N/A')}\n"
+            system_prompt += f"- **Sensibilidad:** {customer_dna.get('sensibility', 'unknown')} (precio vs calidad)\n"
+            system_prompt += f"- **Estilo de comunicación:** {customer_dna.get('communication_style', 'unknown')}\n"
+            system_prompt += f"- **Velocidad de decisión:** {customer_dna.get('decision_speed', 'unknown')}\n"
+            if customer_dna.get('recurring_objection'):
+                system_prompt += f"- **Objeción recurrente:** {customer_dna['recurring_objection']}\n"
+            system_prompt += f"- **Incentivo preferido:** {customer_dna.get('preferred_incentive', 'value')}\n"
+            if customer_dna.get('personality_traits'):
+                system_prompt += f"- **Rasgos de personalidad:** {', '.join(customer_dna['personality_traits'])}\n"
+            system_prompt += "\n"
+            system_prompt += "**USO DEL CUSTOMER DNA:**\n"
+            system_prompt += "- Adapta tu tono al estilo de comunicación del cliente\n"
+            system_prompt += f"- Si prefiere {customer_dna.get('preferred_incentive')}, usa ese tipo de incentivo\n"
+            if customer_dna.get('recurring_objection'):
+                system_prompt += f"- Aborda proactivamente la objeción recurrente: '{customer_dna['recurring_objection']}'\n"
+            system_prompt += "- Haz referencia al resumen para personalizar tu respuesta\n\n"
+        
+        # Añadir Memoria Conversacional Profunda (solo si NO hay customer_dna o para contexto adicional)
+        if full_conversation_context and not customer_dna:
+            system_prompt += f"**MEMORIA CONVERSACIONAL PROFUNDA:**\n{full_conversation_context}\n"
+            system_prompt += "**IMPORTANTE:** Usa esta memoria para hacer referencias como 'Como mencionaste antes...', 'Recuerdo que te interesaba...', etc.\n\n"
+        
+        # Añadir Análisis de Comportamiento al prompt
+        system_prompt += f"**ANÁLISIS DE COMPORTAMIENTO (INTERNO):**\n"
+        system_prompt += f"- Segmento del cliente: {behavior_analysis.segment.value}\n"
+        system_prompt += f"- Señal de compra: {behavior_analysis.purchase_signal.value} (Confianza: {behavior_analysis.confidence:.0%})\n"
+        system_prompt += f"- Nivel de urgencia: {behavior_analysis.urgency_level.value}\n"
+        system_prompt += f"- Riesgo de abandono: {behavior_analysis.risk_of_abandonment:.0%}\n"
+        if behavior_analysis.estimated_time_to_purchase:
+            system_prompt += f"- Tiempo estimado de compra: {behavior_analysis.estimated_time_to_purchase}\n"
+        system_prompt += f"- Acciones sugeridas: {', '.join(behavior_analysis.suggested_actions)}\n\n"
+        
+        # Si hay sugerencias proactivas de alta prioridad, mencionarlas
+        high_priority_suggestions = [s for s in proactive_suggestions if s.priority >= 7]
+        if high_priority_suggestions:
+            system_prompt += f"**SUGERENCIAS PROACTIVAS (ACCIÓN RECOMENDADA):**\n"
+            for suggestion in high_priority_suggestions[:2]:  # Máximo 2
+                system_prompt += f"- {suggestion.message}\n"
+            system_prompt += "\n"
+        
+        # Añadir contexto de E-commerce en tiempo real (PRIORIDAD ALTA - Nivel Meta)
+        product_recommendations_text = ""
+        if ecommerce_context:
+            system_prompt += f"**INFORMACIÓN DE PRODUCTOS EN TIEMPO REAL (ACTUALIZADA):**\n{ecommerce_context}\n\n"
+            system_prompt += "**IMPORTANTE:** Esta información es EN TIEMPO REAL. Usa estos productos, precios y stock actuales. "
+            system_prompt += "Si un producto no está en stock, di que está agotado. Si está en stock, confirma disponibilidad.\n\n"
+        
         # Añadir contexto RAG si está disponible
         if rag_context:
             system_prompt += f"**Información de Documentos (RAG):**\n{rag_context}\n\n"
             system_prompt += "**IMPORTANTE:** Usa SOLO la información de los documentos arriba. NO inventes información.\n\n"
+            
+            # RECOMENDACIONES INTELIGENTES usando RAG (PRIORIDAD 2) 🎯
+            try:
+                # Obtener productos mencionados en la conversación
+                conversation_context_obj = self.conversation_memory.get_accumulated_context(session.session_id)
+                products_mentioned = conversation_context_obj.products_interested if conversation_context_obj else []
+                
+                # Si hay productos mencionados, generar recomendaciones usando RAG
+                if products_mentioned and rag_context:
+                    # Obtener primer producto mencionado
+                    first_product_id = products_mentioned[0] if products_mentioned else None
+                    
+                    if first_product_id:
+                        # Obtener productos disponibles del catálogo/e-commerce
+                        available_products = []  # Se obtendrá del contexto de e-commerce o catálogo
+                        
+                        # Generar recomendaciones
+                        recommendations = self.product_recommender.get_all_recommendations(
+                            current_product_id=first_product_id,
+                            current_product_name=first_product_id,
+                            rag_context=rag_context,
+                            available_products=available_products,
+                            limit=3
+                        )
+                        
+                        if recommendations:
+                            product_recommendations_text = self.product_recommender.format_recommendations_for_prompt(recommendations)
+            except Exception as e:
+                print(f"⚠️ Error generando recomendaciones: {e}")
+        
+        # Añadir recomendaciones de productos al prompt
+        if product_recommendations_text:
+            system_prompt += product_recommendations_text
         
         # Añadir información de Lead Scoring
         if self.chatbot_config.lead_scoring_enabled:
             system_prompt += f"**Lead Score:** {lead_score} ({lead_label})\n"
             if lead_label == "Lead Caliente":
                 system_prompt += "**PRIORIDAD:** Este es un Lead Caliente. Enfócate en cerrar la venta, ofrecer productos, crear urgencia.\n"
+                # Si booking está habilitado, mencionarlo en el prompt
+                if self.chatbot_config.booking_enabled:
+                    system_prompt += "**AGENDAMIENTO:** Si el cliente muestra interés, puedes mencionar que pueden agendar una cita para una demo personalizada.\n"
             system_prompt += "\n"
         
         system_prompt += (
-            "**Instrucciones Especiales (basadas en Mix-ECom, CSALES, Retail-GPT, MegaChat):**\n"
-            "- Si el usuario pregunta por un producto, NO solo muestres ese producto. Sugiere complementos (cross-selling).\n"
-            "- Si el usuario muestra interés pero duda, usa persuasión estratégica adaptada a su perfil.\n"
-            "- Si el usuario envía una imagen, analízala para entender su necesidad (producto, problema, reclamo).\n"
+            "**🎯 ESTRATEGIA DE VENTAS AVANZADA (Nivel Meta Sales Agent):**\n\n"
+            "**1. Descubrimiento Inteligente de Necesidades:**\n"
+            "- Haz preguntas estratégicas para entender el contexto real del cliente (presupuesto, timeline, necesidad específica).\n"
+            "- NO asumas. Pregunta antes de recomendar. Ejemplo: '¿Para qué ocasión lo necesitas?' o '¿Cuál es tu presupuesto aproximado?'\n"
+            "- Escucha activamente: si el cliente menciona algo, profundiza en eso.\n\n"
+            "**2. Persuasión Estratégica y Cierre Avanzado:**\n"
+            "- Usa técnicas de cierre suave: '¿Te parece bien si te muestro 3 opciones que encajan perfecto con lo que buscas?'\n"
+            "- Crea urgencia cuando sea apropiado: 'Solo quedan 2 unidades en tu talla' o 'Esta oferta termina mañana'.\n"
+            "- Resuelve objeciones proactivamente: si detectas dudas sobre precio, explica el valor, no solo el costo.\n"
+            "- Usa prueba social: 'Este producto es muy popular entre clientes como tú'.\n\n"
+            "**3. Cross-Selling y Up-Selling Inteligente:**\n"
+            "- Si el usuario pregunta por un producto, NO solo muestres ese producto. Sugiere complementos lógicos.\n"
+            "- Ejemplo: Si pregunta por zapatillas, sugiere calcetines, plantillas, o productos de cuidado.\n"
+            "- Up-selling natural: 'Para un uso intensivo, te recomendaría la versión Pro que dura 3x más'.\n"
+            "- **USA LAS RECOMENDACIONES DE PRODUCTOS:** Si hay productos recomendados arriba, menciónalos de forma natural en tu respuesta.\n"
+            "- Integra recomendaciones naturalmente: 'Este producto va perfecto con X que también tenemos, ¿te interesa verlo?'\n\n"
+            "**4. Personalización Extrema:**\n"
+            "- Adapta tu tono al perfil del usuario (más formal para B2B, más entusiasta para lifestyle).\n"
+            "- Usa el historial de conversación para personalizar recomendaciones.\n"
+            "- Si el cliente mencionó algo antes, refiérete a eso: 'Como mencionaste que buscas algo cómodo...'\n\n"
+            "**5. Proactividad y Anticipación:**\n"
+            "- Después de resolver una pregunta, pregunta proactivamente: '¿Hay algo más en lo que pueda ayudarte?'\n"
+            "- Anticipa necesidades: Si alguien compra un producto, ofrece información sobre garantía, envío, o cuidado.\n"
+            "- Si el cliente muestra interés pero no compra, pregunta qué le falta: '¿Hay algo específico que te gustaría saber antes de decidir?'\n\n"
+            "**6. Manejo de Objeciones Avanzado:**\n"
+            "- Si el cliente dice 'está caro', no solo defiendas el precio. Pregunta: '¿Comparado con qué?' o '¿Cuál es tu presupuesto?'\n"
+            "- Si dice 'lo voy a pensar', pregunta: '¿Hay algo específico en lo que pueda ayudarte a decidir?'\n"
+            "- Usa técnicas de cierre suave: '¿Te parece bien si te envío un resumen con las opciones que vimos?'\n\n"
+            "**7. Experiencia de Conversación Natural:**\n"
             "- Maneja diálogos mixtos: puedes responder preguntas, recomendar, vender y hacer chit-chat en la misma conversación.\n"
-            "- Personaliza tu tono según el perfil del usuario (más formal para B2B, más entusiasta para lifestyle).\n"
-            "- Si hay análisis de imagen, úsalo para verificar reclamos o identificar productos.\n"
+            "- Si el usuario envía una imagen, analízala para entender su necesidad (producto, problema, reclamo).\n"
+            "- Sé conversacional pero enfocado en resultados.\n"
+            "- Evita respuestas genéricas. Sé específico y útil.\n\n"
+            "**8. Técnicas de Cierre de Ventas (cuando es Lead Caliente):**\n"
+            "- Usa el método de 'asumir la venta': 'Perfecto, ¿qué talla necesitas?' en lugar de '¿Te gustaría comprarlo?'\n"
+            "- Crea escasez cuando sea real: 'Solo quedan X unidades'.\n"
+            "- Ofrece alternativas: 'Si este no encaja, tengo otras 2 opciones que podrían funcionar mejor'.\n"
+            "- Cierra con un siguiente paso claro: '¿Te parece bien si te muestro el carrito para que revises?'\n"
         )
         
         # Añadir instrucciones de idioma si es necesario
@@ -525,6 +1149,21 @@ class BusinessAIAgent:
             if product_id:
                 if cart_action == "add":
                     cart = self.cart_tool.add_item(session_id, product_id, quantity)
+                    
+                    # Tracking de conversión: ADD_TO_CART (PRIORIDAD 1) 📊
+                    user_id = session.customer_id if hasattr(session, 'customer_id') else session.session_id
+                    product_info = next((p for p in tool_results.get("products", []) if isinstance(p, dict) and str(p.get("id")) == str(product_id)), {})
+                    product_name = product_info.get("title") or product_info.get("name") or "Producto"
+                    product_price = float(product_info.get("price", 0))
+                    
+                    self.conversion_tracker.track_add_to_cart(
+                        session_id=session_id,
+                        user_id=user_id,
+                        product_id=str(product_id),
+                        product_name=product_name,
+                        price=product_price,
+                        quantity=quantity
+                    )
                 elif cart_action == "remove":
                     cart = self.cart_tool.remove_item(session_id, product_id)
                 else:
@@ -537,17 +1176,41 @@ class BusinessAIAgent:
         # Pago
         if intent_data.get("needs_payment"):
             cart = self.cart_tool.get_cart(session_id)
+            cart_dict = cart.to_dict() if hasattr(cart, "to_dict") else cart.__dict__
+            cart_items = cart_dict.get("items", [])
+            cart_value = sum(item.get("price", 0) * item.get("quantity", 1) for item in cart_items if isinstance(item, dict))
+            
+            # Tracking de conversión: INITIATE_CHECKOUT (PRIORIDAD 1) 📊
+            user_id = session.customer_id if hasattr(session, 'customer_id') else session.session_id
+            self.conversion_tracker.track_initiate_checkout(
+                session_id=session_id,
+                user_id=user_id,
+                cart_value=cart_value,
+                items=cart_items
+            )
+            
             payment_result = self.payment_tool.create_payment_for_cart(session_id=session_id, cart=cart)
             tool_results["payment"] = payment_result.__dict__
-
+            
             # Crear orden
             order = self.order_tool.create_order(
                 session_id=session_id,
-                cart_snapshot=tool_results.get("cart") or (cart.to_dict() if hasattr(cart, "to_dict") else cart.__dict__),
+                cart_snapshot=tool_results.get("cart") or cart_dict,
                 payment_info=tool_results["payment"],
             )
             tool_results["order"] = order
             session.recent_orders.append(order)
+            
+            # Tracking de conversión: PURCHASE_COMPLETE (PRIORIDAD 1) 📊
+            order_id = order.get("order_id", order.get("id", ""))
+            self.conversion_tracker.track_purchase_complete(
+                session_id=session_id,
+                user_id=user_id,
+                order_id=str(order_id),
+                total=cart_value,
+                items=cart_items,
+                currency="USD"
+            )
 
         # Estado de pedido
         if intent == "order_status" and intent_data.get("order_id"):
@@ -565,27 +1228,48 @@ class BusinessAIAgent:
             session.open_tickets.append(ticket)
             tool_results["ticket"] = ticket
 
-        # Generar respuesta final amigable (con personalización y persuasión)
+        # Generar respuesta final amigable (con personalización y persuasión nivel Meta Sales Agent)
         summary_prompt = (
-            "Genera una respuesta amable, clara y personalizada en español para el cliente.\n\n"
+            "Genera una respuesta INTELIGENTE, PROACTIVA y PERSUASIVA en español para el cliente.\n\n"
             "**Contexto de herramientas ejecutadas:**\n"
             f"{json.dumps(tool_results, default=str)[:2000]}\n\n"
             f"**Mensaje original del cliente:** {user_message[:500]}\n\n"
             f"**Perfil del cliente:** {user_profile_context}\n\n"
-            "**Instrucciones de respuesta (basadas en CSALES y MegaChat):**\n"
-            "- Responde DIRECTAMENTE a la pregunta del usuario. NO uses saludos genéricos si el usuario ya hizo una pregunta específica.\n"
-            "- Si el usuario pregunta por productos, lista los productos encontrados con NOMBRES, PRECIOS y CARACTERÍSTICAS específicas. NO digas genéricamente 'tenemos productos', muestra los productos reales.\n"
-            "- Si hay productos sugeridos, explica POR QUÉ son buenos para este cliente específico (personalización).\n"
-            "- Si el usuario pregunta 'qué día es hoy', responde con la fecha actual REAL (usa la fecha de hoy).\n"
-            "- Si el usuario pregunta 'qué sabes', explica ESPECÍFICAMENTE qué puedes hacer (buscar productos, gestionar pedidos, etc.) con ejemplos concretos.\n"
-            "- Si hay productos de cross-selling, preséntalos de forma persuasiva pero no agresiva.\n"
-            "- Si el cliente muestra dudas sobre precio, usa persuasión estratégica (valor, calidad, beneficios).\n"
-            "- Adapta el tono al perfil del cliente (formal vs casual).\n"
-            "- Si hay carrito, muestra resumen y anima a completar la compra.\n"
-            "- Si hay productos, incluye detalles relevantes (precio, características, disponibilidad).\n"
-            "- Si NO hay productos encontrados, di claramente que no encontraste productos pero ofrece ayuda alternativa.\n"
-            "- Sé proactivo: después de resolver la pregunta actual, pregunta si necesita algo más.\n"
-            "- Evita respuestas genéricas como 'Me alegra que hayas iniciado esta conversación' cuando el usuario ya hizo una pregunta específica.\n"
+            "**🎯 INSTRUCCIONES DE RESPUESTA (Nivel Meta Sales Agent - Super Genio):**\n\n"
+            "**1. Responde DIRECTAMENTE y ESPECÍFICAMENTE:**\n"
+            "- NO uses saludos genéricos si el usuario ya hizo una pregunta específica.\n"
+            "- Si el usuario pregunta por productos, lista los productos encontrados con NOMBRES, PRECIOS y CARACTERÍSTICAS específicas.\n"
+            "- NO digas genéricamente 'tenemos productos'. Muestra los productos REALES con detalles concretos.\n"
+            "- Si el usuario pregunta 'qué día es hoy', responde con la fecha actual REAL.\n"
+            "- Si el usuario pregunta 'qué sabes', explica ESPECÍFICAMENTE qué puedes hacer con ejemplos concretos.\n\n"
+            "**2. Personalización Extrema:**\n"
+            "- Si hay productos sugeridos, explica POR QUÉ son buenos para este cliente específico basándote en su perfil.\n"
+            "- Usa el historial: 'Como mencionaste que buscas algo cómodo...' o 'Basándome en lo que te gustó antes...'\n"
+            "- Adapta el tono al perfil del cliente (formal vs casual, técnico vs simple).\n\n"
+            "**3. Cross-Selling y Up-Selling Inteligente:**\n"
+            "- Si hay productos de cross-selling, preséntalos de forma natural: 'Este producto va perfecto con X que también tenemos'.\n"
+            "- Up-selling suave: 'Para un uso más intensivo, te recomendaría la versión Pro que...'\n"
+            "- NO seas agresivo. Sé útil y natural.\n\n"
+            "**4. Persuasión Estratégica:**\n"
+            "- Si el cliente muestra dudas sobre precio, explica el VALOR, no solo el costo: 'Este producto te durará X años, lo que significa que cuesta solo Y por mes'.\n"
+            "- Crea urgencia cuando sea real: 'Solo quedan X unidades en tu talla' o 'Esta oferta termina mañana'.\n"
+            "- Usa prueba social: 'Este producto es muy popular entre clientes como tú'.\n\n"
+            "**5. Proactividad y Cierre:**\n"
+            "- Después de resolver la pregunta actual, pregunta proactivamente: '¿Hay algo más en lo que pueda ayudarte?' o '¿Te gustaría ver más opciones?'\n"
+            "- Si hay carrito, muestra resumen y anima a completar la compra: 'Tienes X productos en tu carrito. ¿Te parece bien si revisamos el total?'\n"
+            "- Si es Lead Caliente, sé más directo: 'Veo que estás muy interesado. ¿Te parece bien si te muestro cómo completar la compra?'\n\n"
+            "**6. Manejo de Situaciones Específicas:**\n"
+            "- Si NO hay productos encontrados, di claramente que no encontraste productos pero ofrece ayuda alternativa: 'No encontré exactamente eso, pero tengo estas opciones similares que podrían funcionar...'\n"
+            "- Si hay productos, incluye detalles relevantes (precio, características, disponibilidad, envío).\n"
+            "- Si hay análisis de imagen, úsalo para verificar reclamos o identificar productos.\n\n"
+            "**7. Evita Respuestas Genéricas:**\n"
+            "- NO digas 'Me alegra que hayas iniciado esta conversación' cuando el usuario ya hizo una pregunta específica.\n"
+            "- NO uses frases vacías. Sé específico, útil y orientado a resultados.\n"
+            "- Cada respuesta debe agregar valor real al cliente.\n\n"
+            "**8. Técnicas de Cierre Avanzadas (si es Lead Caliente):**\n"
+            "- Usa el método de 'asumir la venta': 'Perfecto, ¿qué talla necesitas?' en lugar de '¿Te gustaría comprarlo?'\n"
+            "- Ofrece alternativas: 'Si este no encaja, tengo otras 2 opciones que podrían funcionar mejor'.\n"
+            "- Cierra con un siguiente paso claro: '¿Te parece bien si te muestro el carrito para que revises?' o '¿Quieres que te ayude a completar la compra?'\n"
         )
 
         # Usar helper para invocar LLM con fallback automático
@@ -595,14 +1279,50 @@ class BusinessAIAgent:
         ])
         final_text = getattr(final_resp, "content", str(final_resp))
         
-        # === PASO 7: Traducción Multilingüe ===
+        # === PASO 7: Agendamiento de Citas (Booking/CTA) - PRIORIDAD ALTA 🚨 ===
+        booking_cta = ""
+        booking_url = None
+        if (self.chatbot_config.booking_enabled and 
+            lead_label == "Lead Caliente" and 
+            (self.chatbot_config.calendly_url or self.chatbot_config.google_calendar_url)):
+            
+            # Construir mensaje de booking con link
+            booking_message = self.chatbot_config.booking_message or "Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga."
+            
+            # Priorizar Calendly si está configurado, sino Google Calendar
+            booking_url = self.chatbot_config.calendly_url or self.chatbot_config.google_calendar_url
+            booking_cta = f"\n\n📅 **{booking_message}**\n\n🔗 [Agendar Cita Aquí]({booking_url})"
+            
+            # Enviar datos al CRM si está configurado
+            if self.chatbot_config.crm_webhook_url and self.chatbot_config.crm_type:
+                try:
+                    self._send_lead_to_crm(session, lead_score, lead_label, booking_url)
+                except Exception as e:
+                    print(f"⚠️ Error enviando lead a CRM: {e}")
+        
+        # === PASO 8: Traducción Multilingüe ===
         if self.translator and detected_language != self.chatbot_config.default_language:
             try:
                 final_text = self.translator.translate(final_text, detected_language)
+                if booking_cta:
+                    booking_cta = self.translator.translate(booking_cta, detected_language)
             except Exception as e:
                 print(f"⚠️ Error traduciendo respuesta: {e}")
 
-        session.add_message("assistant", final_text)
+        # Agregar CTA de booking a la respuesta final
+        final_text_with_booking = final_text + booking_cta
+        
+        session.add_message("assistant", final_text_with_booking)
+        
+        # Guardar respuesta en memoria conversacional (Nivel Dios Alien) 🚀
+        user_id = session.customer_id if hasattr(session, 'customer_id') else session.session_id
+        self.conversation_memory.add_message(
+            session_id=session.session_id,
+            user_id=user_id,
+            role="assistant",
+            content=final_text_with_booking,
+            metadata={"behavior_analysis": behavior_analysis.segment.value if behavior_analysis else None}
+        )
         
         # Guardar mensaje en PostgreSQL si está habilitado (para memoria de largo plazo)
         if hasattr(self.session_manager, 'save_message'):
@@ -610,11 +1330,13 @@ class BusinessAIAgent:
                 self.session_manager.save_message(
                     session_id=session.session_id,
                     role="assistant",
-                    content=final_text,
+                    content=final_text_with_booking if booking_cta else final_text,
                     metadata={
                         "intent": intent,
                         "sentiment": session.sentiment.value,
-                        "frustration_score": session.frustration_score
+                        "frustration_score": session.frustration_score,
+                        "booking_offered": bool(booking_cta),
+                        "booking_url": booking_url if booking_cta else None
                     }
                 )
             except:
@@ -639,7 +1361,7 @@ class BusinessAIAgent:
 
         # Incluir información del carrito en la respuesta (para el widget)
         response_data = {
-            "text": final_text,
+            "text": final_text_with_booking if booking_cta else final_text,
             "intent": intent,
             "tools": tool_results,
             "sentiment": session.sentiment.value,
@@ -648,6 +1370,8 @@ class BusinessAIAgent:
             "language": detected_language,
             "lead_score": lead_score if self.chatbot_config.lead_scoring_enabled else None,
             "lead_label": lead_label if self.chatbot_config.lead_scoring_enabled else None,
+            "booking_offered": bool(booking_cta),
+            "booking_url": booking_url if booking_cta else None,
             "session": session,
         }
         
@@ -813,6 +1537,17 @@ class BusinessAIAgent:
         except Exception as e:
             # Si falla completamente, retornar None
             return None
+
+
+
+
+
+
+
+
+
+
+
 
 
 

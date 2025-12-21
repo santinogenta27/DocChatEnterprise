@@ -24,6 +24,7 @@ class ChatbotConfig:
     # RAG
     rag_enabled: bool = False
     documents_dir: str = ""
+    retriever_path: str = ""  # Ruta al archivo pickle del Hybrid Retriever guardado
     
     # Lead Scoring
     lead_scoring_enabled: bool = False
@@ -40,6 +41,14 @@ class ChatbotConfig:
     
     # Objeciones
     objection_responses: Dict[str, str] = field(default_factory=dict)
+    
+    # Agendamiento de Citas (Booking/CTA) - PRIORIDAD ALTA 🚨
+    booking_enabled: bool = False
+    calendly_url: str = ""
+    google_calendar_url: str = ""
+    crm_webhook_url: str = ""
+    crm_type: str = ""  # hubspot, salesforce, pipedrive, ""
+    booking_message: str = "Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga."
     
     def to_dict(self) -> Dict[str, Any]:
         """Convierte la configuración a diccionario."""
@@ -120,6 +129,7 @@ class ChatbotConfigManager:
         # RAG
         chatbot_config.rag_enabled = os.getenv("DOCCHAT_CHATBOT_RAG_ENABLED", "false").lower() == "true"
         chatbot_config.documents_dir = os.getenv("DOCCHAT_CHATBOT_DOCUMENTS_DIR", "")
+        chatbot_config.retriever_path = os.getenv("DOCCHAT_CHATBOT_RETRIEVER_PATH", "")
         
         # Lead Scoring
         chatbot_config.lead_scoring_enabled = os.getenv("DOCCHAT_CHATBOT_LEAD_SCORING_ENABLED", "false").lower() == "true"
@@ -145,6 +155,14 @@ class ChatbotConfigManager:
             chatbot_config.objection_responses = json.loads(objection_responses_json)
         except:
             chatbot_config.objection_responses = {}
+        
+        # Agendamiento de Citas (Booking/CTA)
+        chatbot_config.booking_enabled = os.getenv("DOCCHAT_CHATBOT_BOOKING_ENABLED", "false").lower() == "true"
+        chatbot_config.calendly_url = os.getenv("DOCCHAT_CHATBOT_CALENDLY_URL", "")
+        chatbot_config.google_calendar_url = os.getenv("DOCCHAT_CHATBOT_GOOGLE_CALENDAR_URL", "")
+        chatbot_config.crm_type = os.getenv("DOCCHAT_CHATBOT_CRM_TYPE", "")
+        chatbot_config.crm_webhook_url = os.getenv("DOCCHAT_CHATBOT_CRM_WEBHOOK_URL", "")
+        chatbot_config.booking_message = os.getenv("DOCCHAT_CHATBOT_BOOKING_MESSAGE", "Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga.")
         
         self.config = chatbot_config
         return chatbot_config
@@ -181,6 +199,14 @@ class ChatbotConfigManager:
             
             env_vars["DOCCHAT_CHATBOT_OBJECTION_RESPONSES"] = json.dumps(chatbot_config.objection_responses)
             
+            # Agendamiento de Citas (Booking/CTA)
+            env_vars["DOCCHAT_CHATBOT_BOOKING_ENABLED"] = "true" if chatbot_config.booking_enabled else "false"
+            env_vars["DOCCHAT_CHATBOT_CALENDLY_URL"] = chatbot_config.calendly_url or ""
+            env_vars["DOCCHAT_CHATBOT_GOOGLE_CALENDAR_URL"] = chatbot_config.google_calendar_url or ""
+            env_vars["DOCCHAT_CHATBOT_CRM_TYPE"] = chatbot_config.crm_type or ""
+            env_vars["DOCCHAT_CHATBOT_CRM_WEBHOOK_URL"] = chatbot_config.crm_webhook_url or ""
+            env_vars["DOCCHAT_CHATBOT_BOOKING_MESSAGE"] = chatbot_config.booking_message or ""
+            
             # Escribir .env
             with open(self.env_path, "w", encoding="utf-8") as f:
                 for key, value in env_vars.items():
@@ -210,4 +236,14 @@ class ChatbotConfigManager:
                 print(f"⚠️ No se pudo actualizar .env (no crítico): {e}")
         
         return success
+
+
+
+
+
+
+
+
+
+
 

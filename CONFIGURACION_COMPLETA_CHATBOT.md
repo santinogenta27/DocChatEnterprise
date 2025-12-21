@@ -160,3 +160,13 @@ Para que estas configuraciones se reflejen completamente en el funcionamiento de
 - Todas las configuraciones son opcionales (el chatbot funciona con valores por defecto)
 
 
+
+
+
+
+
+
+
+
+
+

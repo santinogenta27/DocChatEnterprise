@@ -208,3 +208,13 @@ Para completar la implementación:
 3. Mejorar notificaciones de handoff
 4. Optimizar detección de idioma
 
+
+
+
+
+
+
+
+
+
+

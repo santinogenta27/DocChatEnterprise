@@ -33,7 +33,12 @@ class ResearchAgent:
         self.config = config
         api_key = None
         if config:
-            api_key = config.openai_api_key if provider == "openai" else config.anthropic_api_key
+            if provider == "groq":
+                api_key = config.groq_api_key
+            elif provider == "claude":
+                api_key = config.anthropic_api_key
+            else:
+                api_key = config.openai_api_key
         
         self.llm = create_llm(
             provider=provider,

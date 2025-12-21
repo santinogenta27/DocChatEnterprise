@@ -1,9 +1,15 @@
-"""Factory para crear LLMs de diferentes proveedores (OpenAI, Anthropic)."""
+"""Factory para crear LLMs de diferentes proveedores (OpenAI, Anthropic, Groq)."""
 from __future__ import annotations
 
 from typing import Optional
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+try:
+    from langchain_groq import ChatGroq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    ChatGroq = None
 
 
 def create_llm(
@@ -19,7 +25,7 @@ def create_llm(
     Crea un LLM del proveedor especificado.
     
     Args:
-        provider: "openai" o "claude"
+        provider: "openai", "claude" o "groq"
         model: Nombre del modelo
         temperature: Temperatura del modelo
         max_tokens: Tokens máximos (None = sin límite, la API decide la longitud)
@@ -28,9 +34,28 @@ def create_llm(
         max_retries: Número máximo de reintentos
     
     Returns:
-        LLM instance (ChatOpenAI o ChatAnthropic)
+        LLM instance (ChatOpenAI, ChatAnthropic o ChatGroq)
     """
-    if provider.lower() == "claude":
+    if provider.lower() == "groq":
+        if not GROQ_AVAILABLE:
+            raise ImportError("langchain-groq no está instalado. Instala con: pip install langchain-groq")
+        
+        # Groq soporta modelos Llama y Mixtral
+        # Para Business AI siempre usar llama-3.3-70b-versatile
+        groq_model = model if model.startswith("llama") or model.startswith("mixtral") else "llama-3.3-70b-versatile"
+        
+        kwargs = {
+            "model": groq_model,
+            "temperature": temperature,
+            "groq_api_key": api_key,
+            "timeout": request_timeout,
+            "max_retries": max_retries
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        
+        return ChatGroq(**kwargs)
+    elif provider.lower() == "claude":
         # Mapear modelos de OpenAI a Claude equivalentes
         # ACTUALIZADO: Usar modelos Claude 4.5 (familia actual)
         # Claude Sonnet 4.5: Mejor balance inteligencia/velocidad/costo

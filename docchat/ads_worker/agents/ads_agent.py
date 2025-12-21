@@ -9,22 +9,35 @@ import uuid
 import os
 import logging
 
+# Inicializar variables globales para imports
+create_agent = None
+LANGCHAIN_AVAILABLE = False
+LANGGRAPH_AVAILABLE = False
+
 try:
-    from langchain.agents import AgentExecutor, create_openai_tools_agent
     from langchain_openai import ChatOpenAI
-    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-    from langchain.tools import Tool
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langchain_core.tools import tool, Tool
     from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    # Para LangChain 1.2.0+, usar langchain.agents para crear agentes
+    try:
+        from langchain.agents import create_agent
+        LANGGRAPH_AVAILABLE = True
+    except ImportError:
+        # Fallback al método antiguo si está disponible
+        try:
+            from langgraph.prebuilt import create_react_agent as create_agent
+            LANGGRAPH_AVAILABLE = True
+        except ImportError:
+            LANGGRAPH_AVAILABLE = False
+            create_agent = None
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
+    LANGGRAPH_AVAILABLE = False
     # Definir clases dummy para evitar NameError en type hints
     class Tool:
         """Dummy Tool class when langchain is not installed"""
-        pass
-    
-    class AgentExecutor:
-        """Dummy AgentExecutor class when langchain is not installed"""
         pass
 
 from ..utils.logging import setup_logger
@@ -160,10 +173,16 @@ class AdsWorkerAgent:
         
         return tools
     
-    def _create_agent(self) -> AgentExecutor:
-        """Create the LangChain agent"""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert AI advertising manager that creates and optimizes ad campaigns.
+    def _create_agent(self):
+        """Create the LangChain agent using LangGraph"""
+        if not LANGCHAIN_AVAILABLE:
+            raise ImportError("LangChain is required for AdsWorkerAgent")
+        
+        # Para LangChain 1.2.0+, usar langchain.agents o langgraph
+        if LANGGRAPH_AVAILABLE and create_agent is not None:
+            try:
+                # Crear agente ReAct con LangGraph
+                system_message = """You are an expert AI advertising manager that creates and optimizes ad campaigns.
 
 Your workflow:
 1. Process user assets (images/videos/text) to understand content
@@ -172,16 +191,20 @@ Your workflow:
 4. Create campaigns on Meta and/or Google Ads
 5. Monitor performance and optimize continuously
 
-Always think step by step and explain your decisions."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad")
-        ])
-        
-        agent = create_openai_tools_agent(self.llm, self.tools, prompt)
-        agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True)
-        
-        return agent_executor
+Always think step by step and explain your decisions."""
+                
+                agent = create_agent(
+                    model=self.llm,
+                    tools=self.tools,
+                    system_prompt=system_message
+                )
+                logger.info("✅ Agente ReAct creado con LangGraph")
+                return agent
+            except Exception as e:
+                logger.error(f"Error creando agente con LangGraph: {e}")
+                raise
+        else:
+            raise ImportError("LangGraph is required for AdsWorkerAgent. Install with: pip install langgraph")
     
     def _process_asset_tool(self, asset_info: str) -> str:
         """Tool wrapper for asset processing"""
