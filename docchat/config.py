@@ -53,7 +53,7 @@ class AppConfig:
     # API Keys
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "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")
-    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "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")
     
     # Groq Settings (Enterprise - Velocidad Extrema)
     use_groq: bool = os.getenv("DOCCHAT_USE_GROQ", "false").lower() == "true"

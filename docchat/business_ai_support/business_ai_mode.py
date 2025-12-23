@@ -120,6 +120,32 @@ class BusinessAISupportMode:
             self.troubleshooting_engine = None
             self.internal_scheduler = None
         
+        # Notification Manager (Email + Slack)
+        try:
+            from .notifications.notification_manager import NotificationManager
+            # Configuración desde variables de entorno o defaults
+            email_config = {
+                "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
+                "smtp_port": int(os.getenv("SMTP_PORT", "587")),
+                "smtp_user": os.getenv("SMTP_USER", ""),
+                "smtp_password": os.getenv("SMTP_PASSWORD", ""),
+                "from_email": os.getenv("SMTP_FROM_EMAIL", os.getenv("SMTP_USER", "")),
+                "to_emails": os.getenv("SMTP_TO_EMAILS", "").split(",") if os.getenv("SMTP_TO_EMAILS") else []
+            }
+            slack_config = {
+                "webhook_url": os.getenv("SLACK_WEBHOOK_URL", "")
+            }
+            self.notification_manager = NotificationManager(
+                email_enabled=bool(email_config.get("smtp_user") and email_config.get("smtp_password")),
+                slack_enabled=bool(slack_config.get("webhook_url")),
+                email_config=email_config if email_config.get("smtp_user") else None,
+                slack_config=slack_config if slack_config.get("webhook_url") else None
+            )
+            print("✅ Notification Manager inicializado")
+        except Exception as e:
+            print(f"⚠️ Error inicializando Notification Manager: {e}")
+            self.notification_manager = None
+        
         # CRM Integration - Deep Integration with Salesforce, HubSpot, Zendesk
         self.crm_manager = self._initialize_crm_manager()
         self.crm_tool = CRMTool(self.crm_manager) if self.crm_manager and self.crm_manager.connectors else None
@@ -146,6 +172,7 @@ class BusinessAISupportMode:
             app_config=self.config,  # Pasar AppConfig para RAG y traducción
             troubleshooting_engine=self.troubleshooting_engine,
             internal_scheduler=self.internal_scheduler,
+            notification_manager=self.notification_manager,  # Notification system
         )
 
         # Adaptador por defecto (web). Para WhatsApp/IG se pueden añadir otros.

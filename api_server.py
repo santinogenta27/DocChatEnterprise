@@ -69,6 +69,15 @@ try:
 except Exception as e:
     print(f"⚠️ Business AI Omnicanal no disponible: {e}")
 
+# Inicializar Business AI Support (para omnicanal + escalación + notificaciones)
+business_ai_support_mode = None
+try:
+    from docchat.business_ai_support import BusinessAISupportMode
+    business_ai_support_mode = BusinessAISupportMode(config=config)
+    print("✅ Business AI Support inicializado - Omnicanal + Escalación + Notificaciones")
+except Exception as e:
+    print(f"⚠️ Business AI Support no disponible: {e}")
+
 # Crear aplicación FastAPI
 app = FastAPI(
     title="DocChat Enterprise - Backend RAG + Deep Research + Business AI Widget",
@@ -205,16 +214,22 @@ if business_ai_mode:
         Configura en Twilio Console: https://console.twilio.com
         Webhook URL: https://tu-servidor.com/webhook/whatsapp/twilio
         """
-        if not omnicanal_bridge or not business_ai_mode:
-            return {"error": "OmnicanalBridge o BusinessAIMode no inicializado"}
+        # Usar Business AI Support si está disponible, sino Business AI Omnicanal
+        mode_to_use = business_ai_support_mode if business_ai_support_mode else business_ai_mode
+        
+        if not omnicanal_bridge or not mode_to_use:
+            return {"error": "OmnicanalBridge o Business AI Mode no inicializado"}
         
         try:
             incoming = omnicanal_bridge.process_webhook(Channel.WHATSAPP, payload)
             if not incoming:
                 return {"status": "ignored"}
             
-            # Procesar con Business AI
-            result = business_ai_mode.handle_omnicanal_message(incoming)
+            # Procesar con Business AI (Support o Omnicanal)
+            if business_ai_support_mode:
+                result = business_ai_support_mode.handle_omnicanal_message(incoming)
+            else:
+                result = business_ai_mode.handle_omnicanal_message(incoming)
             
             # Enviar respuesta por WhatsApp
             if result and result.get("text"):
@@ -253,16 +268,22 @@ if business_ai_mode:
         Configura en Meta Developers: https://developers.facebook.com
         Webhook URL: https://tu-servidor.com/webhook/whatsapp/meta
         """
-        if not omnicanal_bridge or not business_ai_mode:
-            return {"error": "OmnicanalBridge o BusinessAIMode no inicializado"}
+        # Usar Business AI Support si está disponible, sino Business AI Omnicanal
+        mode_to_use = business_ai_support_mode if business_ai_support_mode else business_ai_mode
+        
+        if not omnicanal_bridge or not mode_to_use:
+            return {"error": "OmnicanalBridge o Business AI Mode no inicializado"}
         
         try:
             incoming = omnicanal_bridge.process_webhook(Channel.WHATSAPP, payload)
             if not incoming:
                 return {"status": "ignored"}
             
-            # Procesar con Business AI
-            result = business_ai_mode.handle_omnicanal_message(incoming)
+            # Procesar con Business AI (Support o Omnicanal)
+            if business_ai_support_mode:
+                result = business_ai_support_mode.handle_omnicanal_message(incoming)
+            else:
+                result = business_ai_mode.handle_omnicanal_message(incoming)
             
             # Enviar respuesta por WhatsApp
             if result and result.get("text"):
@@ -308,8 +329,15 @@ if business_ai_mode:
             if not incoming:
                 return {"status": "ignored"}
             
-            # Procesar con Business AI
-            result = business_ai_mode.handle_omnicanal_message(incoming)
+            # Procesar con Business AI (Support o Omnicanal)
+            mode_to_use = business_ai_support_mode if business_ai_support_mode else business_ai_mode
+            if mode_to_use:
+                if business_ai_support_mode:
+                    result = business_ai_support_mode.handle_omnicanal_message(incoming)
+                else:
+                    result = business_ai_mode.handle_omnicanal_message(incoming)
+            else:
+                return {"error": "Business AI Mode no disponible"}
             
             # Enviar respuesta por Facebook Messenger
             if result and result.get("text"):
@@ -355,8 +383,15 @@ if business_ai_mode:
             if not incoming:
                 return {"status": "ignored"}
             
-            # Procesar con Business AI
-            result = business_ai_mode.handle_omnicanal_message(incoming)
+            # Procesar con Business AI (Support o Omnicanal)
+            mode_to_use = business_ai_support_mode if business_ai_support_mode else business_ai_mode
+            if mode_to_use:
+                if business_ai_support_mode:
+                    result = business_ai_support_mode.handle_omnicanal_message(incoming)
+                else:
+                    result = business_ai_mode.handle_omnicanal_message(incoming)
+            else:
+                return {"error": "Business AI Mode no disponible"}
             
             # Enviar respuesta por Instagram
             if result and result.get("text"):
@@ -402,7 +437,13 @@ if business_ai_mode:
             }
             
             # Procesar con Business AI
-            result = business_ai_mode.process_message(business_ai_payload, channel=channel)
+            # Usar Business AI Support si está disponible
+            if business_ai_support_mode:
+                result = business_ai_support_mode.process_message(business_ai_payload, channel=channel)
+            elif business_ai_mode:
+                result = business_ai_mode.process_message(business_ai_payload, channel=channel)
+            else:
+                return {"error": "Business AI Mode no disponible"}
             
             # Retornar respuesta para que n8n la envíe de vuelta
             return {

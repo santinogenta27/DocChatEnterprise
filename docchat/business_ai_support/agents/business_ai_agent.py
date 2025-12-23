@@ -53,6 +53,7 @@ class BusinessAIAgent:
         troubleshooting_engine=None,
         internal_scheduler=None,
         crm_tool=None,  # Deep CRM integration
+        notification_manager=None,  # Notification system
     ) -> None:
         self.llm = llm
         self._fallback_llm = fallback_llm  # LLM de respaldo si el principal falla
@@ -68,6 +69,18 @@ class BusinessAIAgent:
         self.app_config = app_config
         self.troubleshooting_engine = troubleshooting_engine
         self.internal_scheduler = internal_scheduler
+        self.notification_manager = notification_manager  # Notification system
+        
+        # Escalation Summary Generator
+        if self.notification_manager:
+            try:
+                from ..summary.escalation_summary_generator import EscalationSummaryGenerator
+                self.summary_generator = EscalationSummaryGenerator(llm=self.llm)
+            except Exception as e:
+                print(f"⚠️ Error inicializando EscalationSummaryGenerator: {e}")
+                self.summary_generator = None
+        else:
+            self.summary_generator = None
         
         # Cargar configuraciones del chatbot desde JSON (o .env como fallback)
         self.chatbot_config_manager = ChatbotConfigManager()
@@ -564,6 +577,8 @@ class BusinessAIAgent:
     def _trigger_human_handoff(self, session: CustomerSessionState, reason: str, user_message: str):
         """Activa handoff humano y envía alerta."""
         session.needs_handoff = True
+        
+        # Create ticket
         ticket = self.support_tool.create_ticket(
             session_id=session.session_id,
             subject=f"Handoff Automático: {reason}",
@@ -571,6 +586,41 @@ class BusinessAIAgent:
             priority="high",
         )
         session.open_tickets.append(ticket)
+        
+        # Generate structured summary for human
+        summary = None
+        if self.summary_generator:
+            try:
+                # Get conversation history
+                conversation_history = []
+                if hasattr(session, 'messages') and session.messages:
+                    for msg in session.messages[-10:]:  # Last 10 messages
+                        role = "user" if msg.get("role") == "user" else "assistant"
+                        content = msg.get("content", "") or msg.get("text", "")
+                        conversation_history.append({"role": role, "content": content})
+                
+                # Get sentiment and frustration
+                sentiment = str(session.sentiment.value) if hasattr(session, 'sentiment') and session.sentiment else None
+                frustration_score = session.frustration_score if hasattr(session, 'frustration_score') else None
+                
+                # Generate summary
+                summary = self.summary_generator.generate_summary(
+                    conversation_history=conversation_history,
+                    ticket_data=ticket,
+                    sentiment=sentiment,
+                    frustration_score=frustration_score,
+                    actions_taken=["Ticket creado", "Escalación automática activada"]
+                )
+                
+                # Store summary in ticket metadata
+                if isinstance(ticket, dict):
+                    ticket["escalation_summary"] = summary
+                    print(f"✅ Resumen estructurado generado para ticket {ticket.get('ticket_id')}")
+                
+            except Exception as e:
+                print(f"⚠️ Error generando resumen estructurado: {e}")
+                import traceback
+                traceback.print_exc()
         
         # CRM Integration: Sync ticket to CRM
         if self.crm_tool and self.crm_tool.has_crm:
@@ -600,7 +650,29 @@ class BusinessAIAgent:
             except Exception as e:
                 print(f"⚠️ Error sincronizando ticket con CRM: {e}")
         
-        # TODO: Enviar notificación a contacto configurado (WhatsApp, email, Slack, etc.)
+        # Send notifications (email + Slack)
+        if self.notification_manager and summary:
+            try:
+                priority = summary.get("urgency", "medium")
+                # Map urgency to priority
+                priority_map = {"critical": "high", "high": "high", "medium": "medium", "low": "normal"}
+                notification_priority = priority_map.get(priority, "medium")
+                
+                notification_result = self.notification_manager.notify_escalation(
+                    ticket_id=ticket.get("ticket_id", "UNKNOWN"),
+                    summary=summary,
+                    priority=notification_priority
+                )
+                
+                if notification_result.get("email_sent") or notification_result.get("slack_sent"):
+                    print(f"✅ Notificaciones enviadas: Email={notification_result.get('email_sent')}, Slack={notification_result.get('slack_sent')}")
+                else:
+                    print(f"⚠️ No se pudieron enviar notificaciones: {notification_result.get('errors', [])}")
+            except Exception as e:
+                print(f"⚠️ Error enviando notificaciones: {e}")
+                import traceback
+                traceback.print_exc()
+        
         print(f"🚨 HANDOFF ACTIVADO: {reason} - Session: {session.session_id}")
         
         return ticket
