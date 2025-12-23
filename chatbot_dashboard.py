@@ -153,8 +153,8 @@ def verificar_necesita_rag(chatbot_id: str, api_key: str, pregunta: str):
 
 
 # Crear interfaz Gradio
-with gr.Blocks(title="DocChat Enterprise - Dashboard Chatbot") as demo:
-    gr.Markdown("# 🤖 Dashboard Chatbot - DocChat Enterprise")
+with gr.Blocks(title="DocChat Enterprise Data AI - Dashboard Chatbot") as demo:
+    gr.Markdown("# 🤖 Dashboard Chatbot - DocChat Enterprise Data AI")
     gr.Markdown("Gestiona tu chatbot sin necesidad de código técnico")
     
     with gr.Tabs():
