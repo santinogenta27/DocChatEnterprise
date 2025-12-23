@@ -3261,9 +3261,30 @@ def create_advertising_campaign_ui(
             target_audience=target_audience if target_audience else None,
             mode_instance=advertising_top_manager_mode
         )
-    except Exception as e:
+        except Exception as e:
         import traceback
         error_details = traceback.format_exc()
         print(f"❌ Error en create_advertising_campaign_ui: {e}")
         print(error_details)
         return f"❌ Error creando campaña: {str(e)}", {}
+
+# =========================
+# GRADIO UI ENTRYPOINT
+# =========================
+
+import gradio as gr
+import os
+
+def launch_ui():
+    with gr.Blocks() as demo:
+        gr.Markdown("# 🚀 DocChat Enterprise")
+        gr.Markdown("UI cargada correctamente")
+
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=int(os.getenv("PORT", 7864)),
+        show_error=True
+    )
+
+if __name__ == "__main__":
+    launch_ui()
