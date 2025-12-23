@@ -3272,19 +3272,3 @@ def create_advertising_campaign_ui(
 # GRADIO UI ENTRYPOINT
 # =========================
 
-import gradio as gr
-import os
-
-def launch_ui():
-    with gr.Blocks() as demo:
-        gr.Markdown("# 🚀 DocChat Enterprise")
-        gr.Markdown("UI cargada correctamente")
-
-    demo.launch(
-        server_name="127.0.0.1",
-        server_port=int(os.getenv("PORT", 7864)),
-        show_error=True
-    )
-
-if __name__ == "__main__":
-    launch_ui()
