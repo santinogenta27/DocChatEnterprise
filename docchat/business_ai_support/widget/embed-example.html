@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business AI Support Widget - Ejemplo de Integración</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+        }
+        .code-block {
+            background: #f4f4f4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .section {
+            margin: 40px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #28a745;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Business AI Support Widget - Guía de Integración</h1>
+    
+    <div class="section">
+        <h2>📋 Método 1: Integración Simple (Recomendado)</h2>
+        <p>El método más fácil. Solo agrega este código antes de cerrar el tag <code>&lt;/body&gt;</code>:</p>
+        
+        <div class="code-block">
+            <code>
+&lt;!-- Business AI Support Widget --&gt;<br>
+&lt;script src="https://tu-dominio.com/widget/business-ai-widget.js"&gt;&lt;/script&gt;<br>
+&lt;script&gt;<br>
+&nbsp;&nbsp;BusinessAIWidget.init({<br>
+&nbsp;&nbsp;&nbsp;&nbsp;apiUrl: 'https://tu-dominio.com',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;primaryColor: '#007bff',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;position: 'bottom-right',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;brandName: 'Mi Empresa'<br>
+&nbsp;&nbsp;});<br>
+&lt;/script&gt;
+            </code>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📋 Método 2: Con Atributos Data (Aún Más Simple)</h2>
+        <p>Usa atributos data para configuración automática:</p>
+        
+        <div class="code-block">
+            <code>
+&lt;!-- Business AI Support Widget --&gt;<br>
+&lt;script <br>
+&nbsp;&nbsp;src="https://tu-dominio.com/widget/business-ai-widget.js"<br>
+&nbsp;&nbsp;data-business-ai-widget<br>
+&nbsp;&nbsp;data-api-url="https://tu-dominio.com"<br>
+&nbsp;&nbsp;data-primary-color="#007bff"<br>
+&nbsp;&nbsp;data-position="bottom-right"<br>
+&nbsp;&nbsp;data-brand-name="Mi Empresa"<br>
+&nbsp;&nbsp;data-logo="https://tu-dominio.com/logo.png"<br>
+&gt;&lt;/script&gt;
+            </code>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎨 Opciones de Personalización</h2>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background: #e9ecef;">
+                <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Opción</th>
+                <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Tipo</th>
+                <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Default</th>
+                <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Descripción</th>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>apiUrl</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">string</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">window.location.origin</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">URL base de tu API</td>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>primaryColor</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">string</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">'#007bff'</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">Color principal (botón, header, mensajes)</td>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>position</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">string</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">'bottom-right'</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">Posición: 'bottom-right', 'bottom-left', 'top-right', 'top-left'</td>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>logo</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">string</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">null</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">URL del logo (se muestra en el header)</td>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>brandName</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">string</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">'Business AI Support'</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">Nombre de tu marca</td>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>welcomeMessage</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">string</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">'¡Hola! 👋 ¿En qué puedo ayudarte hoy?'</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">Mensaje de bienvenida</td>
+            </tr>
+            <tr>
+                <td style="padding: 12px; border: 1px solid #ddd;"><code>zIndex</code></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">number</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">9999</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">Z-index del widget</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>💻 Ejemplo Completo</h2>
+        <div class="code-block">
+            <code>
+&lt;!DOCTYPE html&gt;<br>
+&lt;html lang="es"&gt;<br>
+&lt;head&gt;<br>
+&nbsp;&nbsp;&lt;meta charset="UTF-8"&gt;<br>
+&nbsp;&nbsp;&lt;title&gt;Mi Sitio Web&lt;/title&gt;<br>
+&lt;/head&gt;<br>
+&lt;body&gt;<br>
+&nbsp;&nbsp;&lt;h1&gt;Bienvenido a mi sitio&lt;/h1&gt;<br>
+&nbsp;&nbsp;&lt;p&gt;Contenido de mi página...&lt;/p&gt;<br>
+<br>
+&nbsp;&nbsp;&lt;!-- Business AI Support Widget --&gt;<br>
+&nbsp;&nbsp;&lt;script src="https://tu-dominio.com/widget/business-ai-widget.js"&gt;&lt;/script&gt;<br>
+&nbsp;&nbsp;&lt;script&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;BusinessAIWidget.init({<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;apiUrl: 'https://tu-dominio.com',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;primaryColor: '#28a745',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;position: 'bottom-right',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;logo: 'https://tu-dominio.com/logo.png',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;brandName: 'Mi Empresa',<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;welcomeMessage: '¡Hola! ¿Cómo puedo ayudarte?'<br>
+&nbsp;&nbsp;&nbsp;&nbsp;});<br>
+&nbsp;&nbsp;&lt;/script&gt;<br>
+&lt;/body&gt;<br>
+&lt;/html&gt;
+            </code>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔧 API Pública del Widget</h2>
+        <p>Puedes controlar el widget programáticamente:</p>
+        
+        <div class="code-block">
+            <code>
+// Abrir el widget<br>
+BusinessAIWidget.open();<br>
+<br>
+// Cerrar el widget<br>
+BusinessAIWidget.close();<br>
+<br>
+// Enviar mensaje programáticamente<br>
+BusinessAIWidget.sendMessage('Hola, necesito ayuda');<br>
+<br>
+// Obtener configuración actual<br>
+const config = BusinessAIWidget.getConfig();<br>
+<br>
+// Obtener session ID<br>
+const sessionId = BusinessAIWidget.getSessionId();
+            </code>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📱 Responsive <span class="badge">✅ Incluido</span></h2>
+        <p>El widget es completamente responsive y se adapta automáticamente a dispositivos móviles:</p>
+        <ul>
+            <li>En desktop: 380px de ancho</li>
+            <li>En mobile: Se adapta al ancho de la pantalla (con márgenes)</li>
+            <li>Altura máxima: Se ajusta al viewport</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>✅ Características Incluidas</h2>
+        <ul>
+            <li>✅ Widget completamente funcional</li>
+            <li>✅ Diseño moderno y profesional</li>
+            <li>✅ Responsive (mobile-friendly)</li>
+            <li>✅ Personalización de colores</li>
+            <li>✅ Logo personalizado</li>
+            <li>✅ Posición configurable</li>
+            <li>✅ Animaciones suaves</li>
+            <li>✅ Indicador de carga</li>
+            <li>✅ Manejo de errores</li>
+            <li>✅ API pública para control</li>
+        </ul>
+    </div>
+
+    <!-- Widget de ejemplo (descomenta para probar) -->
+    <!--
+    <script src="business-ai-widget.js"></script>
+    <script>
+        BusinessAIWidget.init({
+            apiUrl: 'http://localhost:7864',
+            primaryColor: '#007bff',
+            position: 'bottom-right',
+            brandName: 'Business AI Support',
+            welcomeMessage: '¡Hola! 👋 ¿En qué puedo ayudarte hoy?'
+        });
+    </script>
+    -->
+</body>
+</html>
+

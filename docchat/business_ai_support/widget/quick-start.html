@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Sitio - Con Business AI Support</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+        .hero {
+            text-align: center;
+            padding: 60px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            margin-bottom: 40px;
+        }
+        .hero h1 {
+            margin: 0;
+            font-size: 48px;
+        }
+        .content {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Bienvenido a Mi Sitio Web</h1>
+        <p>Tenemos soporte 24/7 disponible. Haz clic en el botón de chat para hablar con nuestro agente AI.</p>
+    </div>
+
+    <div class="content">
+        <h2>Contenido de Ejemplo</h2>
+        <p>Este es un ejemplo de cómo integrar el widget de Business AI Support en tu sitio web.</p>
+        <p>El widget aparecerá en la esquina inferior derecha (o la posición que configures).</p>
+        <p>Es completamente responsive y se adapta a dispositivos móviles automáticamente.</p>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- BUSINESS AI SUPPORT WIDGET - COPIAR ESTO -->
+    <!-- ============================================ -->
+    
+    <!-- Opción 1: Con configuración manual -->
+    <script src="business-ai-widget.js"></script>
+    <script>
+        BusinessAIWidget.init({
+            apiUrl: 'http://localhost:7864', // Cambia a tu URL de producción
+            primaryColor: '#667eea',
+            position: 'bottom-right',
+            brandName: 'Mi Empresa',
+            logo: null, // Opcional: URL de tu logo
+            welcomeMessage: '¡Hola! 👋 ¿En qué puedo ayudarte hoy?'
+        });
+    </script>
+
+    <!-- Opción 2: Con atributos data (aún más simple) -->
+    <!--
+    <script 
+        src="business-ai-widget.js"
+        data-business-ai-widget
+        data-api-url="http://localhost:7864"
+        data-primary-color="#667eea"
+        data-position="bottom-right"
+        data-brand-name="Mi Empresa"
+    ></script>
+    -->
+    
+    <!-- ============================================ -->
+</body>
+</html>
+

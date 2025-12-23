@@ -1,0 +1,77 @@
+# Ejemplo de guía de troubleshooting
+guide_id: "password_reset"
+title: "Restablecer Contraseña"
+description: "Guía paso a paso para restablecer tu contraseña"
+category: "account"
+
+start_step_id: "step1"
+
+steps:
+  - step_id: "step1"
+    step_type: "question"
+    title: "¿Tienes acceso a tu email?"
+    content: "Para restablecer tu contraseña, necesitamos verificar tu identidad. ¿Tienes acceso al email asociado a tu cuenta?"
+    options:
+      - value: "yes"
+        label: "Sí, tengo acceso"
+      - value: "no"
+        label: "No, no tengo acceso"
+    next_steps:
+      yes: "step2"
+      no: "step3"
+  
+  - step_id: "step2"
+    step_type: "action"
+    title: "Enviar email de recuperación"
+    content: "Perfecto. He enviado un email a tu dirección registrada con un enlace para restablecer tu contraseña. Por favor revisa tu bandeja de entrada (y spam). El enlace expira en 1 hora."
+    next_steps:
+      default: "step4"
+  
+  - step_id: "step3"
+    step_type: "information"
+    title: "Contactar soporte"
+    content: "Si no tienes acceso a tu email, necesitarás contactar con nuestro equipo de soporte para verificar tu identidad de otra manera. ¿Quieres que te conecte con un agente humano?"
+    next_steps:
+      default: "step5"
+  
+  - step_id: "step4"
+    step_type: "question"
+    title: "¿Recibiste el email?"
+    content: "¿Recibiste el email con el enlace de recuperación?"
+    options:
+      - value: "yes"
+        label: "Sí, lo recibí"
+      - value: "no"
+        label: "No, no lo recibí"
+    next_steps:
+      yes: "step6"
+      no: "step7"
+  
+  - step_id: "step5"
+    step_type: "decision"
+    title: "Escalación a humano"
+    content: "Voy a escalar tu caso a un agente humano que te ayudará a recuperar el acceso a tu cuenta."
+    next_steps:
+      default: null
+  
+  - step_id: "step6"
+    step_type: "information"
+    title: "Completar restablecimiento"
+    content: "Excelente. Haz click en el enlace del email y sigue las instrucciones para crear una nueva contraseña. Una vez completado, podrás iniciar sesión con tu nueva contraseña."
+    next_steps:
+      default: null
+  
+  - step_id: "step7"
+    step_type: "information"
+    title: "Verificar email"
+    content: "Por favor verifica que el email en tu cuenta sea correcto. Si el email es correcto pero no recibiste el mensaje, revisa tu carpeta de spam. Si aún así no lo encuentras, puedo escalar tu caso a soporte."
+    next_steps:
+      default: null
+
+metadata:
+  estimated_time: "5 minutos"
+  difficulty: "easy"
+
+
+
+

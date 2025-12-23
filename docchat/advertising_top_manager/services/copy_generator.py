@@ -1,0 +1,364 @@
+"""
+Copy Generator Service
+Generates multiple variations of ad copy using AI
+Production-ready with rate limiting and error handling
+"""
+from typing import List, Dict, Any, Optional
+import uuid
+import time
+import logging
+
+try:
+    from openai import OpenAI, RateLimitError, APIError
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    # Definir clases dummy para evitar NameError en decoradores
+    class RateLimitError(Exception):
+        """Dummy exception class when openai is not installed"""
+        pass
+    
+    class APIError(Exception):
+        """Dummy exception class when openai is not installed"""
+        pass
+
+from ..utils.logging import setup_logger
+from ..utils.retry import retry_with_backoff
+
+logger = setup_logger("ads_worker.copy_generator")
+
+from ..models.schemas import AssetAnalysis, CreativeGeneration
+
+
+class CopyGenerator:
+    """Generates multiple ad copy variations using AI"""
+    
+    def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o"):
+        if not OPENAI_AVAILABLE:
+            raise ImportError("OpenAI package is required. Install with: pip install openai")
+        
+        if not openai_api_key:
+            raise ValueError("openai_api_key is required")
+        
+        try:
+            self.openai_client = OpenAI(api_key=openai_api_key)
+            logger.info(f"✅ Copy Generator inicializado con modelo: {model}")
+        except Exception as e:
+            logger.error(f"Error inicializando OpenAI client: {e}")
+            raise
+        
+        self.model = model
+        self.last_request_time = 0
+        self.min_request_interval = 0.1  # Rate limiting: 10 requests/second max
+    
+    def generate_copies(
+        self,
+        asset_analysis: AssetAnalysis,
+        num_variations: int = 10,
+        tone: Optional[str] = None,
+        cta_style: Optional[str] = None,
+        target_audience: Optional[str] = None,
+        product_info: Optional[Dict[str, Any]] = None
+    ) -> List[CreativeGeneration]:
+        """
+        Generate multiple ad copy variations
+        
+        Args:
+            asset_analysis: Analysis results from AssetProcessor
+            num_variations: Number of copy variations to generate
+            tone: Desired tone (professional, casual, energetic, etc.)
+            cta_style: Call-to-action style (direct, question, urgency, etc.)
+            target_audience: Target audience description
+            product_info: Additional product/service information
+            
+        Returns:
+            List of CreativeGeneration objects with copy variations
+        """
+        if not self.openai_client:
+            raise ValueError("OpenAI client not initialized. Provide openai_api_key.")
+        
+        # Build context from asset analysis
+        context = self._build_context(asset_analysis, product_info)
+        
+        # Generate copies
+        copies = []
+        batch_size = min(5, num_variations)  # Generate in batches
+        
+        for batch_start in range(0, num_variations, batch_size):
+            batch_end = min(batch_start + batch_size, num_variations)
+            batch_copies = self._generate_batch(
+                context,
+                batch_end - batch_start,
+                tone,
+                cta_style,
+                target_audience
+            )
+            copies.extend(batch_copies)
+        
+        return copies
+    
+    def _build_context(
+        self,
+        asset_analysis: AssetAnalysis,
+        product_info: Optional[Dict[str, Any]]
+    ) -> str:
+        """Build context string from asset analysis"""
+        context_parts = []
+        
+        # Asset type and labels
+        context_parts.append(f"Asset Type: {asset_analysis.asset_type.value}")
+        if asset_analysis.labels:
+            context_parts.append(f"Labels: {', '.join(asset_analysis.labels)}")
+        
+        # Objects detected
+        if asset_analysis.objects_detected:
+            objects = [obj.get("name", "") for obj in asset_analysis.objects_detected]
+            context_parts.append(f"Objects: {', '.join(objects)}")
+        
+        # Style and emotion
+        if asset_analysis.style_tags:
+            context_parts.append(f"Style: {', '.join(asset_analysis.style_tags)}")
+        if asset_analysis.emotion_tags:
+            context_parts.append(f"Emotion: {', '.join(asset_analysis.emotion_tags)}")
+        
+        # Keywords and topics
+        if asset_analysis.keywords:
+            context_parts.append(f"Keywords: {', '.join(asset_analysis.keywords)}")
+        if asset_analysis.topics:
+            context_parts.append(f"Topics: {', '.join(asset_analysis.topics)}")
+        
+        # Transcript (for videos)
+        if asset_analysis.transcript:
+            context_parts.append(f"Audio Transcript: {asset_analysis.transcript}")
+        
+        # Product info
+        if product_info:
+            for key, value in product_info.items():
+                context_parts.append(f"{key}: {value}")
+        
+        return "\n".join(context_parts)
+    
+    @retry_with_backoff(max_retries=3, exceptions=(RateLimitError, APIError))
+    def _generate_batch(
+        self,
+        context: str,
+        count: int,
+        tone: Optional[str],
+        cta_style: Optional[str],
+        target_audience: Optional[str]
+    ) -> List[CreativeGeneration]:
+        """Generate a batch of copy variations"""
+        # Rate limiting
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            time.sleep(self.min_request_interval - time_since_last)
+        self.last_request_time = time.time()
+        
+        # Build prompt
+        prompt = self._build_prompt(context, count, tone, cta_style, target_audience)
+        
+        logger.info(f"📝 Generando {count} variaciones de copy...")
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert copywriter specializing in high-converting ad copy. 
+Generate compelling, persuasive ad copy that drives action. Each variation should be unique and optimized for conversions.
+Always return valid JSON format."""
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.9,  # Higher temperature for more variation
+                max_tokens=1000  # Increased for better responses
+            )
+            
+            logger.info(f"✅ Copy generado exitosamente")
+            
+            # Parse response
+            content = response.choices[0].message.content
+            copies = self._parse_copy_response(content, count)
+            
+            if len(copies) < count:
+                logger.warning(f"Solo se generaron {len(copies)}/{count} copies, generando fallback para el resto")
+                fallback_copies = self._generate_fallback_copies(context, count - len(copies))
+                copies.extend(fallback_copies)
+            
+            logger.info(f"✅ {len(copies)} variaciones de copy generadas")
+            return copies[:count]  # Ensure we don't exceed requested count
+            
+        except RateLimitError as e:
+            logger.error(f"Rate limit excedido: {e}")
+            # Wait and retry
+            time.sleep(60)
+            raise
+        except APIError as e:
+            logger.error(f"Error de API de OpenAI: {e}")
+            # Fallback: generate simple variations
+            logger.info("Usando fallback para generación de copy")
+            return self._generate_fallback_copies(context, count)
+        except Exception as e:
+            logger.error(f"Error generando copy: {e}")
+            # Fallback: generate simple variations
+            return self._generate_fallback_copies(context, count)
+    
+    def _build_prompt(
+        self,
+        context: str,
+        count: int,
+        tone: Optional[str],
+        cta_style: Optional[str],
+        target_audience: Optional[str]
+    ) -> str:
+        """Build the prompt for copy generation"""
+        prompt_parts = [
+            f"Generate {count} unique, high-converting ad copy variations based on this context:",
+            "",
+            context,
+            "",
+            "Requirements:",
+            "- Each copy must include: headline (max 40 chars), description (max 125 chars), and CTA (max 20 chars)",
+            "- Focus on benefits and value proposition",
+            "- Use persuasive language that drives action",
+            "- Each variation should have a different angle or approach",
+        ]
+        
+        if tone:
+            prompt_parts.append(f"- Tone: {tone}")
+        
+        if cta_style:
+            prompt_parts.append(f"- CTA style: {cta_style}")
+        
+        if target_audience:
+            prompt_parts.append(f"- Target audience: {target_audience}")
+        
+        prompt_parts.append("")
+        prompt_parts.append("Return in JSON format:")
+        prompt_parts.append('{"copies": [{"headline": "...", "description": "...", "cta": "...", "tone": "..."}, ...]}')
+        
+        return "\n".join(prompt_parts)
+    
+    def _parse_copy_response(self, content: str, expected_count: int) -> List[CreativeGeneration]:
+        """Parse the AI response into CreativeGeneration objects"""
+        import json
+        import re
+        
+        copies = []
+        
+        # Try to extract JSON from response
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group())
+                copy_list = data.get("copies", [])
+                
+                for copy_data in copy_list[:expected_count]:
+                    creative = CreativeGeneration(
+                        creative_id=str(uuid.uuid4()),
+                        asset_id="",  # Will be set by caller
+                        creative_type="copy",
+                        headline=copy_data.get("headline", ""),
+                        description=copy_data.get("description", ""),
+                        cta=copy_data.get("cta", "Learn More"),
+                        tone=copy_data.get("tone", "professional"),
+                        generation_params={
+                            "model": self.model,
+                            "temperature": 0.9
+                        }
+                    )
+                    copies.append(creative)
+            except json.JSONDecodeError:
+                # Fallback parsing
+                copies = self._parse_text_response(content, expected_count)
+        else:
+            # Fallback parsing
+            copies = self._parse_text_response(content, expected_count)
+        
+        return copies
+    
+    def _parse_text_response(self, content: str, expected_count: int) -> List[CreativeGeneration]:
+        """Fallback: parse text response"""
+        lines = content.split('\n')
+        copies = []
+        current_copy = {}
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if 'headline' in line.lower() or 'title' in line.lower():
+                headline = line.split(':', 1)[-1].strip()
+                current_copy['headline'] = headline
+            elif 'description' in line.lower() or 'body' in line.lower():
+                description = line.split(':', 1)[-1].strip()
+                current_copy['description'] = description
+            elif 'cta' in line.lower() or 'call' in line.lower():
+                cta = line.split(':', 1)[-1].strip()
+                current_copy['cta'] = cta
+                
+                # Create creative when we have all parts
+                if all(k in current_copy for k in ['headline', 'description', 'cta']):
+                    creative = CreativeGeneration(
+                        creative_id=str(uuid.uuid4()),
+                        asset_id="",
+                        creative_type="copy",
+                        headline=current_copy['headline'],
+                        description=current_copy['description'],
+                        cta=current_copy['cta'],
+                        tone="professional"
+                    )
+                    copies.append(creative)
+                    current_copy = {}
+                    
+                    if len(copies) >= expected_count:
+                        break
+        
+        return copies
+    
+    def _generate_fallback_copies(self, context: str, count: int) -> List[CreativeGeneration]:
+        """Generate simple fallback copies if AI fails"""
+        copies = []
+        base_headlines = [
+            "Discover Amazing Products",
+            "Transform Your Experience",
+            "Unlock New Possibilities",
+            "Experience Excellence",
+            "Join the Revolution"
+        ]
+        
+        base_descriptions = [
+            "Discover what makes us different and why thousands choose us every day.",
+            "Experience quality and innovation like never before. Start your journey today.",
+            "Join a community of satisfied customers who trust our products.",
+            "Get the best value with our premium offerings designed for you.",
+            "Don't miss out on this opportunity to elevate your experience."
+        ]
+        
+        ctas = ["Shop Now", "Learn More", "Get Started", "Discover", "Try Now"]
+        
+        for i in range(count):
+            headline = base_headlines[i % len(base_headlines)]
+            description = base_descriptions[i % len(base_descriptions)]
+            cta = ctas[i % len(ctas)]
+            
+            creative = CreativeGeneration(
+                creative_id=str(uuid.uuid4()),
+                asset_id="",
+                creative_type="copy",
+                headline=f"{headline} {i+1}",
+                description=description,
+                cta=cta,
+                tone="professional"
+            )
+            copies.append(creative)
+        
+        return copies
+
+
