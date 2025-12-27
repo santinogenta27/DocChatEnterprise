@@ -1,0 +1,26 @@
+{
+  "tone": "Profesional pero accesible",
+  "personality": "ERES UN EXPERTO EN VENTAS",
+  "custom_instructions": "",
+  "rag_enabled": false,
+  "documents_dir": "docchat/sales_ai_agent/documents",
+  "retriever_path": "",
+  "lead_scoring_enabled": false,
+  "lead_questions": [],
+  "lead_hot_threshold": 7,
+  "handoff_keywords": [
+    "queja",
+    "fraude",
+    "hablar con humano"
+  ],
+  "handoff_sentiment_threshold": 0.7,
+  "default_language": "es",
+  "multilingual_enabled": false,
+  "objection_responses": {},
+  "booking_enabled": false,
+  "calendly_url": "",
+  "google_calendar_url": "",
+  "crm_webhook_url": "",
+  "crm_type": "",
+  "booking_message": "Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga."
+}

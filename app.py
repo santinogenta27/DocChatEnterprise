@@ -1,4 +1,4 @@
-"""Gradio app for Enterprise Data AI - Multi-Agent RAG with Autonomous Agents."""
+"""Gradio app for Data 📊 - Multi-Agent RAG with Autonomous Agents."""
 
 from __future__ import annotations
 
@@ -207,6 +207,33 @@ except ImportError as e:
     BUSINESS_AI_AVAILABLE = False
     BusinessAIMode = None
     print(f"⚠️ Business AI Omnicanal no disponible: {e}")
+
+# Importar STEM Customer Care
+try:
+    from docchat.stem_customer_care import StemCustomerCareMode
+    STEM_CUSTOMER_CARE_AVAILABLE = True
+except ImportError as e:
+    STEM_CUSTOMER_CARE_AVAILABLE = False
+    StemCustomerCareMode = None
+    print(f"⚠️ STEM Customer Care no disponible: {e}")
+
+# Importar Customer Business Agent
+try:
+    from docchat.customer_business_agent import CustomerBusinessAgentMode
+    CUSTOMER_BUSINESS_AGENT_AVAILABLE = True
+except ImportError as e:
+    CUSTOMER_BUSINESS_AGENT_AVAILABLE = False
+    CustomerBusinessAgentMode = None
+    print(f"⚠️ Customer Business Agent no disponible: {e}")
+
+# Importar Sales AI Agent
+try:
+    from docchat.sales_ai_agent import SalesAIAgentMode
+    SALES_AI_AGENT_AVAILABLE = True
+except ImportError as e:
+    SALES_AI_AGENT_AVAILABLE = False
+    SalesAIAgentMode = None
+    print(f"⚠️ Sales AI Agent no disponible: {e}")
 
 try:
     from docchat.top_ads_mode import TopAdsMode
@@ -684,6 +711,39 @@ try:
 except Exception as e:
     print(f"⚠️ Error inicializando Business AI Omnicanal: {e}")
     business_ai_mode = None
+
+# Inicializar STEM Customer Care
+try:
+    if STEM_CUSTOMER_CARE_AVAILABLE and StemCustomerCareMode:
+        stem_customer_care_mode = StemCustomerCareMode(config=config)
+        print("✅ STEM Customer Care inicializado - Agente unificado ventas + soporte 24/7")
+    else:
+        stem_customer_care_mode = None
+except Exception as e:
+    print(f"⚠️ Error inicializando STEM Customer Care: {e}")
+    stem_customer_care_mode = None
+
+# Inicializar Customer Business Agent
+try:
+    if CUSTOMER_BUSINESS_AGENT_AVAILABLE and CustomerBusinessAgentMode:
+        customer_business_agent_mode = CustomerBusinessAgentMode(config=config)
+        print("✅ Customer Business Agent inicializado - Agente unificado ventas + soporte 24/7")
+    else:
+        customer_business_agent_mode = None
+except Exception as e:
+    print(f"⚠️ Error inicializando Customer Business Agent: {e}")
+    customer_business_agent_mode = None
+
+# Inicializar Sales AI Agent
+try:
+    if SALES_AI_AGENT_AVAILABLE and SalesAIAgentMode:
+        sales_ai_agent_mode = SalesAIAgentMode(config=config)
+        print("✅ Sales AI Agent inicializado - Agente unificado ventas + soporte 24/7")
+    else:
+        sales_ai_agent_mode = None
+except Exception as e:
+    print(f"⚠️ Error inicializando Sales AI Agent: {e}")
+    sales_ai_agent_mode = None
 
 # Inicializar Top Ads Mode
 try:
@@ -5393,7 +5453,7 @@ div[class*="event_bus_bot"] {
 """
 
 # Interfaz Gradio - Tema Profesional Azul DeepSeek
-with gr.Blocks(title="Enterprise Data AI", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
+with gr.Blocks(title="Data 📊", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
     
     # ==================== MENÚ DE CONFIGURACIÓN DE API KEYS ====================
     # Estado para almacenar las API keys del usuario
@@ -5405,7 +5465,7 @@ with gr.Blocks(title="Enterprise Data AI", theme=gr.themes.Soft(primary_hue="blu
         with gr.Column(scale=4):
             gr.Markdown(
                 """
-                # Enterprise Data AI
+                # Data 📊
                 """
             )
         with gr.Column(scale=1, min_width=200):
@@ -21862,6 +21922,294 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                 async></script>
                         ```
                         """)
+
+        # Tab: 🎯 STEM Customer Care - Agente unificado ventas + soporte 24/7
+        with gr.Tab("🎯 STEM Customer Care"):
+            gr.Markdown("### 🎯 STEM Customer Care - Agente Unificado de Ventas + Soporte 24/7")
+            gr.Markdown("""
+            **🌟 Agente Omnicanal para Ventas y Soporte al Cliente**
+            
+            **✨ CARACTERÍSTICAS PRINCIPALES:**
+            - 💬 **Chat Unificado**: Un solo agente para todos los canales (Web, WhatsApp, Instagram DM, Messenger)
+            - 🛒 **Ventas en Chat**: Búsqueda de productos, carrito, checkout completo (Stripe/PayPal)
+            - 📦 **Gestión de Pedidos**: Estado de pedidos, devoluciones, seguimiento
+            - 🎯 **Detección de Sentimiento**: Analiza frustración y escala a humano automáticamente
+            - 🔄 **Estado Unificado**: Historial de cliente compartido entre canales
+            - 🎫 **Sistema de Tickets**: Gestión automática de tickets de soporte
+            
+            **💼 Perfecto para:**
+            - E-commerce que necesita atención 24/7
+            - Empresas con múltiples canales de comunicación
+            - Necesidad de ventas y soporte en un solo agente
+            - Automatización de respuestas frecuentes
+            """)
+            
+            if not stem_customer_care_mode:
+                gr.Markdown("⚠️ **STEM Customer Care no está disponible.** Verifica que OPENAI_API_KEY esté configurada.")
+            else:
+                stem_customer_care_session_id = gr.State(value=str(uuid.uuid4()))
+                stem_customer_care_bot = gr.Chatbot(label="💬 STEM Customer Care Chat", height=500, show_copy_button=True)
+                
+                with gr.Row():
+                    stem_customer_care_input = gr.Textbox(
+                        label="Escribe tu mensaje",
+                        placeholder="Ejemplo: ¿Tienen zapatillas talla 42 en color negro?",
+                        lines=2,
+                        scale=4,
+                    )
+                    stem_customer_care_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                
+                with gr.Row():
+                    clear_stem_customer_care_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                    stem_customer_care_stats_btn = gr.Button("📊 Estadísticas", variant="secondary")
+                
+                stem_customer_care_status = gr.Markdown(label="ℹ️ Estado")
+                stem_customer_care_stats_output = gr.Markdown(label="📊 Estadísticas", visible=False)
+                
+                def stem_customer_care_submit(message, history, session_id):
+                    if not message.strip():
+                        return history, history, "⚠️ Escribe un mensaje.", gr.Markdown(visible=False)
+                    try:
+                        payload = {"session_id": session_id, "user_id": session_id, "message": message, "channel": "web"}
+                        result = stem_customer_care_mode.process_message(payload, channel="web")
+                        response_text = result.get("text", "Lo siento, no pude procesar tu mensaje.")
+                        needs_handoff = result.get("needs_handoff", False)
+                        sentiment = result.get("sentiment", "neutral")
+                        history.append([message, None])
+                        if needs_handoff:
+                            response_text += "\n\n⚠️ **Un agente humano se pondrá en contacto contigo pronto.**"
+                        history[-1][1] = response_text
+                        status_msg = f"✅ Mensaje procesado"
+                        if sentiment != "neutral":
+                            status_msg += f" | Sentimiento: {sentiment}"
+                        if needs_handoff:
+                            status_msg += " | Escalado a humano"
+                        return history, history, status_msg, gr.Markdown(visible=False)
+                    except Exception as e:
+                        return history, history, f"❌ Error: {str(e)}", gr.Markdown(visible=False)
+                
+                def clear_stem_customer_care(history, session_id):
+                    new_session_id = str(uuid.uuid4())
+                    return [], f"✅ Chat limpiado. Nueva sesión: {new_session_id[:8]}", gr.Markdown(visible=False), new_session_id
+                
+                def show_stem_customer_care_stats(session_id):
+                    try:
+                        session = stem_customer_care_mode.session_manager.get_session(session_id)
+                        if not session:
+                            return gr.Markdown(visible=True), "⚠️ No hay sesión activa"
+                        output = "## 📊 Estadísticas - STEM Customer Care\n\n"
+                        output += f"### 👤 Perfil de Cliente\n- ID de Sesión: {session_id[:8]}...\n"
+                        if session.profile:
+                            output += f"- Nombre: {session.profile.get('name', 'N/A')}\n- Email: {session.profile.get('email', 'N/A')}\n"
+                        output += f"\n### 🛒 Carrito\n"
+                        if session.cart and len(session.cart) > 0:
+                            total = sum(item.get('price', 0) * item.get('quantity', 1) for item in session.cart)
+                            output += f"- Items: {len(session.cart)} | Total: ${total:.2f}\n"
+                        else:
+                            output += "- Carrito vacío\n"
+                        output += f"\n### 💬 Conversación\n- Mensajes: {len(session.message_history)} | Sentimiento: {session.sentiment} | Frustración: {session.frustration_score:.2f}/10\n"
+                        if session.needs_handoff:
+                            output += f"- ⚠️ Requiere atención humana\n"
+                        return gr.Markdown(output, visible=True)
+                    except Exception as e:
+                        return gr.Markdown(visible=True), f"❌ Error: {str(e)}"
+                
+                stem_customer_care_submit_btn.click(fn=stem_customer_care_submit, inputs=[stem_customer_care_input, stem_customer_care_bot, stem_customer_care_session_id], outputs=[stem_customer_care_bot, stem_customer_care_bot, stem_customer_care_status, stem_customer_care_stats_output]).then(lambda: "", None, stem_customer_care_input)
+                stem_customer_care_input.submit(fn=stem_customer_care_submit, inputs=[stem_customer_care_input, stem_customer_care_bot, stem_customer_care_session_id], outputs=[stem_customer_care_bot, stem_customer_care_bot, stem_customer_care_status, stem_customer_care_stats_output]).then(lambda: "", None, stem_customer_care_input)
+                clear_stem_customer_care_btn.click(fn=clear_stem_customer_care, inputs=[stem_customer_care_bot, stem_customer_care_session_id], outputs=[stem_customer_care_bot, stem_customer_care_status, stem_customer_care_stats_output, stem_customer_care_session_id])
+                stem_customer_care_stats_btn.click(fn=show_stem_customer_care_stats, inputs=[stem_customer_care_session_id], outputs=[stem_customer_care_stats_output, stem_customer_care_stats_output])
+
+        # Tab: 💼 Customer Business Agent - Agente unificado ventas + soporte 24/7
+        with gr.Tab("💼 Customer Business Agent"):
+            gr.Markdown("### 💼 Customer Business Agent - Agente Unificado de Ventas + Soporte 24/7")
+            gr.Markdown("""
+            **🌟 Agente Omnicanal para Ventas y Soporte al Cliente**
+            
+            **✨ CARACTERÍSTICAS PRINCIPALES:**
+            - 💬 **Chat Unificado**: Un solo agente para todos los canales (Web, WhatsApp, Instagram DM, Messenger)
+            - 🛒 **Ventas en Chat**: Búsqueda de productos, carrito, checkout completo (Stripe/PayPal)
+            - 📦 **Gestión de Pedidos**: Estado de pedidos, devoluciones, seguimiento
+            - 🎯 **Detección de Sentimiento**: Analiza frustración y escala a humano automáticamente
+            - 🔄 **Estado Unificado**: Historial de cliente compartido entre canales
+            - 🎫 **Sistema de Tickets**: Gestión automática de tickets de soporte
+            
+            **💼 Perfecto para:**
+            - E-commerce que necesita atención 24/7
+            - Empresas con múltiples canales de comunicación
+            - Necesidad de ventas y soporte en un solo agente
+            - Automatización de respuestas frecuentes
+            """)
+            
+            if not customer_business_agent_mode:
+                gr.Markdown("⚠️ **Customer Business Agent no está disponible.** Verifica que GROQ_API_KEY esté configurada.")
+            else:
+                customer_business_agent_session_id = gr.State(value=str(uuid.uuid4()))
+                customer_business_agent_bot = gr.Chatbot(label="💬 Customer Business Agent Chat", height=500, show_copy_button=True)
+                
+                with gr.Row():
+                    customer_business_agent_input = gr.Textbox(
+                        label="Escribe tu mensaje",
+                        placeholder="Ejemplo: ¿Tienen zapatillas talla 42 en color negro?",
+                        lines=2,
+                        scale=4,
+                    )
+                    customer_business_agent_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                
+                with gr.Row():
+                    clear_customer_business_agent_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                    customer_business_agent_stats_btn = gr.Button("📊 Estadísticas", variant="secondary")
+                
+                customer_business_agent_status = gr.Markdown(label="ℹ️ Estado")
+                customer_business_agent_stats_output = gr.Markdown(label="📊 Estadísticas", visible=False)
+                
+                def customer_business_agent_submit(message, history, session_id):
+                    if not message.strip():
+                        return history, history, "⚠️ Escribe un mensaje.", gr.Markdown(visible=False)
+                    try:
+                        payload = {"session_id": session_id, "user_id": session_id, "message": message, "channel": "web"}
+                        result = customer_business_agent_mode.process_message(payload, channel="web")
+                        response_text = result.get("text", "Lo siento, no pude procesar tu mensaje.")
+                        needs_handoff = result.get("needs_handoff", False)
+                        sentiment = result.get("sentiment", "neutral")
+                        history.append([message, None])
+                        if needs_handoff:
+                            response_text += "\n\n⚠️ **Un agente humano se pondrá en contacto contigo pronto.**"
+                        history[-1][1] = response_text
+                        status_msg = f"✅ Mensaje procesado"
+                        if sentiment != "neutral":
+                            status_msg += f" | Sentimiento: {sentiment}"
+                        if needs_handoff:
+                            status_msg += " | Escalado a humano"
+                        return history, history, status_msg, gr.Markdown(visible=False)
+                    except Exception as e:
+                        return history, history, f"❌ Error: {str(e)}", gr.Markdown(visible=False)
+                
+                def clear_customer_business_agent(history, session_id):
+                    new_session_id = str(uuid.uuid4())
+                    return [], f"✅ Chat limpiado. Nueva sesión: {new_session_id[:8]}", gr.Markdown(visible=False), new_session_id
+                
+                def show_customer_business_agent_stats(session_id):
+                    try:
+                        session = customer_business_agent_mode.session_manager.get_session(session_id)
+                        if not session:
+                            return gr.Markdown(visible=True), "⚠️ No hay sesión activa"
+                        output = "## 📊 Estadísticas - Customer Business Agent\n\n"
+                        output += f"### 👤 Perfil de Cliente\n- ID de Sesión: {session_id[:8]}...\n"
+                        if session.profile:
+                            output += f"- Nombre: {session.profile.get('name', 'N/A')}\n- Email: {session.profile.get('email', 'N/A')}\n"
+                        output += f"\n### 🛒 Carrito\n"
+                        if session.cart and len(session.cart) > 0:
+                            total = sum(item.get('price', 0) * item.get('quantity', 1) for item in session.cart)
+                            output += f"- Items: {len(session.cart)} | Total: ${total:.2f}\n"
+                        else:
+                            output += "- Carrito vacío\n"
+                        output += f"\n### 💬 Conversación\n- Mensajes: {len(session.message_history)} | Sentimiento: {session.sentiment} | Frustración: {session.frustration_score:.2f}/10\n"
+                        if session.needs_handoff:
+                            output += f"- ⚠️ Requiere atención humana\n"
+                        return gr.Markdown(output, visible=True)
+                    except Exception as e:
+                        return gr.Markdown(visible=True), f"❌ Error: {str(e)}"
+                
+                customer_business_agent_submit_btn.click(fn=customer_business_agent_submit, inputs=[customer_business_agent_input, customer_business_agent_bot, customer_business_agent_session_id], outputs=[customer_business_agent_bot, customer_business_agent_bot, customer_business_agent_status, customer_business_agent_stats_output]).then(lambda: "", None, customer_business_agent_input)
+                customer_business_agent_input.submit(fn=customer_business_agent_submit, inputs=[customer_business_agent_input, customer_business_agent_bot, customer_business_agent_session_id], outputs=[customer_business_agent_bot, customer_business_agent_bot, customer_business_agent_status, customer_business_agent_stats_output]).then(lambda: "", None, customer_business_agent_input)
+                clear_customer_business_agent_btn.click(fn=clear_customer_business_agent, inputs=[customer_business_agent_bot, customer_business_agent_session_id], outputs=[customer_business_agent_bot, customer_business_agent_status, customer_business_agent_stats_output, customer_business_agent_session_id])
+                customer_business_agent_stats_btn.click(fn=show_customer_business_agent_stats, inputs=[customer_business_agent_session_id], outputs=[customer_business_agent_stats_output, customer_business_agent_stats_output])
+
+        # Tab: 💰 Sales AI Agent - Agente unificado ventas + soporte 24/7
+        with gr.Tab("💰 Sales AI Agent"):
+            gr.Markdown("### 💰 Sales AI Agent - Agente Unificado de Ventas + Soporte 24/7")
+            gr.Markdown("""
+            **🌟 Agente Omnicanal para Ventas y Soporte al Cliente**
+            
+            **✨ CARACTERÍSTICAS PRINCIPALES:**
+            - 💬 **Chat Unificado**: Un solo agente para todos los canales (Web, WhatsApp, Instagram DM, Messenger)
+            - 🛒 **Ventas en Chat**: Búsqueda de productos, carrito, checkout completo (Stripe/PayPal)
+            - 📦 **Gestión de Pedidos**: Estado de pedidos, devoluciones, seguimiento
+            - 🎯 **Detección de Sentimiento**: Analiza frustración y escala a humano automáticamente
+            - 🔄 **Estado Unificado**: Historial de cliente compartido entre canales
+            - 🎫 **Sistema de Tickets**: Gestión automática de tickets de soporte
+            
+            **💼 Perfecto para:**
+            - E-commerce que necesita atención 24/7
+            - Empresas con múltiples canales de comunicación
+            - Necesidad de ventas y soporte en un solo agente
+            - Automatización de respuestas frecuentes
+            """)
+            
+            if not sales_ai_agent_mode:
+                gr.Markdown("⚠️ **Sales AI Agent no está disponible.** Verifica que GROQ_API_KEY esté configurada.")
+            else:
+                sales_ai_agent_session_id = gr.State(value=str(uuid.uuid4()))
+                sales_ai_agent_bot = gr.Chatbot(label="💬 Sales AI Agent Chat", height=500, show_copy_button=True)
+                
+                with gr.Row():
+                    sales_ai_agent_input = gr.Textbox(
+                        label="Escribe tu mensaje",
+                        placeholder="Ejemplo: ¿Tienen zapatillas talla 42 en color negro?",
+                        lines=2,
+                        scale=4,
+                    )
+                    sales_ai_agent_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                
+                with gr.Row():
+                    clear_sales_ai_agent_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                    sales_ai_agent_stats_btn = gr.Button("📊 Estadísticas", variant="secondary")
+                
+                sales_ai_agent_status = gr.Markdown(label="ℹ️ Estado")
+                sales_ai_agent_stats_output = gr.Markdown(label="📊 Estadísticas", visible=False)
+                
+                def sales_ai_agent_submit(message, history, session_id):
+                    if not message.strip():
+                        return history, history, "⚠️ Escribe un mensaje.", gr.Markdown(visible=False)
+                    try:
+                        payload = {"session_id": session_id, "user_id": session_id, "message": message, "channel": "web"}
+                        result = sales_ai_agent_mode.process_message(payload, channel="web")
+                        response_text = result.get("text", "Lo siento, no pude procesar tu mensaje.")
+                        needs_handoff = result.get("needs_handoff", False)
+                        sentiment = result.get("sentiment", "neutral")
+                        history.append([message, None])
+                        if needs_handoff:
+                            response_text += "\n\n⚠️ **Un agente humano se pondrá en contacto contigo pronto.**"
+                        history[-1][1] = response_text
+                        status_msg = f"✅ Mensaje procesado"
+                        if sentiment != "neutral":
+                            status_msg += f" | Sentimiento: {sentiment}"
+                        if needs_handoff:
+                            status_msg += " | Escalado a humano"
+                        return history, history, status_msg, gr.Markdown(visible=False)
+                    except Exception as e:
+                        return history, history, f"❌ Error: {str(e)}", gr.Markdown(visible=False)
+                
+                def clear_sales_ai_agent(history, session_id):
+                    new_session_id = str(uuid.uuid4())
+                    return [], f"✅ Chat limpiado. Nueva sesión: {new_session_id[:8]}", gr.Markdown(visible=False), new_session_id
+                
+                def show_sales_ai_agent_stats(session_id):
+                    try:
+                        session = sales_ai_agent_mode.session_manager.get_session(session_id)
+                        if not session:
+                            return gr.Markdown(visible=True), "⚠️ No hay sesión activa"
+                        output = "## 📊 Estadísticas - Sales AI Agent\n\n"
+                        output += f"### 👤 Perfil de Cliente\n- ID de Sesión: {session_id[:8]}...\n"
+                        if session.profile:
+                            output += f"- Nombre: {session.profile.get('name', 'N/A')}\n- Email: {session.profile.get('email', 'N/A')}\n"
+                        output += f"\n### 🛒 Carrito\n"
+                        if session.cart and len(session.cart) > 0:
+                            total = sum(item.get('price', 0) * item.get('quantity', 1) for item in session.cart)
+                            output += f"- Items: {len(session.cart)} | Total: ${total:.2f}\n"
+                        else:
+                            output += "- Carrito vacío\n"
+                        output += f"\n### 💬 Conversación\n- Mensajes: {len(session.message_history)} | Sentimiento: {session.sentiment} | Frustración: {session.frustration_score:.2f}/10\n"
+                        if session.needs_handoff:
+                            output += f"- ⚠️ Requiere atención humana\n"
+                        return gr.Markdown(output, visible=True)
+                    except Exception as e:
+                        return gr.Markdown(visible=True), f"❌ Error: {str(e)}"
+                
+                sales_ai_agent_submit_btn.click(fn=sales_ai_agent_submit, inputs=[sales_ai_agent_input, sales_ai_agent_bot, sales_ai_agent_session_id], outputs=[sales_ai_agent_bot, sales_ai_agent_bot, sales_ai_agent_status, sales_ai_agent_stats_output]).then(lambda: "", None, sales_ai_agent_input)
+                sales_ai_agent_input.submit(fn=sales_ai_agent_submit, inputs=[sales_ai_agent_input, sales_ai_agent_bot, sales_ai_agent_session_id], outputs=[sales_ai_agent_bot, sales_ai_agent_bot, sales_ai_agent_status, sales_ai_agent_stats_output]).then(lambda: "", None, sales_ai_agent_input)
+                clear_sales_ai_agent_btn.click(fn=clear_sales_ai_agent, inputs=[sales_ai_agent_bot, sales_ai_agent_session_id], outputs=[sales_ai_agent_bot, sales_ai_agent_status, sales_ai_agent_stats_output, sales_ai_agent_session_id])
+                sales_ai_agent_stats_btn.click(fn=show_sales_ai_agent_stats, inputs=[sales_ai_agent_session_id], outputs=[sales_ai_agent_stats_output, sales_ai_agent_stats_output])
 
         # Tab: 📢 Top Ads Mode - AI Agent Autónomo para Publicidad
         with gr.Tab("📢 Top Ads Mode"):
