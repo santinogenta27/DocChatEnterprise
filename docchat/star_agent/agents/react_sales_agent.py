@@ -275,6 +275,12 @@ class ReactSalesAgent:
             # Decision Layer: Decidir acción basada en intención y etapa
             action = self._decide_action(query, intent, sales_stage, state)
             
+            # Mapear acciones del usuario a acciones internas
+            if action == "start_checkout":
+                action = "close"
+            elif action == "handoff_human":
+                action = "handoff"
+            
             # Validar acción basada en pensamiento del LLM
             if action == "act" and ("necesito buscar" in thought_content.lower() or "necesito consultar" in thought_content.lower()):
                 state["next_action"] = "act"
@@ -507,44 +513,45 @@ Responde SOLO con "YES" si la respuesta está completamente soportada, o "NO" si
         """
         Decision Layer (Orquestador) - Decide la acción a tomar según intención y etapa.
         
-        Implementa el orquestador según especificaciones:
-        - answer: Responder directamente
-        - act: Usar herramientas (catálogo, RAG, etc.)
-        - close: Cerrar venta
-        - handoff: Escalar a humano
-        - ask_clarification: Pedir aclaración
+        Implementa código exacto según especificaciones del usuario:
+        - "comprar" → start_checkout
+        - "hablar con alguien" → handoff_human
+        - len(context) < 200 → ask_clarification
+        - default → answer
         """
         q = query.lower()
+        context = state.get("context_retrieved", "")
         
-        # 1. Detectar si necesita checkout/pago
-        if "comprar" in q or "pagar" in q or "checkout" in q or intent == IntentType.CHECKOUT:
+        # Código exacto según especificaciones del usuario
+        if "comprar" in q:
+            return "start_checkout"  # Mapeado a "close" internamente
+        if "hablar con alguien" in q:
+            return "handoff_human"  # Mapeado a "handoff" internamente
+        if len(context) < 200:
+            return "ask_clarification"
+        
+        # Lógica adicional para casos específicos
+        if "pagar" in q or "checkout" in q or intent == IntentType.CHECKOUT:
             if sales_stage in [SalesStage.READY, SalesStage.CLOSING]:
                 return "close"
             else:
                 return "act"  # Necesita más info antes de cerrar
         
-        # 2. Detectar si necesita handoff a humano
-        if "hablar con alguien" in q or "humano" in q or "asesor" in q or "persona" in q:
+        if "humano" in q or "asesor" in q or "persona" in q:
             return "handoff"
         
-        # 3. Detectar si necesita más información (act)
         if intent in [IntentType.PRODUCTS, IntentType.POLICIES, IntentType.REVIEWS]:
-            # Verificar si ya tenemos contexto suficiente
-            context = state.get("context_retrieved", "")
             if len(context) < 200:
                 return "act"  # Necesita buscar más información
             else:
                 return "answer"  # Ya tiene suficiente contexto
         
-        # 4. Si está en etapa de cierre y tiene carrito
         if sales_stage == SalesStage.READY and state.get("cart_snapshot"):
             return "close"
         
-        # 5. Si necesita aclaración (query muy corto o ambiguo)
         if len(query.strip()) < 10 and not any(x in q for x in ["hola", "gracias", "ok", "sí", "no"]):
             return "ask_clarification"
         
-        # 6. Por defecto, responder directamente
         return "answer"
     
     # === Métodos auxiliares ===
@@ -616,19 +623,36 @@ Responde SOLO con "YES" si la respuesta está completamente soportada, o "NO" si
         return SalesStage.INTEREST
     
     def _select_sales_strategy(self, query: str, stage: SalesStage) -> SalesStrategy:
-        """Selecciona estrategia de venta según query y etapa"""
+        """
+        Selecciona estrategia de venta según query y etapa.
+        
+        Implementa código exacto según especificaciones del usuario:
+        - precio → ANCHORING
+        - vale la pena → ROI
+        - opiniones → SOCIAL_PROOF
+        - default → STANDARD
+        """
         q = query.lower()
         
-        if "precio" in q or "caro" in q:
+        # Código exacto según especificaciones del usuario
+        if "precio" in q:
             return SalesStrategy.ANCHORING
-        elif "vale la pena" in q or "beneficio" in q:
+        if "vale la pena" in q:
+            return SalesStrategy.ROI
+        if "opiniones" in q:
+            return SalesStrategy.SOCIAL_PROOF
+        
+        # Detección adicional
+        if "caro" in q:
+            return SalesStrategy.ANCHORING
+        elif "beneficio" in q:
             return SalesStrategy.ROI
         elif "opinión" in q or "otros" in q:
             return SalesStrategy.SOCIAL_PROOF
         elif "después" in q or "luego" in q:
             return SalesStrategy.URGENCY
-        else:
-            return SalesStrategy.STANDARD
+        
+        return SalesStrategy.STANDARD
     
     def _retrieve_context(self, query: str, intent: IntentType) -> str:
         """Recupera contexto según intención usando RAG avanzado"""
@@ -789,7 +813,22 @@ Responde de manera natural y conversacional, pensando paso a paso."""
         return None
     
     def _handle_objection(self, objection: str, strategy: SalesStrategy) -> str:
-        """Maneja objeciones con técnicas específicas"""
+        """
+        Maneja objeciones con técnicas específicas.
+        
+        Implementa código exacto según especificaciones del usuario:
+        - caro → "Entiendo. Justamente por eso incluye X, Y y Z que ahorran dinero a largo plazo."
+        - después → "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora?"
+        """
+        objection_lower = objection.lower()
+        
+        # Código exacto según especificaciones del usuario
+        if "caro" in objection_lower:
+            return "Entiendo. Justamente por eso incluye X, Y y Z que ahorran dinero a largo plazo."
+        if "después" in objection_lower:
+            return "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora?"
+        
+        # Manejo adicional de objeciones detectadas por tipo
         if objection == "price":
             return "Entiendo. Justamente por eso incluye características que ahorran dinero a largo plazo. ¿Te gustaría que te muestre cómo se amortiza la inversión?"
         elif objection == "timing":
@@ -802,8 +841,14 @@ Responde de manera natural y conversacional, pensando paso a paso."""
         return "Entiendo tu preocupación. ¿Hay algo específico en lo que pueda ayudarte?"
     
     def _close_sale_direct(self) -> str:
-        """Cierre directo y ético"""
-        return "¿Querés que lo procesemos ahora y te lo envío enseguida? Puedo ayudarte a completar tu compra en este momento."
+        """
+        Cierre directo y ético.
+        
+        Implementa código exacto según especificaciones del usuario:
+        "¿Querés que lo procesemos ahora y te lo envío enseguida?"
+        """
+        # Código exacto según especificaciones del usuario
+        return "¿Querés que lo procesemos ahora y te lo envío enseguida?"
     
     def _track_conversion(self, state: AgentState, event_type: str):
         """

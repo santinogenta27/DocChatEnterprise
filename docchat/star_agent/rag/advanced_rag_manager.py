@@ -128,6 +128,12 @@ class AdvancedRAGManager:
         """
         Detecta la intención del usuario basado en el query.
         
+        Implementa código exacto según especificaciones del usuario:
+        - precio/cuesta → productos
+        - envío/entrega → políticas
+        - opinión/reseña → reviews
+        - default → general
+        
         Args:
             query: Consulta del usuario
             
@@ -136,17 +142,25 @@ class AdvancedRAGManager:
         """
         q = query.lower()
         
-        # Detección de intención basada en keywords
-        if any(x in q for x in ["precio", "cuesta", "producto", "comprar", "tengo", "disponible", "stock"]):
+        # Código exacto según especificaciones del usuario
+        if "precio" in q or "cuesta" in q:
             return IntentType.PRODUCTOS
-        elif any(x in q for x in ["envío", "entrega", "devolución", "garantía", "política", "términos"]):
+        if "envío" in q or "entrega" in q:
+            return IntentType.POLITICAS
+        if "opinión" in q or "reseña" in q:
+            return IntentType.REVIEWS
+        
+        # Detección adicional para otros casos
+        if any(x in q for x in ["producto", "comprar", "tengo", "disponible", "stock"]):
+            return IntentType.PRODUCTOS
+        elif any(x in q for x in ["devolución", "garantía", "política", "términos"]):
             return IntentType.POLITICAS
         elif any(x in q for x in ["promoción", "oferta", "descuento", "nuevo", "lanzamiento", "anuncio"]):
             return IntentType.MARKETING
-        elif any(x in q for x in ["opinión", "reseña", "review", "calificación", "experiencia", "cliente"]):
+        elif any(x in q for x in ["review", "calificación", "experiencia", "cliente"]):
             return IntentType.REVIEWS
-        else:
-            return IntentType.GENERAL
+        
+        return IntentType.GENERAL
     
     def add_documents(self, documents: List[Document], intent: Optional[IntentType] = None):
         """
