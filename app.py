@@ -217,6 +217,15 @@ except ImportError as e:
     AssistanceAIMode = None
     print(f"⚠️ Assistance AI no disponible: {e}")
 
+# Importar STAR AGENT (clon completo de Business AI Omnicanal)
+try:
+    from docchat.star_agent import StarAgentMode
+    STAR_AGENT_AVAILABLE = True
+except ImportError as e:
+    STAR_AGENT_AVAILABLE = False
+    StarAgentMode = None
+    print(f"⚠️ STAR AGENT no disponible: {e}")
+
 # Importar STEM Customer Care
 try:
     from docchat.stem_customer_care import StemCustomerCareMode
@@ -731,6 +740,17 @@ try:
 except Exception as e:
     print(f"⚠️ Error inicializando Assistance AI: {e}")
     assistance_ai_mode = None
+
+# Inicializar STAR AGENT
+try:
+    if STAR_AGENT_AVAILABLE and StarAgentMode:
+        star_agent_mode = StarAgentMode(config=config)
+        print("✅ STAR AGENT inicializado - Agente unificado ventas + soporte 24/7")
+    else:
+        star_agent_mode = None
+except Exception as e:
+    print(f"⚠️ Error inicializando STAR AGENT: {e}")
+    star_agent_mode = None
 
 # Inicializar STEM Customer Care
 try:
@@ -20704,6 +20724,103 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 business_ai_input.submit(fn=business_ai_submit, inputs=[business_ai_input, business_ai_bot, business_ai_session_id], outputs=[business_ai_bot, business_ai_bot, business_ai_status, business_ai_stats_output]).then(lambda: "", None, business_ai_input)
                 clear_business_ai_btn.click(fn=clear_business_ai, inputs=[business_ai_bot, business_ai_session_id], outputs=[business_ai_bot, business_ai_status, business_ai_stats_output, business_ai_session_id])
                 business_ai_stats_btn.click(fn=show_business_ai_stats, inputs=[business_ai_session_id], outputs=[business_ai_stats_output, business_ai_stats_output])
+        
+        # Tab: ⭐ STAR AGENT - Agente unificado ventas + soporte 24/7
+        with gr.Tab("⭐ STAR AGENT"):
+            gr.Markdown("### ⭐ STAR AGENT - Agente Unificado de Ventas + Soporte 24/7")
+            gr.Markdown("""
+            **🌟 Agente Omnicanal para Ventas y Soporte al Cliente**
+            
+            **✨ CARACTERÍSTICAS PRINCIPALES:**
+            - 💬 **Chat Unificado**: Un solo agente para todos los canales (Web, WhatsApp, Instagram DM, Messenger)
+            - 🛒 **Ventas en Chat**: Búsqueda de productos, carrito, checkout completo (Stripe/PayPal)
+            - 📦 **Gestión de Pedidos**: Estado de pedidos, devoluciones, seguimiento
+            - 🎯 **Detección de Sentimiento**: Analiza frustración y escala a humano automáticamente
+            - 🔄 **Estado Unificado**: Historial de cliente compartido entre canales
+            - 🎫 **Sistema de Tickets**: Gestión automática de tickets de soporte
+            
+            **💼 Perfecto para:**
+            - E-commerce que necesita atención 24/7
+            - Empresas con múltiples canales de comunicación
+            - Necesidad de ventas y soporte en un solo agente
+            - Automatización de respuestas frecuentes
+            """)
+            
+            if not star_agent_mode:
+                gr.Markdown("⚠️ **STAR AGENT no está disponible.** Verifica que GROQ_API_KEY esté configurada.")
+            else:
+                star_agent_session_id = gr.State(value=str(uuid.uuid4()))
+                star_agent_bot = gr.Chatbot(label="💬 STAR AGENT Chat", height=500, show_copy_button=True)
+                
+                with gr.Row():
+                    star_agent_input = gr.Textbox(
+                        label="Escribe tu mensaje",
+                        placeholder="Ejemplo: ¿Tienen zapatillas talla 42 en color negro?",
+                        lines=2,
+                        scale=4,
+                    )
+                    star_agent_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                
+                with gr.Row():
+                    clear_star_agent_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                    star_agent_stats_btn = gr.Button("📊 Estadísticas", variant="secondary")
+                
+                star_agent_status = gr.Markdown(label="ℹ️ Estado")
+                star_agent_stats_output = gr.Markdown(label="📊 Estadísticas", visible=False)
+                
+                def star_agent_submit(message, history, session_id):
+                    if not message.strip():
+                        return history, history, "⚠️ Escribe un mensaje.", gr.Markdown(visible=False)
+                    try:
+                        payload = {"session_id": session_id, "user_id": session_id, "message": message, "channel": "web"}
+                        result = star_agent_mode.process_message(payload, channel="web")
+                        response_text = result.get("text", "Lo siento, no pude procesar tu mensaje.")
+                        needs_handoff = result.get("needs_handoff", False)
+                        sentiment = result.get("sentiment", "neutral")
+                        history.append([message, None])
+                        if needs_handoff:
+                            response_text += "\n\n⚠️ **Un agente humano se pondrá en contacto contigo pronto.**"
+                        history[-1][1] = response_text
+                        status_msg = f"✅ Mensaje procesado"
+                        if sentiment != "neutral":
+                            status_msg += f" | Sentimiento: {sentiment}"
+                        if needs_handoff:
+                            status_msg += " | Escalado a humano"
+                        return history, history, status_msg, gr.Markdown(visible=False)
+                    except Exception as e:
+                        return history, history, f"❌ Error: {str(e)}", gr.Markdown(visible=False)
+                
+                def clear_star_agent(history, session_id):
+                    new_session_id = str(uuid.uuid4())
+                    return [], f"✅ Chat limpiado. Nueva sesión: {new_session_id[:8]}", gr.Markdown(visible=False), new_session_id
+                
+                def show_star_agent_stats(session_id):
+                    try:
+                        session = star_agent_mode.session_manager.get(session_id)
+                        if not session:
+                            return gr.Markdown(visible=True), "⚠️ No hay sesión activa"
+                        output = "## 📊 Estadísticas - STAR AGENT\n\n"
+                        output += f"### 👤 Perfil de Cliente\n- ID de Sesión: {session_id[:8]}...\n"
+                        if session.profile:
+                            output += f"- Nombre: {getattr(session.profile, 'display_name', 'N/A')}\n- Idioma: {getattr(session.profile, 'language', 'N/A')}\n"
+                        output += f"\n### 🛒 Carrito\n"
+                        if session.cart and isinstance(session.cart, dict) and session.cart.get('items'):
+                            items = session.cart.get('items', [])
+                            total = sum(item.get('price', 0) * item.get('quantity', 1) for item in items if isinstance(item, dict))
+                            output += f"- Items: {len(items)} | Total: ${total:.2f}\n"
+                        else:
+                            output += "- Carrito vacío\n"
+                        output += f"\n### 💬 Conversación\n- Mensajes: {len(session.last_messages)} | Sentimiento: {session.sentiment.value} | Frustración: {session.frustration_score:.2f}/1.0\n"
+                        if session.needs_handoff:
+                            output += f"- ⚠️ Requiere atención humana\n"
+                        return gr.Markdown(visible=True), output
+                    except Exception as e:
+                        return gr.Markdown(visible=True), f"❌ Error: {str(e)}"
+                
+                star_agent_submit_btn.click(fn=star_agent_submit, inputs=[star_agent_input, star_agent_bot, star_agent_session_id], outputs=[star_agent_bot, star_agent_bot, star_agent_status, star_agent_stats_output]).then(lambda: "", None, star_agent_input)
+                star_agent_input.submit(fn=star_agent_submit, inputs=[star_agent_input, star_agent_bot, star_agent_session_id], outputs=[star_agent_bot, star_agent_bot, star_agent_status, star_agent_stats_output]).then(lambda: "", None, star_agent_input)
+                clear_star_agent_btn.click(fn=clear_star_agent, inputs=[star_agent_bot, star_agent_session_id], outputs=[star_agent_bot, star_agent_status, star_agent_stats_output, star_agent_session_id])
+                star_agent_stats_btn.click(fn=show_star_agent_stats, inputs=[star_agent_session_id], outputs=[star_agent_stats_output, star_agent_stats_output])
                 
                 # NUEVO: Generador de Código Widget Embeddable
                 gr.Markdown("---")
