@@ -9,6 +9,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, TypedDict, Annotated, Sequence, Literal
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
@@ -31,6 +32,9 @@ from ..tools.cart_tool import CartTool
 from ..tools.payment_tool import PaymentTool
 from ..tools.order_tool import OrderTool
 from ..tools.support_tool import SupportTool
+from ..rag.advanced_rag_manager import AdvancedRAGManager, IntentType as RAGIntentType
+from ..intelligence.lead_qualification import LeadQualifier, BANTQualification
+from ..learning.continuous_learning import ContinuousLearningSystem
 
 
 class SalesStage(str, Enum):
@@ -77,6 +81,8 @@ class AgentState(TypedDict):
     cart_snapshot: Dict[str, Any]
     conversion_tracked: bool
     next_action: str
+    bant_qualification: Optional[Any]  # BANTQualification
+    next_bant_question: Optional[str]
 
 
 @dataclass
@@ -127,14 +133,23 @@ class ReactSalesAgent:
         self.config = config
         self.app_config = app_config
         
-        # Guardrails anti-injection
+        # Guardrails anti-injection (Rule of Two)
         self.BLOCKED_PATTERNS = [
             "ignora instrucciones",
             "system prompt",
             "actúa como",
             "forget previous",
             "you are now",
+            "override",
+            "bypass",
+            "ignore all",
         ]
+        
+        # Calificador de Leads BANT
+        self.lead_qualifier = LeadQualifier()
+        
+        # Sistema de aprendizaje continuo
+        self.learning_system = ContinuousLearningSystem()
         
         # Construir grafo de LangGraph
         if LANGGRAPH_AVAILABLE:
@@ -144,7 +159,7 @@ class ReactSalesAgent:
             print("⚠️ LangGraph no disponible. El agente ReAct no funcionará correctamente.")
         
         # Inicializar RAG avanzado si está habilitado
-        self.rag_stores = {}
+        self.advanced_rag: Optional[AdvancedRAGManager] = None
         if config.enable_rag_advanced:
             self._initialize_advanced_rag()
     
@@ -229,6 +244,18 @@ class ReactSalesAgent:
         sales_stage = self._detect_sales_stage(query, state)
         state["sales_stage"] = sales_stage
         
+        # Calificación BANT del lead
+        session = self.session_manager.get(state["session_id"])
+        if session:
+            conversation_history = [m.content for m in state["messages"] if isinstance(m, HumanMessage)]
+            bant_qualification = self.lead_qualifier.qualify_lead(session, conversation_history)
+            state["bant_qualification"] = bant_qualification
+            
+            # Obtener siguiente pregunta BANT si es necesario
+            next_question = self.lead_qualifier.get_next_question(bant_qualification, sales_stage.value)
+            if next_question:
+                state["next_bant_question"] = next_question
+        
         # Seleccionar estrategia de venta
         strategy = self._select_sales_strategy(query, sales_stage)
         state["sales_strategy"] = strategy
@@ -245,13 +272,28 @@ class ReactSalesAgent:
             thought_response = self.llm.invoke(thought_messages)
             thought_content = thought_response.content if hasattr(thought_response, 'content') else str(thought_response)
             
-            # Extraer acción del pensamiento
-            if "necesito buscar" in thought_content.lower() or "necesito consultar" in thought_content.lower():
+            # Decision Layer: Decidir acción basada en intención y etapa
+            action = self._decide_action(query, intent, sales_stage, state)
+            
+            # Validar acción basada en pensamiento del LLM
+            if action == "act" and ("necesito buscar" in thought_content.lower() or "necesito consultar" in thought_content.lower()):
                 state["next_action"] = "act"
-            elif "listo para comprar" in thought_content.lower() or "procesar pago" in thought_content.lower():
+            elif action == "close" and ("listo para comprar" in thought_content.lower() or "procesar pago" in thought_content.lower()):
                 state["next_action"] = "close"
-            else:
+            elif action == "handoff" or "hablar con alguien" in query.lower() or "humano" in query.lower():
+                state["needs_handoff"] = True
                 state["next_action"] = "end"
+            else:
+                # Si la acción es "answer", verificar si necesita más contexto
+                if action == "answer":
+                    # Verificar si hay suficiente contexto
+                    context = state.get("context_retrieved", "")
+                    if len(context) < 200:
+                        state["next_action"] = "act"  # Necesita más información
+                    else:
+                        state["next_action"] = "end"  # Puede responder directamente
+                else:
+                    state["next_action"] = action
             
             # Agregar pensamiento al estado (para debugging)
             state["draft_answer"] = thought_content
@@ -461,6 +503,50 @@ Responde SOLO con "YES" si la respuesta está completamente soportada, o "NO" si
         """Decide qué hacer después del nodo verify"""
         return state.get("next_action", "end")
     
+    def _decide_action(self, query: str, intent: IntentType, sales_stage: SalesStage, state: AgentState) -> str:
+        """
+        Decision Layer (Orquestador) - Decide la acción a tomar según intención y etapa.
+        
+        Implementa el orquestador según especificaciones:
+        - answer: Responder directamente
+        - act: Usar herramientas (catálogo, RAG, etc.)
+        - close: Cerrar venta
+        - handoff: Escalar a humano
+        - ask_clarification: Pedir aclaración
+        """
+        q = query.lower()
+        
+        # 1. Detectar si necesita checkout/pago
+        if "comprar" in q or "pagar" in q or "checkout" in q or intent == IntentType.CHECKOUT:
+            if sales_stage in [SalesStage.READY, SalesStage.CLOSING]:
+                return "close"
+            else:
+                return "act"  # Necesita más info antes de cerrar
+        
+        # 2. Detectar si necesita handoff a humano
+        if "hablar con alguien" in q or "humano" in q or "asesor" in q or "persona" in q:
+            return "handoff"
+        
+        # 3. Detectar si necesita más información (act)
+        if intent in [IntentType.PRODUCTS, IntentType.POLICIES, IntentType.REVIEWS]:
+            # Verificar si ya tenemos contexto suficiente
+            context = state.get("context_retrieved", "")
+            if len(context) < 200:
+                return "act"  # Necesita buscar más información
+            else:
+                return "answer"  # Ya tiene suficiente contexto
+        
+        # 4. Si está en etapa de cierre y tiene carrito
+        if sales_stage == SalesStage.READY and state.get("cart_snapshot"):
+            return "close"
+        
+        # 5. Si necesita aclaración (query muy corto o ambiguo)
+        if len(query.strip()) < 10 and not any(x in q for x in ["hola", "gracias", "ok", "sí", "no"]):
+            return "ask_clarification"
+        
+        # 6. Por defecto, responder directamente
+        return "answer"
+    
     # === Métodos auxiliares ===
     
     def _is_safe_query(self, query: str) -> bool:
@@ -486,19 +572,48 @@ Responde SOLO con "YES" si la respuesta está completamente soportada, o "NO" si
             return IntentType.GENERAL
     
     def _detect_sales_stage(self, query: str, state: AgentState) -> SalesStage:
-        """Detecta la etapa de venta actual"""
+        """
+        Detecta la etapa de venta actual (Sales Closer Elite).
+        
+        Etapas:
+        - INTEREST: Interés inicial
+        - CONSIDERATION: Considerando compra (preguntas sobre funcionalidad, garantía, etc.)
+        - READY: Listo para comprar (pregunta por precio, quiere pagar)
+        - CLOSING: En proceso de cierre (confirmando detalles)
+        - COMPLETED: Venta completada
+        """
         q = query.lower()
         
-        if any(x in q for x in ["precio", "cuánto cuesta", "comprar", "pagar"]):
+        # Señales de READY (listo para comprar)
+        ready_signals = [
+            "precio", "cuánto cuesta", "comprar", "pagar", "checkout",
+            "carrito", "finalizar", "completar compra", "procesar pago"
+        ]
+        if any(x in q for x in ready_signals):
             return SalesStage.READY
-        elif any(x in q for x in ["envío", "funciona", "garantía", "vale la pena"]):
+        
+        # Señales de CONSIDERATION (considerando)
+        consideration_signals = [
+            "envío", "entrega", "funciona", "garantía", "devolución",
+            "vale la pena", "beneficio", "ventaja", "comparar", "diferencia"
+        ]
+        if any(x in q for x in consideration_signals):
             return SalesStage.CONSIDERATION
-        else:
-            # Verificar etapa previa en sesión
-            session = self.session_manager.get(state["session_id"])
-            if session and hasattr(session, 'sales_stage'):
-                return session.sales_stage
-            return SalesStage.INTEREST
+        
+        # Señales de CLOSING (en cierre)
+        closing_signals = [
+            "confirmar", "sí quiero", "acepto", "de acuerdo", "perfecto",
+            "proceder", "adelante", "sí compro"
+        ]
+        if any(x in q for x in closing_signals):
+            return SalesStage.CLOSING
+        
+        # Verificar etapa previa en sesión
+        session = self.session_manager.get(state["session_id"])
+        if session and hasattr(session, 'sales_stage'):
+            return session.sales_stage
+        
+        return SalesStage.INTEREST
     
     def _select_sales_strategy(self, query: str, stage: SalesStage) -> SalesStrategy:
         """Selecciona estrategia de venta según query y etapa"""
@@ -517,62 +632,217 @@ Responde SOLO con "YES" si la respuesta está completamente soportada, o "NO" si
     
     def _retrieve_context(self, query: str, intent: IntentType) -> str:
         """Recupera contexto según intención usando RAG avanzado"""
-        if not self.config.enable_rag_advanced:
+        if not self.config.enable_rag_advanced or not self.advanced_rag:
             return ""
         
-        # Usar índice específico según intención
-        store_key = intent.value
-        if store_key not in self.rag_stores:
-            return ""
+        # Mapear IntentType a RAGIntentType
+        intent_map = {
+            IntentType.PRODUCTS: RAGIntentType.PRODUCTOS,
+            IntentType.POLICIES: RAGIntentType.POLITICAS,
+            IntentType.REVIEWS: RAGIntentType.REVIEWS,
+            IntentType.GENERAL: RAGIntentType.GENERAL,
+        }
         
-        # TODO: Implementar búsqueda en vector store específico
-        # Por ahora retornar contexto vacío
-        return ""
+        rag_intent = intent_map.get(intent, RAGIntentType.GENERAL)
+        
+        # Recuperar contexto con validación de confianza
+        result = self.advanced_rag.retrieve_with_confidence(query, rag_intent)
+        return result.get("context", "")
     
     def _initialize_advanced_rag(self):
         """Inicializa RAG avanzado con índices separados"""
-        # TODO: Implementar inicialización de múltiples vector stores
-        # Por ahora placeholder
-        pass
+        try:
+            # Obtener embeddings desde app_config
+            if self.app_config:
+                try:
+                    from langchain_openai import OpenAIEmbeddings
+                    embeddings = OpenAIEmbeddings(
+                        openai_api_key=self.app_config.openai_api_key
+                    )
+                except:
+                    # Fallback a embeddings simples si OpenAI no está disponible
+                    print("⚠️ OpenAI embeddings no disponible. Usando embeddings básicos.")
+                    from langchain.embeddings import FakeEmbeddings
+                    embeddings = FakeEmbeddings(size=384)
+            else:
+                from langchain.embeddings import FakeEmbeddings
+                embeddings = FakeEmbeddings(size=384)
+            
+            self.advanced_rag = AdvancedRAGManager(
+                embeddings=embeddings,
+                base_dir=None,  # Usar default
+                k=4,
+            )
+            print("✅ RAG Avanzado inicializado con índices separados")
+        except Exception as e:
+            print(f"⚠️ Error inicializando RAG avanzado: {e}")
+            self.advanced_rag = None
     
     def _build_think_prompt(self, state: AgentState) -> str:
-        """Construye el prompt para el nodo think"""
+        """
+        Construye el prompt para el nodo think (ReAct pattern).
+        
+        Implementa flujo: Siente → Piensa → Actúa → Aprende
+        """
         sales_stage = state.get("sales_stage", SalesStage.INTEREST)
         strategy = state.get("sales_strategy", SalesStrategy.STANDARD)
+        intent = state.get("intent", IntentType.GENERAL)
         
-        prompt = f"""Eres un asistente virtual 24/7 para {self.config.brand_name}.
+        # Obtener contexto de mensajes anteriores
+        messages = state.get("messages", [])
+        recent_context = ""
+        if len(messages) > 1:
+            recent_context = "\n".join([
+                f"{'Usuario' if isinstance(m, HumanMessage) else 'Asistente'}: {m.content}"
+                for m in messages[-3:]  # Últimos 3 mensajes
+            ])
+        
+        prompt = f"""Eres un asistente virtual 24/7 para {self.config.brand_name}, especializado en ventas y soporte al cliente.
 
-Estás en la etapa de venta: {sales_stage.value}
-Estrategia actual: {strategy.value}
+**CONTEXTO ACTUAL:**
+- Etapa de venta: {sales_stage.value}
+- Estrategia: {strategy.value}
+- Intención detectada: {intent.value}
+- Idioma: {self.config.language}
 
-Piensa paso a paso:
-1. ¿Qué información necesitas para responder?
-2. ¿Qué herramientas debes usar?
-3. ¿Está el usuario listo para comprar?
+**HISTORIAL RECIENTE:**
+{recent_context if recent_context else "Inicio de conversación"}
 
-Responde de manera natural y conversacional."""
+**INSTRUCCIONES (ReAct Pattern):**
+Piensa paso a paso siguiendo el patrón ReAct:
+
+1. **THOUGHT (Pensamiento):**
+   - ¿Qué información necesitas para responder adecuadamente?
+   - ¿Qué herramientas debes usar? (catálogo, carrito, políticas, etc.)
+   - ¿Está el usuario listo para comprar o necesita más información?
+
+2. **ACTION (Acción):**
+   - Si necesitas información: busca en el catálogo, consulta políticas, etc.
+   - Si el usuario está listo: guía hacia el checkout
+   - Si hay objeciones: aplica técnicas de manejo de objeciones
+
+3. **OBSERVATION (Observación):**
+   - Procesa los resultados de tus acciones
+   - Evalúa si necesitas más información o puedes responder
+
+4. **FINAL ANSWER (Respuesta Final):**
+   - Proporciona una respuesta clara, útil y orientada a cerrar la venta
+   - Sé conversacional y natural
+   - Si es apropiado, aplica técnicas de cierre
+
+**IMPORTANTE:**
+- Actúa como asistente profesional 24/7
+- Aprende de las interacciones para mejorar
+- Escala a humano si detectas frustración o el usuario lo solicita
+- Mantén el enfoque en ayudar y cerrar ventas de manera ética
+
+Responde de manera natural y conversacional, pensando paso a paso."""
         
         return prompt
     
     def _apply_closing_techniques(self, state: AgentState, strategy: SalesStrategy) -> str:
-        """Aplica técnicas de cierre según estrategia"""
-        sales_stage = state.get("sales_stage", SalesStage.INTEREST)
+        """
+        Aplica técnicas de cierre según estrategia (Sales Closer Elite).
         
+        Implementa:
+        - ANCHORING: Anclar precio/valor
+        - ROI: Retorno de inversión
+        - SOCIAL_PROOF: Prueba social
+        - URGENCY: Urgencia/escasez ética
+        - STANDARD: Estrategia estándar
+        """
+        sales_stage = state.get("sales_stage", SalesStage.INTEREST)
+        query = state["messages"][-1].content if state["messages"] else ""
+        
+        # Manejo de objeciones
+        objection = self._detect_objection(query)
+        if objection:
+            return self._handle_objection(objection, strategy)
+        
+        # Técnicas de cierre según estrategia
         if strategy == SalesStrategy.ANCHORING:
-            return "Entiendo tu preocupación por el precio. Este producto incluye [beneficios] que lo hacen una excelente inversión."
+            return "Entiendo tu preocupación por el precio. Este producto incluye características premium que lo hacen una excelente inversión a largo plazo. ¿Te gustaría que te muestre el desglose de valor?"
         elif strategy == SalesStrategy.ROI:
-            return "Este producto te ahorrará tiempo y dinero a largo plazo. ¿Qué tendría que pasar para que lo veas útil ahora?"
+            return "Este producto te ahorrará tiempo y dinero a largo plazo. ¿Qué tendría que pasar para que lo veas útil ahora mismo?"
         elif strategy == SalesStrategy.SOCIAL_PROOF:
-            return "Muchos clientes están satisfechos con este producto. ¿Querés que te muestre algunas opiniones?"
+            return "Muchos clientes están satisfechos con este producto. ¿Querés que te muestre algunas opiniones y reseñas?"
         elif strategy == SalesStrategy.URGENCY:
-            return "Tenemos disponibilidad limitada. ¿Querés que lo procesemos ahora y te lo envío enseguida?"
+            # Urgencia ética (no falsa escasez)
+            return "Tenemos disponibilidad limitada en este momento. ¿Querés que lo procesemos ahora y te lo envío enseguida?"
         else:
-            return "¿Querés que te ayude a completar tu compra?"
+            # Cierre directo
+            return self._close_sale_direct()
+    
+    def _detect_objection(self, query: str) -> Optional[str]:
+        """Detecta objeciones comunes en el query"""
+        q = query.lower()
+        
+        if any(x in q for x in ["caro", "precio alto", "muy costoso", "demasiado"]):
+            return "price"
+        elif any(x in q for x in ["después", "luego", "más tarde", "no ahora", "esperar"]):
+            return "timing"
+        elif any(x in q for x in ["no estoy seguro", "dudar", "pensar", "considerar"]):
+            return "uncertainty"
+        elif any(x in q for x in ["no necesito", "no me sirve", "no es para mí"]):
+            return "need"
+        
+        return None
+    
+    def _handle_objection(self, objection: str, strategy: SalesStrategy) -> str:
+        """Maneja objeciones con técnicas específicas"""
+        if objection == "price":
+            return "Entiendo. Justamente por eso incluye características que ahorran dinero a largo plazo. ¿Te gustaría que te muestre cómo se amortiza la inversión?"
+        elif objection == "timing":
+            return "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora? Tal vez podamos encontrar una solución que se ajuste a tus necesidades."
+        elif objection == "uncertainty":
+            return "Es normal tener dudas. ¿Hay algo específico que te gustaría saber más para tomar una decisión informada?"
+        elif objection == "need":
+            return "Entiendo. ¿Podrías contarme más sobre tu situación? Tal vez pueda recomendarte algo que se ajuste mejor a tus necesidades."
+        
+        return "Entiendo tu preocupación. ¿Hay algo específico en lo que pueda ayudarte?"
+    
+    def _close_sale_direct(self) -> str:
+        """Cierre directo y ético"""
+        return "¿Querés que lo procesemos ahora y te lo envío enseguida? Puedo ayudarte a completar tu compra en este momento."
     
     def _track_conversion(self, state: AgentState, event_type: str):
-        """Trackea eventos de conversión"""
-        # TODO: Implementar tracking de conversiones
-        pass
+        """
+        Trackea eventos de conversión (métricas para PYMEs).
+        
+        Eventos:
+        - interest_detected: Interés inicial detectado
+        - consideration: Usuario en etapa de consideración
+        - ready_to_buy: Usuario listo para comprar
+        - payment_initiated: Pago iniciado
+        - payment_completed: Pago completado
+        - objection_handled: Objeción manejada
+        - handoff_to_human: Escalado a humano
+        """
+        try:
+            session_id = state.get("session_id", "unknown")
+            sales_stage = state.get("sales_stage", SalesStage.INTEREST).value
+            
+            # Log de evento (en producción, enviar a analytics)
+            print(f"📊 Conversion Event: {event_type} | Session: {session_id} | Stage: {sales_stage}")
+            
+            # Actualizar sesión con evento
+            session = self.session_manager.get(session_id)
+            if session:
+                # Agregar evento a metadata de sesión
+                if not hasattr(session, 'conversion_events'):
+                    session.conversion_events = []
+                session.conversion_events.append({
+                    "type": event_type,
+                    "stage": sales_stage,
+                    "timestamp": self._get_timestamp(),
+                })
+        except Exception as e:
+            print(f"⚠️ Error trackeando conversión: {e}")
+    
+    def _get_timestamp(self) -> str:
+        """Obtiene timestamp actual"""
+        from datetime import datetime
+        return datetime.now().isoformat()
     
     def process(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Procesa un mensaje usando el workflow ReAct"""
@@ -619,13 +889,32 @@ Responde de manera natural y conversacional."""
             
             response_text = last_ai_message or final_state.get("draft_answer", "Lo siento, no pude generar una respuesta.")
             
-            return {
+            # Registrar interacción para aprendizaje continuo
+            session = self.session_manager.get(session_id)
+            if session:
+                user_message = message
+                self.learning_system.record_interaction(
+                    session=session,
+                    user_message=user_message,
+                    agent_response=response_text,
+                    conversion=final_state.get("conversion_tracked", False),
+                )
+            
+            # Construir respuesta con todos los datos
+            response_data = {
                 "text": response_text,
                 "intent": final_state.get("intent", IntentType.GENERAL).value,
                 "sales_stage": final_state.get("sales_stage", SalesStage.INTEREST).value,
                 "needs_handoff": final_state.get("needs_handoff", False),
                 "cart": final_state.get("cart_snapshot", {}),
             }
+            
+            # Agregar pregunta BANT si existe
+            next_bant_question = final_state.get("next_bant_question")
+            if next_bant_question:
+                response_data["next_bant_question"] = next_bant_question
+            
+            return response_data
             
         except Exception as e:
             print(f"❌ Error en workflow ReAct: {e}")

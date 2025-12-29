@@ -107,28 +107,75 @@ class StarAgentMode:
         self.support_tool = SupportTool()
 
         # Agente principal (SIEMPRE usando Groq - sin fallback)
-        self.agent = StarAgentAgent(
-            llm=self.llm,
-            session_manager=self.session_manager,
-            sentiment_analyzer=self.sentiment_analyzer,
-            catalog_tool=self.catalog_tool,
-            cart_tool=self.cart_tool,
-            payment_tool=self.payment_tool,
-            order_tool=self.order_tool,
-            support_tool=self.support_tool,
-            config=StarAgentConfig(
-                brand_name=self.config.app_name if hasattr(self.config, "app_name") else "Your Brand",
-                # Leer personalización desde variables de entorno (configurado en config.py)
-                tone=self.config.chatbot_tone if hasattr(self.config, "chatbot_tone") else "friendly",
-                personality=self.config.chatbot_personality if hasattr(self.config, "chatbot_personality") else "",
-                custom_instructions=self.config.chatbot_custom_instructions if hasattr(self.config, "chatbot_custom_instructions") else "",
-            ),
-            fallback_llm=None,  # No hay fallback - siempre usamos Groq
-            app_config=self.config,  # Pasar AppConfig para RAG y traducción
-        )
+        # Para widget web, usar ReactSalesAgent optimizado si está disponible
+        use_react_agent = getattr(self.config, "use_react_agent_for_widget", True)
+        
+        if use_react_agent:
+            try:
+                from .agents.react_sales_agent import ReactSalesAgent, ReactSalesAgentConfig
+                self.react_agent = ReactSalesAgent(
+                    llm=self.llm,
+                    session_manager=self.session_manager,
+                    sentiment_analyzer=self.sentiment_analyzer,
+                    catalog_tool=self.catalog_tool,
+                    cart_tool=self.cart_tool,
+                    payment_tool=self.payment_tool,
+                    order_tool=self.order_tool,
+                    support_tool=self.support_tool,
+                    config=ReactSalesAgentConfig(
+                        brand_name=self.config.app_name if hasattr(self.config, "app_name") else "Your Brand",
+                        language="es",
+                        enable_sales_closer=True,
+                        enable_rag_advanced=True,
+                        enable_verification=True,
+                    ),
+                    app_config=self.config,
+                )
+                print("✅ ReactSalesAgent inicializado para widget optimizado")
+                self.agent = self.react_agent  # Usar ReactSalesAgent como agente principal
+            except Exception as e:
+                print(f"⚠️ Error inicializando ReactSalesAgent: {e}. Usando StarAgentAgent.")
+                use_react_agent = False
+        
+        if not use_react_agent:
+            self.agent = StarAgentAgent(
+                llm=self.llm,
+                session_manager=self.session_manager,
+                sentiment_analyzer=self.sentiment_analyzer,
+                catalog_tool=self.catalog_tool,
+                cart_tool=self.cart_tool,
+                payment_tool=self.payment_tool,
+                order_tool=self.order_tool,
+                support_tool=self.support_tool,
+                config=StarAgentConfig(
+                    brand_name=self.config.app_name if hasattr(self.config, "app_name") else "Your Brand",
+                    # Leer personalización desde variables de entorno (configurado en config.py)
+                    tone=self.config.chatbot_tone if hasattr(self.config, "chatbot_tone") else "friendly",
+                    personality=self.config.chatbot_personality if hasattr(self.config, "chatbot_personality") else "",
+                    custom_instructions=self.config.chatbot_custom_instructions if hasattr(self.config, "chatbot_custom_instructions") else "",
+                ),
+                fallback_llm=None,  # No hay fallback - siempre usamos Groq
+                app_config=self.config,  # Pasar AppConfig para RAG y traducción
+            )
 
         # Adaptador por defecto (web). Para WhatsApp/IG se pueden añadir otros.
         self.web_adapter = WebChannelAdapter()
+        
+        # Inicializar sistema de ingesta multi-fuente (opcional)
+        self.multi_source_ingester = None
+        if config.enable_rag_advanced:
+            try:
+                from .ingestion.multi_source_ingester import MultiSourceIngester
+                from .rag.advanced_rag_manager import AdvancedRAGManager
+                
+                # Obtener AdvancedRAGManager del agente si está disponible
+                if hasattr(self.agent, 'advanced_rag') and self.agent.advanced_rag:
+                    self.multi_source_ingester = MultiSourceIngester(
+                        advanced_rag=self.agent.advanced_rag,
+                    )
+                    print("✅ Sistema de ingesta multi-fuente inicializado")
+            except Exception as e:
+                print(f"⚠️ Error inicializando ingesta multi-fuente: {e}")
 
     # --- Núcleo de procesamiento ---
 
@@ -165,11 +212,34 @@ class StarAgentMode:
                 pass
 
         # Pasar al agente principal (con imagen si existe)
-        result = self.agent.handle_message(
-            session=session, 
-            user_message=internal_msg.content,
-            image_data=image_data
-        )
+        # Si es ReactSalesAgent, usar método process() optimizado para widget
+        if hasattr(self.agent, 'process') and callable(getattr(self.agent, 'process')):
+            # ReactSalesAgent - optimizado para widget con ReAct pattern
+            payload_for_react = {
+                "session_id": session.session_id,
+                "user_id": session.profile.user_id if session.profile else "anonymous",
+                "message": internal_msg.content,
+                "channel": channel,
+            }
+            result = self.agent.process(payload_for_react)
+            
+            # Convertir resultado de ReactSalesAgent a formato esperado
+            result = {
+                "text": result.get("text", ""),
+                "intent": result.get("intent", "general"),
+                "sales_stage": result.get("sales_stage", "interest"),
+                "needs_handoff": result.get("needs_handoff", False),
+                "cart": result.get("cart", {}),
+                "sentiment": "neutral",  # ReactSalesAgent maneja esto internamente
+                "frustration_score": 0.0,
+            }
+        else:
+            # StarAgentAgent - método tradicional
+            result = self.agent.handle_message(
+                session=session, 
+                user_message=internal_msg.content,
+                image_data=image_data
+            )
 
         # Actualizar sesión (en PostgreSQL si está habilitado)
         self.session_manager.update(session)
@@ -251,7 +321,21 @@ class StarAgentMode:
                 "error": str(e)
             }
 
-    # --- Integración FastAPI ---
+    # --- Integración FastAPI y Widget Optimizer ---
+    
+    def get_widget_app(self):
+        """
+        Crea aplicación FastAPI optimizada para widget web.
+        
+        Returns:
+            FastAPI app con endpoints optimizados para widget
+        """
+        try:
+            from .widget import create_widget_app
+            return create_widget_app(self)
+        except ImportError as e:
+            print(f"⚠️ No se pudo crear widget app: {e}")
+            return None
 
     def get_api_router(self) -> APIRouter:
         router = APIRouter(prefix="/star-agent", tags=["STAR AGENT"])
