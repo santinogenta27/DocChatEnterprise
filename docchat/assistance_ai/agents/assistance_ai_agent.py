@@ -21,17 +21,18 @@ from ..config.chatbot_config_manager import ChatbotConfigManager
 
 
 @dataclass
-class CustomerBusinessAgentConfig:
+class AssistanceAIConfig:
     brand_name: str = "Your Brand"
     language: str = "es"
     # Personalización del chatbot (opcional)
     tone: str = "friendly"  # friendly, professional, casual, formal, enthusiastic
     personality: str = ""  # Descripción libre de la personalidad
     custom_instructions: str = ""  # Instrucciones personalizadas adicionales
+    use_langgraph: bool = True  # SIEMPRE ACTIVADO - Usar LangGraph Agent Enterprise (nuevo) - NO DESACTIVAR
 
 
-class CustomerBusinessAgent:
-    """Agente orquestador de Customer Business Agent.
+class AssistanceAIAgent:
+    """Agente orquestador de Assistance AI.
 
     Combina ventas (catálogo, carrito, pagos) + soporte (pedidos, tickets)
     en un solo flujo conversacional.
@@ -47,7 +48,7 @@ class CustomerBusinessAgent:
         payment_tool: PaymentTool,
         order_tool: OrderTool,
         support_tool: SupportTool,
-        config: CustomerBusinessAgentConfig | None = None,
+        config: AssistanceAIConfig | None = None,
         fallback_llm: Optional[BaseLanguageModel] = None,
         app_config: Optional[AppConfig] = None,
     ) -> None:
@@ -60,12 +61,45 @@ class CustomerBusinessAgent:
         self.payment_tool = payment_tool
         self.order_tool = order_tool
         self.support_tool = support_tool
-        self.config = config or CustomerBusinessAgentConfig()
+        # SIEMPRE usar LangGraph - configurar por defecto si no viene config
+        if config is None:
+            config = AssistanceAIConfig()
+        # FORZAR use_langgraph=True SIEMPRE (nunca desactivar, incluso si viene como False)
+        config.use_langgraph = True
+        self.config = config
         self.app_config = app_config
         
         # Cargar configuraciones del chatbot desde JSON (o .env como fallback)
         self.chatbot_config_manager = ChatbotConfigManager()
         self.chatbot_config = self.chatbot_config_manager.load()
+        
+        # Inicializar LangGraph Agent si está habilitado
+        self.langgraph_integration = None
+        if self.config.use_langgraph:
+            try:
+                from .langgraph_integration import LangGraphIntegration
+                
+                # Preparar tools
+                tools_dict = {
+                    "catalog_tool": self.catalog_tool,
+                    "cart_tool": self.cart_tool,
+                    "payment_tool": self.payment_tool,
+                    "order_tool": self.order_tool,
+                    "support_tool": self.support_tool,
+                }
+                
+                self.langgraph_integration = LangGraphIntegration(
+                    llm=self.llm,
+                    tools=tools_dict,
+                    rag_enabled=self.chatbot_config.rag_enabled if self.chatbot_config else False
+                )
+                print("✅ LangGraph Agent habilitado - Arquitectura Enterprise activa")
+            except Exception as e:
+                print(f"⚠️ Error inicializando LangGraph Agent: {e}")
+                print("⚠️ Usando agente tradicional como fallback")
+                import traceback
+                traceback.print_exc()
+                self.langgraph_integration = None
         
         # Inicializar RAG si está habilitado
         self.rag_retriever = None
@@ -88,7 +122,7 @@ class CustomerBusinessAgent:
         
         # Sistemas de Inteligencia Avanzada (Nivel Dios Alien) 🚀
         from pathlib import Path
-        memory_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "customer_business_agent" / "conversation_memory"
+        memory_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "assistance_ai" / "conversation_memory"
         
         # 1. Memoria Conversacional Profunda
         from ..memory.conversation_memory import ConversationMemory
@@ -108,12 +142,12 @@ class CustomerBusinessAgent:
         
         # 5. Servicio de Carritos Abandonados
         from ..services.abandoned_cart_service import AbandonedCartService
-        cart_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "customer_business_agent" / "abandoned_carts"
+        cart_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "business_ai" / "abandoned_carts"
         self.abandoned_cart_service = AbandonedCartService(storage_dir=cart_storage_dir)
         
         # 6. Tracking de Conversiones (PRIORIDAD 1) 📊
         from ..analytics.conversion_tracker import ConversionTracker
-        analytics_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "customer_business_agent" / "analytics"
+        analytics_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "business_ai" / "analytics"
         self.conversion_tracker = ConversionTracker(
             storage_dir=analytics_storage_dir,
             enable_ga=False,  # Configurar en .env si se necesita
@@ -123,38 +157,11 @@ class CustomerBusinessAgent:
         # 7. Recomendador de Productos (PRIORIDAD 2) 🎯
         from ..intelligence.product_recommender import ProductRecommender
         self.product_recommender = ProductRecommender()
-        
-        # 8. Servicio de Suscripciones (Inspirado en Sierra.ai) 📅
-        from ..services.subscription_service import SubscriptionService
-        subscription_storage_dir = Path(app_config.memory_dir if app_config else "memory") / "customer_business_agent" / "subscriptions"
-        self.subscription_service = SubscriptionService(storage_dir=subscription_storage_dir)
-        
-        # 9. Mejora de Lenguaje Natural (Inspirado en Sierra.ai) 🧠
-        from ..intelligence.natural_language_enhancer import NaturalLanguageEnhancer
-        self.nlp_enhancer = NaturalLanguageEnhancer()
-        
-        # 10. Integración con CRMs Reales (TOP LEVEL) 🏢
-        self.crm_integration = None
-        self._initialize_crm_integration()
-        
-        # 11. Integración con OMS Reales (TOP LEVEL) 📦
-        self.oms_integration = None
-        self._initialize_oms_integration()
     
     def _invoke_llm_with_fallback(self, messages):
-        """Invoca el LLM con fallback automático si falla la autenticación.
-        
-        Optimizado para velocidad y confiabilidad.
-        """
-        import time
-        start_time = time.time()
-        
+        """Invoca el LLM con fallback automático si falla la autenticación"""
         try:
-            result = self.llm.invoke(messages)
-            elapsed = time.time() - start_time
-            if elapsed > 2.0:  # Si tarda más de 2 segundos, advertir
-                print(f"⚠️ LLM tardó {elapsed:.2f}s (objetivo: <0.5s)")
-            return result
+            return self.llm.invoke(messages)
         except Exception as llm_error:
             error_msg = str(llm_error)
             # Si es error de autenticación (401) y hay fallback, usarlo
@@ -180,7 +187,7 @@ class CustomerBusinessAgent:
             from pathlib import Path
             import pickle
             
-            storage_dir = Path("docchat/customer_business_agent/rag_storage")
+            storage_dir = Path("docchat/assistance_ai/rag_storage")
             chunks_path = storage_dir / "document_chunks.pkl"
             metadata_path = storage_dir / "retriever_metadata.pkl"
             
@@ -245,102 +252,6 @@ class CustomerBusinessAgent:
                     print("✅ WooCommerce integration inicializada")
                 except Exception as e:
                     print(f"⚠️ Error inicializando WooCommerce: {e}")
-        except Exception as e:
-            print(f"⚠️ Error inicializando integraciones de e-commerce: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def _initialize_crm_integration(self):
-        """Inicializa integración con CRM real."""
-        try:
-            chatbot_config = self.chatbot_config_manager.load()
-            
-            if chatbot_config.crm_webhook_url and chatbot_config.crm_type:
-                from ..integrations.crm_integration import CRMIntegration, CRMType
-                
-                crm_type_map = {
-                    "hubspot": CRMType.HUBSPOT,
-                    "salesforce": CRMType.SALESFORCE,
-                    "pipedrive": CRMType.PIPEDRIVE,
-                    "other": CRMType.GENERIC,
-                }
-                
-                crm_type = crm_type_map.get(chatbot_config.crm_type.lower(), CRMType.GENERIC)
-                
-                # Obtener credenciales desde .env o config
-                import os
-                crm_api_key = os.getenv("CRM_API_KEY") or chatbot_config.crm_webhook_url.split("?")[0] if "?" in chatbot_config.crm_webhook_url else None
-                crm_access_token = os.getenv("CRM_ACCESS_TOKEN")
-                
-                if crm_type == CRMType.HUBSPOT:
-                    self.crm_integration = CRMIntegration(
-                        crm_type=crm_type,
-                        api_key=crm_api_key or os.getenv("HUBSPOT_API_KEY"),
-                    )
-                    print("✅ CRM Integration (HubSpot) inicializada")
-                elif crm_type == CRMType.SALESFORCE:
-                    self.crm_integration = CRMIntegration(
-                        crm_type=crm_type,
-                        api_url=os.getenv("SALESFORCE_INSTANCE_URL"),
-                        access_token=crm_access_token or os.getenv("SALESFORCE_ACCESS_TOKEN"),
-                    )
-                    print("✅ CRM Integration (Salesforce) inicializada")
-                elif crm_type == CRMType.GENERIC:
-                    # API genérica - usar webhook URL como base
-                    self.crm_integration = CRMIntegration(
-                        crm_type=crm_type,
-                        api_url=chatbot_config.crm_webhook_url.rsplit("/", 1)[0] if "/" in chatbot_config.crm_webhook_url else chatbot_config.crm_webhook_url,
-                        api_key=crm_api_key,
-                        headers={"Authorization": f"Bearer {crm_api_key}"} if crm_api_key else {},
-                    )
-                    print("✅ CRM Integration (Generic) inicializada")
-        except Exception as e:
-            print(f"⚠️ Error inicializando CRM Integration: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def _initialize_oms_integration(self):
-        """Inicializa integración con OMS real."""
-        try:
-            chatbot_config = self.chatbot_config_manager.load()
-            
-            # Si hay Shopify o WooCommerce, usar como OMS
-            if chatbot_config.ecommerce_enabled:
-                from ..integrations.oms_integration import OMSIntegration, OMSType
-                
-                if chatbot_config.shopify_api_key and chatbot_config.shopify_shop_name:
-                    self.oms_integration = OMSIntegration(
-                        oms_type=OMSType.SHOPIFY,
-                        api_key=chatbot_config.shopify_api_key,
-                        shop_name=chatbot_config.shopify_shop_name,
-                    )
-                    print("✅ OMS Integration (Shopify) inicializada")
-                elif chatbot_config.woocommerce_url and chatbot_config.woocommerce_consumer_key:
-                    self.oms_integration = OMSIntegration(
-                        oms_type=OMSType.WOOCOMMERCE,
-                        api_key=chatbot_config.woocommerce_consumer_key,
-                        api_secret=chatbot_config.woocommerce_consumer_secret,
-                        api_url=chatbot_config.woocommerce_url,
-                    )
-                    print("✅ OMS Integration (WooCommerce) inicializada")
-                
-                # También soportar OMS personalizado desde .env
-                import os
-                oms_api_url = os.getenv("OMS_API_URL")
-                oms_api_key = os.getenv("OMS_API_KEY")
-                
-                if oms_api_url and oms_api_key and not self.oms_integration:
-                    self.oms_integration = OMSIntegration(
-                        oms_type=OMSType.CUSTOM,
-                        api_url=oms_api_url,
-                        api_key=oms_api_key,
-                        headers={"Authorization": f"Bearer {oms_api_key}"},
-                    )
-                    print("✅ OMS Integration (Custom) inicializada")
-        except Exception as e:
-            print(f"⚠️ Error inicializando OMS Integration: {e}")
-            import traceback
-            traceback.print_exc()
             
         except Exception as e:
             print(f"⚠️ Error inicializando integraciones de e-commerce: {e}")
@@ -466,7 +377,7 @@ class CustomerBusinessAgent:
                 return None
             
             # Cargar metadata
-            metadata_path = self._rag_metadata_path or Path("docchat/customer_business_agent/rag_storage/retriever_metadata.pkl")
+            metadata_path = self._rag_metadata_path or Path("docchat/assistance_ai/rag_storage/retriever_metadata.pkl")
             persist_dir = None
             
             if metadata_path.exists():
@@ -499,7 +410,7 @@ class CustomerBusinessAgent:
                 from ...config import AppConfig
                 from ... import load_config
                 config = self.app_config or load_config()
-                persist_dir = Path(config.persist_dir) / "customer_business_agent_rag"
+                persist_dir = Path(config.persist_dir) / "business_ai_rag"
                 
                 vector_store = Chroma.from_documents(
                     documents=self._rag_chunks,
@@ -589,7 +500,7 @@ class CustomerBusinessAgent:
             # Crear workflow con Groq (provider="groq")
             workflow = AgentWorkflow(
                 config=self.app_config,
-                provider="groq"  # SIEMPRE usar Groq para Customer Business Agent
+                provider="groq"  # SIEMPRE usar Groq para Assistance AI
             )
             
             # Obtener todos los documentos para el workflow
@@ -678,100 +589,19 @@ class CustomerBusinessAgent:
         
         return score
     
-    def _build_handoff_summary(self, session: CustomerSessionState, user_message: str, reason: str) -> str:
-        """
-        Construye un resumen completo de la conversación para el humano.
-        
-        Args:
-            session: Sesión del cliente
-            user_message: Último mensaje del usuario
-            reason: Razón del handoff
-            
-        Returns:
-            Resumen completo de la conversación
-        """
-        from datetime import datetime
-        
-        summary_parts = []
-        
-        # Información básica
-        summary_parts.append(f"**HANDOFF AUTOMÁTICO - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}**")
-        summary_parts.append(f"**Razón:** {reason}")
-        summary_parts.append(f"**Session ID:** {session.session_id}")
-        
-        # Perfil del cliente
-        if session.profile:
-            profile_info = []
-            if hasattr(session.profile, 'display_name') and session.profile.display_name:
-                profile_info.append(f"Nombre: {session.profile.display_name}")
-            if hasattr(session.profile, 'email') and session.profile.email:
-                profile_info.append(f"Email: {session.profile.email}")
-            if hasattr(session.profile, 'user_id') and session.profile.user_id:
-                profile_info.append(f"User ID: {session.profile.user_id}")
-            if profile_info:
-                summary_parts.append(f"**Cliente:** {', '.join(profile_info)}")
-        
-        # Sentimiento y frustración
-        summary_parts.append(f"**Sentimiento:** {session.sentiment.value}")
-        summary_parts.append(f"**Frustración:** {session.frustration_score:.2f}/10")
-        
-        # Historial de conversación (últimos 10 mensajes)
-        if session.last_messages:
-            summary_parts.append(f"\n**Historial de Conversación (últimos {min(10, len(session.last_messages))} mensajes):**")
-            for msg in session.last_messages[-10:]:
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")[:200]  # Limitar longitud
-                summary_parts.append(f"- {role.upper()}: {content}")
-        
-        # Carrito actual
-        if session.cart and session.cart.get("items"):
-            items = session.cart["items"]
-            total = sum(item.get("price", 0) * item.get("quantity", 1) for item in items if isinstance(item, dict))
-            summary_parts.append(f"\n**Carrito Actual:**")
-            summary_parts.append(f"- Items: {len(items)}")
-            summary_parts.append(f"- Total: ${total:.2f}")
-        
-        # Órdenes recientes
-        if session.recent_orders:
-            summary_parts.append(f"\n**Órdenes Recientes:**")
-            for order in session.recent_orders[-3:]:  # Últimas 3 órdenes
-                order_id = order.get("order_id") or order.get("id", "N/A")
-                status = order.get("status", "N/A")
-                summary_parts.append(f"- Orden {order_id}: {status}")
-        
-        # Último mensaje del usuario
-        summary_parts.append(f"\n**Último Mensaje del Usuario:**")
-        summary_parts.append(f"{user_message}")
-        
-        # Recomendaciones para el humano
-        summary_parts.append(f"\n**Recomendaciones para el Agente Humano:**")
-        if session.frustration_score >= 0.8:
-            summary_parts.append("- Cliente muy frustrado. Priorizar empatía y resolución rápida.")
-        if session.cart and session.cart.get("items"):
-            summary_parts.append("- Cliente tiene items en carrito. Oportunidad de cerrar venta.")
-        if session.recent_orders:
-            summary_parts.append("- Cliente tiene historial de compras. Verificar satisfacción previa.")
-        
-        return "\n".join(summary_parts)
-    
-    def _trigger_human_handoff(self, session: CustomerSessionState, reason: str, user_message: str, conversation_summary: Optional[str] = None):
-        """Activa handoff humano y envía alerta con contexto completo."""
+    def _trigger_human_handoff(self, session: CustomerSessionState, reason: str, user_message: str):
+        """Activa handoff humano y envía alerta."""
         session.needs_handoff = True
-        
-        # Usar resumen completo si está disponible
-        description = conversation_summary if conversation_summary else f"Razón: {reason}\nMensaje del usuario: {user_message[:500]}"
-        
         ticket = self.support_tool.create_ticket(
             session_id=session.session_id,
             subject=f"Handoff Automático: {reason}",
-            description=description,
+            description=f"Razón: {reason}\nMensaje del usuario: {user_message[:500]}",
             priority="high",
         )
         session.open_tickets.append(ticket)
         
         # TODO: Enviar notificación a contacto configurado (WhatsApp, email, Slack, etc.)
         print(f"🚨 HANDOFF ACTIVADO: {reason} - Session: {session.session_id}")
-        print(f"📋 Resumen de conversación preparado para el agente humano")
         
         return ticket
     
@@ -857,57 +687,64 @@ class CustomerBusinessAgent:
             user_message: Mensaje de texto del usuario
             image_data: Datos de imagen en base64 (opcional)
         """
-        # === VALIDACIÓN DE INPUTS (PRODUCCIÓN) ===
-        if not user_message or not isinstance(user_message, str):
-            return {
-                "text": "Lo siento, no pude entender tu mensaje. ¿Podrías intentar de nuevo?",
-                "error": True,
-                "session": session,
-            }
-        
-        # Limpiar y validar mensaje
-        user_message = user_message.strip()
-        if len(user_message) == 0:
-            return {
-                "text": "Por favor, escribe un mensaje para que pueda ayudarte.",
-                "error": False,
-                "session": session,
-            }
-        
-        # Limitar longitud para evitar abusos
-        if len(user_message) > 5000:
-            user_message = user_message[:5000]
-            print(f"⚠️ Mensaje truncado a 5000 caracteres")
-        
         # Recargar configuración para obtener cambios recientes
-        try:
-            self.chatbot_config = self.chatbot_config_manager.load()
-        except Exception as e:
-            print(f"⚠️ Error cargando configuración: {e}")
-            # Usar configuración por defecto si falla
-            self.chatbot_config = self.chatbot_config_manager.load_from_env()
+        self.chatbot_config = self.chatbot_config_manager.load()
+        
+        # Si LangGraph está habilitado, usarlo
+        if self.langgraph_integration and self.config.use_langgraph:
+            try:
+                # Preparar metadata
+                sentiment_result = self.sentiment_analyzer.analyze(user_message, session)
+                metadata = {
+                    "session_id": session.session_id,
+                    "sentiment": sentiment_result.get("label", "neutral"),
+                    "sentiment_score": sentiment_result.get("score", 0.5),
+                    "frustration_score": session.frustration_score,
+                    "language": self.chatbot_config.default_language if self.chatbot_config else "es"
+                }
+                
+                # Procesar con LangGraph
+                result = self.langgraph_integration.process_message(
+                    user_message=user_message,
+                    user_id=session.profile.user_id if session.profile else session.session_id,
+                    channel="web",  # TODO: obtener del session si está disponible
+                    session_id=session.session_id,
+                    metadata=metadata
+                )
+                
+                # Actualizar sesión
+                session.add_message("user", user_message)
+                session.add_message("assistant", result["text"])
+                
+                if result.get("needs_handoff"):
+                    session.needs_handoff = True
+                    if result.get("escalation_reason"):
+                        self._trigger_human_handoff(session, result["escalation_reason"], user_message)
+                
+                # Convertir al formato esperado
+                return {
+                    "text": result["text"],
+                    "intent": result.get("intent", "pregunta_general"),
+                    "confidence": result.get("confidence", 1.0),
+                    "sentiment": result.get("sentiment", "neutral"),
+                    "frustration_score": result.get("frustration_score", 0.0),
+                    "needs_handoff": result.get("needs_handoff", False),
+                    "session": session,
+                    "language": result.get("language", "es"),
+                    "metadata": result.get("metadata", {})
+                }
+            except Exception as e:
+                print(f"⚠️ Error procesando con LangGraph, usando fallback: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continuar con el código tradicional
         
         session.add_message("user", user_message)
-        
-        # === PASO 0: Mejora de Lenguaje Natural (Inspirado en Sierra.ai) 🧠 ===
-        # Corregir typos y mejorar comprensión
-        enhanced_query = self.nlp_enhancer.enhance_product_search_query(user_message)
-        corrected_message = enhanced_query.get("corrected_query", user_message)
-        has_typos = enhanced_query.get("has_typos", False)
-        
-        if has_typos:
-            print(f"✅ Typos corregidos: '{user_message}' → '{corrected_message}'")
-        
-        # Extraer información de entrega si está presente
-        delivery_info = self.nlp_enhancer.extract_delivery_info(corrected_message)
-        
-        # Usar mensaje corregido para el resto del procesamiento
-        processed_message = corrected_message
         
         # === PASO 1: Detección de Idioma (Multilingüismo Dinámico) ===
         detected_language = self.chatbot_config.default_language
         if self.chatbot_config.multilingual_enabled:
-            detected_language = self._detect_language(processed_message)
+            detected_language = self._detect_language(user_message)
         
         # === PASO 2: Detección de Objeciones ===
         objection_response = self._check_objections(user_message)
@@ -935,35 +772,9 @@ class CustomerBusinessAgent:
         
         if handoff_by_keywords or handoff_by_sentiment:
             reason = "Palabras clave de handoff" if handoff_by_keywords else f"Frustración alta ({session.frustration_score:.2f})"
+            ticket = self._trigger_human_handoff(session, reason, user_message)
             
-            # === HANDOFF MEJORADO: Contexto Completo para el Humano ===
-            # Construir resumen completo de la conversación para el humano
-            conversation_summary = self._build_handoff_summary(session, user_message, reason)
-            
-            ticket = self._trigger_human_handoff(session, reason, user_message, conversation_summary)
-            
-            # Sincronizar con CRM si está configurado (marcar como necesita atención)
-            if self.crm_integration:
-                try:
-                    from ..integrations.crm_integration import CRMContact
-                    customer_email = session.profile.email if session.profile and hasattr(session.profile, 'email') else None
-                    if customer_email:
-                        contact = CRMContact(
-                            email=customer_email,
-                            name=session.profile.display_name if session.profile and hasattr(session.profile, 'display_name') else None,
-                            custom_fields={
-                                "needs_human_attention": True,
-                                "handoff_reason": reason,
-                                "frustration_score": session.frustration_score,
-                                "last_message": user_message[:200],
-                            }
-                        )
-                        self.crm_integration.create_or_update_contact(contact)
-                        print(f"✅ Cliente marcado en CRM como necesita atención humana")
-                except Exception as e:
-                    print(f"⚠️ Error sincronizando handoff con CRM: {e}")
-            
-            handoff_message = "Entiendo que necesitas hablar con una persona de nuestro equipo. Te voy a conectar con un agente humano que podrá ayudarte mejor. Un momento, por favor."
+            handoff_message = "Voy a pasarte con una persona de nuestro equipo para ayudarte mejor."
             if self.translator and detected_language != self.chatbot_config.default_language:
                 handoff_message = self.translator.translate(handoff_message, detected_language)
             
@@ -971,7 +782,6 @@ class CustomerBusinessAgent:
                 "text": handoff_message,
                 "handoff": True,
                 "ticket": ticket,
-                "conversation_summary": conversation_summary,
                 "language": detected_language,
                 "session": session,
             }
@@ -1264,47 +1074,6 @@ class CustomerBusinessAgent:
                     system_prompt += "**AGENDAMIENTO:** Si el cliente muestra interés, puedes mencionar que pueden agendar una cita para una demo personalizada.\n"
             system_prompt += "\n"
         
-        # === MEJORAS SIERRA.AI: Instrucciones Específicas ===
-        system_prompt += (
-            "**🌟 COMPORTAMIENTO INSPIRADO EN SIERRA.AI (Máxima Calidad):**\n\n"
-            "**1. Comprensión de Lenguaje Natural Mejorada:**\n"
-            "- El usuario puede tener typos (ej: 'delivr' → 'deliver', 'thse' → 'these').\n"
-            "- NO te quedes atascado con errores tipográficos. Entiende la intención real.\n"
-            "- Si el usuario escribe 'can you delivr tomorrow?', entiende que quiere entrega mañana.\n\n"
-            "**2. Recomendaciones Contextuales Inteligentes:**\n"
-            "- SIEMPRE ofrece recomendaciones basadas en el contexto de la conversación.\n"
-            "- Si el usuario menciona 'dinner party', sugiere productos apropiados para esa ocasión.\n"
-            "- Si un producto no está disponible, NO termines con un problema - ofrece una alternativa creativa.\n"
-            "- Ejemplo: 'No tenemos ese bouquet para mañana, pero tengo este otro que es perfecto para tu cena.'\n\n"
-            "**3. Resolución Creativa de Problemas:**\n"
-            "- Si algo no está disponible, NO digas solo 'no está disponible'.\n"
-            "- Ofrece alternativas inmediatamente: 'No tenemos X para mañana, pero Y está disponible y es perfecto para tu ocasión.'\n"
-            "- Usa el contexto previo: 'Como mencionaste que es para una cena, este bouquet de girasoles sería ideal.'\n\n"
-            "**4. Sugerencias Proactivas de Suscripciones:**\n"
-            "- Si el cliente ha hecho 2+ pedidos o ha gastado $100+, es buen candidato para suscripción.\n"
-            "- Sugiere suscripción de forma natural: 'Noté que eres un amante regular de las flores. ¿Has considerado nuestro servicio de auto-entrega?'\n"
-            "- Destaca beneficios: 'Ofrece 15% de descuento en cada entrega y puedes reprogramar hasta 24 horas antes.'\n"
-            "- Si el cliente acepta ('bill my card'), confirma la suscripción y menciona la próxima fecha de entrega.\n\n"
-            "**5. Actualización de Órdenes en Tiempo Real:**\n"
-            "- Si el cliente quiere cambiar la dirección de entrega, hazlo INMEDIATAMENTE.\n"
-            "- NO redirijas a otra página o digas 'llama a soporte'.\n"
-            "- Pide confirmación clara: 'Para confirmar, quieres que entreguemos tu pedido del 1 de septiembre a Judy Bloom en 123 Main St, San Francisco, CA, ¿correcto?'\n"
-            "- Una vez confirmado, actualiza la orden y confirma: '¡Perfecto! He actualizado la dirección de entrega.'\n\n"
-            "**6. Confirmaciones Claras Antes de Cambios:**\n"
-            "- Antes de hacer cambios importantes (dirección, fecha, suscripción), SIEMPRE confirma.\n"
-            "- Usa formato: 'Para confirmar, quieres [acción], ¿correcto?'\n"
-            "- Espera confirmación antes de ejecutar el cambio.\n\n"
-            "**7. Información de Entrega e Inventario:**\n"
-            "- SIEMPRE verifica disponibilidad y tiempos de entrega antes de recomendar.\n"
-            "- Si un producto necesita 2 días de entrega y el cliente quiere mañana, ofrece alternativas inmediatamente.\n"
-            "- Menciona detalles específicos: 'Este bouquet necesita 2 días de entrega, pero tengo otros que podemos entregar mañana.'\n\n"
-            "**8. Experiencia Conversacional Natural:**\n"
-            "- Mantén el contexto de la conversación. Si el usuario mencionó algo antes, refiérete a eso.\n"
-            "- Ejemplo: 'Como mencionaste que es para una cena, este bouquet sería perfecto.'\n"
-            "- Haz la conversación fluida, no robótica.\n"
-            "- Responde de forma empática y genuina, como un humano experto.\n\n"
-        )
-        
         system_prompt += (
             "**🎯 ESTRATEGIA DE VENTAS AVANZADA (Nivel Meta Sales Agent):**\n\n"
             "**1. Descubrimiento Inteligente de Necesidades:**\n"
@@ -1526,203 +1295,10 @@ class CustomerBusinessAgent:
                 currency="USD"
             )
 
-        # === MEJORAS SIERRA.AI: Track Order Mejorado ===
-        # Detectar si el usuario pregunta por estado de pedido (con mejor comprensión de lenguaje natural)
-        track_order_keywords = ["track", "order", "pedido", "delivery", "entrega", "when", "cuando", "status", "estado"]
-        is_track_order_query = (
-            intent == "order_status" or 
-            any(keyword in processed_message.lower() for keyword in track_order_keywords)
-        )
-        
-        if is_track_order_query:
-            # Intentar extraer order_id del mensaje o usar el proporcionado
-            order_id = intent_data.get("order_id")
-            if not order_id:
-                # Buscar número de orden en el mensaje
-                import re
-                order_match = re.search(r'\b(\d{6,})\b', processed_message)
-                if order_match:
-                    order_id = order_match.group(1)
-            
-            # Si tenemos order_id, buscar la orden
-            if order_id:
-                order = self.order_tool.get_order_status(order_id)
-                if order:
-                    tool_results["order_status"] = order
-                    # Agregar tracking number si existe
-                    if order.get("tracking_number"):
-                        tool_results["tracking_number"] = order.get("tracking_number")
-                        tool_results["tracking_carrier"] = order.get("tracking_carrier", "UPS")
-            else:
-                # Si no hay order_id, el agente debe pedirlo en la respuesta
-                tool_results["needs_order_info"] = True
-        
-        # === MEJORAS SIERRA.AI: Gestión de Suscripciones ===
-        subscription_keywords = ["subscription", "suscripcion", "auto-delivery", "auto delivery", "recurring", "recurrente"]
-        is_subscription_query = any(keyword in processed_message.lower() for keyword in subscription_keywords)
-        
-        # Detectar si el usuario es candidato para suscripción (después de una compra o consulta)
-        should_suggest_subscription = False
-        if len(session.recent_orders) >= 1 or len(tool_results.get("products", [])) > 0:
-            # Verificar si es buen candidato
-            total_spent = sum(
-                order.get("cart", {}).get("total", 0) 
-                for order in session.recent_orders 
-                if isinstance(order, dict)
-            )
-            is_candidate = self.subscription_service.is_customer_subscription_candidate(
-                customer_id=session.session_id,
-                order_history=session.recent_orders,
-                total_spent=total_spent
-            )
-            if is_candidate and not is_subscription_query:
-                should_suggest_subscription = True
-                tool_results["subscription_suggestion"] = {
-                    "should_suggest": True,
-                    "discount_percentage": 15.0,
-                    "frequency_weeks": 4,
-                }
-        
-        # Procesar creación o actualización de suscripción
-        if is_subscription_query or "bill my card" in processed_message.lower() or "bill card" in processed_message.lower():
-            # Detectar si quiere crear suscripción
-            if "sign up" in processed_message.lower() or "subscribe" in processed_message.lower() or "bill my card" in processed_message.lower():
-                # Obtener producto del carrito o última orden
-                product_id = None
-                product_name = "Producto"
-                
-                if tool_results.get("products") and len(tool_results["products"]) > 0:
-                    product = tool_results["products"][0]
-                    product_id = product.get("id")
-                    product_name = product.get("title") or product.get("name", "Producto")
-                elif session.cart and session.cart.get("items"):
-                    item = session.cart["items"][0]
-                    product_id = item.get("product_id")
-                    product_name = item.get("name", "Producto")
-                
-                if product_id:
-                    subscription = self.subscription_service.create_subscription(
-                        customer_id=session.session_id,
-                        session_id=session.session_id,
-                        product_id=str(product_id),
-                        product_name=product_name,
-                        frequency_weeks=4,
-                        discount_percentage=15.0,
-                    )
-                    tool_results["subscription"] = {
-                        "subscription_id": subscription.subscription_id,
-                        "next_delivery_date": subscription.next_delivery_date,
-                        "discount_percentage": subscription.discount_percentage,
-                    }
-        
-        # === MEJORAS SIERRA.AI: Actualización de Órdenes con OMS Real ===
-        update_order_keywords = ["update", "change", "modify", "actualizar", "cambiar", "send to", "send them to"]
-        is_update_order_query = any(keyword in processed_message.lower() for keyword in update_order_keywords)
-        
-        if is_update_order_query:
-            # Detectar si quiere cambiar dirección de entrega
-            if "address" in processed_message.lower() or "mom" in processed_message.lower() or "send to" in processed_message.lower():
-                # Extraer información de dirección del mensaje
-                address_info = self.nlp_enhancer.extract_address_info(processed_message)
-                
-                # Buscar orden reciente o suscripción
-                if tool_results.get("order_status"):
-                    order_id = tool_results["order_status"].get("order_id")
-                    if order_id:
-                        # 1. Intentar actualizar en OMS real primero (si está configurado)
-                        updated_order = None
-                        if self.oms_integration:
-                            try:
-                                from ..integrations.oms_integration import OrderUpdate
-                                order_update = OrderUpdate(
-                                    order_id=order_id,
-                                    delivery_address=address_info
-                                )
-                                updated_order = self.oms_integration.update_order(order_update)
-                                if updated_order:
-                                    print(f"✅ Orden {order_id} actualizada en OMS real")
-                                    tool_results["order_updated"] = True
-                                    tool_results["updated_order"] = updated_order
-                                    tool_results["updated_in_real_oms"] = True
-                            except Exception as e:
-                                print(f"⚠️ Error actualizando orden en OMS: {e}")
-                        
-                        # 2. Si no se pudo actualizar en OMS real, actualizar en sistema local
-                        if not updated_order:
-                            updated_order = self.order_tool.update_order_delivery_address(
-                                order_id=order_id,
-                                new_address=address_info
-                            )
-                            if updated_order:
-                                tool_results["order_updated"] = True
-                                tool_results["updated_order"] = updated_order
-                                tool_results["updated_in_real_oms"] = False
-                
-                # Si hay suscripción activa, también actualizarla
-                customer_subscriptions = self.subscription_service.get_customer_subscriptions(session.session_id)
-                if customer_subscriptions:
-                    active_sub = next((s for s in customer_subscriptions if s.status.value == "active"), None)
-                    if active_sub:
-                        updated_sub = self.subscription_service.update_delivery_address(
-                            subscription_id=active_sub.subscription_id,
-                            new_address=address_info
-                        )
-                        if updated_sub:
-                            tool_results["subscription_updated"] = True
-                            tool_results["updated_subscription"] = {
-                                "subscription_id": updated_sub.subscription_id,
-                                "next_delivery_date": updated_sub.next_delivery_date,
-                            }
-        
-        # === Sincronizar con CRM Real ===
-        # Si hay una compra o interacción importante, sincronizar con CRM
-        if tool_results.get("order") or tool_results.get("subscription"):
-            if self.crm_integration:
-                try:
-                    from ..integrations.crm_integration import CRMContact, CRMDeal
-                    
-                    # Obtener información del cliente
-                    customer_email = session.profile.email if session.profile and hasattr(session.profile, 'email') else None
-                    customer_name = session.profile.display_name if session.profile and hasattr(session.profile, 'display_name') else None
-                    
-                    if customer_email:
-                        # Crear/actualizar contacto en CRM
-                        contact = CRMContact(
-                            email=customer_email,
-                            name=customer_name,
-                            custom_fields={
-                                "last_interaction": datetime.now().isoformat(),
-                                "session_id": session.session_id,
-                            }
-                        )
-                        crm_contact = self.crm_integration.create_or_update_contact(contact)
-                        tool_results["crm_contact_synced"] = True
-                        tool_results["crm_contact_id"] = crm_contact.get("contact_id")
-                        
-                        # Si hay una compra, crear deal
-                        if tool_results.get("order"):
-                            order = tool_results["order"]
-                            total = sum(
-                                item.get("price", 0) * item.get("quantity", 1)
-                                for item in tool_results.get("cart", {}).get("items", [])
-                                if isinstance(item, dict)
-                            )
-                            
-                            deal = CRMDeal(
-                                name=f"Orden {order.get('order_id', 'Nueva')}",
-                                amount=total,
-                                contact_email=customer_email,
-                                stage="closed-won" if order.get("status") == "completed" else "negotiation",
-                            )
-                            crm_deal = self.crm_integration.create_deal(deal)
-                            tool_results["crm_deal_created"] = True
-                            tool_results["crm_deal_id"] = crm_deal.get("deal_id")
-                            
-                            print(f"✅ Contacto y deal sincronizados con CRM")
-                except Exception as e:
-                    print(f"⚠️ Error sincronizando con CRM: {e}")
-                    import traceback
-                    traceback.print_exc()
+        # Estado de pedido
+        if intent == "order_status" and intent_data.get("order_id"):
+            order = self.order_tool.get_order_status(intent_data["order_id"])
+            tool_results["order_status"] = order
 
         # Devoluciones / soporte
         if intent in ("support", "refund"):
@@ -1735,48 +1311,13 @@ class CustomerBusinessAgent:
             session.open_tickets.append(ticket)
             tool_results["ticket"] = ticket
 
-        # Agregar información sobre acciones ejecutadas (Sierra.ai style)
-        actions_summary = ""
-        if tool_results.get("order_status"):
-            order = tool_results["order_status"]
-            actions_summary += f"**ORDEN ENCONTRADA:**\n"
-            actions_summary += f"- ID: {order.get('order_id')}\n"
-            if tool_results.get("tracking_number"):
-                actions_summary += f"- Tracking: {tool_results['tracking_number']} ({tool_results.get('tracking_carrier', 'UPS')})\n"
-            actions_summary += f"- Estado: {order.get('status')}\n\n"
-        
-        if tool_results.get("subscription"):
-            sub = tool_results["subscription"]
-            actions_summary += f"**SUSCRIPCIÓN CREADA:**\n"
-            actions_summary += f"- Próxima entrega: {sub['next_delivery_date']}\n"
-            actions_summary += f"- Descuento: {sub['discount_percentage']}%\n\n"
-        
-        if tool_results.get("order_updated"):
-            actions_summary += f"**ORDEN ACTUALIZADA:** La dirección de entrega ha sido modificada.\n\n"
-        
-        if tool_results.get("subscription_updated"):
-            sub = tool_results["updated_subscription"]
-            actions_summary += f"**SUSCRIPCIÓN ACTUALIZADA:** Próxima entrega: {sub['next_delivery_date']}\n\n"
-        
-        if tool_results.get("subscription_suggestion", {}).get("should_suggest"):
-            actions_summary += f"**SUGERENCIA PROACTIVA:** El cliente es buen candidato para suscripción. Sugiérela de forma natural.\n\n"
-        
-        # Generar respuesta final amigable (con personalización y persuasión nivel Meta Sales Agent + Sierra.ai)
+        # Generar respuesta final amigable (con personalización y persuasión nivel Meta Sales Agent)
         summary_prompt = (
             "Genera una respuesta INTELIGENTE, PROACTIVA y PERSUASIVA en español para el cliente.\n\n"
             "**Contexto de herramientas ejecutadas:**\n"
             f"{json.dumps(tool_results, default=str)[:2000]}\n\n"
-            f"**Acciones ejecutadas:**\n{actions_summary}\n\n"
-            f"**Mensaje original del cliente:** {user_message[:500]}\n"
-            f"**Mensaje corregido (sin typos):** {processed_message[:500]}\n\n"
+            f"**Mensaje original del cliente:** {user_message[:500]}\n\n"
             f"**Perfil del cliente:** {user_profile_context}\n\n"
-            "**🌟 COMPORTAMIENTO SIERRA.AI (OBLIGATORIO):**\n\n"
-            "**1. Comprensión Natural:** El cliente puede tener typos. Entiende la intención real, no te quedes atascado.\n"
-            "**2. Recomendaciones Contextuales:** Ofrece productos basados en el contexto (ej: 'dinner party' → productos para cena).\n"
-            "**3. Resolución Creativa:** Si algo no está disponible, NO termines con un problema. Ofrece alternativas inmediatamente.\n"
-            "**4. Suscripciones Proactivas:** Si el cliente es candidato, sugiere suscripción de forma natural con beneficios claros.\n"
-            "**5. Actualizaciones en Tiempo Real:** Si el cliente quiere cambiar dirección, hazlo INMEDIATAMENTE. NO redirijas a otra página.\n"
-            "**6. Confirmaciones Claras:** Antes de cambios importantes, confirma: 'Para confirmar, quieres X, ¿correcto?'\n\n"
             "**🎯 INSTRUCCIONES DE RESPUESTA (Nivel Meta Sales Agent - Super Genio):**\n\n"
             "**1. Responde DIRECTAMENTE y ESPECÍFICAMENTE:**\n"
             "- NO uses saludos genéricos si el usuario ya hizo una pregunta específica.\n"
@@ -1804,15 +1345,10 @@ class CustomerBusinessAgent:
             "- Si NO hay productos encontrados, di claramente que no encontraste productos pero ofrece ayuda alternativa: 'No encontré exactamente eso, pero tengo estas opciones similares que podrían funcionar...'\n"
             "- Si hay productos, incluye detalles relevantes (precio, características, disponibilidad, envío).\n"
             "- Si hay análisis de imagen, úsalo para verificar reclamos o identificar productos.\n\n"
-            "**7. Evita Respuestas Genéricas (CRÍTICO):**\n"
+            "**7. Evita Respuestas Genéricas:**\n"
             "- NO digas 'Me alegra que hayas iniciado esta conversación' cuando el usuario ya hizo una pregunta específica.\n"
-            "- NO uses frases vacías como 'Estoy aquí para ayudarte' sin contexto.\n"
-            "- NO repitas información que el cliente ya sabe.\n"
-            "- SIEMPRE personaliza basándote en el historial de conversación.\n"
-            "- Si el cliente mencionó algo antes, refiérete a eso específicamente.\n"
-            "- Cada respuesta debe agregar valor real y ser específica al contexto del cliente.\n"
-            "- Ejemplo MALO: 'Tenemos muchos productos que podrían interesarte.'\n"
-            "- Ejemplo BUENO: 'Como mencionaste que buscas algo para una cena, este bouquet de girasoles sería perfecto.'\n\n"
+            "- NO uses frases vacías. Sé específico, útil y orientado a resultados.\n"
+            "- Cada respuesta debe agregar valor real al cliente.\n\n"
             "**8. Técnicas de Cierre Avanzadas (si es Lead Caliente):**\n"
             "- Usa el método de 'asumir la venta': 'Perfecto, ¿qué talla necesitas?' en lugar de '¿Te gustaría comprarlo?'\n"
             "- Ofrece alternativas: 'Si este no encaja, tengo otras 2 opciones que podrían funcionar mejor'.\n"

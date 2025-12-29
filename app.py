@@ -136,8 +136,8 @@ elif cwd_env_path.exists():
 else:
     load_dotenv(override=True)
 
-# Si load_dotenv no funcionó, leer el archivo manualmente
-if env_file and not os.getenv("OPENAI_API_KEY"):
+# Si load_dotenv no funcionó, leer el archivo manualmente y cargar todas las variables
+if env_file:
     try:
         content = env_file.read_text(encoding='utf-8-sig').strip()
         for line in content.split('\n'):
@@ -146,9 +146,9 @@ if env_file and not os.getenv("OPENAI_API_KEY"):
                 key, value = line.split('=', 1)
                 key = key.strip()
                 value = value.strip().strip('"').strip("'")
-                if key == "OPENAI_API_KEY":
+                # Cargar todas las variables de entorno del .env
+                if key and value:
                     os.environ[key] = value
-                    break
     except Exception:
         pass
 
@@ -207,6 +207,15 @@ except ImportError as e:
     BUSINESS_AI_AVAILABLE = False
     BusinessAIMode = None
     print(f"⚠️ Business AI Omnicanal no disponible: {e}")
+
+# Importar Assistance AI (clon de Business AI Omnicanal)
+try:
+    from docchat.assistance_ai import AssistanceAIMode
+    ASSISTANCE_AI_AVAILABLE = True
+except ImportError as e:
+    ASSISTANCE_AI_AVAILABLE = False
+    AssistanceAIMode = None
+    print(f"⚠️ Assistance AI no disponible: {e}")
 
 # Importar STEM Customer Care
 try:
@@ -711,6 +720,17 @@ try:
 except Exception as e:
     print(f"⚠️ Error inicializando Business AI Omnicanal: {e}")
     business_ai_mode = None
+
+# Inicializar Assistance AI
+try:
+    if ASSISTANCE_AI_AVAILABLE and AssistanceAIMode:
+        assistance_ai_mode = AssistanceAIMode(config=config)
+        print("✅ Assistance AI inicializado - Agente unificado de asistencia 24/7")
+    else:
+        assistance_ai_mode = None
+except Exception as e:
+    print(f"⚠️ Error inicializando Assistance AI: {e}")
+    assistance_ai_mode = None
 
 # Inicializar STEM Customer Care
 try:
@@ -21913,6 +21933,1337 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                         **Ejemplo completo:**
                         ```html
                         <script src="https://tu-servidor.com/static/business-ai-widget.js" 
+                                data-api-url="https://tu-servidor.com"
+                                data-widget-id="mi-widget-123"
+                                data-brand-name="Mi Empresa"
+                                data-primary-color="#ff6b6b"
+                                data-position="bottom-left"
+                                data-welcome-message="¡Hola! ¿Cómo puedo ayudarte?"
+                                async></script>
+                        ```
+                        """)
+
+        # Tab: 🤖 ASSISTANCE AI - Agente unificado de asistencia 24/7 (clon de Business AI Omnicanal)
+        with gr.Tab("🤖 ASSISTANCE AI"):
+            gr.Markdown("### 🤖 ASSISTANCE AI - Agente Unificado de Asistencia 24/7")
+            gr.Markdown("""
+            **🌟 Agente Omnicanal para Asistencia y Soporte al Cliente**
+            
+            **✨ CARACTERÍSTICAS PRINCIPALES:**
+            - 💬 **Chat Unificado**: Un solo agente para todos los canales (Web, WhatsApp, Instagram DM, Messenger)
+            - 🛒 **Ventas en Chat**: Búsqueda de productos, carrito, checkout completo (Stripe/PayPal)
+            - 📦 **Gestión de Pedidos**: Estado de pedidos, devoluciones, seguimiento
+            - 🎯 **Detección de Sentimiento**: Analiza frustración y escala a humano automáticamente
+            - 🔄 **Estado Unificado**: Historial de cliente compartido entre canales
+            - 🎫 **Sistema de Tickets**: Gestión automática de tickets de soporte
+            
+            **💼 Perfecto para:**
+            - E-commerce que necesita atención 24/7
+            - Empresas con múltiples canales de comunicación
+            - Necesidad de ventas y soporte en un solo agente
+            - Automatización de respuestas frecuentes
+            """)
+            
+            if not assistance_ai_mode:
+                gr.Markdown("⚠️ **ASSISTANCE AI no está disponible.** Verifica que OPENAI_API_KEY y GROQ_API_KEY estén configuradas.")
+            else:
+                assistance_ai_session_id = gr.State(value=str(uuid.uuid4()))
+                assistance_ai_bot = gr.Chatbot(label="💬 ASSISTANCE AI Chat", height=500, show_copy_button=True)
+                
+                with gr.Row():
+                    assistance_ai_input = gr.Textbox(
+                        label="Escribe tu mensaje",
+                        placeholder="Ejemplo: ¿Tienen zapatillas talla 42 en color negro?",
+                        lines=2,
+                        scale=4,
+                    )
+                    assistance_ai_submit_btn = gr.Button("📤 Enviar", variant="primary", scale=1)
+                
+                with gr.Row():
+                    clear_assistance_ai_btn = gr.Button("🗑️ Limpiar Chat", variant="secondary")
+                    assistance_ai_stats_btn = gr.Button("📊 Estadísticas", variant="secondary")
+                
+                assistance_ai_status = gr.Markdown(label="ℹ️ Estado")
+                assistance_ai_stats_output = gr.Markdown(label="📊 Estadísticas", visible=False)
+                
+                def assistance_ai_submit(message, history, session_id):
+                    if not message.strip():
+                        return history, history, "⚠️ Escribe un mensaje.", gr.Markdown(visible=False)
+                    try:
+                        payload = {"session_id": session_id, "user_id": session_id, "message": message, "channel": "web"}
+                        result = assistance_ai_mode.process_message(payload, channel="web")
+                        response_text = result.get("text", "Lo siento, no pude procesar tu mensaje.")
+                        needs_handoff = result.get("needs_handoff", False)
+                        sentiment = result.get("sentiment", "neutral")
+                        history.append([message, None])
+                        if needs_handoff:
+                            response_text += "\n\n⚠️ **Un agente humano se pondrá en contacto contigo pronto.**"
+                        history[-1][1] = response_text
+                        status_msg = f"✅ Mensaje procesado"
+                        if sentiment != "neutral":
+                            status_msg += f" | Sentimiento: {sentiment}"
+                        if needs_handoff:
+                            status_msg += " | Escalado a humano"
+                        return history, history, status_msg, gr.Markdown(visible=False)
+                    except Exception as e:
+                        return history, history, f"❌ Error: {str(e)}", gr.Markdown(visible=False)
+                
+                def clear_assistance_ai(history, session_id):
+                    new_session_id = str(uuid.uuid4())
+                    return [], f"✅ Chat limpiado. Nueva sesión: {new_session_id[:8]}", gr.Markdown(visible=False), new_session_id
+                
+                def show_assistance_ai_stats(session_id):
+                    try:
+                        session = assistance_ai_mode.session_manager.get_session(session_id)
+                        if not session:
+                            return gr.Markdown(visible=True), "⚠️ No hay sesión activa"
+                        output = "## 📊 Estadísticas - ASSISTANCE AI\n\n"
+                        output += f"### 👤 Perfil de Cliente\n- ID de Sesión: {session_id[:8]}...\n"
+                        if session.profile:
+                            output += f"- Nombre: {session.profile.get('name', 'N/A')}\n- Email: {session.profile.get('email', 'N/A')}\n"
+                        output += f"\n### 🛒 Carrito\n"
+                        if session.cart and len(session.cart) > 0:
+                            total = sum(item.get('price', 0) * item.get('quantity', 1) for item in session.cart)
+                            output += f"- Items: {len(session.cart)} | Total: ${total:.2f}\n"
+                        else:
+                            output += "- Carrito vacío\n"
+                        output += f"\n### 💬 Conversación\n- Mensajes: {len(session.message_history)} | Sentimiento: {session.sentiment} | Frustración: {session.frustration_score:.2f}/10\n"
+                        if session.needs_handoff:
+                            output += f"- ⚠️ Requiere atención humana\n"
+                        return gr.Markdown(output, visible=True)
+                    except Exception as e:
+                        return gr.Markdown(visible=True), f"❌ Error: {str(e)}"
+                
+                assistance_ai_submit_btn.click(fn=assistance_ai_submit, inputs=[assistance_ai_input, assistance_ai_bot, assistance_ai_session_id], outputs=[assistance_ai_bot, assistance_ai_bot, assistance_ai_status, assistance_ai_stats_output]).then(lambda: "", None, assistance_ai_input)
+                assistance_ai_input.submit(fn=assistance_ai_submit, inputs=[assistance_ai_input, assistance_ai_bot, assistance_ai_session_id], outputs=[assistance_ai_bot, assistance_ai_bot, assistance_ai_status, assistance_ai_stats_output]).then(lambda: "", None, assistance_ai_input)
+                clear_assistance_ai_btn.click(fn=clear_assistance_ai, inputs=[assistance_ai_bot, assistance_ai_session_id], outputs=[assistance_ai_bot, assistance_ai_status, assistance_ai_stats_output, assistance_ai_session_id])
+                assistance_ai_stats_btn.click(fn=show_assistance_ai_stats, inputs=[assistance_ai_session_id], outputs=[assistance_ai_stats_output, assistance_ai_stats_output])
+                
+                # NUEVO: Generador de Código Widget Embeddable
+                gr.Markdown("---")
+                gr.Markdown("### 📦 Widget Embeddable para tu Website")
+                gr.Markdown("**Genera código HTML/JS que tus clientes pueden pegar en su website para desplegar el chatbot automáticamente.**")
+                
+                with gr.Tabs():
+                    with gr.Tab("🔧 Generar Código"):
+                        with gr.Row():
+                            with gr.Column():
+                                assistance_widget_api_url = gr.Textbox(
+                                    label="🌐 URL del Servidor",
+                                    value="https://tu-servidor.com",
+                                    placeholder="https://tu-servidor.com",
+                                    info="URL donde está corriendo tu servidor DocChat Enterprise"
+                                )
+                                assistance_widget_id = gr.Textbox(
+                                    label="🆔 Widget ID",
+                                    placeholder="widget_abc123",
+                                    info="ID único para este widget (se genera automáticamente si lo dejas vacío)"
+                                )
+                                assistance_widget_brand_name = gr.Textbox(
+                                    label="🏷️ Nombre de Marca",
+                                    placeholder="Mi Empresa",
+                                    value="Tu Marca",
+                                    info="Nombre que aparecerá en el widget"
+                                )
+                                assistance_widget_primary_color = gr.Textbox(
+                                    label="🎨 Color Principal",
+                                    value="#007bff",
+                                    placeholder="#007bff",
+                                    info="Color hexadecimal para el widget"
+                                )
+                                assistance_widget_position = gr.Radio(
+                                    label="📍 Posición",
+                                    choices=[("Esquina inferior derecha", "bottom-right"), ("Esquina inferior izquierda", "bottom-left")],
+                                    value="bottom-right"
+                                )
+                                assistance_widget_welcome_message = gr.Textbox(
+                                    label="💬 Mensaje de Bienvenida",
+                                    value="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?",
+                                    lines=2,
+                                    info="Mensaje que verá el usuario al abrir el chat"
+                                )
+                                
+                                assistance_generate_widget_code_btn = gr.Button("📋 Generar Código", variant="primary", size="lg")
+                            
+                            with gr.Column():
+                                assistance_widget_code_output = gr.Code(
+                                    label="📋 Código HTML para Copiar y Pegar",
+                                    language="html",
+                                    lines=15,
+                                    value="**💡 Configura los campos de la izquierda y haz click en 'Generar Código'**"
+                                )
+                                assistance_widget_preview = gr.Markdown(
+                                    label="👁️ Preview",
+                                    value="**El código generado aparecerá arriba**"
+                                )
+                        
+                        def assistance_generate_widget_code(api_url, widget_id_input, brand_name, primary_color, position, welcome_message):
+                            """Genera código HTML/JS para el widget embeddable"""
+                            try:
+                                import uuid
+                                
+                                # Generar widget_id si no se proporciona
+                                if not widget_id_input or not widget_id_input.strip():
+                                    widget_id_final = f"widget_{uuid.uuid4().hex[:12]}"
+                                else:
+                                    widget_id_final = widget_id_input.strip()
+                                
+                                # Validar URL
+                                if not api_url or not api_url.strip():
+                                    return "⚠️ **URL del servidor es requerida**", "❌ Error: URL requerida"
+                                
+                                api_url_clean = api_url.strip().rstrip('/')
+                                
+                                # Generar código HTML
+                                code = f'''<!-- ASSISTANCE AI Widget -->
+<!-- Copia y pega este código antes de </body> en tu website -->
+<script src="{api_url_clean}/static/assistance-ai-widget.js" 
+        data-api-url="{api_url_clean}"
+        data-widget-id="{widget_id_final}"
+        data-brand-name="{brand_name}"
+        data-primary-color="{primary_color}"
+        data-position="{position}"
+        data-welcome-message="{welcome_message}"
+        async></script>
+
+<!-- Ejemplo de uso completo: -->
+<!-- 
+<script src="{api_url_clean}/static/assistance-ai-widget.js" 
+        data-api-url="{api_url_clean}"
+        data-widget-id="{widget_id_final}"
+        data-brand-name="{brand_name}"
+        data-primary-color="{primary_color}"
+        data-position="{position}"
+        data-welcome-message="{welcome_message}"
+        async></script>
+-->
+'''
+                                
+                                preview = f"""## ✅ Código Generado Exitosamente
+
+**Widget ID:** `{widget_id_final}`
+
+**Instrucciones:**
+1. Copia el código HTML de arriba
+2. Pégalo antes de `</body>` en tu website
+3. El widget aparecerá automáticamente en la esquina {position.replace('bottom-', 'inferior ').replace('right', 'derecha').replace('left', 'izquierda')}
+
+**Características del Widget:**
+- ✅ Chat flotante con interfaz moderna
+- ✅ Conectado con ASSISTANCE AI
+- ✅ Ventas + Soporte 24/7
+- ✅ Carrito de compras integrado
+- ✅ Detección de sentimiento
+- ✅ Handoff humano automático
+- ✅ Procesamiento de imágenes
+
+**URL del Widget:** `{api_url_clean}/static/assistance-ai-widget.js`
+"""
+                                
+                                return code, preview
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error generando código: {str(e)}\n\n```\n{traceback.format_exc()}\n```", f"❌ Error: {str(e)}"
+                        
+                        assistance_generate_widget_code_btn.click(
+                            fn=assistance_generate_widget_code,
+                            inputs=[assistance_widget_api_url, assistance_widget_id, assistance_widget_brand_name, assistance_widget_primary_color, assistance_widget_position, assistance_widget_welcome_message],
+                            outputs=[assistance_widget_code_output, assistance_widget_preview]
+                        )
+                    
+                    with gr.Tab("⚙️ Configuración Enterprise"):
+                        gr.Markdown("### ⚙️ Configuración Enterprise (Groq + PostgreSQL + n8n)")
+                        gr.Markdown("""
+                        **Para velocidad extrema y memoria de largo plazo:**
+                        - **Groq:** Responde en <0.5 segundos (Llama 3.3 70B)
+                        - **PostgreSQL:** Recuerda clientes meses después
+                        - **n8n:** Conecta con WhatsApp/Instagram automáticamente
+                        """)
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                gr.Markdown("### 🔥 Groq Cloud (Velocidad Extrema)")
+                                assistance_groq_api_key_input = gr.Textbox(
+                                    label="🔑 Groq API Key",
+                                    type="password",
+                                    placeholder="gsk_...",
+                                    info="Obtén tu API key gratis en https://console.groq.com"
+                                )
+                                assistance_use_groq_checkbox = gr.Checkbox(
+                                    label="✅ Usar Groq (Llama 3.3 70B)",
+                                    value=False,
+                                    info="Activa para respuestas <0.5 segundos"
+                                )
+                                assistance_groq_model_select = gr.Dropdown(
+                                    label="🤖 Modelo Groq",
+                                    choices=[
+                                        ("llama-3.3-70b-versatile", "Llama 3.3 70B (Recomendado)"),
+                                        ("llama-3.1-70b-versatile", "Llama 3.1 70B"),
+                                        ("llama-3.1-8b-instant", "Llama 3.1 8B (Más rápido)")
+                                    ],
+                                    value="llama-3.3-70b-versatile",
+                                    allow_custom_value=True
+                                )
+                                assistance_save_groq_btn = gr.Button("💾 Guardar Configuración Groq", variant="primary")
+                                assistance_groq_status = gr.Markdown(label="📊 Estado Groq")
+                            
+                            with gr.Column():
+                                gr.Markdown("### 🗄️ PostgreSQL (Memoria de Largo Plazo)")
+                                assistance_postgresql_url_input = gr.Textbox(
+                                    label="🔗 Database URL",
+                                    placeholder="postgresql://user:pass@host:port/db",
+                                    type="password",
+                                    info="URL de conexión PostgreSQL"
+                                )
+                                assistance_use_postgresql_checkbox = gr.Checkbox(
+                                    label="✅ Usar PostgreSQL",
+                                    value=False,
+                                    info="Activa para recordar clientes meses después"
+                                )
+                                assistance_save_postgresql_btn = gr.Button("💾 Guardar Configuración PostgreSQL", variant="primary")
+                                assistance_postgresql_status = gr.Markdown(label="📊 Estado PostgreSQL")
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### 🔗 n8n (WhatsApp/Instagram)")
+                        gr.Markdown("""
+                        **Para conectar con Meta (WhatsApp/Instagram):**
+                        1. Instala n8n (self-hosted o cloud)
+                        2. Configura webhook de Meta
+                        3. Crea workflow que llame a: `https://tu-servidor.com/assistance-ai/n8n/webhook`
+                        4. Ver guía completa en: `GUIA_N8N_INTEGRACION.md`
+                        """)
+                        
+                        assistance_n8n_webhook_url_display = gr.Markdown(
+                            value="**Endpoint n8n:** `POST https://tu-servidor.com/assistance-ai/n8n/webhook`"
+                        )
+                        
+                        def assistance_save_groq_config(api_key, use_groq, model):
+                            """Guarda configuración de Groq en .env"""
+                            try:
+                                import os
+                                from pathlib import Path
+                                
+                                env_path = Path(".env")
+                                
+                                # Leer .env actual
+                                env_vars = {}
+                                if env_path.exists():
+                                    with open(env_path, "r", encoding="utf-8") as f:
+                                        for line in f:
+                                            if "=" in line and not line.strip().startswith("#"):
+                                                key, value = line.strip().split("=", 1)
+                                                env_vars[key] = value
+                                
+                                # Actualizar variables
+                                if api_key:
+                                    env_vars["GROQ_API_KEY"] = api_key
+                                env_vars["DOCCHAT_USE_GROQ"] = "true" if use_groq else "false"
+                                env_vars["DOCCHAT_GROQ_MODEL"] = model
+                                
+                                # Escribir .env
+                                with open(env_path, "w", encoding="utf-8") as f:
+                                    for key, value in env_vars.items():
+                                        f.write(f"{key}={value}\n")
+                                
+                                status = f"""✅ **Configuración Groq guardada**
+
+**Estado:**
+- API Key: {'✅ Configurada' if api_key else '❌ No configurada'}
+- Usar Groq: {'✅ Activado' if use_groq else '❌ Desactivado'}
+- Modelo: {model}
+
+**⚠️ IMPORTANTE:** Reinicia el servidor para aplicar cambios.
+```bash
+# Reinicia api_server.py o app.py
+```
+"""
+                                return status
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        def assistance_save_postgresql_config(db_url, use_postgresql):
+                            """Guarda configuración de PostgreSQL en .env"""
+                            try:
+                                import os
+                                from pathlib import Path
+                                
+                                env_path = Path(".env")
+                                
+                                # Leer .env actual
+                                env_vars = {}
+                                if env_path.exists():
+                                    with open(env_path, "r", encoding="utf-8") as f:
+                                        for line in f:
+                                            if "=" in line and not line.strip().startswith("#"):
+                                                key, value = line.strip().split("=", 1)
+                                                env_vars[key] = value
+                                
+                                # Actualizar variables
+                                if db_url:
+                                    env_vars["DATABASE_URL"] = db_url
+                                env_vars["DOCCHAT_POSTGRESQL_ENABLED"] = "true" if use_postgresql else "false"
+                                
+                                # Escribir .env
+                                with open(env_path, "w", encoding="utf-8") as f:
+                                    for key, value in env_vars.items():
+                                        f.write(f"{key}={value}\n")
+                                
+                                status = f"""✅ **Configuración PostgreSQL guardada**
+
+**Estado:**
+- Database URL: {'✅ Configurada' if db_url else '❌ No configurada'}
+- Usar PostgreSQL: {'✅ Activado' if use_postgresql else '❌ Desactivado'}
+
+**⚠️ IMPORTANTE:** 
+1. Instala psycopg2: `pip install psycopg2-binary`
+2. Reinicia el servidor para aplicar cambios.
+3. Las tablas se crearán automáticamente al iniciar.
+"""
+                                return status
+                            except Exception as e:
+                                return f"❌ Error: {str(e)}"
+                        
+                        assistance_save_groq_btn.click(
+                            fn=assistance_save_groq_config,
+                            inputs=[assistance_groq_api_key_input, assistance_use_groq_checkbox, assistance_groq_model_select],
+                            outputs=[assistance_groq_status]
+                        )
+                        
+                        assistance_save_postgresql_btn.click(
+                            fn=assistance_save_postgresql_config,
+                            inputs=[assistance_postgresql_url_input, assistance_use_postgresql_checkbox],
+                            outputs=[assistance_postgresql_status]
+                        )
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### 🎨 Configuración Completa del Chatbot")
+                        gr.Markdown("""
+                        **Configura todas las características avanzadas del chatbot:**
+                        - Personalización (tono, personalidad)
+                        - RAG con documentos (PDFs, URLs)
+                        - Lead Scoring (calificación de leads)
+                        - Handoff humano (palabras clave)
+                        - Multilingüismo
+                        - Manejo de objeciones
+                        - 🚨 **Agendamiento de Citas (Booking/CTA)** - PRIORIDAD ALTA
+                        """)
+                        
+                        with gr.Tabs():
+                            # Tab 1: Personalización Básica
+                            with gr.Tab("🎭 Personalización"):
+                                assistance_chatbot_tone_select = gr.Dropdown(
+                                    label="🎭 Tono de Comunicación - Define cómo se comunica el chatbot con los clientes",
+                                    choices=[
+                                        ("friendly", "Amigable y cercano"),
+                                        ("professional", "Profesional pero accesible"),
+                                        ("casual", "Relajado y conversacional"),
+                                        ("formal", "Formal y respetuoso"),
+                                        ("enthusiastic", "Entusiasta y energético")
+                                    ],
+                                    value="friendly",
+                                    allow_custom_value=True
+                                )
+                                
+                                assistance_chatbot_personality_input = gr.Textbox(
+                                    label="🧠 Personalidad Personalizada - Descripción libre de la personalidad del chatbot",
+                                    placeholder="Ej: Eres un experto en moda que siempre está al día con las últimas tendencias...",
+                                    lines=3
+                                )
+                                
+                                assistance_chatbot_custom_instructions_input = gr.Textbox(
+                                    label="📋 Instrucciones Personalizadas - Instrucciones adicionales específicas para tu negocio",
+                                    placeholder="Ej: Siempre menciona garantías al recomendar productos. Nunca presiones si el cliente dice 'no'...",
+                                    lines=5
+                                )
+                            
+                            # Tab 2: RAG - Documentos
+                            with gr.Tab("📚 RAG - Conocimiento del Negocio"):
+                                assistance_chatbot_rag_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Habilitar RAG (Retrieval-Augmented Generation) - El chatbot usará documentos para evitar alucinaciones",
+                                    value=False
+                                )
+                                
+                                assistance_chatbot_rag_documents_files = gr.Files(
+                                    label="📄 Subir Documentos (PDF, DOCX, TXT, MD) - Sube manuales, catálogos, objeciones, políticas, etc.",
+                                    file_count="multiple",
+                                    file_types=[".pdf", ".docx", ".txt", ".md"]
+                                )
+                                
+                                assistance_chatbot_rag_urls_input = gr.Textbox(
+                                    label="🌐 URLs para Rastrear (una por línea) - El chatbot rastreará estas URLs semanalmente para actualizar conocimiento",
+                                    placeholder="https://tu-empresa.com/manual-ventas\nhttps://tu-empresa.com/catalogo\nhttps://tu-empresa.com/politicas",
+                                    lines=5
+                                )
+                                
+                                assistance_chatbot_rag_process_btn = gr.Button("🔄 Procesar Documentos y URLs", variant="secondary")
+                                assistance_chatbot_rag_status = gr.Markdown(label="📊 Estado RAG")
+                                
+                                def assistance_process_rag_documents(rag_files, rag_urls):
+                                    """Procesa documentos para RAG: PyPDF2 + Genera embeddings + Guarda en ChromaDB."""
+                                    try:
+                                        import time
+                                        import os
+                                        from pathlib import Path
+                                        import pickle
+                                        from docchat.assistance_ai.rag.document_processor import DocumentProcessor
+                                        from docchat import load_config
+                                        from langchain_chroma import Chroma
+                                        from langchain_openai import OpenAIEmbeddings
+                                        
+                                        if not rag_files:
+                                            return "❌ **Error:** No se subieron documentos. Por favor, sube al menos un documento (PDF, TXT, MD)."
+                                        
+                                        print(f"\n{'='*60}")
+                                        print(f"📄 PROCESANDO {len(rag_files)} DOCUMENTOS PARA RAG")
+                                        print(f"{'='*60}")
+                                        print(f"⚡ MODO: PyPDF2 + Generación de Embeddings")
+                                        print(f"   - Procesa con PyPDF2 (local, rápido)")
+                                        print(f"   - Genera embeddings (API de OpenAI)")
+                                        print(f"   - Guarda en ChromaDB para búsqueda rápida")
+                                        print(f"{'='*60}\n")
+                                        
+                                        # Crear directorios
+                                        storage_dir = Path("docchat/assistance_ai/rag_storage")
+                                        storage_dir.mkdir(parents=True, exist_ok=True)
+                                        chunks_path = storage_dir / "document_chunks.pkl"
+                                        metadata_path = storage_dir / "retriever_metadata.pkl"
+                                        
+                                        # Cargar config
+                                        try:
+                                            config = load_config()
+                                        except Exception as e:
+                                            return f"❌ **Error cargando configuración:** {str(e)}"
+                                        
+                                        # Verificar API key para embeddings
+                                        api_key = config.openai_api_key or os.getenv("OPENAI_API_KEY")
+                                        if not api_key:
+                                            return "❌ **Error:** OPENAI_API_KEY no está configurada. Se necesita para generar embeddings."
+                                        
+                                        start_time = time.time()
+                                        
+                                        # PASO 1: Procesar documentos con PyPDF2 (local, rápido)
+                                        try:
+                                            processor = DocumentProcessor(cache_dir=storage_dir / "cache")
+                                            chunks = processor.process(rag_files)
+                                            processing_time = time.time() - start_time
+                                        except Exception as e:
+                                            import traceback
+                                            error_msg = f"❌ **Error procesando documentos:**\n\n```\n{str(e)}\n```\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+                                            print(error_msg)
+                                            return error_msg
+                                        
+                                        if not chunks:
+                                            return "❌ **Error:** No se pudieron procesar los documentos. Verifica que los archivos sean válidos (PDF, TXT, MD)."
+                                        
+                                        print(f"\n✅ Documentos procesados en {processing_time:.1f}s: {len(chunks)} chunks generados")
+                                        
+                                        # Guardar chunks
+                                        try:
+                                            with open(chunks_path, "wb") as f:
+                                                pickle.dump(chunks, f)
+                                            print(f"✅ Chunks guardados en: {chunks_path}")
+                                        except Exception as e:
+                                            return f"❌ **Error guardando chunks:**\n\n```\n{str(e)}\n```"
+                                        
+                                        # PASO 2: Generar embeddings y guardar en ChromaDB (para búsqueda rápida)
+                                        print(f"\n🔄 Generando embeddings para {len(chunks)} chunks...")
+                                        print(f"   Esto puede tardar unos minutos, pero el chatbot responderá RÁPIDO después.")
+                                        
+                                        embeddings_start = time.time()
+                                        try:
+                                            embeddings = OpenAIEmbeddings(
+                                                model="text-embedding-3-small",
+                                                openai_api_key=api_key
+                                            )
+                                            
+                                            persist_dir = Path(config.persist_dir) / "assistance_ai_rag"
+                                            
+                                            # Limpiar directorio si existe para evitar mezclar con documentos previos
+                                            if persist_dir.exists():
+                                                import shutil
+                                                try:
+                                                    shutil.rmtree(persist_dir)
+                                                    print(f"   🗑️ Directorio anterior limpiado")
+                                                except Exception as e:
+                                                    print(f"   ⚠️ No se pudo limpiar directorio: {e}")
+                                            
+                                            # Generar embeddings y guardar en ChromaDB
+                                            vector_store = Chroma.from_documents(
+                                                documents=chunks,
+                                                embedding=embeddings,
+                                                persist_directory=str(persist_dir)
+                                            )
+                                            
+                                            embeddings_time = time.time() - embeddings_start
+                                            print(f"✅ Embeddings generados y guardados en: {persist_dir}")
+                                            print(f"   Tiempo: {embeddings_time:.1f}s")
+                                            
+                                        except Exception as e:
+                                            import traceback
+                                            error_msg = f"❌ **Error generando embeddings:**\n\n```\n{str(e)}\n```\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+                                            print(error_msg)
+                                            return error_msg
+                                        
+                                        # PASO 3: Procesar URLs/FAQs si están configuradas (Crawler Automático - Nivel Meta)
+                                        url_chunks = []
+                                        urls_info = ""
+                                        
+                                        if rag_urls and rag_urls.strip():
+                                            print(f"\n🌐 Procesando URLs/FAQs automáticamente...")
+                                            try:
+                                                from docchat.assistance_ai.integrations.url_crawler import URLCrawler
+                                                
+                                                urls_list = [url.strip() for url in rag_urls.strip().split("\n") if url.strip()]
+                                                crawler = URLCrawler(max_depth=2, max_pages=50)
+                                                
+                                                url_start_time = time.time()
+                                                
+                                                # Crawlear cada URL
+                                                all_url_docs = []
+                                                for url in urls_list:
+                                                    try:
+                                                        print(f"   🔍 Crawleando: {url}")
+                                                        url_docs = crawler.crawl_faqs_only(url)
+                                                        all_url_docs.extend(url_docs)
+                                                        print(f"   ✅ {len(url_docs)} páginas FAQ encontradas en {url}")
+                                                    except Exception as e:
+                                                        print(f"   ⚠️ Error crawleando {url}: {e}")
+                                                        continue
+                                                
+                                                if all_url_docs:
+                                                    url_chunks = all_url_docs
+                                                    url_time = time.time() - url_start_time
+                                                    print(f"✅ URLs procesadas en {url_time:.1f}s: {len(url_chunks)} documentos FAQ")
+                                                    
+                                                    # Agregar documentos de URLs a los chunks
+                                                    chunks.extend(url_chunks)
+                                                    
+                                                    # Regenerar embeddings incluyendo URLs (usar mismo objeto embeddings)
+                                                    print(f"\n🔄 Regenerando embeddings con documentos + URLs...")
+                                                    embeddings_regeneration_start = time.time()
+                                                    
+                                                    # Limpiar y regenerar con todos los chunks (docs + URLs)
+                                                    import shutil
+                                                    if persist_dir.exists():
+                                                        shutil.rmtree(persist_dir)
+                                                    
+                                                    vector_store = Chroma.from_documents(
+                                                        documents=chunks,  # Chunks + URL docs
+                                                        embedding=embeddings,
+                                                        persist_directory=str(persist_dir)
+                                                    )
+                                                    
+                                                    embeddings_regeneration_time = time.time() - embeddings_regeneration_start
+                                                    embeddings_time += embeddings_regeneration_time
+                                                    print(f"✅ Embeddings regenerados en {embeddings_regeneration_time:.1f}s")
+                                                    
+                                                    urls_info = f"\n🌐 **URLs/FAQs procesadas:** {len(urls_list)} URLs → {len(url_chunks)} documentos FAQ"
+                                                else:
+                                                    urls_info = f"\n⚠️ **URLs:** No se encontraron FAQs relevantes en las URLs proporcionadas"
+                                                    
+                                            except ImportError:
+                                                urls_info = f"\n⚠️ **URLs:** BeautifulSoup4 no está instalado. Instala con: pip install beautifulsoup4"
+                                            except Exception as e:
+                                                urls_info = f"\n⚠️ **URLs:** Error procesando URLs: {str(e)[:100]}"
+                                                print(f"⚠️ Error procesando URLs: {e}")
+                                        
+                                        # Guardar metadata final
+                                        retriever_metadata = {
+                                            "namespace": "assistance_ai_rag",
+                                            "chunks_count": len(chunks),
+                                            "chunks_path": str(chunks_path),
+                                            "persist_dir": str(persist_dir),
+                                            "files_processed": len(rag_files),
+                                            "processing_time_seconds": processing_time,
+                                            "embeddings_time_seconds": embeddings_time,
+                                            "embeddings_generated": True,
+                                            "urls_processed": len(url_chunks) if url_chunks else 0,
+                                            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                                        }
+                                        
+                                        try:
+                                            with open(metadata_path, "wb") as f:
+                                                pickle.dump(retriever_metadata, f)
+                                            print(f"✅ Metadata guardado en: {metadata_path}")
+                                        except Exception as e:
+                                            return f"❌ **Error guardando metadata:**\n\n```\n{str(e)}\n```"
+                                        
+                                        total_time = processing_time + embeddings_time
+                                        status = f"""✅ **Documentos procesados exitosamente - LISTOS PARA USO RÁPIDO (Nivel Meta)**
+
+**📊 Estadísticas:**
+- 📄 Documentos procesados: {len(rag_files)}
+- 🔤 Chunks generados: {len(chunks)} (documentos + URLs)
+- ⚡ Procesamiento PyPDF2: {processing_time:.1f}s
+- 🧠 Generación de embeddings: {embeddings_time:.1f}s
+- ⏱️ Tiempo total: {total_time:.1f}s
+- 💾 Guardado en ChromaDB: `{persist_dir}`
+
+**🎯 Proceso completado:**
+1. ✅ Documentos procesados con PyPDF2 (local, rápido)
+2. ✅ URLs/FAQs crawleadas automáticamente (si se proporcionaron)
+3. ✅ Embeddings generados y guardados en ChromaDB
+4. ✅ **LISTO: El chatbot responderá RÁPIDO usando estos documentos**
+
+**💡 Importante:** 
+- Los embeddings ya están generados y guardados
+- El chatbot cargará ChromaDB directamente (sin generar embeddings)
+- Las consultas serán RÁPIDAS (milisegundos, no minutos)
+- **Nivel Meta:** Incluye información de URLs/FAQs actualizada automáticamente
+
+{urls_info}"""
+                                        return status
+                                    except Exception as e:
+                                        import traceback
+                                        error_msg = f"❌ **Error procesando documentos:**\n\n```\n{str(e)}\n```\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+                                        print(error_msg)
+                                        return error_msg
+                                
+                                assistance_chatbot_rag_process_btn.click(
+                                    fn=assistance_process_rag_documents,
+                                    inputs=[assistance_chatbot_rag_documents_files, assistance_chatbot_rag_urls_input],
+                                    outputs=[assistance_chatbot_rag_status]
+                                )
+                            
+                            # Tab 3: E-commerce Integrations (Shopify/WooCommerce) - Nivel Meta
+                            with gr.Tab("🛒 Integraciones E-commerce (Tiempo Real)"):
+                                gr.Markdown("""
+                                ### 🛒 Integraciones E-commerce en Tiempo Real (Nivel Meta)
+                                
+                                **El chatbot consultará productos, stock y precios en tiempo real desde tu tienda online.**
+                                
+                                **⚠️ IMPORTANTE:** Esto es crítico para un Sales Agent profesional. Sin esto, el chatbot no puede saber qué hay en stock o los precios actuales.
+                                """)
+                                
+                                with gr.Row():
+                                    with gr.Column():
+                                        gr.Markdown("#### 🛍️ Shopify Integration")
+                                        assistance_shopify_enabled_checkbox = gr.Checkbox(
+                                            label="✅ Habilitar Shopify (Consulta productos en tiempo real)",
+                                            value=False
+                                        )
+                                        assistance_shopify_shop_url_input = gr.Textbox(
+                                            label="Shopify Shop URL (ej: mi-tienda.myshopify.com)",
+                                            placeholder="mi-tienda.myshopify.com",
+                                            visible=True
+                                        )
+                                        assistance_shopify_access_token_input = gr.Textbox(
+                                            label="Shopify Access Token (Admin API)",
+                                            placeholder="shpat_xxxxxxxxxxxxx",
+                                            type="password",
+                                            visible=True
+                                        )
+                                    
+                                    with gr.Column():
+                                        gr.Markdown("#### 🛒 WooCommerce Integration")
+                                        assistance_woocommerce_enabled_checkbox = gr.Checkbox(
+                                            label="✅ Habilitar WooCommerce (Consulta productos en tiempo real)",
+                                            value=False
+                                        )
+                                        assistance_woocommerce_store_url_input = gr.Textbox(
+                                            label="WooCommerce Store URL",
+                                            placeholder="https://mi-tienda.com",
+                                            visible=True
+                                        )
+                                        assistance_woocommerce_consumer_key_input = gr.Textbox(
+                                            label="WooCommerce Consumer Key",
+                                            placeholder="ck_xxxxxxxxxxxxx",
+                                            type="password",
+                                            visible=True
+                                        )
+                                        assistance_woocommerce_consumer_secret_input = gr.Textbox(
+                                            label="WooCommerce Consumer Secret",
+                                            placeholder="cs_xxxxxxxxxxxxx",
+                                            type="password",
+                                            visible=True
+                                        )
+                                
+                                assistance_ecommerce_test_btn = gr.Button("🧪 Probar Conexión", variant="secondary")
+                                assistance_ecommerce_status = gr.Markdown(label="📊 Estado de Integraciones")
+                                
+                                def assistance_test_ecommerce_integrations(
+                                    shopify_enabled, shopify_url, shopify_token,
+                                    wc_enabled, wc_url, wc_key, wc_secret
+                                ):
+                                    """Prueba las conexiones de e-commerce."""
+                                    results = []
+                                    
+                                    # Probar Shopify
+                                    if shopify_enabled and shopify_url and shopify_token:
+                                        try:
+                                            from docchat.assistance_ai.integrations.shopify_integration import ShopifyIntegration
+                                            shopify = ShopifyIntegration(shopify_url, shopify_token)
+                                            products = shopify.search_products("test", limit=1)
+                                            results.append(f"✅ **Shopify:** Conectado correctamente. {len(products)} productos encontrados.")
+                                        except Exception as e:
+                                            results.append(f"❌ **Shopify:** Error - {str(e)[:100]}")
+                                    elif shopify_enabled:
+                                        results.append("⚠️ **Shopify:** Configuración incompleta (falta URL o Token)")
+                                    
+                                    # Probar WooCommerce
+                                    if wc_enabled and wc_url and wc_key and wc_secret:
+                                        try:
+                                            from docchat.assistance_ai.integrations.woocommerce_integration import WooCommerceIntegration
+                                            wc = WooCommerceIntegration(wc_url, wc_key, wc_secret)
+                                            products = wc.search_products("test", limit=1)
+                                            results.append(f"✅ **WooCommerce:** Conectado correctamente. {len(products)} productos encontrados.")
+                                        except Exception as e:
+                                            results.append(f"❌ **WooCommerce:** Error - {str(e)[:100]}")
+                                    elif wc_enabled:
+                                        results.append("⚠️ **WooCommerce:** Configuración incompleta (falta URL, Key o Secret)")
+                                    
+                                    if not results:
+                                        return "ℹ️ No hay integraciones habilitadas. Habilita Shopify o WooCommerce para probar."
+                                    
+                                    return "\n\n".join(results)
+                                
+                                assistance_ecommerce_test_btn.click(
+                                    fn=assistance_test_ecommerce_integrations,
+                                    inputs=[
+                                        assistance_shopify_enabled_checkbox, assistance_shopify_shop_url_input, assistance_shopify_access_token_input,
+                                        assistance_woocommerce_enabled_checkbox, assistance_woocommerce_store_url_input,
+                                        assistance_woocommerce_consumer_key_input, assistance_woocommerce_consumer_secret_input
+                                    ],
+                                    outputs=[assistance_ecommerce_status]
+                                )
+                                
+                                gr.Markdown("""
+                                **💡 Cómo obtener las credenciales:**
+                                
+                                **Shopify:**
+                                1. Ve a Settings → Apps and sales channels → Develop apps
+                                2. Crea una nueva app privada
+                                3. Configura permisos: `read_products`, `read_inventory`
+                                4. Instala la app y copia el Access Token
+                                
+                                **WooCommerce:**
+                                1. Ve a WooCommerce → Settings → Advanced → REST API
+                                2. Haz clic en "Add key"
+                                3. Copia el Consumer Key y Consumer Secret
+                                """)
+                            
+                            # Tab 4: Lead Scoring
+                            with gr.Tab("🎯 Lead Scoring"):
+                                assistance_chatbot_lead_scoring_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Habilitar Calificación de Leads - El chatbot calificará leads automáticamente (Lead Caliente, Lead Frío, Cliente VIP)",
+                                    value=False
+                                )
+                                
+                                assistance_chatbot_lead_questions_input = gr.Textbox(
+                                    label="❓ Preguntas de Calificación (JSON) - Preguntas que el bot hará para calificar leads. Formato JSON con 'question' y 'weight' (1-5)",
+                                    placeholder='[{"question": "¿Cuál es tu presupuesto?", "weight": 3}, {"question": "¿Cuándo planeas comprar?", "weight": 2}]',
+                                    lines=8
+                                )
+                                
+                                assistance_chatbot_lead_hot_threshold_slider = gr.Slider(
+                                    label="🔥 Threshold para 'Lead Caliente' - Score mínimo para considerar un lead como 'caliente'",
+                                    minimum=1,
+                                    maximum=20,
+                                    value=7,
+                                    step=1
+                                )
+                            
+                            # Tab 5: Handoff Humano
+                            with gr.Tab("👤 Handoff Humano"):
+                                assistance_chatbot_handoff_keywords_input = gr.Textbox(
+                                    label="🔑 Palabras Clave para Handoff - Si el cliente usa estas palabras, el chatbot transferirá a un humano",
+                                    placeholder="queja,fraude,hablar con humano,supervisor,reclamo"
+                                )
+                                
+                                assistance_chatbot_handoff_sentiment_slider = gr.Slider(
+                                    label="😡 Threshold de Frustración - Si el sentimiento negativo supera este valor, activa handoff automático",
+                                    minimum=0.0,
+                                    maximum=1.0,
+                                    value=0.7,
+                                    step=0.1
+                                )
+                            
+                            # Tab 6: Idioma
+                            with gr.Tab("🌍 Idioma"):
+                                assistance_chatbot_default_language_select = gr.Dropdown(
+                                    label="🌐 Idioma Por Defecto - Idioma por defecto del chatbot",
+                                    choices=[
+                                        ("es", "Español"),
+                                        ("en", "English"),
+                                        ("pt", "Português"),
+                                        ("fr", "Français"),
+                                        ("de", "Deutsch"),
+                                        ("it", "Italiano"),
+                                        ("ja", "日本語"),
+                                        ("zh", "中文")
+                                    ],
+                                    value="es",
+                                    allow_custom_value=True
+                                )
+                                
+                                assistance_chatbot_multilingual_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Multilingüismo Automático - El chatbot detectará automáticamente el idioma del cliente y responderá en ese idioma",
+                                    value=False
+                                )
+                            
+                            # Tab 7: Objeciones
+                            with gr.Tab("💬 Manejo de Objeciones"):
+                                assistance_chatbot_objection_responses_input = gr.Textbox(
+                                    label="💬 Respuestas a Objeciones Comunes (JSON) - Respuestas personalizadas a objeciones comunes. Formato JSON: {'objeción': 'respuesta'}",
+                                    placeholder='{"está caro": "Entiendo tu preocupación. ¿Sabías que...", "lo voy a pensar": "Por supuesto, ¿hay algo específico en lo que pueda ayudarte a decidir?"}',
+                                    lines=10
+                                )
+                            
+                            # Tab 8: Agendamiento de Citas (Booking/CTA) - PRIORIDAD ALTA 🚨
+                            with gr.Tab("📅 Agendamiento de Citas"):
+                                gr.Markdown("### 📅 Configuración de Agendamiento de Citas")
+                                gr.Markdown("**🚨 PRIORIDAD ALTA:** Cuando el chatbot detecte un Lead Caliente, ofrecerá agendar una cita automáticamente para cerrar la venta.")
+                                
+                                assistance_chatbot_booking_enabled_checkbox = gr.Checkbox(
+                                    label="✅ Habilitar Agendamiento de Citas - El chatbot ofrecerá agendar citas cuando detecte un Lead Caliente",
+                                    value=False
+                                )
+                                
+                                assistance_chatbot_calendly_url_input = gr.Textbox(
+                                    label="📅 URL de Calendly - URL de tu calendario de Calendly para agendar citas",
+                                    placeholder="https://calendly.com/tu-usuario/consulta",
+                                    info="Obtén tu URL en calendly.com. Ejemplo: https://calendly.com/tu-usuario/demo-30min"
+                                )
+                                
+                                assistance_chatbot_google_calendar_url_input = gr.Textbox(
+                                    label="📆 URL de Google Calendar - URL de tu calendario de Google para agendar citas",
+                                    placeholder="https://calendar.google.com/calendar/u/0/appointments/schedules/...",
+                                    info="Crea un enlace de citas en Google Calendar. Ve a Google Calendar → Configuración → Horarios disponibles"
+                                )
+                                
+                                assistance_chatbot_crm_type_select = gr.Dropdown(
+                                    label="🔗 Tipo de CRM - Selecciona tu CRM para integración automática (opcional)",
+                                    choices=[
+                                        ("", "Ninguno (solo calendario)"),
+                                        ("hubspot", "HubSpot"),
+                                        ("salesforce", "Salesforce"),
+                                        ("pipedrive", "Pipedrive")
+                                    ],
+                                    value="",
+                                    allow_custom_value=True
+                                )
+                                
+                                assistance_chatbot_crm_webhook_url_input = gr.Textbox(
+                                    label="🔗 Webhook URL del CRM - URL del webhook para enviar datos del lead al CRM (opcional)",
+                                    placeholder="https://api.hubspot.com/webhooks/v3/...",
+                                    info="Configura un webhook en tu CRM para recibir datos automáticamente cuando se agende una cita"
+                                )
+                                
+                                assistance_chatbot_booking_message_input = gr.Textbox(
+                                    label="💬 Mensaje Personalizado para CTA - Mensaje que el chatbot usará para ofrecer agendar la cita",
+                                    placeholder="Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga.",
+                                    lines=3,
+                                    value="Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga.",
+                                    info="Personaliza el mensaje que verá el cliente cuando se le ofrezca agendar una cita"
+                                )
+                        
+                        assistance_save_chatbot_config_complete_btn = gr.Button("💾 Guardar Configuración Completa", variant="primary", size="lg")
+                        assistance_chatbot_config_complete_status = gr.Markdown(label="📊 Estado de Configuración")
+                        
+                        def assistance_save_chatbot_config_complete(
+                            tone, personality, custom_instructions,
+                            rag_enabled, rag_files, rag_urls,
+                            shopify_enabled, shopify_url, shopify_token,
+                            wc_enabled, wc_url, wc_key, wc_secret,
+                            lead_scoring_enabled, lead_questions, lead_hot_threshold,
+                            handoff_keywords, handoff_sentiment,
+                            default_language, multilingual_enabled,
+                            objection_responses,
+                            booking_enabled, calendly_url, google_calendar_url,
+                            crm_type, crm_webhook_url, booking_message
+                        ):
+                            """Guarda configuración completa del chatbot en JSON (y .env como backup)"""
+                            try:
+                                import json
+                                from pathlib import Path
+                                from docchat.assistance_ai.config.chatbot_config_manager import ChatbotConfigManager, ChatbotConfig
+                                
+                                # Crear objeto de configuración
+                                chatbot_config = ChatbotConfig()
+                                
+                                # Personalización básica
+                                chatbot_config.tone = tone if tone else "friendly"
+                                chatbot_config.personality = personality if personality else ""
+                                chatbot_config.custom_instructions = custom_instructions if custom_instructions else ""
+                                
+                                # RAG
+                                chatbot_config.rag_enabled = rag_enabled
+                                chatbot_config.documents_dir = str(Path("docchat/assistance_ai/documents").absolute())
+                                
+                                # Ruta al retriever guardado (si existe)
+                                retriever_path = Path("docchat/assistance_ai/rag_storage/hybrid_retriever.pkl")
+                                if retriever_path.exists():
+                                    chatbot_config.retriever_path = str(retriever_path.absolute())
+                                else:
+                                    chatbot_config.retriever_path = ""
+                                
+                                # Lead Scoring
+                                chatbot_config.lead_scoring_enabled = lead_scoring_enabled
+                                try:
+                                    chatbot_config.lead_questions = json.loads(lead_questions) if lead_questions else []
+                                except:
+                                    chatbot_config.lead_questions = []
+                                chatbot_config.lead_hot_threshold = int(lead_hot_threshold)
+                                
+                                # Handoff
+                                chatbot_config.handoff_keywords = [k.strip() for k in handoff_keywords.split(",") if k.strip()] if handoff_keywords else ["queja", "fraude", "hablar con humano"]
+                                chatbot_config.handoff_sentiment_threshold = float(handoff_sentiment)
+                                
+                                # Idioma
+                                chatbot_config.default_language = default_language if default_language else "es"
+                                chatbot_config.multilingual_enabled = multilingual_enabled
+                                
+                                # Objeciones
+                                try:
+                                    chatbot_config.objection_responses = json.loads(objection_responses) if objection_responses else {}
+                                except:
+                                    chatbot_config.objection_responses = {}
+                                
+                                # Agendamiento de Citas (Booking/CTA) - PRIORIDAD ALTA 🚨
+                                chatbot_config.booking_enabled = booking_enabled
+                                chatbot_config.calendly_url = calendly_url.strip() if calendly_url else ""
+                                chatbot_config.google_calendar_url = google_calendar_url.strip() if google_calendar_url else ""
+                                chatbot_config.crm_type = crm_type.strip() if crm_type else ""
+                                chatbot_config.crm_webhook_url = crm_webhook_url.strip() if crm_webhook_url else ""
+                                chatbot_config.booking_message = booking_message.strip() if booking_message else "Veo que estás listo para empezar. ¿Te parece bien agendar una demo? Puedes elegir el horario que mejor te convenga."
+                                
+                                # Guardar usando ChatbotConfigManager (guarda en JSON principalmente)
+                                config_manager = ChatbotConfigManager()
+                                success = config_manager.save(chatbot_config, also_update_env=True)
+                                
+                                if success:
+                                    config_path = config_manager.config_json_path
+                                    status = f"""✅ **Configuración Completa del Chatbot guardada**
+
+**📁 Ubicación:** `{config_path}` (formato JSON - fácil de editar)
+
+**Estado:**
+- ✅ Personalización: Tono={tone or 'friendly'}, Personalidad={'Configurada' if personality else 'No configurada'}
+- ✅ RAG: {'Habilitado' if rag_enabled else 'Deshabilitado'}
+- ✅ E-commerce: Shopify={'✅ Configurado' if shopify_enabled and shopify_url and shopify_token else '❌ No configurado'}, WooCommerce={'✅ Configurado' if wc_enabled and wc_url and wc_key and wc_secret else '❌ No configurado'}
+- ✅ Lead Scoring: {'Habilitado' if lead_scoring_enabled else 'Deshabilitado'} (Threshold: {lead_hot_threshold})
+- ✅ Handoff: Palabras clave configuradas, Threshold: {handoff_sentiment}
+- ✅ Idioma: {default_language}, Multilingüe: {'Sí' if multilingual_enabled else 'No'}
+- ✅ Objeciones: {'Configuradas' if objection_responses else 'No configuradas'}
+
+**✅ Configuración guardada exitosamente**
+
+**💡 Nota importante:**
+- La configuración se guarda en JSON (fácil de editar si es necesario)
+- Si usas el servidor API desde la UI (tab "🚀 Servidor API"), la configuración se aplicará automáticamente
+- Si subiste documentos RAG, estarán disponibles para el chatbot automáticamente
+"""
+                                    return status
+                                else:
+                                    return "❌ Error: No se pudo guardar la configuración"
+                            except Exception as e:
+                                import traceback
+                                return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}"
+                        
+                        assistance_save_chatbot_config_complete_btn.click(
+                            fn=assistance_save_chatbot_config_complete,
+                            inputs=[
+                                assistance_chatbot_tone_select, assistance_chatbot_personality_input, assistance_chatbot_custom_instructions_input,
+                                assistance_chatbot_rag_enabled_checkbox, assistance_chatbot_rag_documents_files, assistance_chatbot_rag_urls_input,
+                                assistance_shopify_enabled_checkbox, assistance_shopify_shop_url_input, assistance_shopify_access_token_input,
+                                assistance_woocommerce_enabled_checkbox, assistance_woocommerce_store_url_input, assistance_woocommerce_consumer_key_input, assistance_woocommerce_consumer_secret_input,
+                                assistance_chatbot_lead_scoring_enabled_checkbox, assistance_chatbot_lead_questions_input, assistance_chatbot_lead_hot_threshold_slider,
+                                assistance_chatbot_handoff_keywords_input, assistance_chatbot_handoff_sentiment_slider,
+                                assistance_chatbot_default_language_select, assistance_chatbot_multilingual_enabled_checkbox,
+                                assistance_chatbot_objection_responses_input,
+                                assistance_chatbot_booking_enabled_checkbox, assistance_chatbot_calendly_url_input, assistance_chatbot_google_calendar_url_input,
+                                assistance_chatbot_crm_type_select, assistance_chatbot_crm_webhook_url_input, assistance_chatbot_booking_message_input
+                            ],
+                            outputs=[assistance_chatbot_config_complete_status]
+                        )
+                    
+                    # NUEVO: Tab para controlar el Servidor API (para widget embeddable)
+                    with gr.Tab("🚀 Servidor API"):
+                        gr.Markdown("### 🚀 Control del Servidor API para Widget Embeddable")
+                        gr.Markdown("""
+                        **Inicia o detén el servidor API necesario para que el widget funcione en tu website.**
+                        
+                        **📋 El servidor API proporciona:**
+                        - 🔗 Endpoints REST para el widget embeddable
+                        - 📦 Servicio del archivo JavaScript del widget (`/static/assistance-ai-widget.js`)
+                        - 🔌 Endpoints de chat para ASSISTANCE AI
+                        - 📚 Documentación interactiva en `/docs`
+                        
+                        **⚠️ IMPORTANTE:** El servidor API debe estar corriendo para que el widget funcione en tu website.
+                        """)
+                        
+                        assistance_api_server_status = gr.Markdown(label="📊 Estado del Servidor API", value="**Estado:** No iniciado")
+                        
+                        with gr.Row():
+                            assistance_api_server_port = gr.Number(
+                                label="🔌 Puerto del Servidor API",
+                                value=7865,
+                                minimum=1000,
+                                maximum=65535,
+                                step=1,
+                                info="Puerto donde correrá el servidor API (por defecto: 7865 para evitar conflicto con Business AI)"
+                            )
+                            
+                        with gr.Row():
+                            assistance_start_api_server_btn = gr.Button("▶️ Iniciar Servidor API", variant="primary")
+                            assistance_stop_api_server_btn = gr.Button("⏹️ Detener Servidor API", variant="stop")
+                            assistance_check_api_server_btn = gr.Button("🔍 Verificar Estado", variant="secondary")
+                        
+                        assistance_api_server_logs = gr.Textbox(
+                            label="📋 Logs del Servidor",
+                            lines=10,
+                            max_lines=20,
+                            interactive=False,
+                            placeholder="Los logs del servidor aparecerán aquí..."
+                        )
+                        
+                        def assistance_start_api_server(port):
+                            """Inicia el servidor API en un thread separado."""
+                            try:
+                                import threading
+                                import subprocess
+                                import sys
+                                from pathlib import Path
+                                
+                                # Verificar si ya está corriendo
+                                global assistance_api_server_process, assistance_api_server_thread
+                                if hasattr(assistance_start_api_server, 'process') and assistance_start_api_server.process and assistance_start_api_server.process.poll() is None:
+                                    return (
+                                        "⚠️ **El servidor API ya está corriendo**\n\n" +
+                                        f"**URL:** http://localhost:{port}\n" +
+                                        f"**Documentación:** http://localhost:{port}/docs\n" +
+                                        f"**Widget JS:** http://localhost:{port}/static/assistance-ai-widget.js",
+                                        f"El servidor API ya está corriendo en el puerto {port}."
+                                    )
+                                
+                                # Función para ejecutar el servidor
+                                def run_api_server():
+                                    try:
+                                        import os
+                                        api_server_path = Path(__file__).parent / "api_server.py"
+                                        if not api_server_path.exists():
+                                            print(f"❌ Error: api_server.py no encontrado en {api_server_path}")
+                                            return
+                                        
+                                        # Establecer variables de entorno
+                                        env = os.environ.copy()
+                                        env["PORT"] = str(int(port))
+                                        env["HOST"] = "0.0.0.0"
+                                        
+                                        # Ejecutar api_server.py
+                                        process = subprocess.Popen(
+                                            [sys.executable, str(api_server_path)],
+                                            env=env,
+                                            stdout=subprocess.PIPE,
+                                            stderr=subprocess.STDOUT,
+                                            text=True,
+                                            bufsize=1,
+                                            universal_newlines=True
+                                        )
+                                        
+                                        assistance_start_api_server.process = process
+                                        assistance_start_api_server.port = int(port)
+                                        
+                                        # Leer output en tiempo real
+                                        for line in iter(process.stdout.readline, ''):
+                                            if line:
+                                                print(f"[ASSISTANCE AI API Server] {line.strip()}")
+                                        
+                                        process.wait()
+                                    except Exception as e:
+                                        print(f"❌ Error ejecutando servidor API: {e}")
+                                        import traceback
+                                        traceback.print_exc()
+                                
+                                # Iniciar en thread separado
+                                thread = threading.Thread(target=run_api_server, daemon=True)
+                                thread.start()
+                                
+                                # Esperar un momento para verificar que inició
+                                import time
+                                time.sleep(2)
+                                
+                                # Verificar si el proceso está corriendo
+                                if hasattr(assistance_start_api_server, 'process') and assistance_start_api_server.process and assistance_start_api_server.process.poll() is None:
+                                    status = f"""✅ **Servidor API iniciado exitosamente**
+
+**📊 Información:**
+- **Estado:** 🟢 Activo
+- **URL Base:** http://localhost:{port}
+- **Documentación:** http://localhost:{port}/docs
+- **Widget JS:** http://localhost:{port}/static/assistance-ai-widget.js
+- **Health Check:** http://localhost:{port}/api/chatbot/health
+
+**🎯 Siguiente paso:**
+1. Ve a la pestaña "🔧 Generar Código"
+2. Configura la URL del servidor: `http://localhost:{port}` (o tu dominio público)
+3. Genera el código del widget
+4. Pega el código en tu website
+
+**💡 Nota:** El servidor seguirá corriendo hasta que lo detengas o cierres la aplicación."""
+                                    
+                                    logs = f"Servidor API iniciado en puerto {port}\nEsperando conexiones...\n"
+                                    
+                                    return status, logs
+                                else:
+                                    return (
+                                        "❌ **Error:** No se pudo iniciar el servidor API. Verifica los logs para más detalles.",
+                                        "Error al iniciar el servidor API."
+                                    )
+                            except Exception as e:
+                                import traceback
+                                error_msg = f"❌ **Error iniciando servidor API:**\n\n```\n{str(e)}\n```"
+                                return error_msg, f"Error: {str(e)}\n\n{traceback.format_exc()}"
+                        
+                        def assistance_stop_api_server():
+                            """Detiene el servidor API."""
+                            try:
+                                global assistance_api_server_process
+                                if hasattr(assistance_start_api_server, 'process') and assistance_start_api_server.process:
+                                    if assistance_start_api_server.process.poll() is None:
+                                        assistance_start_api_server.process.terminate()
+                                        assistance_start_api_server.process.wait(timeout=5)
+                                        status = "✅ **Servidor API detenido exitosamente**"
+                                        logs = "Servidor API detenido.\n"
+                                    else:
+                                        status = "⚠️ **El servidor API no estaba corriendo**"
+                                        logs = "El servidor API no estaba corriendo.\n"
+                                    assistance_start_api_server.process = None
+                                else:
+                                    status = "⚠️ **No hay servidor API corriendo**"
+                                    logs = "No hay servidor API corriendo.\n"
+                                
+                                return status, logs
+                            except Exception as e:
+                                import traceback
+                                error_msg = f"❌ **Error deteniendo servidor API:**\n\n```\n{str(e)}\n```"
+                                return error_msg, f"Error: {str(e)}\n\n{traceback.format_exc()}"
+                        
+                        def assistance_check_api_server_status(port):
+                            """Verifica el estado del servidor API."""
+                            try:
+                                import requests
+                                port = int(port) if port else (assistance_start_api_server.port if hasattr(assistance_start_api_server, 'port') else 7865)
+                                
+                                # Verificar si el proceso está corriendo
+                                if hasattr(assistance_start_api_server, 'process') and assistance_start_api_server.process and assistance_start_api_server.process.poll() is None:
+                                    # Intentar hacer health check
+                                    try:
+                                        response = requests.get(f"http://localhost:{port}/api/chatbot/health", timeout=2)
+                                        if response.status_code == 200:
+                                            status = f"""✅ **Servidor API está corriendo y respondiendo**
+
+**📊 Estado:**
+- **Estado:** 🟢 Activo y respondiendo
+- **URL Base:** http://localhost:{port}
+- **Documentación:** http://localhost:{port}/docs
+- **Widget JS:** http://localhost:{port}/static/assistance-ai-widget.js
+- **Health Check:** ✅ OK"""
+                                        else:
+                                            status = f"⚠️ **Servidor API está corriendo pero no responde correctamente**\n\n**Código de estado:** {response.status_code}"
+                                    except requests.exceptions.RequestException:
+                                        status = f"""⚠️ **Servidor API está iniciando...**
+
+**📊 Estado:**
+- **Proceso:** ✅ Activo
+- **URL Base:** http://localhost:{port}
+- **Estado:** ⏳ Iniciando (puede tardar unos segundos)"""
+                                    
+                                    logs = f"Servidor API verificado - Proceso activo en puerto {port}\n"
+                                else:
+                                    status = "❌ **Servidor API no está corriendo**\n\nHaz clic en '▶️ Iniciar Servidor API' para iniciarlo."
+                                    logs = "Servidor API no está corriendo.\n"
+                                
+                                return status, logs
+                            except Exception as e:
+                                import traceback
+                                error_msg = f"❌ **Error verificando servidor API:**\n\n```\n{str(e)}\n```"
+                                return error_msg, f"Error: {str(e)}\n\n{traceback.format_exc()}"
+                        
+                        # Inicializar variable para el proceso
+                        assistance_start_api_server.process = None
+                        assistance_start_api_server.port = 7865
+                        
+                        # Conectar eventos
+                        assistance_start_api_server_btn.click(
+                            fn=assistance_start_api_server,
+                            inputs=[assistance_api_server_port],
+                            outputs=[assistance_api_server_status, assistance_api_server_logs]
+                        )
+                        
+                        assistance_stop_api_server_btn.click(
+                            fn=assistance_stop_api_server,
+                            inputs=[],
+                            outputs=[assistance_api_server_status, assistance_api_server_logs]
+                        )
+                        
+                        assistance_check_api_server_btn.click(
+                            fn=assistance_check_api_server_status,
+                            inputs=[assistance_api_server_port],
+                            outputs=[assistance_api_server_status, assistance_api_server_logs]
+                        )
+                    
+                    with gr.Tab("📖 Instrucciones"):
+                        gr.Markdown("""
+                        ### 📖 Cómo Usar el Widget en tu Website
+                        
+                        **Paso 1: Genera tu Código**
+                        1. Ve a la pestaña "🔧 Generar Código"
+                        2. Configura:
+                           - URL de tu servidor DocChat Enterprise
+                           - Nombre de tu marca
+                           - Color principal del widget
+                           - Posición (derecha o izquierda)
+                           - Mensaje de bienvenida
+                        3. Haz click en "📋 Generar Código"
+                        
+                        **Paso 2: Copia el Código**
+                        - Copia el código HTML que se genera
+                        
+                        **Paso 3: Pega en tu Website**
+                        - Abre el código HTML de tu website
+                        - Busca la etiqueta `</body>`
+                        - Pega el código ANTES de `</body>`
+                        - Guarda y publica tu website
+                        
+                        **Paso 4: ¡Listo!**
+                        - El widget aparecerá automáticamente en tu website
+                        - Los usuarios podrán chatear directamente
+                        - El agente responderá usando ASSISTANCE AI
+                        
+                        ---
+                        
+                        ### 🎯 Características del Widget
+                        
+                        **Basado en los mejores papers de e-commerce:**
+                        - ✅ **Mix-ECom**: Manejo de diálogos mixtos (QA, recomendación, ventas, chit-chat)
+                        - ✅ **Retail-GPT**: RAG para recomendaciones de productos
+                        - ✅ **CSALES**: Personalización y persuasión estratégica
+                        - ✅ **MegaChat**: Generación de respuestas de alta calidad
+                        
+                        **Funcionalidades:**
+                        - 💬 Chat en tiempo real
+                        - 🛒 Carrito de compras integrado
+                        - 💳 Procesamiento de pagos
+                        - 📦 Gestión de pedidos
+                        - 🎯 Cross-selling inteligente
+                        - 📊 Análisis de sentimiento
+                        - 🔗 Handoff humano automático
+                        - 🖼️ Procesamiento de imágenes
+                        - 📍 Pixel tracking (sabe qué productos vio el usuario)
+                        
+                        ---
+                        
+                        ### 🔧 Configuración Avanzada
+                        
+                        **Personalización:**
+                        - Cambia el color con `data-primary-color`
+                        - Cambia la posición con `data-position`
+                        - Personaliza el mensaje con `data-welcome-message`
+                        
+                        **Ejemplo completo:**
+                        ```html
+                        <script src="https://tu-servidor.com/static/assistance-ai-widget.js" 
                                 data-api-url="https://tu-servidor.com"
                                 data-widget-id="mi-widget-123"
                                 data-brand-name="Mi Empresa"
