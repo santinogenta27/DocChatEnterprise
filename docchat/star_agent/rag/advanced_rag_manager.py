@@ -258,6 +258,10 @@ class AdvancedRAGManager:
             # Recuperar documentos relevantes
             docs = store.get_relevant_documents(query)
             
+            # Re-ranking de resultados (según especificaciones)
+            # Ordenar por relevancia y limitar contexto
+            docs = self._rerank_results(docs, query)
+            
             # Combinar contenido
             context_parts = []
             for doc in docs[:self.k]:
@@ -304,4 +308,47 @@ class AdvancedRAGManager:
             "intent": (intent or self.detect_intent(query)).value,
             "num_docs": len(docs),
         }
+    
+    def _rerank_results(self, docs: List[Document], query: str) -> List[Document]:
+        """
+        Re-rankear resultados según especificaciones.
+        
+        Implementa:
+        - Scoring de relevancia basado en keywords
+        - Ordenamiento por score
+        - Limitación de contexto
+        
+        Args:
+            docs: Lista de documentos recuperados
+            query: Consulta original
+            
+        Returns:
+            Lista de documentos re-rankeados
+        """
+        if not docs:
+            return []
+        
+        # Scoring simple basado en keywords
+        query_words = set(query.lower().split())
+        scored_docs = []
+        
+        for doc in docs:
+            content = doc.page_content.lower() if hasattr(doc, 'page_content') else str(doc).lower()
+            content_words = set(content.split())
+            
+            # Calcular score: intersección de palabras
+            intersection = query_words.intersection(content_words)
+            score = len(intersection) / max(len(query_words), 1)
+            
+            # Bonus si el query está al inicio del documento
+            if content.startswith(query.lower()[:20]):
+                score += 0.2
+            
+            scored_docs.append((score, doc))
+        
+        # Ordenar por score (mayor a menor)
+        scored_docs.sort(key=lambda x: x[0], reverse=True)
+        
+        # Retornar solo documentos (sin scores)
+        return [doc for _, doc in scored_docs]
 

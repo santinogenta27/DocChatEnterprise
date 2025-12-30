@@ -1,18 +1,5 @@
-﻿"""ConfiguraciÃ³n del chatbot STAR AGENT."""
+﻿"""Configuración de STAR AGENT."""
 
-from .chatbot_config_manager import ChatbotConfig, ChatbotConfigManager
+from .chatbot_config_loader import ChatbotConfigLoader
 
-__all__ = ["ChatbotConfig", "ChatbotConfigManager"]
-
-
-
-
-
-
-
-
-
-
-
-
-
+__all__ = ["ChatbotConfigLoader"]

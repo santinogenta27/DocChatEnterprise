@@ -742,14 +742,34 @@ except Exception as e:
     assistance_ai_mode = None
 
 # Inicializar STAR AGENT
+star_agent_mode = None
 try:
     if STAR_AGENT_AVAILABLE and StarAgentMode:
-        star_agent_mode = StarAgentMode(config=config)
-        print("✅ STAR AGENT inicializado - Agente unificado ventas + soporte 24/7")
+        # Verificar que GROQ_API_KEY esté configurada antes de inicializar
+        groq_key = os.getenv("GROQ_API_KEY") or config.groq_api_key
+        if not groq_key:
+            print("⚠️ STAR AGENT no disponible: GROQ_API_KEY no está configurada en .env")
+        else:
+            star_agent_mode = StarAgentMode(config=config)
+            print("✅ STAR AGENT inicializado - Agente unificado ventas + soporte 24/7")
     else:
-        star_agent_mode = None
+        if not STAR_AGENT_AVAILABLE:
+            print("⚠️ STAR AGENT no disponible: Error al importar StarAgentMode")
+        else:
+            print("⚠️ STAR AGENT no disponible: StarAgentMode es None")
+except ValueError as e:
+    # Error de configuración (API key faltante, etc.)
+    print(f"⚠️ STAR AGENT no disponible: {e}")
+    star_agent_mode = None
+except ImportError as e:
+    # Error de dependencias faltantes
+    print(f"⚠️ STAR AGENT no disponible: {e}")
+    star_agent_mode = None
 except Exception as e:
+    # Otros errores
     print(f"⚠️ Error inicializando STAR AGENT: {e}")
+    import traceback
+    traceback.print_exc()
     star_agent_mode = None
 
 # Inicializar STEM Customer Care

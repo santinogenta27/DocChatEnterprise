@@ -94,6 +94,26 @@ class AppConfig:
     # Objection Handling
     chatbot_objection_responses: str = os.getenv("DOCCHAT_CHATBOT_OBJECTION_RESPONSES", "")  # JSON con respuestas a objeciones comunes
 
+    # Ingesta Automática Multi-Fuente (STAR AGENT)
+    enable_auto_ingestion: bool = os.getenv("ENABLE_AUTO_INGESTION", "false").lower() == "true"
+    website_url: str = os.getenv("WEBSITE_URL", "")
+    instagram_access_token: str = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+    facebook_access_token: str = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
+    facebook_page_id: str = os.getenv("FACEBOOK_PAGE_ID", "")
+    facebook_verify_token: str = os.getenv("FACEBOOK_VERIFY_TOKEN", "")
+    google_business_api_key: str = os.getenv("GOOGLE_BUSINESS_API_KEY", "")
+    google_place_id: str = os.getenv("GOOGLE_PLACE_ID", "")
+    
+    # WhatsApp Business API (STAR AGENT)
+    enable_whatsapp: bool = os.getenv("ENABLE_WHATSAPP", "false").lower() == "true"
+    whatsapp_phone_number_id: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    whatsapp_access_token: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+    whatsapp_verify_token: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "star_agent_verify_token")
+    
+    # Facebook Messenger (STAR AGENT)
+    enable_messenger: bool = os.getenv("ENABLE_MESSENGER", "false").lower() == "true"
+    facebook_page_access_token: str = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
+
     # Agentic AI Settings
     enable_autonomous_agents: bool = os.getenv("DOCCHAT_ENABLE_AGENTS", "true").lower() == "true"
     max_agent_iterations: int = 10

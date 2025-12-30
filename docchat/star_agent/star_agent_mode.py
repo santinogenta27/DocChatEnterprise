@@ -47,7 +47,19 @@ class StarAgentMode:
     """Modo principal STAR AGENT."""
 
     def __init__(self, config: Optional[AppConfig] = None, llm: Optional[BaseLanguageModel] = None) -> None:
-        self.config = config or load_config()
+        # Cargar configuración base
+        base_config = config or load_config()
+        
+        # Cargar configuración desde UI de Gradio (si existe)
+        try:
+            from .config.chatbot_config_loader import ChatbotConfigLoader
+            config_loader = ChatbotConfigLoader()
+            base_config = config_loader.apply_to_config(base_config)
+            print("✅ Configuración cargada desde UI de Gradio")
+        except Exception as e:
+            print(f"⚠️ No se pudo cargar configuración desde UI: {e}")
+        
+        self.config = base_config
 
         # LLM - Soporte para Groq (Enterprise - Velocidad Extrema)
         if llm is not None:
@@ -131,10 +143,12 @@ class StarAgentMode:
                     ),
                     app_config=self.config,
                 )
-                print("✅ ReactSalesAgent inicializado para widget optimizado")
+                print("✅ ReactSalesAgent inicializado para widget optimizado con ReAct pattern completo")
                 self.agent = self.react_agent  # Usar ReactSalesAgent como agente principal
             except Exception as e:
-                print(f"⚠️ Error inicializando ReactSalesAgent: {e}. Usando StarAgentAgent.")
+                print(f"⚠️ Error inicializando ReactSalesAgent: {e}")
+                import traceback
+                traceback.print_exc()
                 use_react_agent = False
         
         if not use_react_agent:
@@ -161,21 +175,96 @@ class StarAgentMode:
         # Adaptador por defecto (web). Para WhatsApp/IG se pueden añadir otros.
         self.web_adapter = WebChannelAdapter()
         
+        # Inicializar adaptadores de canales Meta (WhatsApp, Messenger e Instagram)
+        self.whatsapp_adapter = None
+        self.messenger_adapter = None
+        self.instagram_adapter = None
+        
+        # Configurar WhatsApp Business API
+        whatsapp_enabled = getattr(config, 'enable_whatsapp', False) or os.getenv("ENABLE_WHATSAPP", "false").lower() == "true"
+        if whatsapp_enabled:
+            try:
+                from .channels.whatsapp_adapter import WhatsAppBusinessAdapter
+                self.whatsapp_adapter = WhatsAppBusinessAdapter(
+                    phone_number_id=getattr(config, 'whatsapp_phone_number_id', None) or os.getenv("WHATSAPP_PHONE_NUMBER_ID"),
+                    access_token=getattr(config, 'whatsapp_access_token', None) or os.getenv("WHATSAPP_ACCESS_TOKEN"),
+                    verify_token=getattr(config, 'whatsapp_verify_token', None) or os.getenv("WHATSAPP_VERIFY_TOKEN"),
+                )
+                print("✅ WhatsApp Business API adapter inicializado")
+            except Exception as e:
+                print(f"⚠️ Error inicializando WhatsApp adapter: {e}")
+        
+        # Configurar Facebook Messenger
+        messenger_enabled = getattr(config, 'enable_messenger', False) or os.getenv("ENABLE_MESSENGER", "false").lower() == "true"
+        if messenger_enabled:
+            try:
+                from .channels.messenger_adapter import MessengerAdapter
+                self.messenger_adapter = MessengerAdapter(
+                    page_id=getattr(config, 'facebook_page_id', None) or os.getenv("FACEBOOK_PAGE_ID"),
+                    access_token=getattr(config, 'facebook_page_access_token', None) or os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN"),
+                    verify_token=getattr(config, 'facebook_verify_token', None) or os.getenv("FACEBOOK_VERIFY_TOKEN"),
+                )
+                print("✅ Facebook Messenger adapter inicializado")
+            except Exception as e:
+                print(f"⚠️ Error inicializando Messenger adapter: {e}")
+        
+        # Configurar Instagram Direct (usa MessengerAdapter también)
+        instagram_enabled = getattr(config, 'enable_instagram', False) or os.getenv("ENABLE_INSTAGRAM", "false").lower() == "true"
+        if instagram_enabled:
+            try:
+                from .channels.messenger_adapter import MessengerAdapter
+                self.instagram_adapter = MessengerAdapter(
+                    page_id=getattr(config, 'instagram_page_id', None) or os.getenv("INSTAGRAM_PAGE_ID"),
+                    access_token=getattr(config, 'instagram_access_token', None) or os.getenv("INSTAGRAM_ACCESS_TOKEN"),
+                    verify_token=getattr(config, 'instagram_verify_token', None) or os.getenv("INSTAGRAM_VERIFY_TOKEN"),
+                )
+                print("✅ Instagram Direct adapter inicializado")
+            except Exception as e:
+                print(f"⚠️ Error inicializando Instagram adapter: {e}")
+        
         # Inicializar sistema de ingesta multi-fuente (opcional)
         self.multi_source_ingester = None
-        if config.enable_rag_advanced:
+        # Verificar si RAG avanzado está habilitado (usar getattr para compatibilidad)
+        enable_rag_advanced = getattr(config, 'enable_rag_advanced', True)  # Default True para STAR AGENT
+        enable_auto_ingestion = getattr(config, 'enable_auto_ingestion', False)  # Default False (opcional)
+        
+        if enable_rag_advanced and enable_auto_ingestion:
             try:
                 from .ingestion.multi_source_ingester import MultiSourceIngester
                 from .rag.advanced_rag_manager import AdvancedRAGManager
                 
                 # Obtener AdvancedRAGManager del agente si está disponible
+                advanced_rag = None
                 if hasattr(self.agent, 'advanced_rag') and self.agent.advanced_rag:
+                    advanced_rag = self.agent.advanced_rag
+                elif hasattr(self.agent, 'react_agent') and hasattr(self.agent.react_agent, 'advanced_rag'):
+                    advanced_rag = self.agent.react_agent.advanced_rag
+                
+                if advanced_rag:
+                    website_url = getattr(config, 'website_url', None) or os.getenv("WEBSITE_URL")
                     self.multi_source_ingester = MultiSourceIngester(
-                        advanced_rag=self.agent.advanced_rag,
+                        advanced_rag=advanced_rag,
+                        website_url=website_url,
+                        enable_scheduler=True,  # Scheduler cada 6h
+                        enable_webhooks=True,  # Webhooks para nuevos posts
                     )
-                    print("✅ Sistema de ingesta multi-fuente inicializado")
+                    
+                    # Iniciar scheduler automático
+                    self.multi_source_ingester.start_scheduler()
+                    
+                    # Ejecutar ingesta inicial
+                    print("🔄 Ejecutando ingesta inicial de todas las fuentes...")
+                    counts = self.multi_source_ingester.ingest_all_sources()
+                    print(f"✅ Sistema de ingesta multi-fuente inicializado")
+                    print(f"   - Website: {counts['website']} documentos")
+                    print(f"   - Instagram: {counts['instagram']} documentos")
+                    print(f"   - Facebook: {counts['facebook']} documentos")
+                    print(f"   - Google: {counts['google']} documentos")
+                    print(f"   - Scheduler: activo (web cada 6h, redes sociales diario)")
             except Exception as e:
                 print(f"⚠️ Error inicializando ingesta multi-fuente: {e}")
+                import traceback
+                traceback.print_exc()
 
     # --- Núcleo de procesamiento ---
 
@@ -186,10 +275,27 @@ class StarAgentMode:
             payload: Dict con datos del mensaje bruto
             channel: Nombre del canal (web, whatsapp, instagram, messenger)
         """
+        # Seleccionar adapter según el canal
         if channel == "web":
             adapter: BaseChannelAdapter = self.web_adapter
+        elif channel == "whatsapp":
+            # Usar adapter de WhatsApp si está configurado
+            if hasattr(self, 'whatsapp_adapter') and self.whatsapp_adapter:
+                adapter = self.whatsapp_adapter
+            else:
+                # Fallback a web adapter si WhatsApp no está configurado
+                adapter = self.web_adapter
+        elif channel in ["instagram", "messenger"]:
+            # Instagram y Messenger usan MessengerAdapter
+            if hasattr(self, 'instagram_adapter') and self.instagram_adapter:
+                adapter = self.instagram_adapter
+            elif hasattr(self, 'messenger_adapter') and self.messenger_adapter:
+                adapter = self.messenger_adapter
+            else:
+                # Fallback a web adapter si no está configurado
+                adapter = self.web_adapter
         else:
-            # Por ahora usamos el mismo adaptador como fallback
+            # Fallback por defecto
             adapter = self.web_adapter
 
         internal_msg = adapter.to_internal(payload)
@@ -388,15 +494,583 @@ class StarAgentMode:
     # --- Demo / Gradio (opcional) ---
 
     def get_gradio_interface(self):  # type: ignore[override]
+        """
+        Retorna interfaz de Gradio para STAR AGENT.
+        
+        Incluye:
+        - Chat con el agente
+        - Panel de configuración completo
+        - Métricas y analytics
+        """
         try:
             import gradio as gr
         except ImportError as e:
             raise ImportError("Gradio no está instalado. Añade gradio al entorno para usar esta función.") from e
 
-        def _chat_fn(message: str, session_id: str = "demo_session") -> str:
-            payload = {"session_id": session_id, "user_id": session_id, "message": message}
-            resp = self.process_message(payload, channel="web")
-            return str(resp.get("text") or "")
+        # Importar UI de configuración
+        try:
+            from .ui.gradio_config_ui import StarAgentConfigUI
+            config_ui = StarAgentConfigUI()
+        except Exception as e:
+            print(f"⚠️ Error cargando UI de configuración: {e}")
+            config_ui = None
 
-        return gr.Interface(fn=_chat_fn, inputs=["text", "text"], outputs="text", title="STAR AGENT")
+        # Crear interfaz principal con tabs
+        with gr.Blocks(
+            theme=gr.themes.Soft(),
+            title="⭐ STAR AGENT - Asistente Virtual 24/7",
+            css="""
+            .gradio-container {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }
+            """
+        ) as demo:
+            gr.Markdown("""
+            # ⭐ STAR AGENT - Asistente Virtual 24/7
+            
+            Tu asistente virtual inteligente para ventas y soporte. Configura todo desde aquí.
+            """)
+            
+            with gr.Tabs() as main_tabs:
+                # TAB 1: Chat con el Agente
+                with gr.Tab("💬 Chat"):
+                    gr.Markdown("### Prueba tu Agente")
+                    
+                    chatbot = gr.Chatbot(
+                        label="Conversación",
+                        height=500,
+                        show_copy_button=True
+                    )
+                    
+                    with gr.Row():
+                        msg = gr.Textbox(
+                            label="Escribe tu mensaje",
+                            placeholder="Ej: ¿Cuánto cuesta el producto X?",
+                            scale=4
+                        )
+                        submit_btn = gr.Button("Enviar", variant="primary", scale=1)
+                    
+                    clear_btn = gr.Button("🗑️ Limpiar Conversación", variant="secondary")
+                    
+                    session_id_input = gr.Textbox(
+                        label="Session ID (opcional)",
+                        value="demo_session",
+                        visible=False
+                    )
+                    
+                    def chat_fn(message, history, session_id):
+                        """Función de chat."""
+                        if not message:
+                            return history, ""
+                        
+                        payload = {
+                            "session_id": session_id or "demo_session",
+                            "user_id": session_id or "demo_session",
+                            "message": message,
+                            "channel": "web"
+                        }
+                        
+                        try:
+                            resp = self.process_message(payload, channel="web")
+                            response_text = resp.get("text", "Lo siento, no pude generar una respuesta.")
+                            
+                            # Agregar a historial
+                            history.append([message, response_text])
+                            
+                            return history, ""
+                        except Exception as e:
+                            error_msg = f"Error: {str(e)}"
+                            history.append([message, error_msg])
+                            return history, ""
+                    
+                    msg.submit(chat_fn, [msg, chatbot, session_id_input], [chatbot, msg])
+                    submit_btn.click(chat_fn, [msg, chatbot, session_id_input], [chatbot, msg])
+                    clear_btn.click(lambda: ([], ""), outputs=[chatbot, msg])
+                
+                # TAB 2: Configuración
+                with gr.Tab("⚙️ Configuración"):
+                    if config_ui:
+                        # Integrar UI de configuración
+                        config_demo = config_ui.create_ui()
+                        # Copiar componentes de config_ui a este tab
+                        # Por ahora, redirigir a la UI de configuración
+                        gr.Markdown("### Panel de Configuración Completo")
+                        gr.Markdown("""
+                        **Configura desde aquí:**
+                        - Chatbot básico (tone, personality, instructions)
+                        - Ingesta automática (web, Instagram, Facebook, Google)
+                        - RAG y documentos
+                        - Sales Closer Elite
+                        - Integraciones (Stripe, Analytics)
+                        - Canales (Widget, WhatsApp, Messenger)
+                        - Métricas y analytics
+                        """)
+                        
+                        # Crear UI de configuración inline
+                        with gr.Accordion("🤖 Chatbot Básico", open=True):
+                            brand_name = gr.Textbox(
+                                label="Nombre de tu Empresa",
+                                value="",
+                                placeholder="Ej: Mi Tienda Online"
+                            )
+                            chatbot_tone = gr.Dropdown(
+                                label="Tono",
+                                choices=["friendly", "professional", "casual", "formal", "enthusiastic"],
+                                value="friendly"
+                            )
+                        
+                        with gr.Accordion("📥 Ingesta Automática", open=False):
+                            enable_auto_ingestion = gr.Checkbox(label="Habilitar Ingesta Automática", value=False)
+                            website_url = gr.Textbox(label="URL del Sitio Web", placeholder="https://tu-empresa.com")
+                            enable_instagram = gr.Checkbox(label="Habilitar Instagram", value=False)
+                            instagram_token = gr.Textbox(label="Instagram Token", type="password")
+                            enable_facebook = gr.Checkbox(label="Habilitar Facebook", value=False)
+                            facebook_token = gr.Textbox(label="Facebook Token", type="password")
+                        
+                        save_config_btn = gr.Button("💾 Guardar Configuración", variant="primary")
+                        config_status = gr.Textbox(label="Estado", interactive=False)
+                        
+                        def save_config_fn(
+                            brand, tone,
+                            auto_ingest, web_url,
+                            ig_enable, ig_token,
+                            fb_enable, fb_token
+                        ):
+                            """Guarda configuración."""
+                            try:
+                                from .ui.gradio_config_ui import StarAgentConfigUI
+                                ui = StarAgentConfigUI()
+                                config = {
+                                    "brand_name": brand,
+                                    "chatbot_tone": tone,
+                                    "enable_auto_ingestion": auto_ingest,
+                                    "website_url": web_url,
+                                    "enable_instagram": ig_enable,
+                                    "instagram_access_token": ig_token,
+                                    "enable_facebook": fb_enable,
+                                    "facebook_access_token": fb_token,
+                                }
+                                success, msg = ui._save_config(config)
+                                
+                                # Aplicar configuración al agente en tiempo real
+                                if success:
+                                    # Recargar configuración en el agente
+                                    self.config.app_name = brand
+                                    self.config.chatbot_tone = tone
+                                    self.config.enable_auto_ingestion = auto_ingest
+                                    self.config.website_url = web_url
+                                    
+                                    return f"✅ {msg}. Configuración aplicada al agente."
+                                else:
+                                    return f"❌ {msg}"
+                            except Exception as e:
+                                return f"❌ Error: {e}"
+                        
+                        save_config_btn.click(
+                            save_config_fn,
+                            inputs=[brand_name, chatbot_tone, enable_auto_ingestion, website_url,
+                                   enable_instagram, instagram_token, enable_facebook, facebook_token],
+                            outputs=[config_status]
+                        )
+                    else:
+                        gr.Markdown("⚠️ UI de configuración no disponible. Instala dependencias.")
+                
+                # TAB 3: WhatsApp & Instagram
+                with gr.Tab("📱 WhatsApp & Instagram"):
+                    gr.Markdown("### Configuración de Canales Sociales")
+                    gr.Markdown("""
+                    **Conecta tu agente con WhatsApp Business e Instagram Direct**
+                    
+                    Tu agente STAR AGENT puede responder automáticamente a mensajes recibidos en:
+                    - 💬 WhatsApp Business API
+                    - 📷 Instagram Direct Messages
+                    """)
+                    
+                    with gr.Tabs() as social_tabs:
+                        # WhatsApp Tab
+                        with gr.Tab("💬 WhatsApp Business"):
+                            gr.Markdown("### Configuración WhatsApp Business API")
+                            
+                            with gr.Accordion("📋 Requisitos Previos", open=False):
+                                gr.Markdown("""
+                                **Antes de configurar, necesitas:**
+                                1. Una cuenta de WhatsApp Business API (Meta Business)
+                                2. Un número de teléfono verificado
+                                3. Access Token de WhatsApp Business API
+                                4. Phone Number ID de tu cuenta
+                                5. Verify Token (puedes usar uno personalizado)
+                                
+                                **Guía:** https://developers.facebook.com/docs/whatsapp/cloud-api/get-started
+                                """)
+                            
+                            whatsapp_enabled = gr.Checkbox(
+                                label="✅ Habilitar WhatsApp Business",
+                                value=False,
+                                info="Activa/desactiva la integración con WhatsApp"
+                            )
+                            
+                            with gr.Row():
+                                whatsapp_phone_id = gr.Textbox(
+                                    label="Phone Number ID",
+                                    placeholder="Ej: 123456789012345",
+                                    info="ID del número de teléfono de WhatsApp Business"
+                                )
+                                whatsapp_access_token = gr.Textbox(
+                                    label="Access Token",
+                                    type="password",
+                                    placeholder="EAAxxxxxxxxxxxx",
+                                    info="Access Token de WhatsApp Business API"
+                                )
+                            
+                            whatsapp_verify_token = gr.Textbox(
+                                label="Verify Token",
+                                value="star_agent_whatsapp_verify",
+                                info="Token personalizado para verificar webhooks (configúralo en Meta)"
+                            )
+                            
+                            whatsapp_webhook_url = gr.Textbox(
+                                label="Webhook URL",
+                                value="",
+                                interactive=False,
+                                info="URL del webhook (se generará automáticamente)"
+                            )
+                            
+                            with gr.Row():
+                                save_whatsapp_btn = gr.Button("💾 Guardar Configuración WhatsApp", variant="primary")
+                                test_whatsapp_btn = gr.Button("🧪 Probar Conexión", variant="secondary")
+                            
+                            whatsapp_status = gr.Textbox(
+                                label="Estado",
+                                interactive=False,
+                                value="No configurado"
+                            )
+                            
+                            def save_whatsapp_config(enabled, phone_id, access_token, verify_token):
+                                """Guarda configuración de WhatsApp."""
+                                try:
+                                    if not enabled:
+                                        return "⚠️ WhatsApp deshabilitado. Habilítalo para guardar configuración."
+                                    
+                                    if not phone_id or not access_token:
+                                        return "❌ Phone Number ID y Access Token son requeridos"
+                                    
+                                    # Guardar en variables de entorno o configuración
+                                    os.environ["WHATSAPP_PHONE_NUMBER_ID"] = phone_id
+                                    os.environ["WHATSAPP_ACCESS_TOKEN"] = access_token
+                                    os.environ["WHATSAPP_VERIFY_TOKEN"] = verify_token or "star_agent_whatsapp_verify"
+                                    
+                                    # Guardar en configuración
+                                    if hasattr(self.config, 'whatsapp_phone_number_id'):
+                                        self.config.whatsapp_phone_number_id = phone_id
+                                    if hasattr(self.config, 'whatsapp_access_token'):
+                                        self.config.whatsapp_access_token = access_token
+                                    
+                                    # Inicializar adapter
+                                    try:
+                                        from .channels.whatsapp_adapter import WhatsAppBusinessAdapter
+                                        self.whatsapp_adapter = WhatsAppBusinessAdapter(
+                                            phone_number_id=phone_id,
+                                            access_token=access_token,
+                                            verify_token=verify_token
+                                        )
+                                        
+                                        # Generar webhook URL (necesitarías el dominio/host público)
+                                        webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://tu-dominio.com")
+                                        webhook_url = f"{webhook_base}/webhooks/meta/whatsapp"
+                                        
+                                        return f"✅ Configuración guardada. Webhook URL: {webhook_url}\n\n⚠️ Configura este URL en Meta Business Suite > Webhooks"
+                                    except Exception as e:
+                                        return f"⚠️ Configuración guardada pero error inicializando adapter: {e}"
+                                    
+                                except Exception as e:
+                                    return f"❌ Error: {e}"
+                            
+                            def test_whatsapp_connection(enabled, phone_id, access_token):
+                                """Prueba conexión con WhatsApp."""
+                                try:
+                                    if not enabled or not phone_id or not access_token:
+                                        return "⚠️ Configura primero Phone Number ID y Access Token"
+                                    
+                                    from .channels.whatsapp_adapter import WhatsAppBusinessAdapter
+                                    adapter = WhatsAppBusinessAdapter(
+                                        phone_number_id=phone_id,
+                                        access_token=access_token
+                                    )
+                                    
+                                    # Intentar obtener info del número (prueba de conexión)
+                                    import requests
+                                    url = f"{adapter.base_url}/{phone_id}"
+                                    headers = {"Authorization": f"Bearer {access_token}"}
+                                    response = requests.get(url, headers=headers, timeout=10)
+                                    
+                                    if response.status_code == 200:
+                                        data = response.json()
+                                        return f"✅ Conexión exitosa!\n\nNúmero: {data.get('display_phone_number', 'N/A')}\nVerificado: {data.get('verified_name', 'N/A')}"
+                                    else:
+                                        return f"❌ Error de conexión: {response.status_code} - {response.text}"
+                                        
+                                except Exception as e:
+                                    return f"❌ Error probando conexión: {e}"
+                            
+                            save_whatsapp_btn.click(
+                                save_whatsapp_config,
+                                inputs=[whatsapp_enabled, whatsapp_phone_id, whatsapp_access_token, whatsapp_verify_token],
+                                outputs=[whatsapp_status]
+                            )
+                            
+                            test_whatsapp_btn.click(
+                                test_whatsapp_connection,
+                                inputs=[whatsapp_enabled, whatsapp_phone_id, whatsapp_access_token],
+                                outputs=[whatsapp_status]
+                            )
+                        
+                        # Instagram Tab
+                        with gr.Tab("📷 Instagram Direct"):
+                            gr.Markdown("### Configuración Instagram Direct Messages")
+                            
+                            with gr.Accordion("📋 Requisitos Previos", open=False):
+                                gr.Markdown("""
+                                **Antes de configurar, necesitas:**
+                                1. Una cuenta de Instagram Business o Creator
+                                2. Una página de Facebook conectada
+                                3. Instagram Graph API habilitada en Meta for Developers
+                                4. Access Token con permisos: `instagram_basic`, `instagram_manage_messages`, `pages_messaging`
+                                5. Page Access Token de la página de Facebook conectada
+                                
+                                **Guía:** https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login
+                                """)
+                            
+                            instagram_enabled = gr.Checkbox(
+                                label="✅ Habilitar Instagram Direct",
+                                value=False,
+                                info="Activa/desactiva la integración con Instagram Direct"
+                            )
+                            
+                            with gr.Row():
+                                instagram_page_id = gr.Textbox(
+                                    label="Page ID",
+                                    placeholder="Ej: 123456789012345",
+                                    info="ID de la página de Facebook conectada a Instagram"
+                                )
+                                instagram_access_token = gr.Textbox(
+                                    label="Page Access Token",
+                                    type="password",
+                                    placeholder="EAAxxxxxxxxxxxx",
+                                    info="Page Access Token con permisos de Instagram"
+                                )
+                            
+                            instagram_verify_token = gr.Textbox(
+                                label="Verify Token",
+                                value="star_agent_instagram_verify",
+                                info="Token personalizado para verificar webhooks"
+                            )
+                            
+                            instagram_webhook_url = gr.Textbox(
+                                label="Webhook URL",
+                                value="",
+                                interactive=False,
+                                info="URL del webhook (se generará automáticamente)"
+                            )
+                            
+                            with gr.Row():
+                                save_instagram_btn = gr.Button("💾 Guardar Configuración Instagram", variant="primary")
+                                test_instagram_btn = gr.Button("🧪 Probar Conexión", variant="secondary")
+                            
+                            instagram_status = gr.Textbox(
+                                label="Estado",
+                                interactive=False,
+                                value="No configurado"
+                            )
+                            
+                            def save_instagram_config(enabled, page_id, access_token, verify_token):
+                                """Guarda configuración de Instagram."""
+                                try:
+                                    if not enabled:
+                                        return "⚠️ Instagram deshabilitado. Habilítalo para guardar configuración."
+                                    
+                                    if not page_id or not access_token:
+                                        return "❌ Page ID y Access Token son requeridos"
+                                    
+                                    # Guardar en variables de entorno
+                                    os.environ["INSTAGRAM_PAGE_ID"] = page_id
+                                    os.environ["INSTAGRAM_ACCESS_TOKEN"] = access_token
+                                    os.environ["INSTAGRAM_VERIFY_TOKEN"] = verify_token or "star_agent_instagram_verify"
+                                    
+                                    # Guardar en configuración
+                                    if hasattr(self.config, 'instagram_page_id'):
+                                        self.config.instagram_page_id = page_id
+                                    if hasattr(self.config, 'instagram_access_token'):
+                                        self.config.instagram_access_token = access_token
+                                    
+                                    # Inicializar adapter (Instagram usa Messenger API)
+                                    try:
+                                        from .channels.messenger_adapter import MessengerAdapter
+                                        self.instagram_adapter = MessengerAdapter(
+                                            page_id=page_id,
+                                            access_token=access_token,
+                                            verify_token=verify_token
+                                        )
+                                        
+                                        # Generar webhook URL
+                                        webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://tu-dominio.com")
+                                        webhook_url = f"{webhook_base}/webhooks/meta/messenger"
+                                        
+                                        return f"✅ Configuración guardada. Webhook URL: {webhook_url}\n\n⚠️ Configura este URL en Meta for Developers > Webhooks"
+                                    except Exception as e:
+                                        return f"⚠️ Configuración guardada pero error inicializando adapter: {e}"
+                                    
+                                except Exception as e:
+                                    return f"❌ Error: {e}"
+                            
+                            def test_instagram_connection(enabled, page_id, access_token):
+                                """Prueba conexión con Instagram."""
+                                try:
+                                    if not enabled or not page_id or not access_token:
+                                        return "⚠️ Configura primero Page ID y Access Token"
+                                    
+                                    # Intentar obtener info de la página
+                                    import requests
+                                    url = f"https://graph.facebook.com/v18.0/{page_id}"
+                                    params = {
+                                        "access_token": access_token,
+                                        "fields": "name,instagram_business_account"
+                                    }
+                                    response = requests.get(url, params=params, timeout=10)
+                                    
+                                    if response.status_code == 200:
+                                        data = response.json()
+                                        ig_account_id = data.get("instagram_business_account", {}).get("id", "No encontrado")
+                                        return f"✅ Conexión exitosa!\n\nPágina: {data.get('name', 'N/A')}\nInstagram Business Account ID: {ig_account_id}"
+                                    else:
+                                        return f"❌ Error de conexión: {response.status_code} - {response.text}"
+                                        
+                                except Exception as e:
+                                    return f"❌ Error probando conexión: {e}"
+                            
+                            save_instagram_btn.click(
+                                save_instagram_config,
+                                inputs=[instagram_enabled, instagram_page_id, instagram_access_token, instagram_verify_token],
+                                outputs=[instagram_status]
+                            )
+                            
+                            test_instagram_btn.click(
+                                test_instagram_connection,
+                                inputs=[instagram_enabled, instagram_page_id, instagram_access_token],
+                                outputs=[instagram_status]
+                            )
+                        
+                        # Estado y Webhooks Tab
+                        with gr.Tab("🌐 Estado y Webhooks"):
+                            gr.Markdown("### Estado de Conexiones y Webhooks")
+                            
+                            with gr.Accordion("📖 Instrucciones de Configuración", open=True):
+                                gr.Markdown("""
+                                **Pasos para configurar webhooks:**
+                                
+                                **1. WhatsApp Business:**
+                                1. Ve a Meta Business Suite > WhatsApp > API Setup
+                                2. Copia la Webhook URL mostrada arriba
+                                3. Configura el Verify Token (el mismo que ingresaste)
+                                4. Selecciona los eventos: `messages`
+                                5. Guarda la configuración
+                                
+                                **2. Instagram Direct:**
+                                1. Ve a Meta for Developers > Tu App > Webhooks
+                                2. Selecciona "Instagram" o "Page"
+                                3. Copia la Webhook URL mostrada arriba
+                                4. Configura el Verify Token
+                                5. Suscríbete a: `messages`, `messaging_postbacks`
+                                6. Guarda la configuración
+                                
+                                **3. Probar Conexión:**
+                                - Usa los botones "Probar Conexión" en cada tab
+                                - Verifica que el estado muestre "✅ Conexión exitosa"
+                                - Envía un mensaje de prueba desde WhatsApp/Instagram
+                                """)
+                            
+                            connection_status_json = gr.JSON(
+                                label="Estado de Conexiones",
+                                value={
+                                    "whatsapp": {
+                                        "enabled": False,
+                                        "configured": False,
+                                        "connected": False
+                                    },
+                                    "instagram": {
+                                        "enabled": False,
+                                        "configured": False,
+                                        "connected": False
+                                    }
+                                }
+                            )
+                            
+                            refresh_status_btn = gr.Button("🔄 Actualizar Estado", variant="secondary")
+                            
+                            def get_connection_status():
+                                """Obtiene estado actual de conexiones."""
+                                try:
+                                    status = {
+                                        "whatsapp": {
+                                            "enabled": hasattr(self, 'whatsapp_adapter') and self.whatsapp_adapter is not None,
+                                            "configured": bool(os.getenv("WHATSAPP_PHONE_NUMBER_ID")),
+                                            "connected": False  # Se podría verificar con una API call
+                                        },
+                                        "instagram": {
+                                            "enabled": hasattr(self, 'instagram_adapter') and self.instagram_adapter is not None,
+                                            "configured": bool(os.getenv("INSTAGRAM_PAGE_ID")),
+                                            "connected": False
+                                        }
+                                    }
+                                    return status
+                                except:
+                                    return {
+                                        "whatsapp": {"enabled": False, "configured": False, "connected": False},
+                                        "instagram": {"enabled": False, "configured": False, "connected": False}
+                                    }
+                            
+                            refresh_status_btn.click(fn=get_connection_status, outputs=[connection_status_json])
+                            
+                            # Generar URLs de webhooks
+                            webhook_base = os.getenv("WEBHOOK_BASE_URL", "https://tu-dominio.com")
+                            
+                            gr.Markdown(f"""
+                            **URLs de Webhooks:**
+                            - WhatsApp: `{webhook_base}/webhooks/meta/whatsapp`
+                            - Instagram/Messenger: `{webhook_base}/webhooks/meta/messenger`
+                            
+                            ⚠️ **Importante:** Reemplaza `tu-dominio.com` con tu dominio público real. Si estás en desarrollo local, usa ngrok o similar.
+                            """)
+                
+                # TAB 4: Métricas
+                with gr.Tab("📊 Métricas"):
+                    gr.Markdown("### Métricas y Analytics")
+                    
+                    if hasattr(self, 'agent') and hasattr(self.agent, 'react_agent'):
+                        # Obtener métricas del widget optimizer si está disponible
+                        metrics_json = gr.JSON(label="Métricas Actuales", value={})
+                        refresh_btn = gr.Button("🔄 Actualizar", variant="secondary")
+                        
+                        def get_metrics():
+                            """Obtiene métricas actuales."""
+                            try:
+                                # Intentar obtener métricas del widget optimizer
+                                # Por ahora, retornar métricas de ejemplo
+                                return {
+                                    "total_requests": 0,
+                                    "conversions": 0,
+                                    "conversion_rate": 0.0,
+                                    "total_revenue": 0.0,
+                                    "drop_off_rate": 0.0,
+                                    "avg_response_time": 0.0,
+                                    "sales_stages": {},
+                                    "intents": {},
+                                }
+                            except:
+                                return {}
+                        
+                        refresh_btn.click(fn=get_metrics, outputs=[metrics_json])
+                    else:
+                        gr.Markdown("Las métricas estarán disponibles cuando el agente esté en uso.")
+            
+            return demo
 

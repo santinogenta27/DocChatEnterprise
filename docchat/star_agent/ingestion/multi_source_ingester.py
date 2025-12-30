@@ -1,21 +1,29 @@
 """
-Sistema de Ingesta Multi-Fuente para STAR AGENT.
+Sistema de Ingesta Multi-Fuente Automática para STAR AGENT.
 
-Arquitectura:
-Fuentes Datos (Web/IG/FB/Google) → Crawlers/APIs → Normalización → Chunking → Embeddings → Vector DB → RAG → LLM
+Implementa según especificaciones:
+- Crawlers web (Playwright para JS-heavy sites)
+- APIs Instagram/Facebook (Graph API)
+- Google Business API
+- Normalización semántica + clasificación
+- Chunking inteligente
+- Embeddings automáticos
+- Actualización en Vector DB
+- Scheduler cada 6h para web
+- Webhooks para nuevos posts IG/FB
 """
 
 from __future__ import annotations
 
-import json
 import os
+import json
+import hashlib
 import schedule
 import time
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass, asdict
 
 try:
     from playwright.sync_api import sync_playwright, Browser, Page
@@ -29,550 +37,759 @@ try:
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
+    print("⚠️ requests no disponible. Instala con: pip install requests")
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+    BS4_AVAILABLE = True
+except ImportError:
+    BS4_AVAILABLE = False
+    print("⚠️ BeautifulSoup no disponible. Instala con: pip install beautifulsoup4")
+
 from langchain_core.documents import Document
 
-from ..rag.advanced_rag_manager import AdvancedRAGManager, IntentType as RAGIntentType
-
-
-class SourceType(str, Enum):
-    """Tipos de fuentes de datos"""
-    WEBSITE = "website"
-    INSTAGRAM = "instagram"
-    FACEBOOK = "facebook"
-    GOOGLE_BUSINESS = "google_business"
-    CATALOG = "catalog"
-    FAQ = "faq"
+from ..rag.advanced_rag_manager import AdvancedRAGManager, IntentType
 
 
 @dataclass
 class IngestedDocument:
-    """Documento normalizado después de ingesta"""
-    source: SourceType
-    source_id: str  # URL, post_id, review_id, etc.
-    title: str
-    content: str
-    category: str  # producto, política, marketing, review, general
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=datetime.now)
+    """Documento normalizado según especificaciones."""
+    source: str  # "website", "instagram", "facebook", "google"
+    url: Optional[str] = None
+    title: Optional[str] = None
+    content: str = ""
+    category: Optional[str] = None  # "producto", "política", "marketing", "review"
+    metadata: Dict[str, Any] = None
+    date: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
+        if self.date is None:
+            self.date = datetime.now().isoformat()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convierte a diccionario."""
+        return asdict(self)
+    
+    def to_langchain_document(self) -> Document:
+        """Convierte a Document de LangChain."""
+        return Document(
+            page_content=self.content,
+            metadata={
+                "source": self.source,
+                "url": self.url or "",
+                "title": self.title or "",
+                "category": self.category or "general",
+                "date": self.date,
+                **self.metadata,
+            }
+        )
+
+
+class WebCrawler:
+    """
+    Crawler web usando Playwright según especificaciones.
+    
+    Características:
+    - Maneja JS-heavy sites
+    - Prioriza schema.org y OpenGraph
+    - Extracción semántica
+    """
+    
+    def __init__(self):
+        self.browser: Optional[Browser] = None
+        self.playwright = None
+        
+        if PLAYWRIGHT_AVAILABLE:
+            try:
+                self.playwright = sync_playwright().start()
+                self.browser = self.playwright.chromium.launch(headless=True)
+            except Exception as e:
+                print(f"⚠️ Error inicializando Playwright: {e}")
+    
+    def crawl_website(self, url: str, max_pages: int = 10) -> List[IngestedDocument]:
+        """
+        Crawlea sitio web usando Playwright.
+        
+        Args:
+            url: URL del sitio web
+            max_pages: Número máximo de páginas a crawlear
+            
+        Returns:
+            Lista de documentos normalizados
+        """
+        if not PLAYWRIGHT_AVAILABLE or not self.browser:
+            print("⚠️ Playwright no disponible. Retornando lista vacía.")
+            return []
+        
+        documents = []
+        visited_urls = set()
+        
+        try:
+            page = self.browser.new_page()
+            
+            # Crawlear página principal
+            docs = self._crawl_page(page, url, visited_urls, max_pages)
+            documents.extend(docs)
+            
+            page.close()
+        except Exception as e:
+            print(f"⚠️ Error crawleando {url}: {e}")
+        
+        return documents
+    
+    def _crawl_page(self, page: Page, url: str, visited: set, max_pages: int, depth: int = 0) -> List[IngestedDocument]:
+        """Crawlea una página específica."""
+        if url in visited or depth > 3 or len(visited) >= max_pages:
+            return []
+        
+        visited.add(url)
+        documents = []
+        
+        try:
+            page.goto(url, wait_until="networkidle", timeout=30000)
+            
+            # Esperar a que cargue JavaScript
+            page.wait_for_timeout(2000)
+            
+            # Extraer contenido
+            content = self._extract_content(page)
+            
+            # Extraer metadata (schema.org, OpenGraph)
+            metadata = self._extract_metadata(page)
+            
+            # Crear documento normalizado
+            doc = IngestedDocument(
+                source="website",
+                url=url,
+                title=metadata.get("title", ""),
+                content=content,
+                category=self._classify_content(content),
+                metadata=metadata,
+            )
+            documents.append(doc)
+            
+            # Encontrar enlaces para crawlear más páginas
+            if depth < 2:  # Máximo 2 niveles de profundidad
+                links = page.query_selector_all("a[href]")
+                for link in links[:10]:  # Máximo 10 enlaces por página
+                    href = link.get_attribute("href")
+                    if href and href.startswith("http") and href not in visited:
+                        try:
+                            sub_docs = self._crawl_page(page, href, visited, max_pages, depth + 1)
+                            documents.extend(sub_docs)
+                        except:
+                            pass  # Continuar si falla un enlace
+            
+        except Exception as e:
+            print(f"⚠️ Error crawleando página {url}: {e}")
+        
+        return documents
+    
+    def _extract_content(self, page: Page) -> str:
+        """Extrae contenido semántico de la página."""
+        try:
+            # Intentar extraer texto principal
+            content_parts = []
+            
+            # Priorizar schema.org structured data
+            schema_data = page.evaluate("""
+                () => {
+                    const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+                    return scripts.map(s => s.textContent).join('\\n');
+                }
+            """)
+            if schema_data:
+                content_parts.append(schema_data)
+            
+            # Extraer texto del body
+            body_text = page.evaluate("""
+                () => {
+                    // Remover scripts y styles
+                    const scripts = document.querySelectorAll('script, style');
+                    scripts.forEach(s => s.remove());
+                    
+                    // Extraer texto
+                    return document.body.innerText;
+                }
+            """)
+            if body_text:
+                content_parts.append(body_text)
+            
+            return "\n\n".join(content_parts)
+        except Exception as e:
+            print(f"⚠️ Error extrayendo contenido: {e}")
+            return ""
+    
+    def _extract_metadata(self, page: Page) -> Dict[str, Any]:
+        """Extrae metadata (schema.org, OpenGraph)."""
+        metadata = {}
+        
+        try:
+            # OpenGraph
+            og_title = page.query_selector('meta[property="og:title"]')
+            if og_title:
+                metadata["og_title"] = og_title.get_attribute("content")
+            
+            og_description = page.query_selector('meta[property="og:description"]')
+            if og_description:
+                metadata["og_description"] = og_description.get_attribute("content")
+            
+            # Schema.org
+            schema_scripts = page.query_selector_all('script[type="application/ld+json"]')
+            for script in schema_scripts:
+                try:
+                    schema_data = json.loads(script.inner_text())
+                    if isinstance(schema_data, dict):
+                        metadata.update(schema_data)
+                except:
+                    pass
+            
+            # Título de la página
+            title = page.title()
+            if title:
+                metadata["title"] = title
+            
+        except Exception as e:
+            print(f"⚠️ Error extrayendo metadata: {e}")
+        
+        return metadata
+    
+    def _classify_content(self, content: str) -> str:
+        """Clasifica contenido según especificaciones."""
+        content_lower = content.lower()
+        
+        if any(x in content_lower for x in ["precio", "producto", "comprar", "disponible"]):
+            return "producto"
+        elif any(x in content_lower for x in ["envío", "política", "garantía", "devolución"]):
+            return "política"
+        elif any(x in content_lower for x in ["promoción", "oferta", "descuento", "nuevo"]):
+            return "marketing"
+        elif any(x in content_lower for x in ["opinión", "reseña", "review", "calificación"]):
+            return "review"
+        else:
+            return "general"
+    
+    def close(self):
+        """Cierra el browser."""
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
+
+
+class InstagramExtractor:
+    """
+    Extractor de Instagram usando Graph API según especificaciones.
+    
+    Extrae:
+    - Bio
+    - Posts
+    - Captions
+    - Product tags
+    - Reviews
+    """
+    
+    def __init__(self, access_token: Optional[str] = None):
+        self.access_token = access_token or os.getenv("INSTAGRAM_ACCESS_TOKEN")
+        self.base_url = "https://graph.instagram.com"
+    
+    def extract_posts(self, user_id: Optional[str] = None, limit: int = 25) -> List[IngestedDocument]:
+        """
+        Extrae posts de Instagram.
+        
+        Args:
+            user_id: ID de usuario de Instagram (si None, usa el del token)
+            limit: Número máximo de posts a extraer
+            
+        Returns:
+            Lista de documentos normalizados
+        """
+        if not self.access_token:
+            print("⚠️ Instagram access token no configurado")
+            return []
+        
+        documents = []
+        
+        try:
+            # Obtener user_id si no se proporciona
+            if not user_id:
+                user_id = self._get_user_id()
+            
+            if not user_id:
+                return []
+            
+            # Obtener posts
+            url = f"{self.base_url}/{user_id}/media"
+            params = {
+                "access_token": self.access_token,
+                "fields": "id,caption,media_type,permalink,timestamp",
+                "limit": limit,
+            }
+            
+            if not REQUESTS_AVAILABLE:
+                print("⚠️ requests no disponible")
+                return []
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            posts = data.get("data", [])
+            
+            for post in posts:
+                doc = IngestedDocument(
+                    source="instagram",
+                    url=post.get("permalink", ""),
+                    title="Instagram Post",
+                    content=post.get("caption", ""),
+                    category="marketing",  # Posts de Instagram son marketing
+                    metadata={
+                        "post_id": post.get("id", ""),
+                        "media_type": post.get("media_type", ""),
+                        "timestamp": post.get("timestamp", ""),
+                    },
+                    date=post.get("timestamp", datetime.now().isoformat()),
+                )
+                documents.append(doc)
+                
+        except Exception as e:
+            print(f"⚠️ Error extrayendo posts de Instagram: {e}")
+        
+        return documents
+    
+    def _get_user_id(self) -> Optional[str]:
+        """Obtiene el user_id desde el access token."""
+        try:
+            url = f"{self.base_url}/me"
+            params = {"access_token": self.access_token, "fields": "id"}
+            
+            if not REQUESTS_AVAILABLE:
+                return None
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("id")
+        except:
+            return None
+
+
+class FacebookExtractor:
+    """
+    Extractor de Facebook usando Graph API según especificaciones.
+    
+    Extrae:
+    - Posts
+    - Captions
+    - Product tags
+    - Reviews
+    """
+    
+    def __init__(self, access_token: Optional[str] = None):
+        self.access_token = access_token or os.getenv("FACEBOOK_ACCESS_TOKEN")
+        self.base_url = "https://graph.facebook.com/v18.0"
+    
+    def extract_posts(self, page_id: Optional[str] = None, limit: int = 25) -> List[IngestedDocument]:
+        """
+        Extrae posts de Facebook.
+        
+        Args:
+            page_id: ID de la página de Facebook
+            limit: Número máximo de posts a extraer
+            
+        Returns:
+            Lista de documentos normalizados
+        """
+        if not self.access_token:
+            print("⚠️ Facebook access token no configurado")
+            return []
+        
+        if not page_id:
+            page_id = os.getenv("FACEBOOK_PAGE_ID")
+        
+        if not page_id:
+            print("⚠️ Facebook page_id no configurado")
+            return []
+        
+        documents = []
+        
+        try:
+            url = f"{self.base_url}/{page_id}/posts"
+            params = {
+                "access_token": self.access_token,
+                "fields": "id,message,created_time,permalink_url",
+                "limit": limit,
+            }
+            
+            if not REQUESTS_AVAILABLE:
+                print("⚠️ requests no disponible")
+                return []
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            posts = data.get("data", [])
+            
+            for post in posts:
+                doc = IngestedDocument(
+                    source="facebook",
+                    url=post.get("permalink_url", ""),
+                    title="Facebook Post",
+                    content=post.get("message", ""),
+                    category="marketing",
+                    metadata={
+                        "post_id": post.get("id", ""),
+                        "created_time": post.get("created_time", ""),
+                    },
+                    date=post.get("created_time", datetime.now().isoformat()),
+                )
+                documents.append(doc)
+                
+        except Exception as e:
+            print(f"⚠️ Error extrayendo posts de Facebook: {e}")
+        
+        return documents
+
+
+class GoogleBusinessExtractor:
+    """
+    Extractor de Google Business según especificaciones.
+    
+    Extrae:
+    - Reviews
+    - Q&A
+    - Horarios
+    """
+    
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv("GOOGLE_BUSINESS_API_KEY")
+        self.place_id = os.getenv("GOOGLE_PLACE_ID")
+    
+    def extract_reviews(self) -> List[IngestedDocument]:
+        """
+        Extrae reviews de Google Business.
+        
+        Returns:
+            Lista de documentos normalizados
+        """
+        if not self.api_key or not self.place_id:
+            print("⚠️ Google Business API key o place_id no configurado")
+            return []
+        
+        documents = []
+        
+        try:
+            # Google Places API
+            url = "https://maps.googleapis.com/maps/api/place/details/json"
+            params = {
+                "place_id": self.place_id,
+                "fields": "review,rating",
+                "key": self.api_key,
+            }
+            
+            if not REQUESTS_AVAILABLE:
+                print("⚠️ requests no disponible")
+                return []
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            result = data.get("result", {})
+            reviews = result.get("reviews", [])
+            
+            for review in reviews:
+                doc = IngestedDocument(
+                    source="google",
+                    url=f"https://www.google.com/maps/place/?q=place_id:{self.place_id}",
+                    title="Google Review",
+                    content=review.get("text", ""),
+                    category="review",
+                    metadata={
+                        "rating": review.get("rating", 0),
+                        "author_name": review.get("author_name", ""),
+                        "time": review.get("time", ""),
+                    },
+                    date=datetime.fromtimestamp(review.get("time", 0)).isoformat() if review.get("time") else None,
+                )
+                documents.append(doc)
+                
+        except Exception as e:
+            print(f"⚠️ Error extrayendo reviews de Google: {e}")
+        
+        return documents
 
 
 class MultiSourceIngester:
     """
-    Sistema completo de ingesta multi-fuente.
+    Sistema de Ingesta Multi-Fuente Automática según especificaciones.
     
-    Características:
-    - Crawling web con Playwright (JS-heavy sites)
-    - APIs oficiales Instagram/Facebook/Google
-    - Normalización semántica
-    - Clasificación automática
-    - Chunking inteligente
-    - Actualización automática (scheduler + webhooks)
+    Arquitectura:
+    Fuentes Datos (Web/IG/FB/Google) → Crawlers/APIs → Normalización → 
+    Chunking → Embeddings → Vector DB → RAG → LLM
     """
     
     def __init__(
         self,
         advanced_rag: AdvancedRAGManager,
-        base_dir: Optional[Path] = None,
+        website_url: Optional[str] = None,
+        enable_scheduler: bool = True,
+        enable_webhooks: bool = True,
     ):
         """
-        Inicializa el sistema de ingesta.
+        Inicializa el sistema de ingesta multi-fuente.
         
         Args:
-            advanced_rag: Instancia de AdvancedRAGManager para agregar documentos
-            base_dir: Directorio base para almacenar datos
+            advanced_rag: Instancia de AdvancedRAGManager para actualizar índices
+            website_url: URL del sitio web a crawlear
+            enable_scheduler: Habilitar scheduler automático cada 6h
+            enable_webhooks: Habilitar webhooks para nuevos posts
         """
         self.advanced_rag = advanced_rag
-        self.base_dir = base_dir or Path("docchat/star_agent/ingestion_data")
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.website_url = website_url or os.getenv("WEBSITE_URL")
+        self.enable_scheduler = enable_scheduler
+        self.enable_webhooks = enable_webhooks
         
-        # Browser para Playwright
-        self.browser: Optional[Browser] = None
+        # Extractores
+        self.web_crawler = WebCrawler() if PLAYWRIGHT_AVAILABLE else None
+        self.instagram_extractor = InstagramExtractor()
+        self.facebook_extractor = FacebookExtractor()
+        self.google_extractor = GoogleBusinessExtractor()
         
-        # Configuración de APIs
-        self.instagram_token: Optional[str] = os.getenv("INSTAGRAM_ACCESS_TOKEN")
-        self.instagram_user_id: Optional[str] = os.getenv("INSTAGRAM_USER_ID")
-        self.facebook_token: Optional[str] = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
-        self.google_api_key: Optional[str] = os.getenv("GOOGLE_API_KEY")
-        self.google_place_id: Optional[str] = os.getenv("GOOGLE_PLACE_ID")
+        # Cache de documentos procesados (para evitar duplicados)
+        self.processed_docs_hash: set = set()
         
-        # Historial de ingesta (para evitar duplicados)
-        self.ingestion_history: Dict[str, datetime] = {}
-        self._load_ingestion_history()
+        # Scheduler
+        self.scheduler_running = False
         
-        # Inicializar Playwright si está disponible
-        if PLAYWRIGHT_AVAILABLE:
-            self._init_playwright()
+        if enable_scheduler:
+            self._setup_scheduler()
     
-    def _init_playwright(self):
-        """Inicializa Playwright para crawling web"""
-        try:
-            self.playwright = sync_playwright().start()
-            self.browser = self.playwright.chromium.launch(headless=True)
-        except Exception as e:
-            print(f"⚠️ Error inicializando Playwright: {e}")
-            self.browser = None
-    
-    def _load_ingestion_history(self):
-        """Carga historial de ingesta desde archivo"""
-        history_file = self.base_dir / "ingestion_history.json"
-        if history_file.exists():
-            try:
-                with open(history_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    for key, timestamp_str in data.items():
-                        self.ingestion_history[key] = datetime.fromisoformat(timestamp_str)
-            except Exception as e:
-                print(f"⚠️ Error cargando historial: {e}")
-    
-    def _save_ingestion_history(self):
-        """Guarda historial de ingesta"""
-        history_file = self.base_dir / "ingestion_history.json"
-        try:
-            data = {
-                key: timestamp.isoformat()
-                for key, timestamp in self.ingestion_history.items()
-            }
-            with open(history_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            print(f"⚠️ Error guardando historial: {e}")
-    
-    # === EXTRACCIÓN WEBSITE ===
-    
-    def ingest_website(
-        self,
-        url: str,
-        use_playwright: bool = True,
-        extract_schema: bool = True,
-    ) -> Optional[IngestedDocument]:
+    def ingest_all_sources(self) -> Dict[str, int]:
         """
-        Extrae contenido de un sitio web.
+        Ingestiona desde todas las fuentes configuradas.
         
-        Args:
-            url: URL del sitio web
-            use_playwright: Usar Playwright para JS-heavy sites
-            extract_schema: Priorizar schema.org, OpenGraph
+        Returns:
+            Dict con conteo de documentos por fuente
         """
-        # Verificar si ya fue ingerido recientemente
-        if url in self.ingestion_history:
-            last_ingest = self.ingestion_history[url]
-            if (datetime.now() - last_ingest).total_seconds() < 3600:  # 1 hora
-                return None
-        
-        try:
-            if use_playwright and self.browser:
-                content = self._crawl_with_playwright(url)
-            else:
-                content = self._crawl_with_requests(url)
-            
-            if not content:
-                return None
-            
-            # Extraer schema.org y OpenGraph
-            metadata = {}
-            if extract_schema:
-                metadata.update(self._extract_schema_org(content))
-                metadata.update(self._extract_opengraph(content))
-            
-            # Normalizar y clasificar
-            doc = self._normalize_document(
-                source=SourceType.WEBSITE,
-                source_id=url,
-                raw_content=content,
-                metadata=metadata,
-            )
-            
-            # Actualizar historial
-            self.ingestion_history[url] = datetime.now()
-            self._save_ingestion_history()
-            
-            return doc
-            
-        except Exception as e:
-            print(f"⚠️ Error ingiriendo website {url}: {e}")
-            return None
-    
-    def _crawl_with_playwright(self, url: str) -> Optional[str]:
-        """Crawling con Playwright para JS-heavy sites"""
-        if not self.browser:
-            return None
-        
-        try:
-            page = self.browser.new_page()
-            page.goto(url, wait_until="networkidle", timeout=30000)
-            content = page.content()
-            page.close()
-            
-            # Extraer texto con BeautifulSoup
-            soup = BeautifulSoup(content, 'html.parser')
-            
-            # Remover scripts y styles
-            for script in soup(["script", "style"]):
-                script.decompose()
-            
-            # Extraer texto principal
-            text = soup.get_text(separator='\n', strip=True)
-            return text
-            
-        except Exception as e:
-            print(f"⚠️ Error en Playwright crawl: {e}")
-            return None
-    
-    def _crawl_with_requests(self, url: str) -> Optional[str]:
-        """Crawling básico con requests"""
-        if not REQUESTS_AVAILABLE:
-            return None
-        
-        try:
-            response = requests.get(url, timeout=10, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            for script in soup(["script", "style"]):
-                script.decompose()
-            
-            text = soup.get_text(separator='\n', strip=True)
-            return text
-            
-        except Exception as e:
-            print(f"⚠️ Error en requests crawl: {e}")
-            return None
-    
-    def _extract_schema_org(self, html_content: str) -> Dict[str, Any]:
-        """Extrae datos de schema.org"""
-        metadata = {}
-        try:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # Buscar JSON-LD
-            for script in soup.find_all('script', type='application/ld+json'):
-                try:
-                    data = json.loads(script.string)
-                    if isinstance(data, dict):
-                        metadata.update(data)
-                except:
-                    pass
-            
-            # Buscar microdata
-            for item in soup.find_all(attrs={"itemtype": True}):
-                item_type = item.get("itemtype", "")
-                if "Product" in item_type:
-                    metadata["type"] = "product"
-                elif "Organization" in item_type:
-                    metadata["type"] = "organization"
-        
-        except Exception as e:
-            print(f"⚠️ Error extrayendo schema.org: {e}")
-        
-        return metadata
-    
-    def _extract_opengraph(self, html_content: str) -> Dict[str, Any]:
-        """Extrae datos de OpenGraph"""
-        metadata = {}
-        try:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            
-            for meta in soup.find_all('meta', property=lambda x: x and x.startswith('og:')):
-                prop = meta.get('property', '').replace('og:', '')
-                content = meta.get('content', '')
-                if prop and content:
-                    metadata[f"og_{prop}"] = content
-        
-        except Exception as e:
-            print(f"⚠️ Error extrayendo OpenGraph: {e}")
-        
-        return metadata
-    
-    # === EXTRACCIÓN INSTAGRAM ===
-    
-    def ingest_instagram_post(self, post_id: str) -> Optional[IngestedDocument]:
-        """Extrae post de Instagram usando Graph API"""
-        if not self.instagram_token or not REQUESTS_AVAILABLE:
-            return None
-        
-        try:
-            url = f"https://graph.instagram.com/{post_id}"
-            params = {
-                "fields": "id,caption,media_type,media_url,timestamp,permalink",
-                "access_token": self.instagram_token,
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            # Normalizar
-            doc = self._normalize_document(
-                source=SourceType.INSTAGRAM,
-                source_id=post_id,
-                raw_content=data.get("caption", ""),
-                metadata={
-                    "post_id": post_id,
-                    "media_type": data.get("media_type"),
-                    "media_url": data.get("media_url"),
-                    "permalink": data.get("permalink"),
-                    "timestamp": data.get("timestamp"),
-                },
-            )
-            
-            return doc
-            
-        except Exception as e:
-            print(f"⚠️ Error ingiriendo Instagram post {post_id}: {e}")
-            return None
-    
-    def ingest_instagram_posts(self, limit: int = 25) -> List[IngestedDocument]:
-        """Ingiere múltiples posts de Instagram"""
-        if not self.instagram_user_id or not self.instagram_token:
-            return []
-        
-        try:
-            url = f"https://graph.instagram.com/{self.instagram_user_id}/media"
-            params = {
-                "fields": "id,caption,media_type,media_url,timestamp,permalink",
-                "access_token": self.instagram_token,
-                "limit": limit,
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            docs = []
-            for post in data.get("data", []):
-                doc = self.ingest_instagram_post(post["id"])
-                if doc:
-                    docs.append(doc)
-            
-            return docs
-            
-        except Exception as e:
-            print(f"⚠️ Error ingiriendo posts de Instagram: {e}")
-            return []
-    
-    # === EXTRACCIÓN FACEBOOK ===
-    
-    def ingest_facebook_post(self, post_id: str) -> Optional[IngestedDocument]:
-        """Extrae post de Facebook usando Graph API"""
-        if not self.facebook_token or not REQUESTS_AVAILABLE:
-            return None
-        
-        try:
-            url = f"https://graph.facebook.com/v18.0/{post_id}"
-            params = {
-                "fields": "id,message,created_time,permalink_url",
-                "access_token": self.facebook_token,
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            doc = self._normalize_document(
-                source=SourceType.FACEBOOK,
-                source_id=post_id,
-                raw_content=data.get("message", ""),
-                metadata={
-                    "post_id": post_id,
-                    "created_time": data.get("created_time"),
-                    "permalink_url": data.get("permalink_url"),
-                },
-            )
-            
-            return doc
-            
-        except Exception as e:
-            print(f"⚠️ Error ingiriendo Facebook post {post_id}: {e}")
-            return None
-    
-    # === EXTRACCIÓN GOOGLE BUSINESS ===
-    
-    def ingest_google_reviews(self, limit: int = 10) -> List[IngestedDocument]:
-        """Extrae reviews de Google Business"""
-        if not self.google_place_id or not self.google_api_key or not REQUESTS_AVAILABLE:
-            return []
-        
-        try:
-            url = "https://maps.googleapis.com/maps/api/place/details/json"
-            params = {
-                "place_id": self.google_place_id,
-                "fields": "reviews,rating",
-                "key": self.google_api_key,
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            docs = []
-            for review in data.get("result", {}).get("reviews", [])[:limit]:
-                doc = self._normalize_document(
-                    source=SourceType.GOOGLE_BUSINESS,
-                    source_id=review.get("author_name", ""),
-                    raw_content=review.get("text", ""),
-                    metadata={
-                        "rating": review.get("rating"),
-                        "author_name": review.get("author_name"),
-                        "relative_time_description": review.get("relative_time_description"),
-                    },
-                )
-                docs.append(doc)
-            
-            return docs
-            
-        except Exception as e:
-            print(f"⚠️ Error ingiriendo Google reviews: {e}")
-            return []
-    
-    # === NORMALIZACIÓN Y CLASIFICACIÓN ===
-    
-    def _normalize_document(
-        self,
-        source: SourceType,
-        source_id: str,
-        raw_content: str,
-        metadata: Dict[str, Any],
-    ) -> IngestedDocument:
-        """
-        Normaliza y clasifica documento.
-        
-        Convierte todo a formato semántico con metadata (source, type, intent).
-        """
-        # Clasificar categoría automáticamente
-        category = self._classify_content(raw_content)
-        
-        # Extraer título
-        title = metadata.get("og_title") or metadata.get("name") or source_id
-        
-        return IngestedDocument(
-            source=source,
-            source_id=source_id,
-            title=title,
-            content=raw_content,
-            category=category,
-            metadata=metadata,
-            timestamp=datetime.now(),
-        )
-    
-    def _classify_content(self, content: str) -> str:
-        """Clasifica contenido en categorías (producto, política, marketing, review, general)"""
-        content_lower = content.lower()
-        
-        # Producto
-        if any(x in content_lower for x in ["precio", "producto", "disponible", "stock", "comprar"]):
-            return "producto"
-        
-        # Política
-        if any(x in content_lower for x in ["envío", "política", "garantía", "devolución", "términos"]):
-            return "política"
-        
-        # Marketing
-        if any(x in content_lower for x in ["promoción", "oferta", "descuento", "nuevo", "lanzamiento"]):
-            return "marketing"
-        
-        # Review
-        if any(x in content_lower for x in ["opinión", "reseña", "review", "calificación", "experiencia"]):
-            return "review"
-        
-        return "general"
-    
-    # === CHUNKING Y AGREGACIÓN A RAG ===
-    
-    def add_to_rag(self, doc: IngestedDocument):
-        """Agrega documento normalizado al RAG avanzado"""
-        # Convertir a Document de LangChain
-        langchain_doc = Document(
-            page_content=doc.content,
-            metadata={
-                "source": doc.source.value,
-                "source_id": doc.source_id,
-                "title": doc.title,
-                "category": doc.category,
-                "timestamp": doc.timestamp.isoformat(),
-                **doc.metadata,
-            }
-        )
-        
-        # Mapear categoría a IntentType
-        category_to_intent = {
-            "producto": RAGIntentType.PRODUCTOS,
-            "política": RAGIntentType.POLITICAS,
-            "marketing": RAGIntentType.MARKETING,
-            "review": RAGIntentType.REVIEWS,
-            "general": RAGIntentType.GENERAL,
+        counts = {
+            "website": 0,
+            "instagram": 0,
+            "facebook": 0,
+            "google": 0,
         }
         
-        intent = category_to_intent.get(doc.category, RAGIntentType.GENERAL)
+        all_documents: List[Document] = []
         
-        # Agregar al RAG
-        self.advanced_rag.add_documents([langchain_doc], intent=intent)
-    
-    # === ACTUALIZACIÓN AUTOMÁTICA ===
-    
-    def setup_scheduler(self, websites: List[str], interval_hours: int = 6):
-        """
-        Configura scheduler para actualización automática.
+        # 1. Website crawling
+        if self.website_url and self.web_crawler:
+            try:
+                print(f"🔄 Crawleando sitio web: {self.website_url}")
+                web_docs = self.web_crawler.crawl_website(self.website_url, max_pages=20)
+                counts["website"] = len(web_docs)
+                
+                # Convertir a Document de LangChain
+                for doc in web_docs:
+                    langchain_doc = doc.to_langchain_document()
+                    all_documents.append(langchain_doc)
+                
+                print(f"✅ Extraídos {len(web_docs)} documentos del sitio web")
+            except Exception as e:
+                print(f"⚠️ Error crawleando sitio web: {e}")
         
-        Args:
-            websites: Lista de URLs a actualizar periódicamente
-            interval_hours: Intervalo en horas (default: 6)
-        """
-        def update_websites():
-            print(f"🔄 Actualizando websites (scheduled task)...")
-            for url in websites:
-                doc = self.ingest_website(url)
-                if doc:
-                    self.add_to_rag(doc)
-                    print(f"✅ Actualizado: {url}")
-        
-        # Programar actualización cada X horas
-        schedule.every(interval_hours).hours.do(update_websites)
-        print(f"✅ Scheduler configurado: actualización cada {interval_hours} horas")
-    
-    def run_scheduler_loop(self):
-        """Ejecuta loop del scheduler (debe correr en thread separado)"""
-        while True:
-            schedule.run_pending()
-            time.sleep(60)  # Verificar cada minuto
-    
-    # === WEBHOOKS PARA IG/FB ===
-    
-    def handle_webhook_new_post(self, channel: str, post_data: Dict[str, Any]):
-        """
-        Maneja webhook de nuevo post desde Instagram/Facebook.
-        
-        Args:
-            channel: "instagram" o "facebook"
-            post_data: Datos del post del webhook
-        """
+        # 2. Instagram
         try:
-            if channel == "instagram":
-                post_id = post_data.get("id")
-                if post_id:
-                    doc = self.ingest_instagram_post(post_id)
-                    if doc:
-                        self.add_to_rag(doc)
-                        print(f"✅ Nuevo post de Instagram ingerido: {post_id}")
+            print("🔄 Extrayendo posts de Instagram...")
+            ig_docs = self.instagram_extractor.extract_posts(limit=25)
+            counts["instagram"] = len(ig_docs)
             
-            elif channel == "facebook":
-                post_id = post_data.get("id")
-                if post_id:
-                    doc = self.ingest_facebook_post(post_id)
-                    if doc:
-                        self.add_to_rag(doc)
-                        print(f"✅ Nuevo post de Facebook ingerido: {post_id}")
-        
+            for doc in ig_docs:
+                langchain_doc = doc.to_langchain_document()
+                all_documents.append(langchain_doc)
+            
+            print(f"✅ Extraídos {len(ig_docs)} posts de Instagram")
         except Exception as e:
-            print(f"⚠️ Error procesando webhook: {e}")
+            print(f"⚠️ Error extrayendo Instagram: {e}")
+        
+        # 3. Facebook
+        try:
+            print("🔄 Extrayendo posts de Facebook...")
+            fb_docs = self.facebook_extractor.extract_posts(limit=25)
+            counts["facebook"] = len(fb_docs)
+            
+            for doc in fb_docs:
+                langchain_doc = doc.to_langchain_document()
+                all_documents.append(langchain_doc)
+            
+            print(f"✅ Extraídos {len(fb_docs)} posts de Facebook")
+        except Exception as e:
+            print(f"⚠️ Error extrayendo Facebook: {e}")
+        
+        # 4. Google Business
+        try:
+            print("🔄 Extrayendo reviews de Google Business...")
+            google_docs = self.google_extractor.extract_reviews()
+            counts["google"] = len(google_docs)
+            
+            for doc in google_docs:
+                langchain_doc = doc.to_langchain_document()
+                all_documents.append(langchain_doc)
+            
+            print(f"✅ Extraídos {len(google_docs)} reviews de Google")
+        except Exception as e:
+            print(f"⚠️ Error extrayendo Google: {e}")
+        
+        # 5. Filtrar duplicados
+        unique_documents = self._filter_duplicates(all_documents)
+        
+        # 6. Agregar a RAG avanzado
+        if unique_documents:
+            print(f"🔄 Agregando {len(unique_documents)} documentos únicos a RAG...")
+            self.advanced_rag.add_documents(unique_documents)
+            print(f"✅ Documentos agregados a RAG avanzado")
+        
+        return counts
     
-    def __del__(self):
-        """Cleanup al destruir instancia"""
-        if hasattr(self, 'browser') and self.browser:
-            self.browser.close()
-        if hasattr(self, 'playwright'):
-            self.playwright.stop()
-
+    def _filter_duplicates(self, documents: List[Document]) -> List[Document]:
+        """Filtra documentos duplicados basado en hash del contenido."""
+        unique_docs = []
+        
+        for doc in documents:
+            # Generar hash del contenido
+            content_hash = hashlib.md5(doc.page_content.encode()).hexdigest()
+            
+            if content_hash not in self.processed_docs_hash:
+                self.processed_docs_hash.add(content_hash)
+                unique_docs.append(doc)
+        
+        return unique_docs
+    
+    def _setup_scheduler(self):
+        """Configura scheduler automático cada 6h según especificaciones."""
+        if not self.enable_scheduler:
+            return
+        
+        # Scheduler cada 6 horas para web
+        schedule.every(6).hours.do(self._scheduled_ingest_web)
+        
+        # Scheduler diario para redes sociales (más frecuente)
+        schedule.every().day.at("09:00").do(self._scheduled_ingest_social)
+        
+        print("✅ Scheduler configurado: web cada 6h, redes sociales diario")
+    
+    def _scheduled_ingest_web(self):
+        """Ejecuta ingesta de web según scheduler."""
+        if self.website_url and self.web_crawler:
+            try:
+                print(f"⏰ [SCHEDULER] Iniciando ingesta automática de web: {datetime.now()}")
+                web_docs = self.web_crawler.crawl_website(self.website_url, max_pages=20)
+                
+                if web_docs:
+                    langchain_docs = [doc.to_langchain_document() for doc in web_docs]
+                    unique_docs = self._filter_duplicates(langchain_docs)
+                    
+                    if unique_docs:
+                        self.advanced_rag.add_documents(unique_docs)
+                        print(f"✅ [SCHEDULER] Agregados {len(unique_docs)} documentos nuevos de web")
+            except Exception as e:
+                print(f"⚠️ [SCHEDULER] Error en ingesta automática de web: {e}")
+    
+    def _scheduled_ingest_social(self):
+        """Ejecuta ingesta de redes sociales según scheduler."""
+        try:
+            print(f"⏰ [SCHEDULER] Iniciando ingesta automática de redes sociales: {datetime.now()}")
+            self.ingest_all_sources()
+        except Exception as e:
+            print(f"⚠️ [SCHEDULER] Error en ingesta automática de redes sociales: {e}")
+    
+    def start_scheduler(self):
+        """Inicia el scheduler en un thread separado."""
+        if not self.enable_scheduler:
+            return
+        
+        import threading
+        
+        def run_scheduler():
+            self.scheduler_running = True
+            while self.scheduler_running:
+                schedule.run_pending()
+                time.sleep(60)  # Verificar cada minuto
+        
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        print("✅ Scheduler iniciado en background")
+    
+    def stop_scheduler(self):
+        """Detiene el scheduler."""
+        self.scheduler_running = False
+        schedule.clear()
+        print("✅ Scheduler detenido")
+    
+    def handle_webhook_new_post(self, platform: str, post_data: Dict[str, Any]) -> bool:
+        """
+        Maneja webhook de nuevo post según especificaciones.
+        
+        Args:
+            platform: "instagram" o "facebook"
+            post_data: Datos del post desde webhook
+            
+        Returns:
+            True si se procesó exitosamente
+        """
+        if not self.enable_webhooks:
+            return False
+        
+        try:
+            # Normalizar datos según plataforma
+            if platform == "instagram":
+                doc = IngestedDocument(
+                    source="instagram",
+                    url=post_data.get("permalink", ""),
+                    title="Instagram Post",
+                    content=post_data.get("caption", ""),
+                    category="marketing",
+                    metadata={
+                        "post_id": post_data.get("id", ""),
+                        "media_type": post_data.get("media_type", ""),
+                    },
+                    date=post_data.get("timestamp", datetime.now().isoformat()),
+                )
+            elif platform == "facebook":
+                doc = IngestedDocument(
+                    source="facebook",
+                    url=post_data.get("permalink_url", ""),
+                    title="Facebook Post",
+                    content=post_data.get("message", ""),
+                    category="marketing",
+                    metadata={
+                        "post_id": post_data.get("id", ""),
+                    },
+                    date=post_data.get("created_time", datetime.now().isoformat()),
+                )
+            else:
+                print(f"⚠️ Plataforma desconocida: {platform}")
+                return False
+            
+            # Convertir a Document y agregar a RAG
+            langchain_doc = doc.to_langchain_document()
+            unique_docs = self._filter_duplicates([langchain_doc])
+            
+            if unique_docs:
+                self.advanced_rag.add_documents(unique_docs)
+                print(f"✅ [WEBHOOK] Nuevo post de {platform} agregado a RAG")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ [WEBHOOK] Error procesando nuevo post: {e}")
+            return False
+    
+    def close(self):
+        """Cierra recursos."""
+        if self.web_crawler:
+            self.web_crawler.close()
+        self.stop_scheduler()

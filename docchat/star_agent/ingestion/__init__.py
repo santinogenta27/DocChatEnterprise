@@ -1,10 +1,19 @@
-"""Sistema de ingesta multi-fuente para STAR AGENT."""
+"""Sistema de Ingesta Multi-Fuente para STAR AGENT."""
 
-from .multi_source_ingester import MultiSourceIngester, SourceType, IngestedDocument
+from .multi_source_ingester import (
+    MultiSourceIngester,
+    IngestedDocument,
+    WebCrawler,
+    InstagramExtractor,
+    FacebookExtractor,
+    GoogleBusinessExtractor,
+)
 
 __all__ = [
     "MultiSourceIngester",
-    "SourceType",
     "IngestedDocument",
+    "WebCrawler",
+    "InstagramExtractor",
+    "FacebookExtractor",
+    "GoogleBusinessExtractor",
 ]
-

@@ -38,9 +38,6 @@ from ..tools.payment_tool import PaymentTool
 from ..tools.order_tool import OrderTool
 from ..tools.support_tool import SupportTool
 from ..rag.advanced_rag_manager import AdvancedRAGManager, IntentType
-from ..sales_closer_elite import SalesCloserElite
-from ..orchestrator import Orchestrator
-from ..guardrails import Guardrails
 
 
 class SalesStage(str, Enum):
@@ -148,18 +145,14 @@ class ReactSalesAgent:
             except Exception as e:
                 print(f"⚠️ Error inicializando AdvancedRAGManager: {e}")
         
-        # Sales Closer Elite
-        import os
-        stripe_key = getattr(app_config, 'stripe_api_key', None) if app_config else None
-        if not stripe_key:
-            stripe_key = os.getenv('STRIPE_API_KEY')
-        self.sales_closer = SalesCloserElite(stripe_api_key=stripe_key)
-        
-        # Orquestador
-        self.orchestrator = Orchestrator()
-        
-        # Guardrails completos
-        self.guardrails = Guardrails()
+        # Guardrails - Patrones bloqueados (anti-injection)
+        self.BLOCKED_PATTERNS = [
+            "ignora instrucciones",
+            "system prompt",
+            "actúa como",
+            "forget previous",
+            "you are now",
+        ]
         
         # Construir grafo de LangGraph
         self.graph = self._build_graph()
@@ -228,22 +221,7 @@ class ReactSalesAgent:
         user_query = last_message.content
         
         # Guardrails: Verificar si el query es seguro
-        validation = self.guardrails.validate_input(
-            query=user_query,
-            action=None,
-            session_id=state["session_id"],
-        )
-        if not validation["is_safe"]:
-            return {
-                "messages": [AIMessage(content=validation["message"] or "Lo siento, no puedo procesar esa solicitud.")],
-                "needs_handoff": validation["blocked_reason"] == "rule_of_two",
-            }
-        
-        # Usar orquestador para decidir acción
-        context_for_decision = ""
-        if self.advanced_rag:
-            context_result = self.advanced_rag.retrieve_with_confidence(user_query)
-            context_for_decision = context_result.get("context", "")
+        if not self._is_safe_query(user_query):
             return {
                 "messages": [AIMessage(content="Lo siento, no puedo procesar esa solicitud.")],
                 "needs_handoff": True,
@@ -269,35 +247,6 @@ class ReactSalesAgent:
         if self.advanced_rag:
             context_result = self.advanced_rag.retrieve_with_confidence(user_query)
             context = context_result.get("context", "")
-        
-        # Usar orquestador para decidir acción
-        action = self.orchestrator.decide_action(user_query, context)
-        action_result = self.orchestrator.handle_action(
-            action=action,
-            query=user_query,
-            context=context,
-            session_data={"session_id": state["session_id"], "user_id": state["user_id"]}
-        )
-        
-        # Si necesita handoff humano, retornar inmediatamente
-        if action_result.get("needs_handoff"):
-            return {
-                "messages": [AIMessage(content=action_result["message"])],
-                "needs_handoff": True,
-            }
-        
-        # Si necesita clarificación, retornar con mensaje
-        if action_result.get("needs_clarification"):
-            return {
-                "messages": [AIMessage(content=action_result["message"])],
-                "context_retrieved": context,
-            }
-        
-        # Si es checkout, preparar para iniciar proceso
-        if action_result.get("needs_checkout"):
-            # Log inicio de checkout
-            self._log_event("checkout_started", state["session_id"])
-            # Se manejará en el nodo act
         
         # Análisis de sentimiento
         sentiment_result = self.sentiment_analyzer.analyze(user_query, session)
@@ -373,29 +322,10 @@ class ReactSalesAgent:
                     product_id = tool_args.get("product_id")
                     quantity = tool_args.get("quantity", 1)
                     cart = self.cart_tool.add_item(session_id, product_id, quantity)
-                    # Log evento de carrito
-                    self._log_event("cart_add", session_id, {
-                        "product_id": product_id,
-                        "quantity": quantity
-                    })
                     executed_tools["cart"] = cart.to_dict() if hasattr(cart, "to_dict") else cart.__dict__
                 
                 elif tool_name == "create_payment":
                     cart = self.cart_tool.get_cart(session_id)
-                    # Usar Sales Closer Elite para crear payment link
-                    cart_dict = cart.to_dict() if hasattr(cart, "to_dict") else cart.__dict__
-                    payment_result = self._request_payment(session_id, cart_dict)
-                    if payment_result.get("payment_link"):
-                        executed_tools["payment"] = payment_result
-                        executed_tools["payment_link"] = payment_result["payment_link"]
-                        # Log evento
-                        self._log_event("payment_initiated", session_id, {"total": payment_result.get("total", 0)})
-                    else:
-                        # Fallback al payment_tool original
-                        payment_result = self.payment_tool.create_payment_for_cart(
-                            session_id=session_id,
-                            cart=cart,
-                        )
                     payment_result = self.payment_tool.create_payment_for_cart(
                         session_id=session_id,
                         cart=cart,
@@ -558,12 +488,7 @@ Responde en JSON:
         
         # Aplicar Sales Closer Elite si está habilitado
         closing_strategy = None
-        closing_message = None
         if self.config.enable_sales_closer:
-            closing_strategy = self._select_sales_strategy(sales_stage, intent, tool_results)
-            # Si está en etapa READY o CLOSING, usar mensaje de cierre directo
-            if sales_stage in [SalesStage.READY.value, SalesStage.CLOSING.value]:
-                closing_message = self._close_sale()
             closing_strategy = self._select_sales_strategy(sales_stage, intent, tool_results)
         
         # Construir prompt de cierre
@@ -629,8 +554,15 @@ Responde en JSON:
     # === Métodos auxiliares ===
     
     def _detect_sales_stage(self, query: str) -> str:
-        """Detecta etapa de venta usando Sales Closer Elite."""
-        return self.sales_closer.detect_sales_stage(query)
+        """Detecta etapa de venta según especificaciones."""
+        q = query.lower()
+        
+        if any(x in q for x in ["precio", "cuánto cuesta", "comprar", "pagar"]):
+            return SalesStage.READY.value
+        if any(x in q for x in ["envío", "funciona", "garantía", "características"]):
+            return SalesStage.CONSIDERATION.value
+        if any(x in q for x in ["interesado", "me gusta", "quiero ver"]):
+            return SalesStage.INTEREST.value
         
         return SalesStage.INTEREST.value
     
@@ -640,34 +572,40 @@ Responde en JSON:
         intent: str,
         tool_results: Dict[str, Any],
     ) -> Optional[SalesStrategy]:
-        """Selecciona estrategia de venta usando Sales Closer Elite."""
-        query = f"{sales_stage} {intent}"
-        strategy = self.sales_closer.sales_strategy(query)
-        return SalesStrategy(strategy)
+        """Selecciona estrategia de venta según especificaciones."""
+        if sales_stage == SalesStage.READY.value:
+            if "precio" in intent.lower():
+                return SalesStrategy.ANCHORING
+            if "opiniones" in intent.lower():
+                return SalesStrategy.SOCIAL_PROOF
+            return SalesStrategy.URGENCY
+        
+        if sales_stage == SalesStage.CONSIDERATION.value:
+            if "vale la pena" in intent.lower():
+                return SalesStrategy.ROI
+            return SalesStrategy.SOCIAL_PROOF
+        
+        return SalesStrategy.STANDARD
     
     def _handle_objection(self, objection: str) -> str:
-        """Maneja objeciones usando Sales Closer Elite."""
-        return self.sales_closer.handle_objection(objection)
+        """Maneja objeciones según especificaciones."""
+        obj_lower = objection.lower()
+        
+        if "caro" in obj_lower:
+            return "Entiendo. Justamente por eso incluye X, Y y Z que ahorran dinero a largo plazo."
+        if "después" in obj_lower or "luego" in obj_lower:
+            return "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora?"
+        if "pensar" in obj_lower:
+            return "Claro, es una decisión importante. ¿Hay algo específico en lo que pueda ayudarte a decidir?"
+        
+        return "Entiendo tu preocupación. ¿Puedes contarme más sobre qué te preocupa específicamente?"
     
     def _is_safe_query(self, query: str) -> bool:
-        """Verifica si el query es seguro usando Guardrails."""
-        validation = self.guardrails.validate_input(query)
-        return validation["is_safe"]
+        """Verifica si el query es seguro (guardrails anti-injection)."""
+        query_lower = query.lower()
+        return not any(pattern in query_lower for pattern in self.BLOCKED_PATTERNS)
     
-
-    def _close_sale(self) -> str:
-        """Cierre directo usando Sales Closer Elite."""
-        return self.sales_closer.close_sale()
-    
-    def _request_payment(self, session_id: str, cart: Dict[str, Any]) -> Dict[str, Any]:
-        """Solicita pago usando Sales Closer Elite."""
-        return self.sales_closer.request_payment(session_id, cart)
-    
-    def _log_event(self, event_type: str, session_id: str, metadata: Optional[Dict[str, Any]] = None):
-        """Registra evento para métricas."""
-        self.sales_closer.log_event(event_type, session_id, metadata)
-
-        def _build_think_prompt(
+    def _build_think_prompt(
         self,
         user_query: str,
         intent: str,
@@ -855,20 +793,11 @@ Genera la respuesta final optimizada para widget web.
         
         response_text = final_message.content if hasattr(final_message, 'content') else str(final_message)
         
-        # Log conversión si está en etapa de cierre
-        if sales_stage in [SalesStage.READY.value, SalesStage.CLOSING.value, SalesStage.COMPLETED.value]:
-            cart = tool_results.get("cart")
-            total = 0
-            if cart and isinstance(cart, dict):
-                total = sum(item.get("price", 0) * item.get("quantity", 1) for item in cart.get("items", []))
-            self._log_event("conversion", state["session_id"], {
-                "sales_stage": sales_stage,
-                "total": total,
-                "intent": intent
-            })
-        
         # Construir respuesta final
-        result = {, SalesStage.INTEREST.value),
+        result = {
+            "text": response_text,
+            "intent": final_state.get("intent", "general"),
+            "sales_stage": final_state.get("sales_stage", SalesStage.INTEREST.value),
             "needs_handoff": final_state.get("needs_handoff", False),
             "cart": final_state.get("cart"),
             "payment_link": final_state.get("payment_link"),

@@ -50,7 +50,7 @@ class WidgetOptimizer:
         self.response_cache: Dict[str, Dict[str, Any]] = {}
         self.cache_ttl = timedelta(minutes=5)  # TTL de 5 minutos
         
-        # Métricas avanzadas
+        # Métricas avanzadas (según especificaciones)
         self.metrics = {
             "total_requests": 0,
             "cache_hits": 0,
@@ -62,10 +62,14 @@ class WidgetOptimizer:
             "handoffs": 0,
             "sales_stages": defaultdict(int),
             "intents": defaultdict(int),
+            "objections": defaultdict(int),  # Objeciones dominantes
         }
         
         # Tiempos de respuesta
         self.response_times: List[float] = []
+        
+        # Metadata de conversiones para revenue tracking
+        self._conversion_metadata: List[Dict[str, Any]] = []
     
     def optimize_response_for_widget(
         self, 
@@ -115,12 +119,16 @@ class WidgetOptimizer:
                 else:
                     text = text[:297] + "..."
         
-        # Optimización 2: Agregar CTA si está en etapa de cierre
+        # Optimización 2: Agregar CTA si está en etapa de cierre (Sales Closer Elite)
         if sales_stage in ["ready", "closing"] and "comprar" not in text.lower() and "pagar" not in text.lower():
-            # Agregar CTA sutil
+            # Agregar CTA sutil pero persuasivo
             if not text.endswith(".") and not text.endswith("!"):
                 text += "."
-            text += " ¿Te ayudo a completar tu compra?"
+            # CTA optimizado según etapa
+            if sales_stage == "closing":
+                text += " ¿Querés que lo procesemos ahora y te lo envío enseguida?"
+            else:
+                text += " ¿Te ayudo a completar tu compra?"
         
         # Optimización 3: Formato para widget (emojis, estructura)
         # Mantener emojis si existen, pero no agregar si no hay
@@ -231,11 +239,11 @@ class WidgetOptimizer:
     
     def track_conversion(self, event_type: str, metadata: Optional[Dict[str, Any]] = None):
         """
-        Trackea evento de conversión.
+        Trackea evento de conversión (según especificaciones).
         
         Args:
             event_type: Tipo de evento (cart_add, payment_initiated, conversion, etc.)
-            metadata: Metadata adicional del evento
+            metadata: Metadata adicional del evento (puede incluir revenue, objection, etc.)
         """
         if event_type == "cart_add":
             self.metrics["cart_adds"] += 1
@@ -243,8 +251,15 @@ class WidgetOptimizer:
             self.metrics["payment_initiated"] += 1
         elif event_type == "conversion":
             self.metrics["conversions"] += 1
+            # Guardar metadata para revenue tracking
+            if metadata:
+                self._conversion_metadata.append(metadata)
         elif event_type == "handoff":
             self.metrics["handoffs"] += 1
+        elif event_type == "objection":
+            # Trackear objeciones dominantes
+            objection_type = metadata.get("objection_type", "unknown") if metadata else "unknown"
+            self.metrics["objections"][objection_type] += 1
         
         # Trackear en sales_stage si existe
         if metadata and "sales_stage" in metadata:
@@ -289,10 +304,28 @@ class WidgetOptimizer:
             if total > 0 else 0.0
         )
         
+        # Calcular revenue (si está disponible en metadata)
+        total_revenue = sum(
+            m.get("revenue", 0) for m in getattr(self, "_conversion_metadata", [])
+            if isinstance(m, dict)
+        )
+        
+        # Calcular drop-off rate (sessions que no completaron)
+        drop_off_rate = (
+            (total - self.metrics["conversions"]) / total
+            if total > 0 else 0.0
+        )
+        
         return {
             **self.metrics,
             "cache_hit_rate": cache_hit_rate,
             "conversion_rate": conversion_rate,
+            "drop_off_rate": drop_off_rate,
+            "total_revenue": total_revenue,
+            "avg_revenue_per_conversion": (
+                total_revenue / self.metrics["conversions"]
+                if self.metrics["conversions"] > 0 else 0.0
+            ),
             "cache_size": len(self.response_cache),
             "sales_stages": dict(self.metrics["sales_stages"]),
             "intents": dict(self.metrics["intents"]),
@@ -385,7 +418,14 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
                     return JSONResponse(content=cached_response)
             
             # Procesar con STAR AGENT (flujo completo Siente→Piensa→Actúa→Aprende)
+            # Si es ReactSalesAgent, ya tiene ReAct pattern integrado
             result = star_agent_mode.process_message(payload, channel="web")
+            
+            # Asegurar que sales_stage e intent estén presentes
+            if "sales_stage" not in result:
+                result["sales_stage"] = "interest"
+            if "intent" not in result:
+                result["intent"] = "general"
             
             # Extraer información para optimización
             sales_stage = result.get("sales_stage")
@@ -567,6 +607,46 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
             "service": "STAR AGENT Widget",
             "timestamp": datetime.now().isoformat(),
         }
+    
+    # Agregar webhooks si ingesta automática está habilitada
+    if hasattr(star_agent_mode, 'multi_source_ingester') and star_agent_mode.multi_source_ingester:
+        try:
+            from ..ingestion.webhook_handler import create_webhook_router
+            webhook_router = create_webhook_router(star_agent_mode.multi_source_ingester)
+            app.include_router(webhook_router)
+            print("✅ Webhooks de Instagram/Facebook habilitados")
+        except Exception as e:
+            print(f"⚠️ Error agregando webhooks: {e}")
+    
+    # Agregar webhooks de Meta (WhatsApp, Messenger e Instagram)
+    whatsapp_adapter = getattr(star_agent_mode, 'whatsapp_adapter', None)
+    messenger_adapter = getattr(star_agent_mode, 'messenger_adapter', None)
+    instagram_adapter = getattr(star_agent_mode, 'instagram_adapter', None)
+    
+    # Usar instagram_adapter si está disponible, sino messenger_adapter
+    messenger_adapter_to_use = instagram_adapter if instagram_adapter else messenger_adapter
+    
+    if whatsapp_adapter or messenger_adapter_to_use:
+        try:
+            from ..channels.meta_webhooks import create_meta_webhooks_router
+            meta_webhooks_router = create_meta_webhooks_router(
+                whatsapp_adapter=whatsapp_adapter,
+                messenger_adapter=messenger_adapter_to_use,  # Usa instagram_adapter si está disponible
+                star_agent_mode=star_agent_mode
+            )
+            app.include_router(meta_webhooks_router)
+            channels_enabled = []
+            if whatsapp_adapter:
+                channels_enabled.append("WhatsApp")
+            if instagram_adapter:
+                channels_enabled.append("Instagram")
+            if messenger_adapter and not instagram_adapter:
+                channels_enabled.append("Messenger")
+            print(f"✅ Webhooks de {' y '.join(channels_enabled)} habilitados")
+        except Exception as e:
+            print(f"⚠️ Error agregando webhooks de Meta: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Endpoint para servir widget HTML (si existe)
     @app.get("/widget", response_class=HTMLResponse)
