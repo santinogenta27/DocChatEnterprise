@@ -145,6 +145,9 @@ class StarAgentMode:
                 )
                 print("✅ ReactSalesAgent inicializado para widget optimizado con ReAct pattern completo")
                 self.agent = self.react_agent  # Usar ReactSalesAgent como agente principal
+                
+                # Inicializar scheduler de ingesta automática si está configurado
+                self._init_ingestion_scheduler()
             except Exception as e:
                 print(f"⚠️ Error inicializando ReactSalesAgent: {e}")
                 import traceback
@@ -282,7 +285,7 @@ class StarAgentMode:
             # Usar adapter de WhatsApp si está configurado
             if hasattr(self, 'whatsapp_adapter') and self.whatsapp_adapter:
                 adapter = self.whatsapp_adapter
-        else:
+            else:
                 # Fallback a web adapter si WhatsApp no está configurado
                 adapter = self.web_adapter
         elif channel in ["instagram", "messenger"]:

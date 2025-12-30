@@ -174,6 +174,10 @@ class ReactSalesAgent:
         from ..config.links_manager import LinksManager
         self.links_manager = LinksManager()
         
+        # Handoff Manager - Para transferir conversaciones a humanos
+        from ..integrations.handoff_manager import HandoffManager
+        self.handoff_manager = HandoffManager(enabled=False)  # Se configurará desde UI
+        
         # Multi-Agent RAG: Scope Checker (Relevance Checker)
         self.scope_checker: Optional[ScopeChecker] = None
         if config.enable_rag_advanced and self.advanced_rag:
@@ -248,6 +252,7 @@ class ReactSalesAgent:
         workflow.add_node("observe", self._observe_node)
         workflow.add_node("verify", self._verify_node)
         workflow.add_node("close", self._close_node)
+        workflow.add_node("handoff", self._handoff_node)  # Nodo para handoff a humanos
         
         # Flujo principal: think → act → observe
         workflow.add_edge("think", "act")
@@ -261,9 +266,13 @@ class ReactSalesAgent:
                 "verify": "verify",
                 "close": "close",
                 "think": "think",  # Loop si necesita más razonamiento
+                "handoff": "handoff",  # Handoff a humanos
                 "end": END,
             }
         )
+        
+        # Después de handoff, terminar
+        workflow.add_edge("handoff", END)
         
         # Después de verificar, decidir
         workflow.add_conditional_edges(
@@ -769,9 +778,30 @@ Responde en JSON:
         }
     
     def _should_continue(self, state: AgentState) -> str:
-        """Decide si continuar después de observar."""
+        """
+        Decide el siguiente paso después de observar.
+        
+        Returns:
+            "verify", "close", "think", "handoff", o "end"
+        """
+        messages = state["messages"]
         verification_passed = state.get("verification_passed", False)
         sales_stage = state.get("sales_stage", SalesStage.INTEREST.value)
+        
+        # Verificar si necesita handoff automático
+        if self.handoff_manager.enabled:
+            from ..integrations.handoff_manager import HandoffTrigger
+            
+            # Obtener métricas del estado
+            context_retrieved = state.get("context_retrieved", "")
+            confidence = len(context_retrieved) / 2000.0 if context_retrieved else 0.0  # Proxy de confianza
+            
+            # Verificar triggers automáticos
+            if self.handoff_manager.should_handoff(
+                HandoffTrigger.AUTO_LOW_CONFIDENCE,
+                confidence=confidence,
+            ):
+                return "handoff"
         
         # Si la verificación está habilitada y no pasó, verificar
         if self.config.enable_verification and not verification_passed:
@@ -843,6 +873,35 @@ Responde en JSON:
     def _log_event(self, event_type: str, session_id: str, metadata: Optional[Dict[str, Any]] = None):
         """Registra evento para métricas."""
         self.sales_closer.log_event(event_type, session_id, metadata)
+    
+    def _format_conversation_history(self, messages: Sequence[BaseMessage]) -> str:
+        """Formatea historial de conversación para handoff."""
+        history_parts = []
+        for msg in messages[-10:]:  # Últimos 10 mensajes
+            if isinstance(msg, HumanMessage):
+                history_parts.append(f"Usuario: {msg.content}")
+            elif isinstance(msg, AIMessage):
+                history_parts.append(f"Agente: {msg.content}")
+        return "\n".join(history_parts)
+    
+    def update_handoff_config(self, config: Dict[str, Any]):
+        """Actualiza configuración de handoff desde UI."""
+        handoff_config = {
+            "handoff_enabled": config.get("handoff_enabled", False),
+            "handoff_provider": config.get("handoff_provider", "none"),
+            "handoff_api_key": config.get("handoff_zendesk_subdomain") or config.get("handoff_whatsapp_token"),
+            "handoff_api_token": config.get("handoff_zendesk_token"),
+            "handoff_queue": config.get("handoff_zendesk_queue"),
+            "handoff_department": config.get("handoff_zendesk_queue"),
+            "handoff_email": config.get("handoff_email"),
+            "handoff_triggers": config.get("handoff_triggers", {
+                "manual": True,
+                "auto_low_confidence": False,
+                "auto_strong_objection": False,
+                "auto_frustration": False,
+            }),
+        }
+        self.handoff_manager.update_config(handoff_config)
 
     def _build_think_prompt(
         self,

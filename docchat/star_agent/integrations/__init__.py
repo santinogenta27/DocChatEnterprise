@@ -1,16 +1,7 @@
-﻿"""Integraciones para STAR AGENT."""
+﻿"""
+Integraciones de STAR AGENT.
+"""
 
-from .shopify_integration import ShopifyIntegration, ShopifyProduct
-from .woocommerce_integration import WooCommerceIntegration, WooCommerceProduct
-from .url_crawler import URLCrawler, CrawledPage
+from .handoff_manager import HandoffManager, HandoffProvider, HandoffTrigger
 
-__all__ = [
-    "ShopifyIntegration",
-    "ShopifyProduct",
-    "WooCommerceIntegration",
-    "WooCommerceProduct",
-    "URLCrawler",
-    "CrawledPage",
-]
-
-
+__all__ = ["HandoffManager", "HandoffProvider", "HandoffTrigger"]

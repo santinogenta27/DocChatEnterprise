@@ -147,5 +147,26 @@ class ChatbotConfigLoader:
                 if field in config_dict:
                     setattr(app_config, field, config_dict[field])
         
+        # Guardar configuración de handoff en app_config (no se aplica directamente, se usa desde UI)
+        handoff_fields = [
+            "handoff_enabled", "handoff_provider", "handoff_zendesk_subdomain",
+            "handoff_zendesk_token", "handoff_zendesk_queue", "handoff_whatsapp_token",
+            "handoff_email", "handoff_triggers"
+        ]
+        for field in handoff_fields:
+            if field in config_dict:
+                setattr(app_config, field, config_dict[field])
+        
+        # Guardar configuración de ingesta automática en app_config
+        ingestion_fields = [
+            "ingestion_scheduler_enabled", "ingestion_interval_hours",
+            "ingestion_website_enabled", "ingestion_website_url",
+            "ingestion_instagram_enabled", "ingestion_instagram_token",
+            "ingestion_facebook_enabled", "ingestion_facebook_token"
+        ]
+        for field in ingestion_fields:
+            if field in config_dict:
+                setattr(app_config, field, config_dict[field])
+        
         return app_config
 

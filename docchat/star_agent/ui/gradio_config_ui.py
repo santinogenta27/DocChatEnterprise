@@ -586,7 +586,187 @@ class StarAgentConfigUI:
                             value=self.current_config.get("enable_instagram_direct", False)
                         )
                 
-                # TAB 8: Métricas y Analytics
+                # TAB 7: Handoff a Humanos
+                with gr.Tab("👤 Handoff a Humanos"):
+                    gr.Markdown("### Configuración de Handoff a Agentes Humanos")
+                    gr.Markdown("""
+                    **Configura la transferencia de conversaciones a humanos.**
+                    
+                    El agente puede transferir automáticamente cuando:
+                    - Confianza baja en respuesta
+                    - Objeción fuerte del cliente
+                    - Frustración alta detectada
+                    - Usuario solicita explícitamente
+                    """)
+                    
+                    enable_handoff = gr.Checkbox(
+                        label="✅ Habilitar Handoff a Humanos",
+                        value=self.current_config.get("handoff_enabled", False),
+                        info="Activa/desactiva la transferencia a humanos"
+                    )
+                    
+                    handoff_provider = gr.Dropdown(
+                        label="Proveedor de Handoff",
+                        choices=["zendesk", "whatsapp", "email", "none"],
+                        value=self.current_config.get("handoff_provider", "none"),
+                        info="Selecciona el proveedor para handoff"
+                    )
+                    
+                    with gr.Accordion("🔌 Configuración Zendesk", open=True):
+                        gr.Markdown("**Configuración para Zendesk (Subdomain, API Token, Queue)**")
+                        
+                        handoff_zendesk_subdomain = gr.Textbox(
+                            label="Zendesk Subdomain",
+                            value=self.current_config.get("handoff_zendesk_subdomain", ""),
+                            placeholder="tu-empresa",
+                            info="Subdomain de Zendesk (ej: tu-empresa.zendesk.com)"
+                        )
+                        
+                        handoff_zendesk_token = gr.Textbox(
+                            label="Zendesk API Token",
+                            value=self.current_config.get("handoff_zendesk_token", ""),
+                            type="password",
+                            placeholder="token_xxx",
+                            info="API Token de Zendesk"
+                        )
+                        
+                        handoff_zendesk_queue = gr.Textbox(
+                            label="Queue / Departamento",
+                            value=self.current_config.get("handoff_zendesk_queue", ""),
+                            placeholder="soporte",
+                            info="Queue o departamento en Zendesk"
+                        )
+                    
+                    with gr.Accordion("💬 Configuración WhatsApp Handoff", open=False):
+                        gr.Markdown("**Configuración para Handoff vía WhatsApp Business**")
+                        
+                        handoff_whatsapp_token = gr.Textbox(
+                            label="WhatsApp Access Token",
+                            value=self.current_config.get("handoff_whatsapp_token", ""),
+                            type="password",
+                            info="Access Token de WhatsApp Business API"
+                        )
+                    
+                    with gr.Accordion("📧 Configuración Email Handoff", open=False):
+                        gr.Markdown("**Configuración para Handoff vía Email**")
+                        
+                        handoff_email = gr.Textbox(
+                            label="Email de Destino",
+                            value=self.current_config.get("handoff_email", ""),
+                            placeholder="soporte@tu-empresa.com",
+                            info="Email donde se enviarán las consultas"
+                        )
+                    
+                    with gr.Accordion("🎯 Triggers de Handoff", open=True):
+                        gr.Markdown("**Configura cuándo hacer handoff automáticamente**")
+                        
+                        handoff_trigger_manual = gr.Checkbox(
+                            label="Manual (Usuario lo solicita)",
+                            value=self.current_config.get("handoff_trigger_manual", True),
+                            info="Handoff cuando el usuario explícitamente lo pide"
+                        )
+                        
+                        handoff_trigger_low_confidence = gr.Checkbox(
+                            label="Automático: Confianza Baja",
+                            value=self.current_config.get("handoff_trigger_low_confidence", False),
+                            info="Handoff cuando la confianza en la respuesta es < 50%"
+                        )
+                        
+                        handoff_trigger_strong_objection = gr.Checkbox(
+                            label="Automático: Objeción Fuerte",
+                            value=self.current_config.get("handoff_trigger_strong_objection", False),
+                            info="Handoff cuando detecta objeción fuerte (> 70%)"
+                        )
+                        
+                        handoff_trigger_frustration = gr.Checkbox(
+                            label="Automático: Frustración Alta",
+                            value=self.current_config.get("handoff_trigger_frustration", False),
+                            info="Handoff cuando frustración > 70%"
+                        )
+                
+                # TAB 8: Ingesta Automática
+                with gr.Tab("🔄 Ingesta Automática"):
+                    gr.Markdown("### Configuración de Ingesta Automática Multi-Fuente")
+                    gr.Markdown("""
+                    **Configura la ingesta automática de datos desde múltiples fuentes.**
+                    
+                    El sistema puede absorber automáticamente información de:
+                    - Sitio web (crawling con Playwright)
+                    - Instagram (posts, captions, productos)
+                    - Facebook (posts, reviews)
+                    """)
+                    
+                    ingestion_scheduler_enabled = gr.Checkbox(
+                        label="✅ Habilitar Scheduler de Ingesta",
+                        value=self.current_config.get("ingestion_scheduler_enabled", False),
+                        info="Activa/desactiva la ingesta automática programada"
+                    )
+                    
+                    ingestion_interval_hours = gr.Number(
+                        label="Intervalo de Ingesta (horas)",
+                        value=self.current_config.get("ingestion_interval_hours", 6),
+                        minimum=1,
+                        maximum=168,
+                        info="Cada cuántas horas ejecutar ingesta automática (default: 6h)"
+                    )
+                    
+                    with gr.Accordion("🌐 Ingesta de Website", open=True):
+                        gr.Markdown("**Configuración para ingesta automática del sitio web**")
+                        
+                        ingestion_website_enabled = gr.Checkbox(
+                            label="✅ Habilitar Ingesta de Website",
+                            value=self.current_config.get("ingestion_website_enabled", False),
+                            info="Activa/desactiva ingesta de website"
+                        )
+                        
+                        ingestion_website_url = gr.Textbox(
+                            label="URL del Website",
+                            value=self.current_config.get("ingestion_website_url", ""),
+                            placeholder="https://tu-empresa.com",
+                            info="URL principal del sitio web a crawlear"
+                        )
+                    
+                    with gr.Accordion("📷 Ingesta de Instagram", open=False):
+                        gr.Markdown("**Configuración para ingesta automática de Instagram**")
+                        
+                        ingestion_instagram_enabled = gr.Checkbox(
+                            label="✅ Habilitar Ingesta de Instagram",
+                            value=self.current_config.get("ingestion_instagram_enabled", False),
+                            info="Activa/desactiva ingesta de Instagram"
+                        )
+                        
+                        ingestion_instagram_token = gr.Textbox(
+                            label="Instagram Access Token",
+                            value=self.current_config.get("ingestion_instagram_token", ""),
+                            type="password",
+                            info="Access Token de Instagram Graph API"
+                        )
+                    
+                    with gr.Accordion("📘 Ingesta de Facebook", open=False):
+                        gr.Markdown("**Configuración para ingesta automática de Facebook**")
+                        
+                        ingestion_facebook_enabled = gr.Checkbox(
+                            label="✅ Habilitar Ingesta de Facebook",
+                            value=self.current_config.get("ingestion_facebook_enabled", False),
+                            info="Activa/desactiva ingesta de Facebook"
+                        )
+                        
+                        ingestion_facebook_token = gr.Textbox(
+                            label="Facebook Access Token",
+                            value=self.current_config.get("ingestion_facebook_token", ""),
+                            type="password",
+                            info="Access Token de Facebook Graph API"
+                        )
+                    
+                    run_ingestion_now_btn = gr.Button("▶️ Ejecutar Ingesta Ahora (Run Now)", variant="primary")
+                    ingestion_status = gr.Textbox(
+                        label="Estado de Ingesta",
+                        value="No ejecutado",
+                        interactive=False,
+                        lines=5
+                    )
+                
+                # TAB 9: Métricas y Analytics
                 with gr.Tab("📊 Métricas"):
                     gr.Markdown("### Métricas y Analytics del Agente")
                     
@@ -639,7 +819,16 @@ class StarAgentConfigUI:
                 widget_enable, widget_pos,
                 whatsapp_enable, whatsapp_phone_id_val, whatsapp_token_val, whatsapp_verify_val,
                 messenger_enable, messenger_page_id_val, messenger_token_val, messenger_verify_val,
-                instagram_direct_enable
+                instagram_direct_enable,
+                handoff_enable, handoff_provider_val,
+                handoff_zendesk_subdomain, handoff_zendesk_token, handoff_zendesk_queue,
+                handoff_whatsapp_token, handoff_email_val,
+                handoff_trigger_manual, handoff_trigger_low_confidence,
+                handoff_trigger_strong_objection, handoff_trigger_frustration,
+                ingestion_scheduler_enable, ingestion_interval_hours_val,
+                ingestion_website_enable, ingestion_website_url_val,
+                ingestion_instagram_enable, ingestion_instagram_token_val,
+                ingestion_facebook_enable, ingestion_facebook_token_val
             ):
                 """Guarda toda la configuración."""
                 config = {
@@ -709,6 +898,31 @@ class StarAgentConfigUI:
                     "messenger_page_access_token": messenger_token_val,
                     "messenger_verify_token": messenger_verify_val,
                     "enable_instagram_direct": instagram_direct_enable,
+                    
+                    # Handoff a Humanos
+                    "handoff_enabled": handoff_enable,
+                    "handoff_provider": handoff_provider_val,
+                    "handoff_zendesk_subdomain": handoff_zendesk_subdomain,
+                    "handoff_zendesk_token": handoff_zendesk_token,
+                    "handoff_zendesk_queue": handoff_zendesk_queue,
+                    "handoff_whatsapp_token": handoff_whatsapp_token,
+                    "handoff_email": handoff_email_val,
+                    "handoff_triggers": {
+                        "manual": handoff_trigger_manual,
+                        "auto_low_confidence": handoff_trigger_low_confidence,
+                        "auto_strong_objection": handoff_trigger_strong_objection,
+                        "auto_frustration": handoff_trigger_frustration,
+                    },
+                    
+                    # Ingesta Automática
+                    "ingestion_scheduler_enabled": ingestion_scheduler_enable,
+                    "ingestion_interval_hours": int(ingestion_interval_hours_val) if ingestion_interval_hours_val else 6,
+                    "ingestion_website_enabled": ingestion_website_enable,
+                    "ingestion_website_url": ingestion_website_url_val,
+                    "ingestion_instagram_enabled": ingestion_instagram_enable,
+                    "ingestion_instagram_token": ingestion_instagram_token_val,
+                    "ingestion_facebook_enabled": ingestion_facebook_enable,
+                    "ingestion_facebook_token": ingestion_facebook_token_val,
                 }
                 
                 success, message = self._save_config(config)
@@ -717,6 +931,7 @@ class StarAgentConfigUI:
             def load_config_ui():
                 """Carga configuración y actualiza UI."""
                 config = self._load_config()
+                handoff_triggers = config.get("handoff_triggers", {})
                 return (
                     config.get("brand_name", ""),
                     config.get("chatbot_tone", "friendly"),
@@ -749,6 +964,18 @@ class StarAgentConfigUI:
                     config.get("google_analytics_id", ""),
                     config.get("enable_meta_pixel", False),
                     config.get("meta_pixel_id", ""),
+                    config.get("product_catalog_link", ""),
+                    config.get("store_link", ""),
+                    config.get("checkout_link", ""),
+                    config.get("payment_methods_link", ""),
+                    config.get("support_link", ""),
+                    config.get("contact_link", ""),
+                    config.get("faq_link", ""),
+                    config.get("shipping_link", ""),
+                    config.get("returns_link", ""),
+                    config.get("privacy_policy_link", ""),
+                    config.get("terms_link", ""),
+                    config.get("custom_links", {}),
                     config.get("enable_widget", True),
                     config.get("widget_position", "bottom-right"),
                     config.get("enable_whatsapp", False),
@@ -760,6 +987,25 @@ class StarAgentConfigUI:
                     config.get("messenger_page_access_token", "") or config.get("facebook_page_access_token", ""),
                     config.get("messenger_verify_token", "") or config.get("facebook_verify_token", ""),
                     config.get("enable_instagram_direct", False),
+                    config.get("handoff_enabled", False),
+                    config.get("handoff_provider", "none"),
+                    config.get("handoff_zendesk_subdomain", ""),
+                    config.get("handoff_zendesk_token", ""),
+                    config.get("handoff_zendesk_queue", ""),
+                    config.get("handoff_whatsapp_token", ""),
+                    config.get("handoff_email", ""),
+                    handoff_triggers.get("manual", True),
+                    handoff_triggers.get("auto_low_confidence", False),
+                    handoff_triggers.get("auto_strong_objection", False),
+                    handoff_triggers.get("auto_frustration", False),
+                    config.get("ingestion_scheduler_enabled", False),
+                    config.get("ingestion_interval_hours", 6),
+                    config.get("ingestion_website_enabled", False),
+                    config.get("ingestion_website_url", ""),
+                    config.get("ingestion_instagram_enabled", False),
+                    config.get("ingestion_instagram_token", ""),
+                    config.get("ingestion_facebook_enabled", False),
+                    config.get("ingestion_facebook_token", ""),
                     "✅ Configuración cargada"
                 )
             
@@ -820,6 +1066,27 @@ class StarAgentConfigUI:
                     "messenger_page_access_token": "",
                     "messenger_verify_token": "",
                     "enable_instagram_direct": False,
+                    "handoff_enabled": False,
+                    "handoff_provider": "none",
+                    "handoff_zendesk_subdomain": "",
+                    "handoff_zendesk_token": "",
+                    "handoff_zendesk_queue": "",
+                    "handoff_whatsapp_token": "",
+                    "handoff_email": "",
+                    "handoff_triggers": {
+                        "manual": True,
+                        "auto_low_confidence": False,
+                        "auto_strong_objection": False,
+                        "auto_frustration": False,
+                    },
+                    "ingestion_scheduler_enabled": False,
+                    "ingestion_interval_hours": 6,
+                    "ingestion_website_enabled": False,
+                    "ingestion_website_url": "",
+                    "ingestion_instagram_enabled": False,
+                    "ingestion_instagram_token": "",
+                    "ingestion_facebook_enabled": False,
+                    "ingestion_facebook_token": "",
                 }
                 self._save_config(default_config)
                 return load_config_ui()
@@ -848,6 +1115,45 @@ class StarAgentConfigUI:
                     "drop_off_rate": 0.0,
                     "avg_response_time": 0.0,
                 }
+            
+            # Función para ejecutar ingesta manualmente
+            def run_ingestion_manual():
+                """Ejecuta ingesta manualmente (Run now)."""
+                try:
+                    # Cargar configuración actual
+                    config = self._load_config()
+                    
+                    # Crear scheduler temporal para ejecución
+                    from ..ingestion.ingestion_scheduler import IngestionScheduler
+                    
+                    scheduler = IngestionScheduler(
+                        enabled=False,  # No iniciar scheduler, solo ejecutar manualmente
+                        interval_hours=config.get("ingestion_interval_hours", 6),
+                        website_enabled=config.get("ingestion_website_enabled", False),
+                        website_url=config.get("ingestion_website_url"),
+                        instagram_enabled=config.get("ingestion_instagram_enabled", False),
+                        instagram_token=config.get("ingestion_instagram_token"),
+                        facebook_enabled=config.get("ingestion_facebook_enabled", False),
+                        facebook_token=config.get("ingestion_facebook_token"),
+                        rag_manager=None,  # Se integrará con RAG manager del agente
+                    )
+                    
+                    results = scheduler.run_ingestion_now()
+                    
+                    # Formatear resultado
+                    status_parts = []
+                    for source, result in results.items():
+                        if result.get("success"):
+                            status_parts.append(f"✅ {source.upper()}: {result.get('message', 'Completado')}")
+                        elif result.get("message"):
+                            status_parts.append(f"ℹ️ {source.upper()}: {result.get('message', 'No ejecutado')}")
+                    
+                    if not status_parts:
+                        return "⚠️ No hay fuentes habilitadas para ingesta"
+                    
+                    return "\n".join(status_parts)
+                except Exception as e:
+                    return f"❌ Error ejecutando ingesta: {e}"
             
             # Conectar callbacks
             save_btn.click(
@@ -902,6 +1208,15 @@ class StarAgentConfigUI:
                     enable_whatsapp, whatsapp_phone_number_id, whatsapp_access_token, whatsapp_verify_token,
                     enable_messenger, messenger_page_id, messenger_page_access_token, messenger_verify_token,
                     enable_instagram_direct,
+                    enable_handoff, handoff_provider,
+                    handoff_zendesk_subdomain, handoff_zendesk_token, handoff_zendesk_queue,
+                    handoff_whatsapp_token, handoff_email,
+                    handoff_trigger_manual, handoff_trigger_low_confidence,
+                    handoff_trigger_strong_objection, handoff_trigger_frustration,
+                    ingestion_scheduler_enabled, ingestion_interval_hours,
+                    ingestion_website_enabled, ingestion_website_url,
+                    ingestion_instagram_enabled, ingestion_instagram_token,
+                    ingestion_facebook_enabled, ingestion_facebook_token,
                     save_status,
                 ]
             )
@@ -928,6 +1243,13 @@ class StarAgentConfigUI:
             
             upload_btn.click(fn=process_documents, inputs=[document_upload], outputs=[upload_status])
             refresh_metrics_btn.click(fn=refresh_metrics, outputs=[metrics_display])
+            
+            # Botón Run now para ingesta
+            run_ingestion_now_btn.click(
+                fn=run_ingestion_manual,
+                inputs=[],
+                outputs=[ingestion_status]
+            )
         
         return demo
     
