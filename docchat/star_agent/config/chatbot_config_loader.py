@@ -129,7 +129,23 @@ class ChatbotConfigLoader:
             if "stripe_secret_key" in config_dict:
                 # Guardar en variable de entorno para que PaymentTool lo use
                 import os
-                os.environ["STRIPE_SECRET_KEY"] = config_dict["stripe_secret_key"]
+                stripe_key = config_dict["stripe_secret_key"]
+                os.environ["STRIPE_SECRET_KEY"] = stripe_key
+                os.environ["STRIPE_API_KEY"] = stripe_key  # También como STRIPE_API_KEY para compatibilidad
+                # Guardar en app_config para Sales Closer Elite
+                app_config.stripe_api_key = stripe_key
+        
+        # Cargar links configurados si existen
+        links_fields = [
+            "product_catalog_link", "store_link", "checkout_link", "payment_methods_link",
+            "support_link", "contact_link", "faq_link", "shipping_link",
+            "returns_link", "privacy_policy_link", "terms_link", "custom_links"
+        ]
+        if any(field in config_dict for field in links_fields):
+            # Guardar links en app_config para acceso del agente
+            for field in links_fields:
+                if field in config_dict:
+                    setattr(app_config, field, config_dict[field])
         
         return app_config
 

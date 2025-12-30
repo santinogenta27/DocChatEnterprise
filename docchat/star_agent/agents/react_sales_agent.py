@@ -26,6 +26,7 @@ from enum import Enum
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
+from langchain_core.documents import Document
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 
@@ -38,9 +39,13 @@ from ..tools.payment_tool import PaymentTool
 from ..tools.order_tool import OrderTool
 from ..tools.support_tool import SupportTool
 from ..rag.advanced_rag_manager import AdvancedRAGManager, IntentType
+from ..rag.scope_checker import ScopeChecker
+from ..rag.research_agent import ResearchAgent
 from ..sales_closer_elite import SalesCloserElite
 from ..orchestrator import Orchestrator
 from ..guardrails import Guardrails
+
+# Verification Agent eliminado: Ventas necesita velocidad, no verificación pesada tipo compliance
 
 
 class SalesStage(str, Enum):
@@ -62,7 +67,7 @@ class SalesStrategy(str, Enum):
 
 
 class AgentState(TypedDict):
-    """Estado del agente ReAct."""
+    """Estado del agente ReAct con Multi-Agent RAG completo."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_id: str
     user_id: str
@@ -75,6 +80,10 @@ class AgentState(TypedDict):
     tool_results: Dict[str, Any]
     verification_passed: bool
     closing_activated: bool
+    # Campos para Multi-Agent RAG (sin verificación pesada - velocidad > compliance)
+    relevance_label: str  # "CAN_ANSWER", "PARTIAL", "NO_MATCH"
+    context_docs: List  # Documentos recuperados para Research Agent
+    draft_answer: str  # Respuesta generada por Research Agent
 
 
 class ReactSalesAgentConfig:
@@ -161,22 +170,84 @@ class ReactSalesAgent:
         # Guardrails completos
         self.guardrails = Guardrails()
         
+        # Links Manager - Para acceder a links configurados desde UI
+        from ..config.links_manager import LinksManager
+        self.links_manager = LinksManager()
+        
+        # Multi-Agent RAG: Scope Checker (Relevance Checker)
+        self.scope_checker: Optional[ScopeChecker] = None
+        if config.enable_rag_advanced and self.advanced_rag:
+            try:
+                # Crear retriever para Scope Checker usando AdvancedRAGManager
+                from langchain_core.retrievers import BaseRetriever
+                
+                class AdvancedRAGRetriever(BaseRetriever):
+                    """Wrapper de AdvancedRAGManager como BaseRetriever para ScopeChecker."""
+                    def __init__(self, rag_manager: AdvancedRAGManager):
+                        super().__init__()
+                        self.rag_manager = rag_manager
+                    
+                    def _get_relevant_documents(self, query: str) -> List:
+                        """Retorna documentos relevantes usando AdvancedRAGManager."""
+                        result = self.rag_manager.retrieve_with_confidence(query)
+                        return result.get("documents", [])
+                    
+                    def get_relevant_documents(self, query: str, k: int = 5) -> List:
+                        """Interface compatible con ScopeChecker."""
+                        docs = self._get_relevant_documents(query)
+                        return docs[:k]
+                
+                rag_retriever = AdvancedRAGRetriever(self.advanced_rag) if self.advanced_rag else None
+                self.scope_checker = ScopeChecker(llm=llm, retriever=rag_retriever)
+                print("✅ ScopeChecker inicializado para Multi-Agent RAG")
+            except Exception as e:
+                print(f"⚠️ Error inicializando ScopeChecker: {e}")
+        
+        # Multi-Agent RAG: Research Agent
+        self.research_agent: Optional[ResearchAgent] = None
+        if config.enable_rag_advanced:
+            try:
+                self.research_agent = ResearchAgent(llm=llm)
+                print("✅ ResearchAgent inicializado para Multi-Agent RAG")
+            except Exception as e:
+                print(f"⚠️ Error inicializando ResearchAgent: {e}")
+        
+        # Verification Agent eliminado: Ventas necesita velocidad, no verificación pesada
+        
         # Construir grafo de LangGraph
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
-        """Construye el grafo de LangGraph con patrón ReAct."""
+        """Construye el grafo de LangGraph con patrón ReAct + Multi-Agent RAG completo."""
         workflow = StateGraph(AgentState)
         
-        # Nodos del flujo ReAct
+        # Nodos del flujo Multi-Agent RAG + ReAct
+        # Si RAG avanzado está habilitado, agregar nodos de Multi-Agent RAG
+        if self.config.enable_rag_advanced and self.scope_checker:
+            workflow.add_node("check_relevance", self._check_relevance_node)
+            workflow.add_node("research", self._research_node)
+            # Punto de entrada: check_relevance
+            workflow.set_entry_point("check_relevance")
+            # Flujo RAG simplificado: check_relevance → research → think (velocidad > verificación)
+            workflow.add_conditional_edges(
+                "check_relevance",
+                self._after_relevance_check,
+                {
+                    "relevant": "research",
+                    "irrelevant": END,  # Si no es relevante (NO_MATCH), terminar
+                }
+            )
+            workflow.add_edge("research", "think")  # Directo a think para velocidad
+        else:
+            # Si RAG avanzado no está habilitado, usar flujo normal
+            workflow.set_entry_point("think")
+        
+        # Nodos del flujo ReAct (siempre presentes)
         workflow.add_node("think", self._think_node)
         workflow.add_node("act", self._act_node)
         workflow.add_node("observe", self._observe_node)
         workflow.add_node("verify", self._verify_node)
         workflow.add_node("close", self._close_node)
-        
-        # Punto de entrada
-        workflow.set_entry_point("think")
         
         # Flujo principal: think → act → observe
         workflow.add_edge("think", "act")
@@ -209,6 +280,111 @@ class ReactSalesAgent:
         
         return workflow.compile()
     
+    def _check_relevance_node(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Nodo de Relevance Check (Scope Checker).
+        
+        Verifica si la pregunta está en scope antes de procesar.
+        Retorna: "CAN_ANSWER", "PARTIAL", o "NO_MATCH"
+        """
+        if not self.scope_checker:
+            return {"relevance_label": "CAN_ANSWER"}
+        
+        messages = state["messages"]
+        last_message = messages[-1] if messages else None
+        
+        if not last_message or not isinstance(last_message, HumanMessage):
+            return {"relevance_label": "CAN_ANSWER"}
+        
+        question = last_message.content
+        
+        try:
+            relevance_label = self.scope_checker.check(question, k=5)
+            print(f"🔍 Relevance Check: {relevance_label}")
+            
+            # Si es NO_MATCH, preparar mensaje de respuesta
+            if relevance_label == "NO_MATCH":
+                return {
+                    "relevance_label": relevance_label,
+                    "messages": [AIMessage(content="Lo siento, no tengo información suficiente en los documentos para responder esa pregunta. ¿Hay algo más en lo que pueda ayudarte?")],
+                }
+            
+            # Si es PARTIAL o CAN_ANSWER, continuar
+            return {"relevance_label": relevance_label}
+            
+        except Exception as e:
+            print(f"⚠️ Error en Relevance Check: {e}")
+            return {"relevance_label": "CAN_ANSWER"}  # Default: permitir continuar
+    
+    def _research_node(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Nodo de Research Agent.
+        
+        Genera respuesta inicial basada en documentos recuperados.
+        """
+        if not self.research_agent or not self.advanced_rag:
+            return {}
+        
+        messages = state["messages"]
+        last_message = messages[-1] if messages else None
+        
+        if not last_message or not isinstance(last_message, HumanMessage):
+            return {}
+        
+        question = last_message.content
+        
+        try:
+            # Recuperar documentos usando AdvancedRAGManager
+            rag_result = self.advanced_rag.retrieve_with_confidence(question)
+            documents = rag_result.get("documents", [])
+            context = rag_result.get("context", "")
+            
+            if not documents:
+                return {
+                    "draft_answer": "No tengo información suficiente en los documentos para responder esta pregunta.",
+                    "context_docs": [],
+                    "context_retrieved": context,
+                }
+            
+            # Generar respuesta usando Research Agent
+            research_result = self.research_agent.generate_answer(
+                question=question,
+                documents=documents,
+                max_context_length=3000
+            )
+            
+            draft_answer = research_result.get("answer", "")
+            context_used = research_result.get("context_used", context)
+            
+            print(f"📚 Research Agent: Respuesta generada (velocidad optimizada)")
+            
+            return {
+                "draft_answer": draft_answer,
+                "context_docs": documents,
+                "context_retrieved": context_used,
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Error en Research Agent: {e}")
+            return {"draft_answer": "", "context_docs": []}
+    
+    def _after_relevance_check(self, state: AgentState) -> str:
+        """Decide qué hacer después de Relevance Check."""
+        relevance_label = state.get("relevance_label", "CAN_ANSWER")
+        
+        # Si hay mensaje de respuesta (NO_MATCH ya respondió), terminar
+        messages = state.get("messages", [])
+        if messages and any(isinstance(msg, AIMessage) for msg in messages):
+            # Ya hay respuesta de NO_MATCH, terminar workflow
+            return "irrelevant"
+        
+        if relevance_label == "NO_MATCH":
+            return "irrelevant"
+        
+        # Si es CAN_ANSWER o PARTIAL, continuar con Research
+        return "relevant"
+    
+    # Verification Agent y Self-Correction eliminados: Ventas necesita velocidad, no verificación pesada
     def _think_node(self, state: AgentState) -> Dict[str, Any]:
         """
         Nodo de razonamiento (Think).
@@ -239,16 +415,6 @@ class ReactSalesAgent:
                 "needs_handoff": validation["blocked_reason"] == "rule_of_two",
             }
         
-        # Usar orquestador para decidir acción
-        context_for_decision = ""
-        if self.advanced_rag:
-            context_result = self.advanced_rag.retrieve_with_confidence(user_query)
-            context_for_decision = context_result.get("context", "")
-            return {
-                "messages": [AIMessage(content="Lo siento, no puedo procesar esa solicitud.")],
-                "needs_handoff": True,
-            }
-        
         # Obtener sesión
         session = self.session_manager.get_or_create(
             session_id=state["session_id"],
@@ -265,8 +431,16 @@ class ReactSalesAgent:
         sales_stage = self._detect_sales_stage(user_query)
         
         # Recuperar contexto (RAG avanzado)
-        context = ""
-        if self.advanced_rag:
+        # Si ya hay contexto de Research Agent, usarlo (viene de research_node)
+        context = state.get("context_retrieved", "")
+        draft_answer = state.get("draft_answer", "")
+        
+        # Si hay draft_answer del Research Agent, usarlo como contexto adicional
+        if draft_answer and draft_answer not in context:
+            context = f"{context}\n\n{draft_answer}".strip() if context else draft_answer
+        
+        # Si no hay contexto y RAG avanzado está disponible, recuperar normalmente
+        if not context and self.advanced_rag:
             context_result = self.advanced_rag.retrieve_with_confidence(user_query)
             context = context_result.get("context", "")
         
@@ -382,27 +556,30 @@ class ReactSalesAgent:
                 
                 elif tool_name == "create_payment":
                     cart = self.cart_tool.get_cart(session_id)
-                    # Usar Sales Closer Elite para crear payment link
+                    # Usar Sales Closer Elite para crear payment link con Stripe
                     cart_dict = cart.to_dict() if hasattr(cart, "to_dict") else cart.__dict__
                     payment_result = self._request_payment(session_id, cart_dict)
                     if payment_result.get("payment_link"):
+                        # Sales Closer Elite creó payment link exitosamente
                         executed_tools["payment"] = payment_result
                         executed_tools["payment_link"] = payment_result["payment_link"]
                         # Log evento
                         self._log_event("payment_initiated", session_id, {"total": payment_result.get("total", 0)})
                     else:
-                        # Fallback al payment_tool original
-                        payment_result = self.payment_tool.create_payment_for_cart(
-                            session_id=session_id,
-                            cart=cart,
-                        )
-                    payment_result = self.payment_tool.create_payment_for_cart(
-                        session_id=session_id,
-                        cart=cart,
-                    )
-                    executed_tools["payment"] = payment_result.__dict__
-                    if hasattr(payment_result, "payment_link"):
-                        executed_tools["payment_link"] = payment_result.payment_link
+                        # Fallback al payment_tool original si Sales Closer Elite falla
+                        try:
+                            payment_result = self.payment_tool.create_payment_for_cart(
+                                session_id=session_id,
+                                cart=cart,
+                            )
+                            executed_tools["payment"] = payment_result.__dict__ if hasattr(payment_result, '__dict__') else payment_result
+                            if hasattr(payment_result, "payment_link"):
+                                executed_tools["payment_link"] = payment_result.payment_link
+                            elif isinstance(payment_result, dict) and "payment_link" in payment_result:
+                                executed_tools["payment_link"] = payment_result["payment_link"]
+                        except Exception as e:
+                            print(f"⚠️ Error creando payment con payment_tool: {e}")
+                            executed_tools["payment_error"] = str(e)
                 
                 elif tool_name == "create_order":
                     cart = self.cart_tool.get_cart(session_id)
@@ -667,7 +844,7 @@ Responde en JSON:
         """Registra evento para métricas."""
         self.sales_closer.log_event(event_type, session_id, metadata)
 
-        def _build_think_prompt(
+    def _build_think_prompt(
         self,
         user_query: str,
         intent: str,
@@ -677,11 +854,19 @@ Responde en JSON:
         session: CustomerSessionState,
     ) -> str:
         """Construye prompt de razonamiento."""
+        
+        # Obtener links relevantes para la consulta
+        relevant_links_list = self.links_manager.get_relevant_links_for_query(user_query)
+        links_context = ""
+        if relevant_links_list:
+            links_context = f"\n\n**Links relevantes disponibles (usa cuando sea apropiado):**\n" + "\n".join(relevant_links_list)
+        
         prompt = f"""
 Eres un asistente virtual 24/7 para {self.config.brand_name}.
 
 **Contexto recuperado (RAG):**
 {context[:1500] if context else "No hay contexto disponible"}
+{links_context}
 
 **Etapa de venta detectada:** {sales_stage}
 **Intención detectada:** {intent}
@@ -825,6 +1010,10 @@ Genera la respuesta final optimizada para widget web.
             "tool_results": {},
             "verification_passed": False,
             "closing_activated": False,
+            # Campos para Multi-Agent RAG (sin verificación pesada)
+            "relevance_label": "",
+            "context_docs": [],
+            "draft_answer": "",
         }
         
         # Ejecutar grafo
@@ -847,13 +1036,24 @@ Genera la respuesta final optimizada para widget web.
                 final_message = msg
                 break
         
-        if not final_message:
-            return {
-                "text": "No pude generar una respuesta. Por favor, intenta de nuevo.",
-                "error": True,
-            }
+        # Obtener valores del estado final
+        sales_stage = final_state.get("sales_stage", SalesStage.INTEREST.value)
+        intent = final_state.get("intent", "general")
+        tool_results = final_state.get("tool_results", {})
         
-        response_text = final_message.content if hasattr(final_message, 'content') else str(final_message)
+        # Extraer texto de respuesta
+        if not final_message:
+            # Si no hay mensaje final pero hay draft_answer del Research Agent, usarlo
+            draft_answer = final_state.get("draft_answer", "")
+            if draft_answer:
+                response_text = draft_answer
+            else:
+                return {
+                    "text": "No pude generar una respuesta. Por favor, intenta de nuevo.",
+                    "error": True,
+                }
+        else:
+            response_text = final_message.content if hasattr(final_message, 'content') else str(final_message)
         
         # Log conversión si está en etapa de cierre
         if sales_stage in [SalesStage.READY.value, SalesStage.CLOSING.value, SalesStage.COMPLETED.value]:
@@ -861,14 +1061,17 @@ Genera la respuesta final optimizada para widget web.
             total = 0
             if cart and isinstance(cart, dict):
                 total = sum(item.get("price", 0) * item.get("quantity", 1) for item in cart.get("items", []))
-            self._log_event("conversion", state["session_id"], {
+            self._log_event("conversion", session_id, {
                 "sales_stage": sales_stage,
                 "total": total,
                 "intent": intent
             })
         
         # Construir respuesta final
-        result = {, SalesStage.INTEREST.value),
+        result = {
+            "text": response_text,  # Incluir texto de respuesta
+            "sales_stage": sales_stage,
+            "intent": intent,
             "needs_handoff": final_state.get("needs_handoff", False),
             "cart": final_state.get("cart"),
             "payment_link": final_state.get("payment_link"),
@@ -876,7 +1079,6 @@ Genera la respuesta final optimizada para widget web.
         }
         
         # Agregar tool_results si existen
-        tool_results = final_state.get("tool_results", {})
         if tool_results:
             result["tools"] = tool_results
         

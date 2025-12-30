@@ -282,7 +282,7 @@ class StarAgentMode:
             # Usar adapter de WhatsApp si está configurado
             if hasattr(self, 'whatsapp_adapter') and self.whatsapp_adapter:
                 adapter = self.whatsapp_adapter
-            else:
+        else:
                 # Fallback a web adapter si WhatsApp no está configurado
                 adapter = self.web_adapter
         elif channel in ["instagram", "messenger"]:

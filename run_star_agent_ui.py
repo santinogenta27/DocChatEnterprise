@@ -23,7 +23,7 @@ def main():
     # Lanzar UI de Gradio
     demo = star_agent.get_gradio_interface()
     demo.launch(
-        share=False,  # Cambiar a True para crear link público
+        share=True,  # Cambiar a True para crear link público (necesario en algunos entornos)
         server_name="127.0.0.1",
         server_port=7860,
         show_error=True

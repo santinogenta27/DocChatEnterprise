@@ -271,11 +271,11 @@ class StarAgentConfigUI:
                     )
                     
                     with gr.Accordion("📁 Subir Documentos Manualmente", open=True):
+                        gr.Markdown("**Sube documentos que el agente debe conocer (PDFs, Word, texto)**")
                         document_upload = gr.File(
                             label="Subir Documentos",
                             file_count="multiple",
-                            file_types=[".pdf", ".docx", ".txt", ".md"],
-                            info="Sube documentos que el agente debe conocer (PDFs, Word, texto)"
+                            file_types=[".pdf", ".docx", ".txt", ".md"]
                         )
                         
                         upload_btn = gr.Button("📤 Procesar y Agregar Documentos", variant="primary")
@@ -325,14 +325,14 @@ class StarAgentConfigUI:
                         )
                     
                     with gr.Accordion("🛡️ Manejo de Objeciones", open=True):
+                        gr.Markdown("**Define cómo responder a objeciones comunes (formato JSON)**")
                         objection_responses = gr.JSON(
                             label="Respuestas a Objeciones Comunes",
                             value=self.current_config.get("objection_responses", {
                                 "caro": "Entiendo. Justamente por eso incluye X, Y y Z que ahorran dinero a largo plazo.",
                                 "después": "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora?",
                                 "pensar": "Claro, es una decisión importante. ¿Hay algo específico en lo que pueda ayudarte a decidir?"
-                            }),
-                            info="Define cómo responder a objeciones comunes (formato JSON)"
+                            })
                         )
                 
                 # TAB 5: Integraciones
@@ -378,7 +378,118 @@ class StarAgentConfigUI:
                             placeholder="1234567890"
                         )
                 
-                # TAB 6: Canales
+                # TAB 6: Links y URLs
+                with gr.Tab("🔗 Links y URLs"):
+                    gr.Markdown("### Configuración de Links Personalizados")
+                    gr.Markdown("""
+                    **Configura links que el agente puede usar y enviar a los clientes.**
+                    
+                    El agente puede acceder a estos links automáticamente cuando sea apropiado.
+                    """)
+                    
+                    with gr.Accordion("📋 Links de Productos", open=True):
+                        gr.Markdown("**Links relacionados con productos (catálogo, tienda, etc.)**")
+                        
+                        product_catalog_link = gr.Textbox(
+                            label="Link del Catálogo de Productos",
+                            value=self.current_config.get("product_catalog_link", ""),
+                            placeholder="https://tu-tienda.com/productos",
+                            info="Link al catálogo completo de productos"
+                        )
+                        
+                        store_link = gr.Textbox(
+                            label="Link de la Tienda",
+                            value=self.current_config.get("store_link", ""),
+                            placeholder="https://tu-tienda.com",
+                            info="Link principal de tu tienda/sitio web"
+                        )
+                    
+                    with gr.Accordion("💳 Links de Pago y Checkout", open=True):
+                        gr.Markdown("**Links relacionados con pagos (checkout, carrito, etc.)**")
+                        
+                        checkout_link = gr.Textbox(
+                            label="Link de Checkout",
+                            value=self.current_config.get("checkout_link", ""),
+                            placeholder="https://tu-tienda.com/checkout",
+                            info="Link directo al checkout/carrito"
+                        )
+                        
+                        payment_methods_link = gr.Textbox(
+                            label="Link de Métodos de Pago",
+                            value=self.current_config.get("payment_methods_link", ""),
+                            placeholder="https://tu-tienda.com/metodos-pago",
+                            info="Link con información de métodos de pago aceptados"
+                        )
+                    
+                    with gr.Accordion("📞 Links de Contacto y Soporte", open=True):
+                        gr.Markdown("**Links de contacto, soporte y ayuda**")
+                        
+                        support_link = gr.Textbox(
+                            label="Link de Soporte/Ayuda",
+                            value=self.current_config.get("support_link", ""),
+                            placeholder="https://tu-tienda.com/soporte",
+                            info="Link a página de soporte o centro de ayuda"
+                        )
+                        
+                        contact_link = gr.Textbox(
+                            label="Link de Contacto",
+                            value=self.current_config.get("contact_link", ""),
+                            placeholder="https://tu-tienda.com/contacto",
+                            info="Link a página de contacto"
+                        )
+                        
+                        faq_link = gr.Textbox(
+                            label="Link de Preguntas Frecuentes (FAQ)",
+                            value=self.current_config.get("faq_link", ""),
+                            placeholder="https://tu-tienda.com/faq",
+                            info="Link a página de preguntas frecuentes"
+                        )
+                    
+                    with gr.Accordion("📦 Links de Entrega y Políticas", open=False):
+                        gr.Markdown("**Links sobre envíos, políticas y términos**")
+                        
+                        shipping_link = gr.Textbox(
+                            label="Link de Envíos/Entrega",
+                            value=self.current_config.get("shipping_link", ""),
+                            placeholder="https://tu-tienda.com/envios",
+                            info="Link con información de envíos y entregas"
+                        )
+                        
+                        returns_link = gr.Textbox(
+                            label="Link de Devoluciones",
+                            value=self.current_config.get("returns_link", ""),
+                            placeholder="https://tu-tienda.com/devoluciones",
+                            info="Link con política de devoluciones"
+                        )
+                        
+                        privacy_policy_link = gr.Textbox(
+                            label="Link de Política de Privacidad",
+                            value=self.current_config.get("privacy_policy_link", ""),
+                            placeholder="https://tu-tienda.com/privacidad",
+                            info="Link a política de privacidad"
+                        )
+                        
+                        terms_link = gr.Textbox(
+                            label="Link de Términos y Condiciones",
+                            value=self.current_config.get("terms_link", ""),
+                            placeholder="https://tu-tienda.com/terminos",
+                            info="Link a términos y condiciones"
+                        )
+                    
+                    with gr.Accordion("🎁 Links Personalizados", open=False):
+                        gr.Markdown("**Define tus propios links personalizados con etiquetas**")
+                        gr.Markdown("**Formato JSON:** `{'etiqueta': 'url', ...}`")
+                        
+                        custom_links = gr.JSON(
+                            label="Links Personalizados",
+                            value=self.current_config.get("custom_links", {
+                                "promocion_especial": "https://tu-tienda.com/promo",
+                                "nuevos_lanzamientos": "https://tu-tienda.com/nuevos"
+                            }),
+                            info="Define links personalizados con etiquetas para usar en respuestas"
+                        )
+                
+                # TAB 7: Canales
                 with gr.Tab("📱 Canales"):
                     gr.Markdown("### Configuración de Canales de Comunicación")
                     
@@ -441,21 +552,21 @@ class StarAgentConfigUI:
                         
                         messenger_page_id = gr.Textbox(
                             label="Facebook Page ID",
-                            value=self.current_config.get("facebook_page_id", ""),
+                            value=self.current_config.get("messenger_page_id", "") or self.current_config.get("facebook_page_id", ""),
                             placeholder="123456789012345",
                             info="ID de tu página de Facebook"
                         )
                         
                         messenger_page_access_token = gr.Textbox(
                             label="Facebook Page Access Token",
-                            value=self.current_config.get("facebook_page_access_token", ""),
+                            value=self.current_config.get("messenger_page_access_token", "") or self.current_config.get("facebook_page_access_token", ""),
                             type="password",
                             info="Page Access Token (no confundir con User Access Token)"
                         )
                         
                         messenger_verify_token = gr.Textbox(
                             label="Messenger Verify Token",
-                            value=self.current_config.get("facebook_verify_token", ""),
+                            value=self.current_config.get("messenger_verify_token", "") or self.current_config.get("facebook_verify_token", ""),
                             placeholder="star_agent_verify_token",
                             info="Token de verificación para webhooks"
                         )
@@ -475,15 +586,14 @@ class StarAgentConfigUI:
                             value=self.current_config.get("enable_instagram_direct", False)
                         )
                 
-                # TAB 7: Métricas y Analytics
+                # TAB 8: Métricas y Analytics
                 with gr.Tab("📊 Métricas"):
                     gr.Markdown("### Métricas y Analytics del Agente")
                     
                     with gr.Row():
                         metrics_display = gr.JSON(
                             label="Métricas Actuales",
-                            value={},
-                            interactive=False
+                            value={}
                         )
                     
                     refresh_metrics_btn = gr.Button("🔄 Actualizar Métricas", variant="secondary")
@@ -521,9 +631,15 @@ class StarAgentConfigUI:
                 stripe_enable, stripe_key,
                 ga_enable, ga_id,
                 pixel_enable, pixel_id,
+                product_catalog_link, store_link,
+                checkout_link, payment_methods_link,
+                support_link, contact_link, faq_link,
+                shipping_link, returns_link, privacy_policy_link, terms_link,
+                custom_links,
                 widget_enable, widget_pos,
-                whatsapp_enable, whatsapp_key,
-                messenger_enable, instagram_direct_enable
+                whatsapp_enable, whatsapp_phone_id_val, whatsapp_token_val, whatsapp_verify_val,
+                messenger_enable, messenger_page_id_val, messenger_token_val, messenger_verify_val,
+                instagram_direct_enable
             ):
                 """Guarda toda la configuración."""
                 config = {
@@ -567,17 +683,31 @@ class StarAgentConfigUI:
                     "enable_meta_pixel": pixel_enable,
                     "meta_pixel_id": pixel_id,
                     
+                    # Links y URLs
+                    "product_catalog_link": product_catalog_link,
+                    "store_link": store_link,
+                    "checkout_link": checkout_link,
+                    "payment_methods_link": payment_methods_link,
+                    "support_link": support_link,
+                    "contact_link": contact_link,
+                    "faq_link": faq_link,
+                    "shipping_link": shipping_link,
+                    "returns_link": returns_link,
+                    "privacy_policy_link": privacy_policy_link,
+                    "terms_link": terms_link,
+                    "custom_links": custom_links if isinstance(custom_links, dict) else {},
+                    
                     # Canales
                     "enable_widget": widget_enable,
                     "widget_position": widget_pos,
                     "enable_whatsapp": whatsapp_enable,
-                    "whatsapp_phone_number_id": whatsapp_phone_id,
-                    "whatsapp_access_token": whatsapp_token,
-                    "whatsapp_verify_token": whatsapp_verify,
+                    "whatsapp_phone_number_id": whatsapp_phone_id_val,
+                    "whatsapp_access_token": whatsapp_token_val,
+                    "whatsapp_verify_token": whatsapp_verify_val,
                     "enable_messenger": messenger_enable,
-                    "facebook_page_id": messenger_page_id,
-                    "facebook_page_access_token": messenger_token,
-                    "facebook_verify_token": messenger_verify,
+                    "messenger_page_id": messenger_page_id_val,
+                    "messenger_page_access_token": messenger_token_val,
+                    "messenger_verify_token": messenger_verify_val,
                     "enable_instagram_direct": instagram_direct_enable,
                 }
                 
@@ -626,9 +756,9 @@ class StarAgentConfigUI:
                     config.get("whatsapp_access_token", ""),
                     config.get("whatsapp_verify_token", ""),
                     config.get("enable_messenger", False),
-                    config.get("facebook_page_id", ""),
-                    config.get("facebook_page_access_token", ""),
-                    config.get("facebook_verify_token", ""),
+                    config.get("messenger_page_id", "") or config.get("facebook_page_id", ""),
+                    config.get("messenger_page_access_token", "") or config.get("facebook_page_access_token", ""),
+                    config.get("messenger_verify_token", "") or config.get("facebook_verify_token", ""),
                     config.get("enable_instagram_direct", False),
                     "✅ Configuración cargada"
                 )
@@ -667,6 +797,18 @@ class StarAgentConfigUI:
                     "google_analytics_id": "",
                     "enable_meta_pixel": False,
                     "meta_pixel_id": "",
+                    "product_catalog_link": "",
+                    "store_link": "",
+                    "checkout_link": "",
+                    "payment_methods_link": "",
+                    "support_link": "",
+                    "contact_link": "",
+                    "faq_link": "",
+                    "shipping_link": "",
+                    "returns_link": "",
+                    "privacy_policy_link": "",
+                    "terms_link": "",
+                    "custom_links": {},
                     "enable_widget": True,
                     "widget_position": "bottom-right",
                     "enable_whatsapp": False,
@@ -674,9 +816,9 @@ class StarAgentConfigUI:
                     "whatsapp_access_token": "",
                     "whatsapp_verify_token": "",
                     "enable_messenger": False,
-                    "facebook_page_id": "",
-                    "facebook_page_access_token": "",
-                    "facebook_verify_token": "",
+                    "messenger_page_id": "",
+                    "messenger_page_access_token": "",
+                    "messenger_verify_token": "",
                     "enable_instagram_direct": False,
                 }
                 self._save_config(default_config)
@@ -723,9 +865,15 @@ class StarAgentConfigUI:
                     enable_stripe, stripe_secret_key,
                     enable_google_analytics, google_analytics_id,
                     enable_meta_pixel, meta_pixel_id,
+                    product_catalog_link, store_link,
+                    checkout_link, payment_methods_link,
+                    support_link, contact_link, faq_link,
+                    shipping_link, returns_link, privacy_policy_link, terms_link,
+                    custom_links,
                     enable_widget, widget_position,
-                    enable_whatsapp, whatsapp_api_key,
-                    enable_messenger, enable_instagram_direct,
+                    enable_whatsapp, whatsapp_phone_number_id, whatsapp_access_token, whatsapp_verify_token,
+                    enable_messenger, messenger_page_id, messenger_page_access_token, messenger_verify_token,
+                    enable_instagram_direct,
                 ],
                 outputs=[save_status]
             )
@@ -745,9 +893,15 @@ class StarAgentConfigUI:
                     enable_stripe, stripe_secret_key,
                     enable_google_analytics, google_analytics_id,
                     enable_meta_pixel, meta_pixel_id,
+                    product_catalog_link, store_link,
+                    checkout_link, payment_methods_link,
+                    support_link, contact_link, faq_link,
+                    shipping_link, returns_link, privacy_policy_link, terms_link,
+                    custom_links,
                     enable_widget, widget_position,
-                    enable_whatsapp, whatsapp_api_key,
-                    enable_messenger, enable_instagram_direct,
+                    enable_whatsapp, whatsapp_phone_number_id, whatsapp_access_token, whatsapp_verify_token,
+                    enable_messenger, messenger_page_id, messenger_page_access_token, messenger_verify_token,
+                    enable_instagram_direct,
                     save_status,
                 ]
             )
@@ -766,8 +920,9 @@ class StarAgentConfigUI:
                 enable_google_analytics, google_analytics_id,
                 enable_meta_pixel, meta_pixel_id,
                 enable_widget, widget_position,
-                enable_whatsapp, whatsapp_api_key,
-                enable_messenger, enable_instagram_direct,
+                enable_whatsapp, whatsapp_phone_number_id, whatsapp_access_token, whatsapp_verify_token,
+                enable_messenger, messenger_page_id, messenger_page_access_token, messenger_verify_token,
+                enable_instagram_direct,
                 save_status,
             ])
             
