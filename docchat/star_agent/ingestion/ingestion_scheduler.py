@@ -65,8 +65,8 @@ class IngestionScheduler:
         self.facebook_token = facebook_token
         self.rag_manager = rag_manager
         
-        # Inicializar ingester
-        self.ingester = MultiSourceIngester(rag_manager=rag_manager)
+        # Inicializar ingester (MultiSourceIngester espera advanced_rag, no rag_manager)
+        self.ingester = MultiSourceIngester(advanced_rag=rag_manager)
         
         # Thread para scheduler
         self._scheduler_thread: Optional[threading.Thread] = None

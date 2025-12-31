@@ -135,7 +135,7 @@ class StarAgentMode:
                     order_tool=self.order_tool,
                     support_tool=self.support_tool,
                     config=ReactSalesAgentConfig(
-                        brand_name=self.config.app_name if hasattr(self.config, "app_name") else "Your Brand",
+                        brand_name=getattr(self.config, "app_name", None) or getattr(self.config, "brand_name", None) or "Your Brand",
                         language="es",
                         enable_sales_closer=True,
                         enable_rag_advanced=True,

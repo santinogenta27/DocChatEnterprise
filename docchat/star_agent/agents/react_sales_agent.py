@@ -96,10 +96,11 @@ class ReactSalesAgentConfig:
         enable_sales_closer: bool = True,
         enable_rag_advanced: bool = True,
         enable_verification: bool = True,
+        base_url: Optional[str] = None,
     ):
         self.brand_name = brand_name
         self.language = language
-        self.base_url = os.getenv("BASE_URL") or os.getenv("SHOPIFY_SHOP_URL")  # URL base para generar links
+        self.base_url = base_url or os.getenv("BASE_URL") or os.getenv("SHOPIFY_SHOP_URL")  # URL base para generar links
         self.enable_sales_closer = enable_sales_closer
         self.enable_rag_advanced = enable_rag_advanced
         self.enable_verification = enable_verification
