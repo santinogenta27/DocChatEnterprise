@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List, TypedDict, Annotated, Sequence
 from enum import Enum
@@ -68,8 +69,308 @@ class SalesStrategy(str, Enum):
     STANDARD = "standard"
 
 
+class ObjectionDetector:
+    """
+    Detecta objeciones comunes en el mensaje del usuario.
+    Reglas heurísticas simples.
+    """
+    
+    def __init__(self):
+        self.objection_keywords = {
+            "caro": ["caro", "costoso", "precio alto", "muy caro", "carísimo", "demasiado caro"],
+            "después": ["después", "más tarde", "luego", "después lo compro", "ya veré"],
+            "precio": ["precio", "cuánto cuesta", "vale mucho", "es caro"],
+            "calidad": ["calidad", "es bueno", "confianza", "duradero"],
+            "tiempo": ["tarda", "demora", "envío", "cuándo llega"],
+        }
+    
+    def detect_objection(self, query: str) -> Optional[str]:
+        """
+        Detecta si hay una objeción en el query.
+        
+        Returns:
+            Tipo de objeción o None si no hay objeción
+        """
+        query_lower = query.lower()
+        
+        for objection_type, keywords in self.objection_keywords.items():
+            if any(keyword in query_lower for keyword in keywords):
+                return objection_type
+        
+        return None
+    
+    def is_objection(self, query: str) -> bool:
+        """Retorna True si el query contiene una objeción."""
+        return self.detect_objection(query) is not None
+
+
+class ProductRecommender:
+    """
+    Sistema básico de recomendaciones (upsell/cross-sell).
+    Reglas heurísticas simples basadas en productos mencionados.
+    """
+    
+    def __init__(self, catalog_tool: CatalogTool):
+        self.catalog_tool = catalog_tool
+    
+    def get_upsell_recommendations(self, current_product_name: str, limit: int = 2) -> List[Dict[str, Any]]:
+        """
+        Recomienda productos superiores (upsell) basado en el producto actual.
+        
+        Heurística simple: busca productos con palabras clave "premium", "pro", "deluxe"
+        o productos similares pero con precio mayor.
+        """
+        recommendations = []
+        try:
+            # Buscar productos relacionados
+            related = self.catalog_tool.suggest_alternatives(current_product_name, limit=limit * 2)
+            
+            # Filtrar productos que podrían ser upsell (precio mayor o keywords premium)
+            for product in related[:limit]:
+                if hasattr(product, 'name') and product.name:
+                    name_lower = product.name.lower()
+                    # Detectar keywords de upsell
+                    upsell_keywords = ["premium", "pro", "deluxe", "superior", "advanced"]
+                    is_upsell = any(keyword in name_lower for keyword in upsell_keywords)
+                    
+                    if is_upsell:
+                        recommendations.append({
+                            "product_id": getattr(product, 'id', ''),
+                            "name": getattr(product, 'name', ''),
+                            "price": getattr(product, 'price', 0),
+                            "type": "upsell",
+                        })
+        except Exception as e:
+            print(f"⚠️ Error en upsell recommendations: {e}")
+        
+        return recommendations
+    
+    def get_cross_sell_recommendations(self, current_product_name: str, limit: int = 2) -> List[Dict[str, Any]]:
+        """
+        Recomienda productos complementarios (cross-sell).
+        
+        Heurística simple: productos relacionados del catálogo.
+        """
+        recommendations = []
+        try:
+            # Buscar productos relacionados
+            related = self.catalog_tool.suggest_alternatives(current_product_name, limit=limit * 2)
+            
+            # Excluir el producto actual y tomar los primeros
+            for product in related[:limit]:
+                if hasattr(product, 'name') and product.name and product.name.lower() != current_product_name.lower():
+                    recommendations.append({
+                        "product_id": getattr(product, 'id', ''),
+                        "name": getattr(product, 'name', ''),
+                        "price": getattr(product, 'price', 0),
+                        "type": "cross_sell",
+                    })
+        except Exception as e:
+            print(f"⚠️ Error en cross-sell recommendations: {e}")
+        
+        return recommendations
+    
+    def get_recommendations(
+        self,
+        products_mentioned: List[str],
+        personalization: Dict[str, Any],
+        lead_temperature: str,
+        limit: int = 2
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Genera recomendaciones combinadas (upsell + cross-sell).
+        
+        Args:
+            products_mentioned: Lista de productos mencionados
+            personalization: Datos de personalización
+            lead_temperature: Temperatura del lead (cold/warm/hot)
+            limit: Número máximo de recomendaciones por tipo
+            
+        Returns:
+            Dict con "upsell" y "cross_sell" lists
+        """
+        all_recommendations = {"upsell": [], "cross_sell": []}
+        
+        # Solo recomendar si el lead es warm o hot
+        if lead_temperature == "cold":
+            return all_recommendations
+        
+        # Si no hay productos mencionados, no hacer recomendaciones
+        if not products_mentioned:
+            return all_recommendations
+        
+        # Usar el primer producto mencionado como base
+        base_product = products_mentioned[0]
+        
+        # Obtener recomendaciones
+        try:
+            upsell = self.get_upsell_recommendations(base_product, limit=limit)
+            cross_sell = self.get_cross_sell_recommendations(base_product, limit=limit)
+            
+            all_recommendations["upsell"] = upsell
+            all_recommendations["cross_sell"] = cross_sell
+        except Exception as e:
+            print(f"⚠️ Error generando recomendaciones: {e}")
+        
+        return all_recommendations
+
+
+class LeadScorer:
+    """
+    Sistema de scoring de leads con reglas heurísticas (0-100).
+    FASE 1: Sin ML, solo reglas basadas en comportamiento.
+    """
+    
+    def __init__(self):
+        self.base_score = 0
+        self.max_score = 100
+    
+    def calculate_score(
+        self,
+        intent: str,
+        sales_stage: str,
+        clear_intent: str,
+        messages_count: int,
+        has_cart_items: bool,
+        has_payment_link: bool,
+        products_mentioned: List[str],
+        personalization: Dict[str, Any]
+    ) -> int:
+        """
+        Calcula score de lead (0-100) basado en reglas heurísticas.
+        
+        Args:
+            intent: Intención detectada
+            sales_stage: Etapa de venta
+            clear_intent: Intención clara (precio, compra, checkout, info)
+            messages_count: Número de mensajes en la conversación
+            has_cart_items: Si tiene items en carrito
+            has_payment_link: Si tiene link de pago
+            products_mentioned: Productos mencionados
+            personalization: Datos de personalización
+            
+        Returns:
+            Score de 0 a 100
+        """
+        score = 0
+        
+        # 1. Intención clara (0-30 puntos)
+        if clear_intent == "checkout":
+            score += 30
+        elif clear_intent == "compra":
+            score += 25
+        elif clear_intent == "precio":
+            score += 15
+        elif clear_intent == "info":
+            score += 10
+        else:  # explorando
+            score += 5
+        
+        # 2. Etapa de venta (0-25 puntos)
+        if sales_stage == "closing":
+            score += 25
+        elif sales_stage == "ready":
+            score += 20
+        elif sales_stage == "consideration":
+            score += 15
+        elif sales_stage == "interest":
+            score += 10
+        else:
+            score += 5
+        
+        # 3. Comportamiento de compra (0-20 puntos)
+        if has_payment_link:
+            score += 20
+        elif has_cart_items:
+            score += 15
+        elif len(products_mentioned) > 0:
+            score += 10
+        
+        # 4. Engagement (0-15 puntos)
+        if messages_count >= 5:
+            score += 15
+        elif messages_count >= 3:
+            score += 10
+        elif messages_count >= 2:
+            score += 5
+        
+        # 5. Personalización (0-10 puntos)
+        if personalization.get("talla") or personalization.get("color"):
+            score += 10
+        elif personalization.get("products_mentioned"):
+            score += 5
+        
+        # Asegurar que el score esté entre 0 y 100
+        return min(max(score, 0), 100)
+    
+    def get_temperature(self, score: int) -> str:
+        """
+        Determina temperatura del lead basado en score.
+        
+        Args:
+            score: Score del lead (0-100)
+            
+        Returns:
+            "cold", "warm", o "hot"
+        """
+        if score >= 70:
+            return "hot"
+        elif score >= 40:
+            return "warm"
+        else:
+            return "cold"
+    
+    def detect_clear_intent(self, query: str, sales_stage: str) -> str:
+        """
+        Detecta intención clara del usuario.
+        
+        Args:
+            query: Mensaje del usuario
+            sales_stage: Etapa de venta actual
+            
+        Returns:
+            "precio", "compra", "checkout", "info", o "explorando"
+        """
+        query_lower = query.lower()
+        
+        # Checkout (más alta prioridad)
+        checkout_keywords = [
+            "pagar", "checkout", "comprar ahora", "finalizar compra",
+            "proceder al pago", "ir a pagar", "completar compra"
+        ]
+        if any(keyword in query_lower for keyword in checkout_keywords):
+            return "checkout"
+        
+        # Compra
+        compra_keywords = [
+            "quiero comprar", "me interesa comprar", "dame", "necesito",
+            "agregar al carrito", "añadir al carrito", "comprar"
+        ]
+        if any(keyword in query_lower for keyword in compra_keywords):
+            return "compra"
+        
+        # Precio
+        precio_keywords = [
+            "precio", "cuánto cuesta", "cuánto vale", "costo",
+            "precio de", "vale", "cuesta"
+        ]
+        if any(keyword in query_lower for keyword in precio_keywords):
+            return "precio"
+        
+        # Info (preguntas específicas)
+        info_keywords = [
+            "qué", "cómo", "cuál", "dónde", "cuándo", "talles",
+            "colores", "material", "talla", "color", "disponible"
+        ]
+        if any(keyword in query_lower for keyword in info_keywords):
+            return "info"
+        
+        # Por defecto: explorando
+        return "explorando"
+
+
 class AgentState(TypedDict):
-    """Estado del agente ReAct con Multi-Agent RAG completo."""
+    """Estado del agente ReAct con Multi-Agent RAG completo + FASE 1 (Lead Scoring y Métricas)."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_id: str
     user_id: str
@@ -86,6 +387,16 @@ class AgentState(TypedDict):
     relevance_label: str  # "CAN_ANSWER", "PARTIAL", "NO_MATCH"
     context_docs: List  # Documentos recuperados para Research Agent
     draft_answer: str  # Respuesta generada por Research Agent
+    # FASE 1: Lead Scoring y Métricas
+    lead_score: int  # Score 0-100
+    lead_temperature: str  # "cold", "warm", "hot"
+    clear_intent: str  # "precio", "compra", "checkout", "info", "explorando"
+    metrics: Dict[str, Any]  # Métricas básicas
+    personalization: Dict[str, Any]  # Personalización mínima
+    events: List[Dict[str, Any]]  # Registro de eventos
+    # Detección de objeciones
+    objection_detected: bool
+    objection_type: Optional[str]
 
 
 class ReactSalesAgentConfig:
@@ -186,6 +497,15 @@ class ReactSalesAgent:
         # Guardrails completos
         self.guardrails = Guardrails()
         
+        # FASE 1: Lead Scoring y Métricas
+        self.lead_scorer = LeadScorer()
+        
+        # Sistema de detección de objeciones
+        self.objection_detector = ObjectionDetector()
+        
+        # Sistema de recomendaciones (upsell/cross-sell)
+        self.product_recommender = ProductRecommender(catalog_tool)
+        
         # Links Manager - Para acceder a links configurados desde UI (con sistema de 3 capas)
         from ..config.links_manager import LinksManager
         from ..config.intent_link_mapper import UserIntent, LinkType
@@ -273,22 +593,9 @@ class ReactSalesAgent:
         workflow.add_node("close", self._close_node)
         workflow.add_node("handoff", self._handoff_node)  # Nodo para handoff a humanos
         
-        # Flujo principal: think → act → observe
+        # Flujo principal simplificado: think → act → close (directo, sin observe)
         workflow.add_edge("think", "act")
-        workflow.add_edge("act", "observe")
-        
-        # Después de observar, decidir siguiente paso
-        workflow.add_conditional_edges(
-            "observe",
-            self._should_continue,
-            {
-                "verify": "verify",
-                "close": "close",
-                "think": "think",  # Loop si necesita más razonamiento
-                "handoff": "handoff",  # Handoff a humanos
-                "end": END,
-            }
-        )
+        workflow.add_edge("act", "close")  # Directo a close después de ejecutar herramientas
         
         # Después de handoff, terminar
         workflow.add_edge("handoff", END)
@@ -459,6 +766,64 @@ class ReactSalesAgent:
         # Detección de etapa de venta
         sales_stage = self._detect_sales_stage(user_query)
         
+        # FASE 1: Detección de intención clara
+        clear_intent = self.lead_scorer.detect_clear_intent(user_query, sales_stage)
+        
+        # FASE 1: Obtener personalización y memoria conversacional
+        personalization = state.get("personalization", {})
+        previous_score = state.get("lead_score", 0)
+        previous_temperature = state.get("lead_temperature", "cold")
+        
+        # Actualizar personalización: extraer productos, talla, color mencionados
+        personalization = self._update_personalization(user_query, personalization, messages)
+        
+        # FASE 1: Calcular score de lead
+        products_mentioned = personalization.get("products_mentioned", [])
+        has_cart_items = bool(state.get("cart") and state.get("cart").get("items"))
+        has_payment_link = bool(state.get("payment_link"))
+        messages_count = len([m for m in messages if isinstance(m, HumanMessage)])
+        
+        lead_score = self.lead_scorer.calculate_score(
+            intent=intent,
+            sales_stage=sales_stage,
+            clear_intent=clear_intent,
+            messages_count=messages_count,
+            has_cart_items=has_cart_items,
+            has_payment_link=has_payment_link,
+            products_mentioned=products_mentioned,
+            personalization=personalization
+        )
+        
+        lead_temperature = self.lead_scorer.get_temperature(lead_score)
+        
+        # FASE 1: Registrar evento de cambio de score
+        events = state.get("events", [])
+        if lead_score != previous_score:
+            events.append({
+                "type": "score_change",
+                "previous_score": previous_score,
+                "new_score": lead_score,
+                "temperature": lead_temperature,
+                "timestamp": str(datetime.now()) if 'datetime' in dir() else ""
+            })
+        
+        # Registrar evento de intención detectada
+        events.append({
+            "type": "intent_detected",
+            "clear_intent": clear_intent,
+            "intent": intent,
+            "sales_stage": sales_stage,
+            "timestamp": str(datetime.now()) if 'datetime' in dir() else ""
+        })
+        
+        # FASE 1: Inicializar métricas si no existen
+        metrics = state.get("metrics", {})
+        metrics["intent_detected"] = clear_intent
+        metrics["score_current"] = lead_score
+        metrics["temperature"] = lead_temperature
+        metrics["link_shown"] = False  # Se actualizará en close_node
+        metrics["link_clicked"] = False  # Se actualizará cuando se detecte click
+        
         # Recuperar contexto (RAG avanzado)
         # Si ya hay contexto de Research Agent, usarlo (viene de research_node)
         context = state.get("context_retrieved", "")
@@ -502,6 +867,31 @@ class ReactSalesAgent:
             self._log_event("checkout_started", state["session_id"])
             # Se manejará en el nodo act
         
+        # Detección de objeciones
+        objection_type = self.objection_detector.detect_objection(user_query)
+        objection_detected = objection_type is not None
+        
+        # Si hay objeción, manejarla automáticamente
+        objection_response = None
+        if objection_detected and objection_type:
+            objection_response = self._handle_objection(user_query)
+            # Registrar evento
+            events.append({
+                "type": "objection_detected",
+                "objection_type": objection_type,
+                "timestamp": str(datetime.now())
+            })
+        
+        # Generar recomendaciones (upsell/cross-sell) si aplica
+        recommendations = {}
+        if lead_temperature in ["warm", "hot"] and products_mentioned:
+            recommendations = self.product_recommender.get_recommendations(
+                products_mentioned=products_mentioned,
+                personalization=personalization,
+                lead_temperature=lead_temperature,
+                limit=2
+            )
+        
         # Análisis de sentimiento
         sentiment_result = self.sentiment_analyzer.analyze(user_query, session)
         
@@ -525,12 +915,34 @@ class ReactSalesAgent:
         content = response.content if hasattr(response, 'content') else str(response)
         decision = self._parse_think_decision(content)
         
+        # Si hay objeción detectada, incluir respuesta de objeción en tool_results
+        tool_results_with_extras = decision.copy() if decision else {}
+        if objection_detected and objection_response:
+            tool_results_with_extras["objection"] = {
+                "type": objection_type,
+                "response": objection_response,
+            }
+        
+        # Incluir recomendaciones en tool_results
+        if recommendations:
+            tool_results_with_extras["recommendations"] = recommendations
+        
         return {
             "messages": [response],
             "intent": intent,
             "sales_stage": sales_stage,
             "context_retrieved": context,
-            "tool_results": decision,
+            "tool_results": tool_results_with_extras,
+            # FASE 1: Lead Scoring y Métricas
+            "lead_score": lead_score,
+            "lead_temperature": lead_temperature,
+            "clear_intent": clear_intent,
+            "metrics": metrics,
+            "personalization": personalization,
+            "events": events,
+            # Detección de objeciones
+            "objection_detected": objection_detected,
+            "objection_type": objection_type,
         }
     
     def _act_node(self, state: AgentState) -> Dict[str, Any]:
@@ -711,9 +1123,9 @@ class ReactSalesAgent:
         # Agregar contexto del RAG si está disponible
         rag_context = ""
         if context_retrieved:
-            rag_context = f"\n\n**Contexto recuperado de documentos (RAG - ÚSALO):**\n{context_retrieved[:1000]}"
+            rag_context = f"\n\n**Contexto recuperado de documentos (RAG - ÚSALO COMPLETAMENTE):**\n{context_retrieved[:2000]}"
         if draft_answer and draft_answer not in context_retrieved:
-            rag_context += f"\n\n**Información adicional del Research Agent:**\n{draft_answer[:500]}"
+            rag_context += f"\n\n**Información adicional del Research Agent:**\n{draft_answer[:1000]}"
         
         # Agregar link configurado según intención
         if link_for_intent:
@@ -843,10 +1255,29 @@ Responde en JSON:
                 closing_message = self._close_sale()
             closing_strategy = self._select_sales_strategy(sales_stage, intent, tool_results)
         
-        # Determinar si debe incluir links
-        should_include_links = self._should_include_product_links(sales_stage, intent, state)
+        # FASE 1: Obtener datos de scoring y personalización
+        lead_score = state.get("lead_score", 0)
+        lead_temperature = state.get("lead_temperature", "cold")
+        clear_intent = state.get("clear_intent", "explorando")
+        personalization = state.get("personalization", {})
+        metrics = state.get("metrics", {})
+        events = state.get("events", [])
         
-        # Construir prompt de cierre
+        # FASE 1: Determinar si debe incluir links basado en intención + etapa + score
+        should_include_links = self._should_send_link(clear_intent, sales_stage, lead_score, lead_temperature)
+        
+        # FASE 1: Registrar si se va a mostrar un link
+        if should_include_links:
+            metrics["link_shown"] = True
+            events.append({
+                "type": "link_shown",
+                "clear_intent": clear_intent,
+                "sales_stage": sales_stage,
+                "lead_score": lead_score,
+                "timestamp": str(datetime.now())
+            })
+        
+        # Construir prompt de cierre con contexto unificado
         close_prompt = self._build_close_prompt(
             sales_stage=sales_stage,
             intent=intent,
@@ -854,15 +1285,43 @@ Responde en JSON:
             context=context,
             closing_strategy=closing_strategy,
             state=state,
+            # FASE 1: Contexto unificado
+            lead_score=lead_score,
+            lead_temperature=lead_temperature,
+            clear_intent=clear_intent,
+            personalization=personalization,
         )
         
         # Generar respuesta final
         response = self.llm.invoke([
             SystemMessage(content=close_prompt),
-            HumanMessage(content="Genera la respuesta final optimizada para el widget."),
+            HumanMessage(content="Genera la respuesta final optimizada para el widget. Responde en texto natural, NO en JSON."),
         ])
         
         final_text = response.content if hasattr(response, 'content') else str(response)
+        
+        # Limpiar respuesta: eliminar JSON si aparece accidentalmente
+        # Si la respuesta contiene JSON estructurado, extraer solo el texto útil
+        import re
+        # Buscar si hay bloques JSON en la respuesta
+        json_pattern = r'\{[^{}]*"response_draft"[^{}]*\}'
+        if re.search(json_pattern, final_text):
+            # Intentar extraer solo el contenido útil
+            match = re.search(r'"response_draft"\s*:\s*"([^"]+)"', final_text)
+            if match:
+                final_text = match.group(1)
+            else:
+                # Si no se puede extraer, eliminar el JSON completo
+                final_text = re.sub(json_pattern, '', final_text).strip()
+        
+        # Eliminar cualquier otro JSON visible
+        final_text = re.sub(r'\{[^{}]*\}', '', final_text).strip()
+        
+        # Limpiar espacios múltiples
+        final_text = re.sub(r'\s+', ' ', final_text).strip()
+        
+        # Validar respuesta antes de enviar
+        final_text = self._validate_and_improve_response(final_text, context, tool_results)
         
         # Extraer payment_link si existe
         payment_link = tool_results.get("payment_link") or tool_results.get("payment", {}).get("payment_link")
@@ -1066,7 +1525,7 @@ Eres un asistente virtual 24/7 para {self.config.brand_name}.
 5. SIEMPRE cita o referencia información del contexto cuando sea posible.
 
 **Contexto recuperado (RAG):**
-{context[:1500] if context else "⚠️ NO HAY CONTEXTO DISPONIBLE - Solo responde con información que SABES que es correcta o di que no tienes la información."}
+{context[:6000] if context else "⚠️ NO HAY CONTEXTO DISPONIBLE - Solo responde con información que SABES que es correcta o di que no tienes la información."}
 {links_context}
 
 **Etapa de venta detectada:** {sales_stage}
@@ -1248,6 +1707,10 @@ Responde en formato JSON con tu decisión:
         context: str,
         closing_strategy: Optional[SalesStrategy],
         state: Optional[Dict[str, Any]] = None,
+        lead_score: int = 0,
+        lead_temperature: str = "cold",
+        clear_intent: str = "explorando",
+        personalization: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Construye prompt de cierre optimizado para widget.
@@ -1259,28 +1722,105 @@ Responde en formato JSON con tu decisión:
             context: Contexto recuperado
             closing_strategy: Estrategia de cierre
             state: Estado completo del agente (para determinar si incluir links)
+            lead_score: Score del lead (0-100)
+            lead_temperature: Temperatura del lead (cold, warm, hot)
+            clear_intent: Intención clara detectada
+            personalization: Datos de personalización
         """
-        # Determinar si debe incluir links de productos
-        should_include_product_links = True  # En cierre, siempre incluir links si hay productos
-        if state:
-            should_include_product_links = self._should_include_product_links(sales_stage, intent, state)
+        # FASE 1: Usar personalización del estado si está disponible
+        if personalization is None:
+            personalization = state.get("personalization", {}) if state else {}
         
-        # Obtener último mensaje del usuario para detectar intención (CAPA 1+2+3)
-        messages = state.get("messages", []) if state else []
-        last_user_message = ""
-        for msg in reversed(messages):
-            if hasattr(msg, 'content') and isinstance(msg.content, str):
-                last_user_message = msg.content
-                break
+        # FASE 1: Construir contexto unificado (sin fragmentación)
+        unified_context_parts = []
         
-        # CAPA 1+2+3: Detectar intención y obtener link correcto
-        user_intent = self.links_manager.intent_mapper.detect_intent(last_user_message, sales_stage)
-        link_for_intent = self.links_manager.format_link_for_intent(user_intent, sales_stage)
+        # 1. Contexto RAG (prioritario)
+        if context:
+            unified_context_parts.append(f"**CONTEXTO DE DOCUMENTOS (RAG):**\n{context[:8000]}")
         
-        # Construir contexto de links
+        # 2. Personalización y memoria conversacional
+        personalization_context = ""
+        products_mentioned = personalization.get("products_mentioned", [])
+        talla = personalization.get("talla")
+        color = personalization.get("color")
+        
+        if products_mentioned or talla or color:
+            personalization_context = "\n\n**PERSONALIZACIÓN DEL CLIENTE:**\n"
+            if products_mentioned:
+                personalization_context += f"- Productos mencionados anteriormente: {', '.join(set(products_mentioned))}\n"
+            if talla:
+                personalization_context += f"- Talla preferida: {talla}\n"
+            if color:
+                personalization_context += f"- Color preferido: {color}\n"
+            personalization_context += "- Usa esta información para personalizar tu respuesta."
+        
+        # 3. Lead Score y Temperatura (para estrategia, NO mencionar al usuario)
+        score_context = f"\n\n**INFORMACIÓN INTERNA (NO MENCIONAR):**\n"
+        score_context += f"- Lead Score: {lead_score}/100\n"
+        score_context += f"- Temperatura: {lead_temperature}\n"
+        score_context += f"- Intención clara: {clear_intent}\n"
+        score_context += f"- Etapa de venta: {sales_stage}\n"
+        if lead_temperature == "hot":
+            score_context += "- ⚠️ LEAD CALIENTE: Prioriza cierre de venta y envío de links.\n"
+        elif lead_temperature == "warm":
+            score_context += "- ⚠️ LEAD TIBIO: Nutre la relación, proporciona información detallada.\n"
+        else:
+            score_context += "- ⚠️ LEAD FRÍO: Solo información, sin presión de venta.\n"
+        
+        # 4. Links (solo si debe enviarse)
         links_context = ""
-        if link_for_intent:
-            links_context = f"\n\n**🔗 LINK OBLIGATORIO para incluir en tu respuesta:**\n{link_for_intent}\n\n**Intención detectada:** {user_intent.value}\n**Acción:** DEBES incluir este link en tu respuesta."
+        if state:
+            should_include_product_links = self._should_send_link(clear_intent, sales_stage, lead_score, lead_temperature)
+            if should_include_product_links:
+                # Obtener link según intención
+                messages = state.get("messages", [])
+                last_user_message = ""
+                for msg in reversed(messages):
+                    if isinstance(msg, HumanMessage) and hasattr(msg, 'content'):
+                        last_user_message = msg.content
+                        break
+                
+                user_intent = self.links_manager.intent_mapper.detect_intent(last_user_message, sales_stage)
+                link_for_intent = self.links_manager.format_link_for_intent(user_intent, sales_stage)
+                
+                if link_for_intent:
+                    links_context = f"\n\n**🔗 LINK OBLIGATORIO (DEBES INCLUIRLO):**\n{link_for_intent}\n"
+        
+        # 5. Recomendaciones (upsell/cross-sell)
+        recommendations_context = ""
+        if tool_results and "recommendations" in tool_results:
+            recommendations = tool_results["recommendations"]
+            upsell_list = recommendations.get("upsell", [])
+            cross_sell_list = recommendations.get("cross_sell", [])
+            
+            if upsell_list or cross_sell_list:
+                recommendations_context = "\n\n**RECOMENDACIONES DE PRODUCTOS (UPSELL/CROSS-SELL):**\n"
+                if upsell_list:
+                    recommendations_context += "- **Productos superiores (upsell):**\n"
+                    for rec in upsell_list:
+                        recommendations_context += f"  • {rec.get('name', 'Producto')} - ${rec.get('price', 0)}\n"
+                if cross_sell_list:
+                    recommendations_context += "- **Productos complementarios (cross-sell):**\n"
+                    for rec in cross_sell_list:
+                        recommendations_context += f"  • {rec.get('name', 'Producto')} - ${rec.get('price', 0)}\n"
+                recommendations_context += "- Si el lead es warm o hot, PRESENTA estas recomendaciones de forma natural en tu respuesta.\n"
+                recommendations_context += "- Ejemplo: 'También tenemos [producto] que va perfecto con [producto actual]' o '¿Te interesa conocer nuestra versión premium?'\n"
+        
+        # 6. Objeción detectada (si hay)
+        objection_context = ""
+        objection_detected_state = state.get("objection_detected", False) if state else False
+        objection_type_state = state.get("objection_type") if state else None
+        if objection_detected_state and objection_type_state and tool_results and "objection" in tool_results:
+            objection_data = tool_results["objection"]
+            objection_response = objection_data.get("response", "")
+            objection_context = f"\n\n**⚠️ OBJECIÓN DETECTADA ({objection_type_state}):**\n"
+            objection_context += f"- El cliente expresó una objeción sobre: {objection_type_state}\n"
+            objection_context += f"- Respuesta sugerida: {objection_response}\n"
+            objection_context += "- DEBES incluir esta respuesta en tu mensaje de forma natural.\n"
+            objection_context += "- NO ignores la objeción - abórdala directamente pero con tacto.\n"
+        
+        # Combinar todo en contexto unificado
+        unified_context = "\n".join(unified_context_parts) + personalization_context + score_context + links_context + recommendations_context + objection_context
         
         prompt = f"""
 Eres un asistente virtual de ventas para {self.config.brand_name}.
@@ -1290,14 +1830,13 @@ Eres un asistente virtual de ventas para {self.config.brand_name}.
 2. NUNCA inventes información, precios, políticas, fechas o garantías.
 3. Si no tienes la información en el contexto, di: "No tengo esa información en mis documentos. ¿Puedes ser más específico?"
 4. SIEMPRE usa información real del contexto recuperado (RAG) y resultados de herramientas.
-5. NUNCA menciones información técnica como "etapa de venta", "intención detectada", "relevancia", etc. al usuario.
-6. NUNCA digas cosas como "Basándome en la información proporcionada, el usuario se encuentra en la etapa de interés" - esto es información técnica interna.
-7. Responde de forma natural y conversacional, como si fueras un vendedor humano.
+5. NUNCA menciones información técnica como "etapa de venta", "intención detectada", "relevancia", "score", etc. al usuario.
+6. NUNCA digas cosas como "Basándome en la información proporcionada" - habla DIRECTAMENTE.
+7. Responde de forma natural y conversacional, como si fueras un vendedor humano experto.
 8. Si el contexto contiene información relevante sobre productos, servicios, políticas, etc., ÚSALO en tu respuesta.
 
-**Contexto recuperado de documentos (RAG - ÚSALO EN TU RESPUESTA):**
-{context[:2000] if context else "⚠️ NO HAY CONTEXTO DISPONIBLE - Solo responde con información de resultados de herramientas o di que no tienes la información."}
-{links_context}
+**CONTEXTO UNIFICADO (TODO LO QUE NECESITAS):**
+{unified_context}
 
 **INFORMACIÓN INTERNA (NO MENCIONAR AL USUARIO):**
 - Etapa de venta: {sales_stage}
@@ -1307,27 +1846,81 @@ Eres un asistente virtual de ventas para {self.config.brand_name}.
 **Resultados de herramientas:**
 {json.dumps(tool_results, default=str)[:2000]}
 
-**Instrucciones CRÍTICAS sobre LINKS (OBLIGATORIO):**
-- Los links son el 90% del producto - SIEMPRE inclúyelos cuando están disponibles.
-- Si hay "🔗 LINK OBLIGATORIO" arriba, DEBES incluirlo en tu respuesta.
-- Formato: [Texto del link](url) en Markdown.
-- NO elijas links al azar - usa SOLO los links proporcionados.
-{"✅ INCLUYE LINKS DE PRODUCTOS:" if should_include_product_links else "❌ NO INCLUYAS LINKS DE PRODUCTOS todavía:"}
-{self._get_link_instructions(sales_stage, intent, should_include_product_links)}
+**INSTRUCCIONES CRÍTICAS PARA GENERAR LA RESPUESTA:**
 
-**Otras instrucciones para respuesta final:**
-1. Sé directo y conciso (máximo 300 caracteres para widget).
-2. PRIORIDAD: Usa información del contexto RAG si está disponible (productos, descripciones, precios, políticas, etc.).
-3. Si hay productos en el contexto RAG, preséntalos con nombres y precios específicos.
-4. Si hay productos en resultados de herramientas, también preséntalos.
-5. Si hay payment_link, inclúyelo claramente con CTA: [Pagar ahora](payment_link).
-6. Si estás en etapa READY o CLOSING, incluye un CTA claro con link de checkout.
-7. Usa la estrategia de cierre {closing_strategy.value if closing_strategy else "standard"}.
-8. Sé persuasivo pero ético.
-9. Responde como un vendedor humano, NO como un sistema técnico.
-10. Combina información del contexto RAG con resultados de herramientas cuando sea apropiado.
+1. **CONTEXTO RAG ES PRIORITARIO**: Si el contexto RAG contiene información sobre productos, servicios, precios, tallas, materiales, colores, MOQ, etc., DEBES INCLUIR TODA ESA INFORMACIÓN en tu respuesta. NO omitas detalles importantes.
 
-Genera la respuesta final optimizada para widget web. Responde directamente al usuario usando la información del contexto RAG y resultados de herramientas, sin mencionar información técnica interna.
+2. **INFORMACIÓN COMPLETA DE PRODUCTOS**: Cuando menciones un producto del contexto RAG, incluye:
+   - Nombre completo del producto
+   - Precio (si está disponible)
+   - MOQ (Minimum Order Quantity) si está disponible
+   - Tallas/Sizes disponibles
+   - Colores disponibles
+   - Materiales
+   - Personalización disponible
+   - País de origen/Fabricación
+   - Cualquier otro detalle relevante que esté en el contexto
+
+3. **FORMATO DE RESPUESTA**: 
+   - Responde de forma natural y conversacional, como un vendedor humano experto
+   - Usa lenguaje claro y directo
+   - NO uses frases genéricas como "Parece que estás explorando" o "Basándome en la información"
+   - Habla DIRECTAMENTE al cliente: "Tenemos la Agerola T-shirt en color negro..."
+   - NO incluyas JSON en tu respuesta - solo texto natural
+
+4. **LINKS (OBLIGATORIO si están disponibles):**
+   - Si hay "🔗 LINK OBLIGATORIO" en el contexto unificado, DEBES incluirlo en tu respuesta.
+   - Formato: [Texto del link](url) en Markdown.
+   - NO elijas links al azar - usa SOLO los links proporcionados.
+   - Si el lead es "hot" o la intención es "checkout"/"compra", SIEMPRE incluye links.
+   - Si el lead es "cold" y solo está "explorando", NO incluyas links todavía.
+
+5. **MANEJO DE OBJECIONES (CRÍTICO):**
+   - Si hay "⚠️ OBJECIÓN DETECTADA" en el contexto, DEBES abordarla DIRECTAMENTE.
+   - Usa la respuesta sugerida como guía, pero adaptala de forma natural.
+   - NO ignores objeciones - son oportunidades para aclarar dudas y cerrar ventas.
+   - Sé empático: "Entiendo tu preocupación sobre [objeción]..."
+   - Luego presenta tu respuesta de forma convincente pero honesta.
+
+6. **RECOMENDACIONES (UPSELL/CROSS-SELL):**
+   - Si hay "RECOMENDACIONES DE PRODUCTOS" en el contexto, PRESÉNTALAS de forma natural.
+   - Solo recomienda si el lead es warm o hot (no a leads fríos).
+   - Cross-sell: "Este producto va perfecto con [producto recomendado]"
+   - Upsell: "¿Te interesa conocer nuestra versión premium [producto]?"
+   - NO seas agresivo - presenta las recomendaciones como sugerencias útiles.
+
+7. **EMPUJAR A DECISIÓN (PROACTIVO):**
+   - Si el lead es "hot" (score >= 70), EMPUJA activamente hacia la decisión.
+   - Usa CTAs claros: "¿Quieres que lo agreguemos a tu carrito?", "¿Procedemos con el pago?"
+   - Si está en etapa READY o CLOSING, incluye un CTA claro con link de checkout.
+   - Si el lead es "warm" (score 40-69), nutre la relación pero también invita a acción.
+   - Si el lead es "cold" (score < 40), solo proporciona información, sin presión.
+
+8. **OTRAS INSTRUCCIONES:**
+   - Si hay payment_link, inclúyelo claramente con CTA: [Pagar ahora](payment_link)
+   - Usa la estrategia de cierre {closing_strategy.value if closing_strategy else "standard"}
+   - Sé persuasivo pero ético
+   - Responde como un vendedor humano experto que CONOCE sus productos
+   - Si el contexto tiene información detallada, ÚSALA TODA - no resumas innecesariamente
+
+**EJEMPLOS DE BUENAS RESPUESTAS:**
+
+Ejemplo 1 (producto específico):
+"¡Perfecto! Tenemos la Agerola T-shirt en color negro. Está disponible en tallas S, M, L, XL, XXL. El precio es desde 27,90 € (con pedidos de 100 unidades, MOQ: 15/49/100 pcs, precios: 30€/28,50€/27,90€). Está hecha 100% algodón, hecha en Italia por Giulio M. en Milano. Puedes personalizarla con etiquetas y colores. ¿Qué talle necesitas?"
+
+Ejemplo 2 (catálogo general):
+"Tenemos una excelente colección de ropa para hombre. Entre nuestros productos destacados están: Agerola T-shirt (desde 27,90€, 100% algodón, tallas S-XXL), Tagliamento Corset (hecho en Italia, personalizable), y más. ¿Hay algún producto específico que te interese?"
+
+Ejemplo 3 (pregunta sobre detalles):
+"Sí, la Agerola T-shirt está disponible en las siguientes tallas: S, M, L, XL, XXL. El material es 100% algodón y puedes elegir entre 3+ colores. El precio depende de la cantidad: 30€ para 15 unidades, 28,50€ para 49 unidades, y 27,90€ para 100 unidades o más. ¿Cuántas unidades necesitas?"
+
+**REGLAS ABSOLUTAS:**
+- NUNCA digas "Parece que", "Basándome en", "Según la información" - habla DIRECTAMENTE
+- SIEMPRE incluye TODOS los detalles del producto que estén en el contexto
+- NO resumas innecesariamente - da información completa
+- Responde como si fueras un vendedor experto que CONOCE sus productos de memoria
+
+Genera la respuesta final. Habla DIRECTAMENTE al cliente usando TODA la información relevante del contexto RAG. Responde en texto natural, NO en JSON.
 """
         return prompt
     
@@ -1399,6 +1992,24 @@ Genera la respuesta final optimizada para widget web. Responde directamente al u
             "relevance_label": "",
             "context_docs": [],
             "draft_answer": "",
+            # FASE 1: Lead Scoring y Métricas (inicializados)
+            "lead_score": 0,
+            "lead_temperature": "cold",
+            "clear_intent": "explorando",
+            "metrics": {
+                "intent_detected": "explorando",
+                "score_current": 0,
+                "temperature": "cold",
+                "link_shown": False,
+                "link_clicked": False,
+            },
+            "personalization": {
+                "products_mentioned": [],
+                "talla": None,
+                "color": None,
+                "last_strong_intent": None,
+            },
+            "events": [],
         }
         
         # Ejecutar grafo
@@ -1439,6 +2050,32 @@ Genera la respuesta final optimizada para widget web. Responde directamente al u
                 }
         else:
             response_text = final_message.content if hasattr(final_message, 'content') else str(final_message)
+        
+        # Limpiar respuesta final: eliminar JSON si aparece
+        import re
+        # Buscar y eliminar bloques JSON que puedan aparecer en la respuesta
+        if response_text.strip().startswith('{') or '"response_draft"' in response_text or '"ready_to_respond"' in response_text:
+            # Intentar extraer texto útil de JSON
+            match = re.search(r'"response_draft"\s*:\s*"([^"]+(?:\\.[^"]*)*)"', response_text, re.DOTALL)
+            if match:
+                response_text = match.group(1).replace('\\"', '"').replace('\\n', '\n')
+            else:
+                # Si la respuesta completa parece JSON, intentar extraer cualquier texto útil
+                match = re.search(r'"[^"]+"\s*:\s*"([^"]+)"', response_text)
+                if match:
+                    response_text = match.group(1)
+                else:
+                    # Eliminar bloques JSON completos pero mantener el texto fuera de ellos
+                    response_text = re.sub(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', '', response_text)
+        
+        # Limpiar espacios múltiples y saltos de línea innecesarios
+        response_text = re.sub(r'\s+', ' ', response_text).strip()
+        
+        # Si la respuesta está vacía o es muy corta después de limpiar, usar draft_answer
+        if len(response_text) < 20:
+            draft_answer = final_state.get("draft_answer", "")
+            if draft_answer:
+                response_text = draft_answer
         
         # Log conversión si está en etapa de cierre
         if sales_stage in [SalesStage.READY.value, SalesStage.CLOSING.value, SalesStage.COMPLETED.value]:
