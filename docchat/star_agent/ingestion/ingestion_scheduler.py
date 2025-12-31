@@ -66,7 +66,10 @@ class IngestionScheduler:
         self.rag_manager = rag_manager
         
         # Inicializar ingester (MultiSourceIngester espera advanced_rag, no rag_manager)
-        self.ingester = MultiSourceIngester(advanced_rag=rag_manager)
+        if rag_manager:
+            self.ingester = MultiSourceIngester(advanced_rag=rag_manager)
+        else:
+            self.ingester = None
         
         # Thread para scheduler
         self._scheduler_thread: Optional[threading.Thread] = None
