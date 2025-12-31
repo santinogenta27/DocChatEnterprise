@@ -652,11 +652,27 @@ class ReactSalesAgent:
         sales_stage = state.get("sales_stage", "interest")
         intent = state.get("intent", "general")
         
-        # Determinar si debe enviar links basado en etapa de venta e intención
-        should_include_links = self._should_include_product_links(sales_stage, intent, state)
+        # Determinar si debe enviar links de productos basado en etapa de venta e intención
+        should_include_product_links = self._should_include_product_links(sales_stage, intent, state)
+        
+        # Obtener último mensaje del usuario para detectar intención (CAPA 1+2+3)
+        messages = state.get("messages", [])
+        last_user_message = ""
+        for msg in reversed(messages):
+            if hasattr(msg, 'content') and isinstance(msg.content, str):
+                last_user_message = msg.content
+                break
+        
+        # CAPA 1+2+3: Detectar intención y obtener link correcto
+        user_intent = self.links_manager.intent_mapper.detect_intent(last_user_message, sales_stage)
+        link_for_intent = self.links_manager.format_link_for_intent(user_intent, sales_stage)
         
         # Construir contexto de observación
-        observation_context = self._build_observation_context(tool_results, include_links=should_include_links)
+        observation_context = self._build_observation_context(tool_results, include_links=should_include_product_links)
+        
+        # Agregar link configurado según intención
+        if link_for_intent:
+            observation_context += f"\n\n**🔗 LINK OBLIGATORIO para incluir:** {link_for_intent}"
         
         # Invocar LLM para procesar observaciones
         observation_prompt = f"""
@@ -1196,10 +1212,27 @@ Responde en formato JSON con tu decisión:
             closing_strategy: Estrategia de cierre
             state: Estado completo del agente (para determinar si incluir links)
         """
-        # Determinar si debe incluir links
-        should_include_links = True  # En cierre, siempre incluir links si hay productos
+        # Determinar si debe incluir links de productos
+        should_include_product_links = True  # En cierre, siempre incluir links si hay productos
         if state:
-            should_include_links = self._should_include_product_links(sales_stage, intent, state)
+            should_include_product_links = self._should_include_product_links(sales_stage, intent, state)
+        
+        # Obtener último mensaje del usuario para detectar intención (CAPA 1+2+3)
+        messages = state.get("messages", []) if state else []
+        last_user_message = ""
+        for msg in reversed(messages):
+            if hasattr(msg, 'content') and isinstance(msg.content, str):
+                last_user_message = msg.content
+                break
+        
+        # CAPA 1+2+3: Detectar intención y obtener link correcto
+        user_intent = self.links_manager.intent_mapper.detect_intent(last_user_message, sales_stage)
+        link_for_intent = self.links_manager.format_link_for_intent(user_intent, sales_stage)
+        
+        # Construir contexto de links
+        links_context = ""
+        if link_for_intent:
+            links_context = f"\n\n**🔗 LINK OBLIGATORIO para incluir en tu respuesta:**\n{link_for_intent}\n\n**Intención detectada:** {user_intent.value}\n**Acción:** DEBES incluir este link en tu respuesta."
         
         prompt = f"""
 Eres un asistente virtual de ventas para {self.config.brand_name}.
@@ -1209,6 +1242,7 @@ Eres un asistente virtual de ventas para {self.config.brand_name}.
 2. NUNCA inventes información, precios, políticas, fechas o garantías.
 3. Si no tienes la información, di: "No tengo esa información. ¿Puedes ser más específico?"
 4. SIEMPRE usa información real de los resultados de herramientas o contexto.
+{links_context}
 
 **Etapa de venta:** {sales_stage}
 **Intención:** {intent}
@@ -1217,8 +1251,13 @@ Eres un asistente virtual de ventas para {self.config.brand_name}.
 **Resultados de herramientas:**
 {json.dumps(tool_results, default=str)[:2000]}
 
-**Instrucciones CRÍTICAS sobre LINKS:**
-{self._get_link_instructions(sales_stage, intent, should_include_links)}
+**Instrucciones CRÍTICAS sobre LINKS (OBLIGATORIO):**
+- Los links son el 90% del producto - SIEMPRE inclúyelos cuando están disponibles.
+- Si hay "🔗 LINK OBLIGATORIO" arriba, DEBES incluirlo en tu respuesta.
+- Formato: [Texto del link](url) en Markdown.
+- NO elijas links al azar - usa SOLO los links proporcionados.
+{"✅ INCLUYE LINKS DE PRODUCTOS:" if should_include_product_links else "❌ NO INCLUYAS LINKS DE PRODUCTOS todavía:"}
+{self._get_link_instructions(sales_stage, intent, should_include_product_links)}
 
 **Otras instrucciones para respuesta final:**
 1. Sé directo y conciso (máximo 300 caracteres para widget).
