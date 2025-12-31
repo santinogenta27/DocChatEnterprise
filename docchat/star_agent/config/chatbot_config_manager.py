@@ -21,6 +21,9 @@ class ChatbotConfig:
     personality: str = ""
     custom_instructions: str = ""
     
+    # E-commerce
+    ecommerce_enabled: bool = True  # Habilitado por defecto para STAR AGENT
+    
     # RAG
     rag_enabled: bool = False
     documents_dir: str = ""
