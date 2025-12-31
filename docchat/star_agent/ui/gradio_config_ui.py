@@ -1805,7 +1805,11 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                         return "❌ Error: AdvancedRAGManager no inicializado."
                     
                     # Procesar cada archivo
-                    from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+                    try:
+                        from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+                    except ImportError:
+                        raise ImportError("Dependencias faltantes. Instala: pip install pypdf langchain-community python-docx")
+                    
                     from langchain.text_splitter import RecursiveCharacterTextSplitter
                     from langchain_core.documents import Document
                     from pathlib import Path
