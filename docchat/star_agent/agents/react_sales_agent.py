@@ -979,8 +979,15 @@ Responde en JSON:
         prompt = f"""
 Eres un asistente virtual 24/7 para {self.config.brand_name}.
 
+**REGLAS CRÍTICAS - LÉELAS CUIDADOSAMENTE:**
+1. SOLO responde usando la información del contexto proporcionado.
+2. NUNCA inventes información, precios, políticas, fechas o garantías.
+3. Si no tienes la información en el contexto, di: "No tengo esa información en mis documentos. ¿Puedes ser más específico?"
+4. Si el contexto está vacío, di: "No tengo información sobre eso en mis documentos."
+5. SIEMPRE cita o referencia información del contexto cuando sea posible.
+
 **Contexto recuperado (RAG):**
-{context[:1500] if context else "No hay contexto disponible"}
+{context[:1500] if context else "⚠️ NO HAY CONTEXTO DISPONIBLE - Solo responde con información que SABES que es correcta o di que no tienes la información."}
 {links_context}
 
 **Etapa de venta detectada:** {sales_stage}

@@ -1781,16 +1781,85 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                 return load_config_ui()
             
             def process_documents(files):
-                """Procesa documentos subidos."""
+                """Procesa documentos subidos y los agrega al RAG."""
                 if not files:
                     return "⚠️ No se seleccionaron archivos"
                 
                 try:
-                    # Aquí se procesarían los documentos y se agregarían a RAG
-                    # Por ahora, solo retornamos mensaje
-                    return f"✅ {len(files)} documento(s) procesado(s). Los documentos se agregarán a la base de conocimiento del agente."
+                    # Obtener AdvancedRAGManager del agente
+                    if not self.star_agent_mode or not hasattr(self.star_agent_mode, 'agent'):
+                        return "❌ Error: Agente no disponible. Inicia el servidor API primero."
+                    
+                    agent = self.star_agent_mode.agent
+                    advanced_rag = None
+                    
+                    # Obtener advanced_rag del agente
+                    if hasattr(agent, 'advanced_rag') and agent.advanced_rag:
+                        advanced_rag = agent.advanced_rag
+                    elif hasattr(agent, 'react_agent') and hasattr(agent.react_agent, 'advanced_rag'):
+                        advanced_rag = agent.react_agent.advanced_rag
+                    else:
+                        return "❌ Error: RAG no disponible. ¿Está habilitado RAG Avanzado?"
+                    
+                    if not advanced_rag:
+                        return "❌ Error: AdvancedRAGManager no inicializado."
+                    
+                    # Procesar cada archivo
+                    from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+                    from langchain.text_splitter import RecursiveCharacterTextSplitter
+                    from langchain_core.documents import Document
+                    from pathlib import Path
+                    
+                    processed_count = 0
+                    total_docs = 0
+                    
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=1000,
+                        chunk_overlap=200,
+                        length_function=len,
+                    )
+                    
+                    all_documents = []
+                    
+                    for file_path in files:
+                        try:
+                            file_path_obj = Path(file_path)
+                            file_ext = file_path_obj.suffix.lower()
+                            
+                            # Cargar documento según extensión
+                            if file_ext == '.pdf':
+                                loader = PyPDFLoader(file_path)
+                                docs = loader.load()
+                            elif file_ext in ['.txt', '.md']:
+                                loader = TextLoader(file_path, encoding='utf-8')
+                                docs = loader.load()
+                            elif file_ext in ['.docx', '.doc']:
+                                loader = Docx2txtLoader(file_path)
+                                docs = loader.load()
+                            else:
+                                return f"❌ Formato no soportado: {file_ext}. Soporta: PDF, TXT, MD, DOCX"
+                            
+                            # Dividir en chunks
+                            chunks = text_splitter.split_documents(docs)
+                            all_documents.extend(chunks)
+                            processed_count += 1
+                            total_docs += len(chunks)
+                            
+                        except Exception as e:
+                            return f"❌ Error procesando {Path(file_path).name}: {str(e)}"
+                    
+                    # Agregar todos los documentos al RAG
+                    if all_documents:
+                        advanced_rag.add_documents(all_documents)
+                        return f"✅ {processed_count} archivo(s) procesado(s), {total_docs} fragmentos agregados a la base de conocimiento RAG. El agente ahora puede usar esta información."
+                    else:
+                        return "⚠️ No se pudieron procesar los documentos."
+                        
+                except ImportError as e:
+                    return f"❌ Error: Dependencias faltantes. Instala: pip install pypdf langchain-community python-docx"
                 except Exception as e:
-                    return f"❌ Error procesando documentos: {e}"
+                    import traceback
+                    return f"❌ Error procesando documentos: {str(e)}\n\n{traceback.format_exc()}"
             
             def refresh_metrics():
                 """Actualiza métricas."""
