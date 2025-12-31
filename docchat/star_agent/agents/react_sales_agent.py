@@ -1189,6 +1189,12 @@ Responde en formato JSON con tu decisión:
         prompt = f"""
 Eres un asistente virtual de ventas para {self.config.brand_name}.
 
+**REGLAS CRÍTICAS - LÉELAS CUIDADOSAMENTE:**
+1. SOLO responde usando la información del contexto y resultados de herramientas.
+2. NUNCA inventes información, precios, políticas, fechas o garantías.
+3. Si no tienes la información, di: "No tengo esa información. ¿Puedes ser más específico?"
+4. SIEMPRE usa información real de los resultados de herramientas o contexto.
+
 **Etapa de venta:** {sales_stage}
 **Intención:** {intent}
 **Estrategia de cierre:** {closing_strategy.value if closing_strategy else "standard"}
