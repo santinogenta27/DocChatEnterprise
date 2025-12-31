@@ -5,7 +5,7 @@ Combina bÃºsqueda por keywords (BM25) y semÃ¡ntica (vector) para mejor preci
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from pathlib import Path
 
 try:
@@ -46,10 +46,41 @@ class HybridRetriever(BaseRetriever):
             k: NÃºmero de documentos a retornar
         """
         super().__init__()
-        self.bm25_retriever = bm25_retriever
-        self.vector_retriever = vector_retriever
-        self.bm25_weight, self.vector_weight = weights
-        self.k = k
+        # Establecer atributos directamente
+        self._bm25_retriever = bm25_retriever
+        self._vector_retriever = vector_retriever
+        self._bm25_weight = weights[0]
+        self._vector_weight = weights[1]
+        self._k = k
+    
+    @property
+    def bm25_retriever(self):
+        return self._bm25_retriever
+    
+    @property
+    def vector_retriever(self):
+        return self._vector_retriever
+    
+    @property
+    def bm25_weight(self):
+        return self._bm25_weight
+    
+    @property
+    def vector_weight(self):
+        return self._vector_weight
+    
+    @property
+    def k(self):
+        return self._k
+    
+    def get_relevant_documents(self, query: str, k: Optional[int] = None) -> List[Document]:
+        """Método público para obtener documentos relevantes (compatibilidad con código legacy)."""
+        return self._get_relevant_documents(query, k=k)
+    
+    def invoke(self, input: str, config: Optional[Any] = None, **kwargs) -> List[Document]:
+        """Método invoke (nuevo estándar de LangChain)."""
+        k = kwargs.get('k') or self._k
+        return self._get_relevant_documents(input, k=k)
     
     def _get_relevant_documents(self, query: str, *, k: Optional[int] = None) -> List[Document]:
         """Obtiene documentos relevantes usando ambos retrievers.
@@ -61,11 +92,19 @@ class HybridRetriever(BaseRetriever):
         Returns:
             Lista de documentos relevantes (combinados y rankeados)
         """
-        k = k or self.k
+        k = k or self._k
         
-        # Obtener resultados de ambos retrievers
-        bm25_docs = self.bm25_retriever.get_relevant_documents(query)
-        vector_docs = self.vector_retriever.get_relevant_documents(query)
+        # Obtener resultados de ambos retrievers (usar invoke que es el método estándar en LangChain)
+        # invoke es el método estándar en versiones recientes de LangChain
+        if hasattr(self._bm25_retriever, 'invoke'):
+            bm25_docs = self._bm25_retriever.invoke(query)
+        else:
+            bm25_docs = self._bm25_retriever.get_relevant_documents(query)
+        
+        if hasattr(self._vector_retriever, 'invoke'):
+            vector_docs = self._vector_retriever.invoke(query)
+        else:
+            vector_docs = self._vector_retriever.get_relevant_documents(query)
         
         # Combinar y rankear documentos
         combined_docs = self._combine_and_rank(bm25_docs, vector_docs, query)
@@ -97,13 +136,13 @@ class HybridRetriever(BaseRetriever):
             # Score inverso de posiciÃ³n (primer documento = mayor score)
             score = (len(bm25_docs) - i) / len(bm25_docs) if bm25_docs else 0
             doc_id = self._get_doc_id(doc)
-            doc_scores[doc_id] = doc_scores.get(doc_id, 0) + score * self.bm25_weight
+            doc_scores[doc_id] = doc_scores.get(doc_id, 0) + score * self._bm25_weight
         
         # Asignar scores de Vector Search
         for i, doc in enumerate(vector_docs):
             score = (len(vector_docs) - i) / len(vector_docs) if vector_docs else 0
             doc_id = self._get_doc_id(doc)
-            doc_scores[doc_id] = doc_scores.get(doc_id, 0) + score * self.vector_weight
+            doc_scores[doc_id] = doc_scores.get(doc_id, 0) + score * self._vector_weight
         
         # Crear diccionario de documentos Ãºnicos
         unique_docs = {}
@@ -165,33 +204,24 @@ def build_hybrid_retriever(
             "ChromaDB no disponible. Instala con: pip install chromadb"
         )
     
-    # Crear BM25 retriever
+    # Crear BM25 retriever (siempre reconstruir con todos los documentos para mantener consistencia)
+    # BM25 necesita todos los documentos para funcionar correctamente
     bm25_retriever = BM25Retriever.from_documents(documents)
     bm25_retriever.k = k * 2  # Obtener mÃ¡s resultados para combinar
     
-    # Crear Vector Store (ChromaDB)
+    # Crear Vector Store (ChromaDB) con persistencia
+    # Nota: Cuando se reconstruye el índice, se pasan TODOS los documentos (existentes + nuevos)
+    # Por lo tanto, siempre recreamos el store completo para evitar duplicados
     if persist_directory:
         persist_dir_str = str(persist_directory)
-        # Intentar cargar existente o crear nuevo
-        try:
-            vector_store = Chroma(
-                persist_directory=persist_dir_str,
-                embedding_function=embeddings,
-            )
-            # Si estÃ¡ vacÃ­o, agregar documentos
-            if vector_store._collection.count() == 0:
-                vector_store = Chroma.from_documents(
-                    documents=documents,
-                    embedding=embeddings,
-                    persist_directory=persist_dir_str,
-                )
-        except Exception:
-            # Crear nuevo si falla
-            vector_store = Chroma.from_documents(
-                documents=documents,
-                embedding=embeddings,
-                persist_directory=persist_dir_str,
-            )
+        
+        # Siempre crear store con todos los documentos (reconstrucción completa)
+        # Esto asegura que no haya duplicados y que BM25 y Vector estén sincronizados
+        vector_store = Chroma.from_documents(
+            documents=documents,
+            embedding=embeddings,
+            persist_directory=persist_dir_str,
+        )
     else:
         # Sin persistencia
         vector_store = Chroma.from_documents(

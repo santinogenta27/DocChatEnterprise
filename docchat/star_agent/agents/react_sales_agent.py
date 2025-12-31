@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 import os
+from pathlib import Path
 from typing import Dict, Any, Optional, List, TypedDict, Annotated, Sequence
 from enum import Enum
 
@@ -147,16 +148,28 @@ class ReactSalesAgent:
         self.advanced_rag: Optional[AdvancedRAGManager] = None
         if config.enable_rag_advanced:
             try:
-                from langchain_openai import OpenAIEmbeddings
+                # Usar sentence-transformers (gratis, local) en lugar de OpenAI embeddings
+                # Claude/Anthropic no tiene modelo de embeddings dedicado
+                from langchain_community.embeddings import HuggingFaceEmbeddings
                 import os
-                api_key = os.getenv("OPENAI_API_KEY") or (app_config.openai_api_key if app_config else None)
-                if api_key:
-                    embeddings = OpenAIEmbeddings(
-                        model="text-embedding-3-small",
-                        openai_api_key=api_key
-                    )
-                    self.advanced_rag = AdvancedRAGManager(embeddings=embeddings)
-                    print("✅ AdvancedRAGManager inicializado para ReactSalesAgent")
+                
+                # Usar modelo multilingüe que funciona bien en español
+                # Este modelo es gratuito, local y no requiere API calls
+                embeddings = HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                    model_kwargs={'device': 'cpu'},  # Usar CPU (cambiar a 'cuda' si tienes GPU)
+                    encode_kwargs={'normalize_embeddings': True}
+                )
+                
+                # Directorio para persistir el RAG (los documentos se guardan aquí)
+                base_dir = Path("docchat/star_agent/rag_storage")
+                base_dir.mkdir(parents=True, exist_ok=True)
+                
+                self.advanced_rag = AdvancedRAGManager(embeddings=embeddings, base_dir=base_dir)
+                print("✅ AdvancedRAGManager inicializado para ReactSalesAgent (usando sentence-transformers - gratis y local)")
+            except ImportError as e:
+                print(f"⚠️ Error: sentence-transformers no instalado. Instala con: pip install sentence-transformers")
+                print(f"   Detalles: {e}")
             except Exception as e:
                 print(f"⚠️ Error inicializando AdvancedRAGManager: {e}")
         
@@ -286,6 +299,7 @@ class ReactSalesAgent:
             self._after_verify,
             {
                 "close": "close",
+                "think": "think",  # Volver a pensar si no pasó verificación
                 "end": END,
             }
         )
@@ -546,11 +560,26 @@ class ReactSalesAgent:
             tool_calls = self._extract_tool_calls_from_content(last_ai_message.content)
         
         executed_tools = {}
+        tool_call_map = {}  # Mapear tool_name a tool_call_id para crear ToolMessage
         
         # Ejecutar herramientas
-        for tool_call in tool_calls:
-            tool_name = tool_call.get("name")
-            tool_args = tool_call.get("args", {})
+        for idx, tool_call in enumerate(tool_calls):
+            # Los tool_calls son diccionarios en LangChain
+            tool_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
+            tool_args = tool_call.get("args", {}) if isinstance(tool_call, dict) else getattr(tool_call, "args", {})
+            
+            # Si no hay tool_name, saltar esta tool_call
+            if not tool_name:
+                continue
+            
+            # Obtener tool_call_id (generar uno si no existe)
+            if isinstance(tool_call, dict):
+                tool_call_id = tool_call.get("id", f"call_{tool_name}_{idx}")
+            else:
+                tool_call_id = getattr(tool_call, "id", f"call_{tool_name}_{idx}")
+            
+            # Guardar tool_call_id para usar en ToolMessage
+            tool_call_map[tool_name] = tool_call_id
             
             try:
                 if tool_name == "search_products":
@@ -628,10 +657,14 @@ class ReactSalesAgent:
         # Crear mensajes de herramientas
         tool_messages = []
         for tool_name, result in executed_tools.items():
+            # Obtener tool_call_id correspondiente, o generar uno si no existe
+            tool_call_id = tool_call_map.get(tool_name, f"call_{tool_name}_{len(tool_messages)}")
+            
             tool_messages.append(
                 ToolMessage(
                     content=json.dumps(result, default=str),
                     name=tool_name,
+                    tool_call_id=tool_call_id,
                 )
             )
         
@@ -668,8 +701,19 @@ class ReactSalesAgent:
         user_intent = self.links_manager.intent_mapper.detect_intent(last_user_message, sales_stage)
         link_for_intent = self.links_manager.format_link_for_intent(user_intent, sales_stage)
         
+        # Obtener contexto del RAG del estado
+        context_retrieved = state.get("context_retrieved", "")
+        draft_answer = state.get("draft_answer", "")
+        
         # Construir contexto de observación
         observation_context = self._build_observation_context(tool_results, include_links=should_include_product_links)
+        
+        # Agregar contexto del RAG si está disponible
+        rag_context = ""
+        if context_retrieved:
+            rag_context = f"\n\n**Contexto recuperado de documentos (RAG - ÚSALO):**\n{context_retrieved[:1000]}"
+        if draft_answer and draft_answer not in context_retrieved:
+            rag_context += f"\n\n**Información adicional del Research Agent:**\n{draft_answer[:500]}"
         
         # Agregar link configurado según intención
         if link_for_intent:
@@ -681,9 +725,11 @@ Analiza los resultados de las herramientas ejecutadas y decide el siguiente paso
 
 **Resultados de herramientas:**
 {observation_context}
+{rag_context}
 
-**Etapa de venta actual:** {sales_stage}
-**Intención detectada:** {intent}
+**INFORMACIÓN INTERNA (NO MENCIONAR AL USUARIO):**
+- Etapa de venta actual: {sales_stage}
+- Intención detectada: {intent}
 
 **Instrucciones CRÍTICAS sobre LINKS (OBLIGATORIO):**
 - Si hay "🔗 LINK OBLIGATORIO" en el contexto, DEBES incluirlo en tu respuesta.
@@ -698,12 +744,13 @@ Analiza los resultados de las herramientas ejecutadas y decide el siguiente paso
 2. Si hay un payment_link, inclúyelo claramente con un CTA: [Pagar ahora](payment_link).
 3. Si hay errores, explica qué salió mal.
 4. Decide si necesitas más información o si puedes generar la respuesta final.
+5. IMPORTANTE: Si generas un "response_draft", NO incluyas información técnica como "etapa de venta", "intención detectada", etc. Responde de forma natural y conversacional.
 
 Responde en JSON:
 {{
     "ready_to_respond": true/false,
     "needs_more_info": true/false,
-    "response_draft": "borrador de respuesta si está listo",
+    "response_draft": "borrador de respuesta si está listo (sin información técnica)",
     "next_action": "respond" | "verify" | "close" | "think_more"
 }}
 """
@@ -1239,15 +1286,23 @@ Responde en formato JSON con tu decisión:
 Eres un asistente virtual de ventas para {self.config.brand_name}.
 
 **REGLAS CRÍTICAS - LÉELAS CUIDADOSAMENTE:**
-1. SOLO responde usando la información del contexto y resultados de herramientas.
+1. SOLO responde usando la información del contexto proporcionado y resultados de herramientas.
 2. NUNCA inventes información, precios, políticas, fechas o garantías.
-3. Si no tienes la información, di: "No tengo esa información. ¿Puedes ser más específico?"
-4. SIEMPRE usa información real de los resultados de herramientas o contexto.
+3. Si no tienes la información en el contexto, di: "No tengo esa información en mis documentos. ¿Puedes ser más específico?"
+4. SIEMPRE usa información real del contexto recuperado (RAG) y resultados de herramientas.
+5. NUNCA menciones información técnica como "etapa de venta", "intención detectada", "relevancia", etc. al usuario.
+6. NUNCA digas cosas como "Basándome en la información proporcionada, el usuario se encuentra en la etapa de interés" - esto es información técnica interna.
+7. Responde de forma natural y conversacional, como si fueras un vendedor humano.
+8. Si el contexto contiene información relevante sobre productos, servicios, políticas, etc., ÚSALO en tu respuesta.
+
+**Contexto recuperado de documentos (RAG - ÚSALO EN TU RESPUESTA):**
+{context[:2000] if context else "⚠️ NO HAY CONTEXTO DISPONIBLE - Solo responde con información de resultados de herramientas o di que no tienes la información."}
 {links_context}
 
-**Etapa de venta:** {sales_stage}
-**Intención:** {intent}
-**Estrategia de cierre:** {closing_strategy.value if closing_strategy else "standard"}
+**INFORMACIÓN INTERNA (NO MENCIONAR AL USUARIO):**
+- Etapa de venta: {sales_stage}
+- Intención: {intent}
+- Estrategia de cierre: {closing_strategy.value if closing_strategy else "standard"}
 
 **Resultados de herramientas:**
 {json.dumps(tool_results, default=str)[:2000]}
@@ -1262,13 +1317,17 @@ Eres un asistente virtual de ventas para {self.config.brand_name}.
 
 **Otras instrucciones para respuesta final:**
 1. Sé directo y conciso (máximo 300 caracteres para widget).
-2. Si hay productos, preséntalos con nombres y precios específicos.
-3. Si hay payment_link, inclúyelo claramente con CTA: [Pagar ahora](payment_link).
-4. Si estás en etapa READY o CLOSING, incluye un CTA claro con link de checkout.
-5. Usa la estrategia de cierre {closing_strategy.value if closing_strategy else "standard"}.
-6. Sé persuasivo pero ético.
+2. PRIORIDAD: Usa información del contexto RAG si está disponible (productos, descripciones, precios, políticas, etc.).
+3. Si hay productos en el contexto RAG, preséntalos con nombres y precios específicos.
+4. Si hay productos en resultados de herramientas, también preséntalos.
+5. Si hay payment_link, inclúyelo claramente con CTA: [Pagar ahora](payment_link).
+6. Si estás en etapa READY o CLOSING, incluye un CTA claro con link de checkout.
+7. Usa la estrategia de cierre {closing_strategy.value if closing_strategy else "standard"}.
+8. Sé persuasivo pero ético.
+9. Responde como un vendedor humano, NO como un sistema técnico.
+10. Combina información del contexto RAG con resultados de herramientas cuando sea apropiado.
 
-Genera la respuesta final optimizada para widget web.
+Genera la respuesta final optimizada para widget web. Responde directamente al usuario usando la información del contexto RAG y resultados de herramientas, sin mencionar información técnica interna.
 """
         return prompt
     

@@ -712,6 +712,18 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
         .agent-message {
             background: #e3f2fd;
         }
+        .message a {
+            color: #0066cc;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .message a:hover {
+            color: #0052a3;
+            text-decoration: underline;
+        }
+        .message a:visited {
+            color: #551a8b;
+        }
         input {
             width: 100%;
             padding: 10px;
@@ -782,11 +794,26 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
             }
         }
         
+        function convertMarkdownToHTML(text) {
+            // Convertir links Markdown [texto](url) a HTML <a href="url">texto</a>
+            // Usar regex con escape correcto para Python string
+            text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">$1</a>');
+            
+            // Convertir saltos de línea a <br>
+            text = text.replace(/\n/g, '<br>');
+            
+            return text;
+        }
+        
         function displayMessage(text, type) {
             const messagesDiv = document.getElementById('chat-messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message ' + type + '-message';
-            messageDiv.textContent = text;
+            
+            // Convertir Markdown a HTML (especialmente links)
+            const htmlContent = convertMarkdownToHTML(text);
+            messageDiv.innerHTML = htmlContent;
+            
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }

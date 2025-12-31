@@ -414,6 +414,20 @@
                         0 2px 4px rgba(0, 0, 0, 0.04);
                 }
                 
+                /* Estilos para links en mensajes */
+                .business-ai-widget-message a {
+                    color: #0066cc;
+                    text-decoration: underline;
+                    cursor: pointer;
+                }
+                .business-ai-widget-message a:hover {
+                    color: #0052a3;
+                    text-decoration: underline;
+                }
+                .business-ai-widget-message a:visited {
+                    color: #551a8b;
+                }
+                
                 .business-ai-widget-message.loading {
                     background: white;
                     align-self: flex-start;
@@ -772,23 +786,32 @@
         }
     }
     
+    // Convertir Markdown a HTML (especialmente links)
+    function convertMarkdownToHTML(text) {
+        // Convertir links Markdown [texto](url) a HTML <a href="url">texto</a>
+        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        
+        // Convertir negrita **texto** a <strong>
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        // Convertir cursiva *texto* a <em>
+        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        
+        // Convertir saltos de línea a <br>
+        text = text.replace(/\n/g, '<br>');
+        
+        return text;
+    }
+    
     // Agregar mensaje a la UI
     function addMessageToUI(role, content) {
         const messagesContainer = document.getElementById('business-ai-widget-messages');
         const messageDiv = document.createElement('div');
         messageDiv.className = `business-ai-widget-message ${role}`;
         
-        // Si es HTML, usar innerHTML; si no, textContent
-        if (content.includes('<') || content.includes('**')) {
-            // Convertir markdown básico a HTML
-            let htmlContent = content
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/\n/g, '<br>');
-            messageDiv.innerHTML = htmlContent;
-        } else {
-            messageDiv.textContent = content;
-        }
+        // Siempre convertir Markdown a HTML (especialmente para links)
+        const htmlContent = convertMarkdownToHTML(content);
+        messageDiv.innerHTML = htmlContent;
         
         messagesContainer.appendChild(messageDiv);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;

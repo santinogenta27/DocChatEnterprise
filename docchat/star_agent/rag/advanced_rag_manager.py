@@ -104,25 +104,58 @@ class AdvancedRAGManager:
                         persist_directory=str(store_dir),
                         embedding_function=self.embeddings,
                     )
-                    if vector_store._collection.count() > 0:
-                        # Hay documentos, crear retriever
-                        if BM25_AVAILABLE:
-                            bm25 = BM25Retriever.from_documents(empty_docs)
-                            vector_retriever = vector_store.as_retriever(
-                                search_kwargs={"k": self.k * 2}
-                            )
-                            self.stores[intent_key] = HybridRetriever(
-                                bm25_retriever=bm25,
-                                vector_retriever=vector_retriever,
-                                weights=(0.4, 0.6),
-                                k=self.k,
-                            )
-                        else:
+                    count = vector_store._collection.count()
+                    if count > 0:
+                        # Hay documentos, cargar desde ChromaDB para construir BM25 correctamente
+                        # Obtener todos los documentos del vector store
+                        try:
+                            all_docs = vector_store.get(include=['documents', 'metadatas'])
+                            documents_list = []
+                            
+                            # Convertir resultados de ChromaDB a Document objects
+                            if all_docs and 'documents' in all_docs:
+                                from langchain_core.documents import Document
+                                docs_data = all_docs['documents']
+                                metadatas = all_docs.get('metadatas', [])
+                                
+                                for idx, doc_text in enumerate(docs_data):
+                                    metadata = metadatas[idx] if idx < len(metadatas) else {}
+                                    documents_list.append(Document(page_content=doc_text, metadata=metadata))
+                            
+                            # Crear retriever híbrido con documentos cargados
+                            if BM25_AVAILABLE and documents_list:
+                                try:
+                                    self.stores[intent_key] = build_hybrid_retriever(
+                                        documents=documents_list,
+                                        embeddings=self.embeddings,
+                                        persist_directory=store_dir,
+                                        k=self.k,
+                                        weights=(0.4, 0.6),
+                                    )
+                                    # Guardar documentos en documents_by_intent para referencia
+                                    self.documents_by_intent[intent_key] = documents_list
+                                    print(f"✅ Índice {intent_key} cargado: {len(documents_list)} documentos")
+                                except Exception as build_error:
+                                    print(f"⚠️ Error construyendo hybrid retriever para {intent_key}: {build_error}")
+                                    # Fallback: usar solo vector retriever
+                                    self.stores[intent_key] = vector_store.as_retriever(
+                                        search_kwargs={"k": self.k}
+                                    )
+                            else:
+                                # Si no hay BM25 o documentos, usar solo vector retriever
+                                self.stores[intent_key] = vector_store.as_retriever(
+                                    search_kwargs={"k": self.k}
+                                )
+                        except Exception as load_error:
+                            print(f"⚠️ Error cargando documentos desde ChromaDB para {intent_key}: {load_error}")
+                            # Fallback: usar solo vector retriever
                             self.stores[intent_key] = vector_store.as_retriever(
                                 search_kwargs={"k": self.k}
                             )
             except Exception as e:
                 print(f"⚠️ Error inicializando índice {intent_key}: {e}")
+                import traceback
+                traceback.print_exc()
     
     def detect_intent(self, query: str) -> IntentType:
         """
@@ -200,6 +233,7 @@ class AdvancedRAGManager:
             docs_by_intent[target_intent].append(doc)
         
         # Agregar a cada índice
+        errors = []
         for intent_key, docs in docs_by_intent.items():
             if not docs:
                 continue
@@ -208,7 +242,16 @@ class AdvancedRAGManager:
             self.documents_by_intent[intent_key].extend(docs)
             
             # Reconstruir índice
-            self._rebuild_store(intent_key, self.documents_by_intent[intent_key])
+            try:
+                self._rebuild_store(intent_key, self.documents_by_intent[intent_key])
+            except Exception as e:
+                error_msg = str(e)
+                errors.append(f"Error indexando documentos en {intent_key}: {error_msg}")
+                # Continuar con otros índices aunque uno falle
+        
+        # Si hubo errores, lanzar excepción con todos los errores
+        if errors:
+            raise Exception("; ".join(errors))
     
     def _rebuild_store(self, intent_key: str, documents: List[Document]):
         """Reconstruye el índice para una intención específica."""
@@ -217,17 +260,14 @@ class AdvancedRAGManager:
         
         store_dir = self.base_dir / intent_key
         
-        try:
-            # Construir hybrid retriever
-            self.stores[intent_key] = build_hybrid_retriever(
-                documents=documents,
-                embeddings=self.embeddings,
-                persist_directory=store_dir,
-                k=self.k,
-                weights=(0.4, 0.6),
-            )
-        except Exception as e:
-            print(f"⚠️ Error reconstruyendo índice {intent_key}: {e}")
+        # Construir hybrid retriever (propagar error si falla)
+        self.stores[intent_key] = build_hybrid_retriever(
+            documents=documents,
+            embeddings=self.embeddings,
+            persist_directory=store_dir,
+            k=self.k,
+            weights=(0.4, 0.6),
+        )
     
     def retrieve_context(self, query: str, intent: Optional[IntentType] = None) -> str:
         """

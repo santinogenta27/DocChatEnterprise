@@ -1781,7 +1781,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                 return load_config_ui()
             
             def process_documents(files):
-                """Procesa documentos subidos y los agrega al RAG."""
+                """Procesa documentos subidos y los agrega al RAG usando el mismo procesador que el modo Alien."""
                 if not files:
                     return "⚠️ No se seleccionaron archivos"
                 
@@ -1804,63 +1804,59 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                     if not advanced_rag:
                         return "❌ Error: AdvancedRAGManager no inicializado."
                     
-                    # Procesar cada archivo
-                    try:
-                        from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
-                    except ImportError:
-                        raise ImportError("Dependencias faltantes. Instala: pip install pypdf langchain-community python-docx")
-                    
-                    from langchain.text_splitter import RecursiveCharacterTextSplitter
-                    from langchain_core.documents import Document
+                    # Usar el mismo DocumentProcessor que el modo Alien (PyPDF2 + Docling fallback)
+                    from docchat.document_processor import DocumentProcessor
+                    from docchat.config import load_config
                     from pathlib import Path
                     
-                    processed_count = 0
-                    total_docs = 0
+                    # Convertir strings a objetos con atributo .name para compatibilidad con DocumentProcessor
+                    # Gradio devuelve una lista de strings (paths), pero DocumentProcessor espera objetos con .name
+                    class FileWrapper:
+                        def __init__(self, path_str):
+                            self.path = Path(path_str)
+                            self.name = self.path.name
+                            
+                        def read(self):
+                            with open(self.path, 'rb') as f:
+                                return f.read()
                     
-                    text_splitter = RecursiveCharacterTextSplitter(
-                        chunk_size=1000,
-                        chunk_overlap=200,
-                        length_function=len,
-                    )
-                    
-                    all_documents = []
-                    
+                    # Convertir archivos de Gradio (strings) a objetos FileWrapper
+                    wrapped_files = []
                     for file_path in files:
-                        try:
-                            file_path_obj = Path(file_path)
-                            file_ext = file_path_obj.suffix.lower()
-                            
-                            # Cargar documento según extensión
-                            if file_ext == '.pdf':
-                                loader = PyPDFLoader(file_path)
-                                docs = loader.load()
-                            elif file_ext in ['.txt', '.md']:
-                                loader = TextLoader(file_path, encoding='utf-8')
-                                docs = loader.load()
-                            elif file_ext in ['.docx', '.doc']:
-                                loader = Docx2txtLoader(file_path)
-                                docs = loader.load()
-                            else:
-                                return f"❌ Formato no soportado: {file_ext}. Soporta: PDF, TXT, MD, DOCX"
-                            
-                            # Dividir en chunks
-                            chunks = text_splitter.split_documents(docs)
-                            all_documents.extend(chunks)
-                            processed_count += 1
-                            total_docs += len(chunks)
-                            
-                        except Exception as e:
-                            return f"❌ Error procesando {Path(file_path).name}: {str(e)}"
+                        if isinstance(file_path, str):
+                            wrapped_files.append(FileWrapper(file_path))
+                        else:
+                            wrapped_files.append(file_path)
+                    
+                    # Cargar configuración y crear procesador
+                    config = load_config()
+                    processor = DocumentProcessor(config)
+                    
+                    # Procesar documentos usando el mismo método que el modo Alien
+                    # El DocumentProcessor ya maneja PyPDF2 primero, luego Docling como fallback
+                    all_documents = processor.process(wrapped_files)
                     
                     # Agregar todos los documentos al RAG
                     if all_documents:
-                        advanced_rag.add_documents(all_documents)
-                        return f"✅ {processed_count} archivo(s) procesado(s), {total_docs} fragmentos agregados a la base de conocimiento RAG. El agente ahora puede usar esta información."
+                        try:
+                            advanced_rag.add_documents(all_documents)
+                            processed_count = len(set(doc.metadata.get("source", "") for doc in all_documents))
+                            total_docs = len(all_documents)
+                            return f"✅ {processed_count} archivo(s) procesado(s), {total_docs} fragmentos agregados a la base de conocimiento RAG. El agente ahora puede usar esta información."
+                        except Exception as rag_error:
+                            error_msg = str(rag_error).lower()
+                            # Detectar errores de quota de OpenAI
+                            if "429" in error_msg or "insufficient_quota" in error_msg or "quota" in error_msg:
+                                return f"⚠️ Error: Cuota de OpenAI excedida. Los documentos se procesaron correctamente ({len(all_documents)} chunks), pero no se pudieron indexar en la base de conocimiento debido a la cuota excedida de la API de OpenAI para generar embeddings.\n\n💡 Soluciones:\n1. Verifica tu plan y billing en https://platform.openai.com/account/billing\n2. Espera unos minutos y vuelve a intentar\n3. O configura una API key diferente en .env\n\nEl PDF se procesó correctamente, pero el agente NO podrá usar esta información hasta que se generen los embeddings."
+                            else:
+                                import traceback
+                                return f"❌ Error agregando documentos al RAG: {str(rag_error)}\n\n{traceback.format_exc()}"
                     else:
                         return "⚠️ No se pudieron procesar los documentos."
                         
                 except ImportError as e:
-                    return f"❌ Error: Dependencias faltantes. Instala: pip install pypdf langchain-community python-docx"
+                    import traceback
+                    return f"❌ Error: Dependencias faltantes. Instala las dependencias necesarias.\n\nError: {str(e)}\n\n{traceback.format_exc()}"
                 except Exception as e:
                     import traceback
                     return f"❌ Error procesando documentos: {str(e)}\n\n{traceback.format_exc()}"
