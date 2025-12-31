@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STAR AGENT – Asistente Virtual con IA</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        
+        header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        header p {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            margin-bottom: 40px;
+        }
+        
+        .hero-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 50px;
+            margin-bottom: 40px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        
+        .hero-section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        
+        .hero-section p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            line-height: 1.8;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 40px;
+        }
+        
+        .feature-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+        }
+        
+        .feature-card .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+        }
+        
+        .feature-card p {
+            font-size: 0.95rem;
+            opacity: 0.9;
+        }
+        
+        .cta-section {
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            margin-top: 40px;
+        }
+        
+        .cta-section h2 {
+            font-size: 2.2rem;
+            margin-bottom: 20px;
+        }
+        
+        .cta-section p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+        
+        .widget-info {
+            background: rgba(0, 123, 255, 0.2);
+            border-left: 4px solid #007bff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        
+        .widget-info h3 {
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .widget-info p {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            margin-top: 60px;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero-section {
+                padding: 30px 20px;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>⭐ STAR AGENT</h1>
+            <p>Asistente Virtual con Inteligencia Artificial 24/7</p>
+        </header>
+
+        <div class="hero-section">
+            <h2>🤖 Tu Asistente Virtual Integrado</h2>
+            <p>
+                Este sitio web incluye un <strong>chatbot flotante</strong> conectado a <strong>STAR AGENT</strong>.
+                Podés hablar con él en cualquier momento haciendo click en el ícono de chat que aparece en la 
+                <strong>esquina inferior derecha</strong> de la página.
+            </p>
+            
+            <div class="widget-info">
+                <h3>💬 ¿Cómo usar el chatbot?</h3>
+                <p>✅ Mira la esquina inferior derecha → Verás un botón de chat flotante</p>
+                <p>✅ Haz click en el botón → Se abrirá la ventana de chat</p>
+                <p>✅ Escribe tu pregunta → El asistente responderá al instante</p>
+                <p>✅ El chatbot está activo 24/7 y listo para ayudarte</p>
+            </div>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon">💬</div>
+                <h3>Chat en Tiempo Real</h3>
+                <p>Conversaciones fluidas con respuesta inmediata usando IA avanzada</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="icon">🛒</div>
+                <h3>Carrito de Compras</h3>
+                <p>Integración completa con carrito para facilitar tus compras</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="icon">🎯</div>
+                <h3>Ventas Inteligentes</h3>
+                <p>Sistema avanzado de cierre de ventas con detección de intenciones</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="icon">📊</div>
+                <h3>Análisis de Sentimiento</h3>
+                <p>Detección automática del estado emocional para mejor atención</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="icon">👤</div>
+                <h3>Handoff Humano</h3>
+                <p>Transferencia automática a agentes humanos cuando es necesario</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="icon">🖼️</div>
+                <h3>Procesamiento de Imágenes</h3>
+                <p>Capacidad de analizar y entender imágenes que envíes</p>
+            </div>
+        </div>
+
+        <div class="cta-section">
+            <h2>🚀 Prueba el Chatbot Ahora</h2>
+            <p>
+                Haz click en el botón de chat en la esquina inferior derecha y comienza a conversar.
+                El asistente está listo para responder tus preguntas, ayudarte con compras, 
+                o cualquier consulta que tengas.
+            </p>
+            <p style="font-size: 1rem; opacity: 0.85; margin-top: 20px;">
+                💡 <strong>Tip:</strong> El chatbot está optimizado para ventas y soporte, 
+                pero también puede mantener conversaciones casuales.
+            </p>
+        </div>
+    </div>
+
+    <footer>
+        <p>© 2025 STAR AGENT — Powered by Advanced AI</p>
+        <p style="margin-top: 10px; font-size: 0.85rem;">
+            Asistente Virtual con Inteligencia Artificial | Ventas + Soporte 24/7
+        </p>
+    </footer>
+
+    <!-- STAR AGENT Widget -->
+    <!-- Este código carga el chatbot flotante en la esquina inferior derecha -->
+    <!-- Cache buster: v=2 para forzar recarga del archivo JS actualizado -->
+    <script src="http://127.0.0.1:7864/static/business-ai-widget.js?v=2" 
+            data-api-url="http://127.0.0.1:7864"
+            data-widget-id="star_agent_widget_demo_001"
+            data-brand-name="STAR AGENT"
+            data-primary-color="#007bff"
+            data-position="bottom-right"
+            data-welcome-message="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
+            async></script>
+
+</body>
+</html>
+

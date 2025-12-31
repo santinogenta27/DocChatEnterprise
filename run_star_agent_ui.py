@@ -22,10 +22,29 @@ def main():
     
     # Lanzar UI de Gradio
     demo = star_agent.get_gradio_interface()
+    
+    # Intentar encontrar un puerto disponible
+    import socket
+    def find_free_port(start_port=7860, max_attempts=10):
+        for i in range(max_attempts):
+            port = start_port + i
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                sock.bind(('127.0.0.1', port))
+                sock.close()
+                return port
+            except OSError:
+                sock.close()
+                continue
+        return start_port  # Si no encuentra, intenta el original
+    
+    port = find_free_port(7860)
+    print(f"📡 Usando puerto: {port}")
+    
     demo.launch(
         share=True,  # Cambiar a True para crear link público (necesario en algunos entornos)
         server_name="127.0.0.1",
-        server_port=7860,
+        server_port=port,
         show_error=True
     )
 

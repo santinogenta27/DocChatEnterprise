@@ -147,7 +147,7 @@ class StarAgentMode:
                 self.agent = self.react_agent  # Usar ReactSalesAgent como agente principal
                 
                 # Inicializar scheduler de ingesta automática si está configurado
-                self._init_ingestion_scheduler()
+                self._init_ingestion_scheduler_from_config()
             except Exception as e:
                 print(f"⚠️ Error inicializando ReactSalesAgent: {e}")
                 import traceback
@@ -225,7 +225,11 @@ class StarAgentMode:
             except Exception as e:
                 print(f"⚠️ Error inicializando Instagram adapter: {e}")
         
-        # Inicializar sistema de ingesta multi-fuente (opcional)
+        # Inicializar scheduler de ingesta automática (nuevo sistema)
+        self.ingestion_scheduler = None
+        self._init_ingestion_scheduler_from_config()
+        
+        # Inicializar sistema de ingesta multi-fuente (opcional - legacy)
         self.multi_source_ingester = None
         # Verificar si RAG avanzado está habilitado (usar getattr para compatibilidad)
         enable_rag_advanced = getattr(config, 'enable_rag_advanced', True)  # Default True para STAR AGENT
@@ -268,6 +272,51 @@ class StarAgentMode:
                 print(f"⚠️ Error inicializando ingesta multi-fuente: {e}")
                 import traceback
                 traceback.print_exc()
+    
+    def _init_ingestion_scheduler_from_config(self):
+        """Inicializa el IngestionScheduler desde la configuración."""
+        try:
+            from .ingestion.ingestion_scheduler import IngestionScheduler
+            
+            # Obtener configuración de ingesta desde config
+            enable_scheduler = getattr(self.config, 'ingestion_scheduler_enabled', False)
+            interval_hours = getattr(self.config, 'ingestion_interval_hours', 6)
+            enable_website = getattr(self.config, 'ingestion_website_enabled', False)
+            website_url = getattr(self.config, 'ingestion_website_url', None)
+            enable_instagram = getattr(self.config, 'ingestion_instagram_enabled', False)
+            instagram_token = getattr(self.config, 'ingestion_instagram_token', None)
+            enable_facebook = getattr(self.config, 'ingestion_facebook_enabled', False)
+            facebook_token = getattr(self.config, 'ingestion_facebook_token', None)
+            
+            # Obtener AdvancedRAGManager del agente si está disponible
+            advanced_rag = None
+            if hasattr(self, 'agent') and self.agent:
+                if hasattr(self.agent, 'advanced_rag') and self.agent.advanced_rag:
+                    advanced_rag = self.agent.advanced_rag
+                elif hasattr(self.agent, 'react_agent') and hasattr(self.agent.react_agent, 'advanced_rag'):
+                    advanced_rag = self.agent.react_agent.advanced_rag
+            
+            # Inicializar IngestionScheduler
+            self.ingestion_scheduler = IngestionScheduler(
+                enabled=enable_scheduler,
+                interval_hours=interval_hours,
+                website_enabled=enable_website,
+                website_url=website_url,
+                instagram_enabled=enable_instagram,
+                instagram_token=instagram_token,
+                facebook_enabled=enable_facebook,
+                facebook_token=facebook_token,
+                rag_manager=advanced_rag
+            )
+            
+            # El scheduler se inicia automáticamente si enabled=True
+            if enable_scheduler and self.ingestion_scheduler:
+                print("✅ IngestionScheduler inicializado y activo")
+        except Exception as e:
+            print(f"⚠️ Error inicializando IngestionScheduler: {e}")
+            import traceback
+            traceback.print_exc()
+            self.ingestion_scheduler = None
 
     # --- Núcleo de procesamiento ---
 
@@ -441,9 +490,47 @@ class StarAgentMode:
         """
         try:
             from .widget import create_widget_app
-            return create_widget_app(self)
+            from pathlib import Path
+            import os
+            
+            # Directorio de archivos estáticos (business-ai-widget.js)
+            # Intentar varias rutas posibles
+            current_file = Path(__file__).resolve()
+            static_dir = None
+            
+            # Ruta 1: Desde el directorio actual de trabajo (donde se ejecuta el script)
+            import os
+            cwd = Path(os.getcwd())
+            possible_paths = [
+                cwd / "docchat" / "static",  # Desde directorio de trabajo
+                current_file.parent.parent.parent / "static",  # docchat/static (relativa al archivo)
+                Path("docchat/static").resolve(),  # Ruta relativa resuelta
+            ]
+            
+            for path in possible_paths:
+                path_resolved = path.resolve() if hasattr(path, 'resolve') else Path(path).resolve()
+                js_file = path_resolved / "business-ai-widget.js"
+                if path_resolved.exists() and js_file.exists():
+                    static_dir = path_resolved
+                    print(f"✅ Archivos estáticos encontrados en: {static_dir}")
+                    break
+            
+            if not static_dir:
+                print(f"⚠️ No se encontró directorio de archivos estáticos.")
+                print(f"   Rutas probadas: {[str(p) for p in possible_paths]}")
+                print(f"   CWD: {os.getcwd()}")
+                print(f"   Current file: {current_file}")
+            
+            return create_widget_app(self, static_dir=static_dir)
         except ImportError as e:
             print(f"⚠️ No se pudo crear widget app: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        except Exception as e:
+            print(f"⚠️ Error creando widget app: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def get_api_router(self) -> APIRouter:
@@ -513,7 +600,7 @@ class StarAgentMode:
         # Importar UI de configuración
         try:
             from .ui.gradio_config_ui import StarAgentConfigUI
-            config_ui = StarAgentConfigUI()
+            config_ui = StarAgentConfigUI(star_agent_mode=self)  # Pasar instancia de StarAgentMode
         except Exception as e:
             print(f"⚠️ Error cargando UI de configuración: {e}")
             config_ui = None

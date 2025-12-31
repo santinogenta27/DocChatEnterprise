@@ -1,108 +1,107 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Business AI Widget</title>
+    <meta charset="UTF-8" />
+    <title>STAR AGENT – AI Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Estilos básicos -->
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(135deg, #0f172a, #020617);
+            color: #ffffff;
+        }
+
+        header {
+            padding: 32px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.85;
+        }
+
+        main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .feature {
+            background: rgba(255,255,255,0.06);
             padding: 20px;
-            background-color: #f5f5f5;
+            border-radius: 12px;
         }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #007bff;
-        }
-        .info {
-            background: #e7f3ff;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }A
-        
-        .warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
+
+        footer {
+            text-align: center;
+            padding: 24px;
+            opacity: 0.6;
+            font-size: 0.9rem;
         }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>🤖 Test Business AI Widget</h1>
-        
-        <div class="info">
-            <h2>📋 Instrucciones:</h2>
-            <ol>
-                <li>Asegúrate de que tu servidor esté corriendo en <code>http://localhost:7864</code></li>
-                <li>El widget debería aparecer automáticamente en la esquina inferior derecha</li>
-                <li>Haz click en el botón del widget para abrir el chat</li>
-                <li>¡Empieza a chatear! 🎉</li>
-            </ol>
+
+<header>
+    <h1>STAR AGENT</h1>
+    <p>Ventas, soporte y automatización con IA 24/7</p>
+</header>
+
+<main>
+    <div class="card">
+        <h2>🤖 Asistente Inteligente Integrado</h2>
+        <p>
+            Este sitio incluye un chatbot flotante conectado a <strong>STAR AGENT</strong>.
+            Podés hablar con él en cualquier momento desde la esquina inferior derecha.
+        </p>
+
+        <div class="features">
+            <div class="feature">✅ Chat flotante moderno</div>
+            <div class="feature">✅ Ventas + soporte 24/7</div>
+            <div class="feature">✅ Carrito de compras</div>
+            <div class="feature">✅ Detección de sentimiento</div>
+            <div class="feature">✅ Handoff humano automático</div>
+            <div class="feature">✅ Procesamiento de imágenes</div>
         </div>
-
-        <div class="status success">
-            ✅ <strong>Widget cargado:</strong> El script del widget está incluido abajo
-        </div>
-
-        <div class="status warning">
-            ⚠️ <strong>Nota:</strong> Si el widget no aparece, verifica:
-            <ul>
-                <li>Que el servidor esté corriendo (<code>python app.py</code> o <code>python api_server.py</code>)</li>
-                <li>Que la URL <code>http://localhost:7864/static/business-ai-widget.js</code> sea accesible</li>
-                <li>Que no haya errores en la consola del navegador (F12)</li>
-            </ul>
-        </div>
-
-        <h2>🎨 Contenido de Prueba</h2>
-        <p>Este es un ejemplo de página web. El widget debería aparecer como un botón flotante en la esquina inferior derecha.</p>
-        
-        <p>Puedes probar el chatbot haciendo preguntas como:</p>
-        <ul>
-            <li>"¿Tienen zapatillas Nike?"</li>
-            <li>"¿Qué productos recomiendan?"</li>
-            <li>"¿Cómo puedo hacer una devolución?"</li>
-            <li>"Muéstrame productos de menos de $50"</li>
-        </ul>
-
-        <h2>🔧 Para Usar en tu Website Real:</h2>
-        <p>Copia el código del script de abajo y pégalo antes de <code>&lt;/body&gt;</code> en tu website HTML.</p>
     </div>
+</main>
 
-    <!-- ============================================ -->
-    <!-- BUSINESS AI OMNICANAL WIDGET -->
-    <!-- Copia y pega este código antes de </body> en tu website -->
-    <!-- ============================================ -->
-    <script src="http://localhost:7864/static/business-ai-widget.js" 
-            data-api-url="http://localhost:7864"
-            data-widget-id="alien"
-            data-brand-name="x"
-            data-primary-color="#007bff"
-            data-position="bottom-right"
-            data-welcome-message="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
-            async></script>
-    <!-- ============================================ -->
-    
+<footer>
+    © 2025 STAR AGENT — Powered by AI
+</footer>
+
+<!-- STAR AGENT Widget -->
+<script src="http://127.0.0.1:7864/static/business-ai-widget.js" 
+        data-api-url="http://127.0.0.1:7864"
+        data-widget-id="widget_star_agent_123"
+        data-brand-name="STAR AGENT"
+        data-primary-color="#007bff"
+        data-position="bottom-right"
+        data-welcome-message="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?"
+        async></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-

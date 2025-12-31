@@ -22,7 +22,12 @@
         primaryColor: '#007bff',
         welcomeMessage: '👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?',
         brandName: 'Tu Marca',
-        language: 'es'
+        language: 'es',
+        enableWhatsApp: false,
+        enableMessenger: false,
+        whatsappNumber: null,
+        whatsappMessage: 'Hola, vi tu producto en tu website',
+        messengerPage: null
     };
     
     // Cargar configuración desde atributos data-*
@@ -36,6 +41,11 @@
         widgetConfig.welcomeMessage = scriptTag.getAttribute('data-welcome-message') || widgetConfig.welcomeMessage;
         widgetConfig.brandName = scriptTag.getAttribute('data-brand-name') || widgetConfig.brandName;
         widgetConfig.language = scriptTag.getAttribute('data-language') || widgetConfig.language;
+        widgetConfig.enableWhatsApp = scriptTag.getAttribute('data-enable-whatsapp') === 'true' || scriptTag.getAttribute('data-enable-whatsapp') === '1';
+        widgetConfig.enableMessenger = scriptTag.getAttribute('data-enable-messenger') === 'true' || scriptTag.getAttribute('data-enable-messenger') === '1';
+        widgetConfig.whatsappNumber = scriptTag.getAttribute('data-whatsapp-number') || widgetConfig.whatsappNumber;
+        widgetConfig.whatsappMessage = scriptTag.getAttribute('data-whatsapp-message') || widgetConfig.whatsappMessage;
+        widgetConfig.messengerPage = scriptTag.getAttribute('data-messenger-page') || widgetConfig.messengerPage;
     }
     
     if (!widgetConfig.widgetId) {
@@ -119,6 +129,7 @@
                         <div class="business-ai-widget-welcome">
                             ${widgetConfig.welcomeMessage}
                         </div>
+                        <div id="business-ai-widget-external-chat-buttons" class="business-ai-widget-external-chat-buttons" style="display: none;"></div>
                     </div>
                     
                     <!-- Input -->
@@ -290,6 +301,7 @@
                     margin-bottom: 8px;
                     font-size: 14px;
                     line-height: 1.5;
+                    color: #000000;
                 }
                 
                 .business-ai-widget-message {
@@ -388,6 +400,89 @@
                     cursor: not-allowed;
                 }
                 
+                .business-ai-widget-external-chat-buttons {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    margin-top: 12px;
+                    margin-bottom: 8px;
+                }
+                
+                .business-ai-widget-external-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 12px 16px;
+                    border-radius: 8px;
+                    border: 1px solid #e0e0e0;
+                    background: white;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    font-size: 14px;
+                    font-weight: 500;
+                    text-decoration: none;
+                    color: #333;
+                }
+                
+                .business-ai-widget-external-btn:hover {
+                    background: #f5f5f5;
+                    border-color: ${primaryColor};
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                }
+                
+                .business-ai-widget-external-btn.whatsapp {
+                    border-color: #25D366;
+                }
+                
+                .business-ai-widget-external-btn.whatsapp:hover {
+                    background: #25D366;
+                    color: white;
+                    border-color: #25D366;
+                }
+                
+                .business-ai-widget-external-btn.messenger {
+                    border-color: #0084ff;
+                }
+                
+                .business-ai-widget-external-btn.messenger:hover {
+                    background: #0084ff;
+                    color: white;
+                    border-color: #0084ff;
+                }
+                
+                .business-ai-widget-external-btn-icon {
+                    font-size: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 20px;
+                    height: 20px;
+                    flex-shrink: 0;
+                }
+                
+                .business-ai-widget-external-btn-icon svg {
+                    width: 100%;
+                    height: 100%;
+                }
+                
+                .business-ai-widget-external-btn.whatsapp .business-ai-widget-external-btn-icon svg {
+                    fill: #25D366;
+                }
+                
+                .business-ai-widget-external-btn.whatsapp:hover .business-ai-widget-external-btn-icon svg {
+                    fill: white;
+                }
+                
+                .business-ai-widget-external-btn-text {
+                    flex: 1;
+                }
+                
+                .business-ai-widget-external-btn-arrow {
+                    font-size: 12px;
+                    opacity: 0.6;
+                }
+                
                 .business-ai-widget-product-card {
                     background: white;
                     border: 1px solid #e0e0e0;
@@ -479,7 +574,7 @@
                 }
             };
             
-            const response = await fetch(`${widgetConfig.apiUrl}/business-ai/chat`, {
+            const response = await fetch(`${widgetConfig.apiUrl}/api/widget/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -641,6 +736,65 @@
         }
     }
     
+    // Crear botones de WhatsApp y Messenger
+    function createExternalChatButtons() {
+        const buttonsContainer = document.getElementById('business-ai-widget-external-chat-buttons');
+        if (!buttonsContainer) return;
+        
+        buttonsContainer.innerHTML = '';
+        
+        // Botón de WhatsApp
+        if (widgetConfig.enableWhatsApp && widgetConfig.whatsappNumber) {
+            const whatsappBtn = document.createElement('a');
+            whatsappBtn.className = 'business-ai-widget-external-btn whatsapp';
+            
+            const phoneNumber = widgetConfig.whatsappNumber.replace(/[^0-9]/g, '');
+            const encodedMessage = encodeURIComponent(widgetConfig.whatsappMessage);
+            const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+            whatsappBtn.href = whatsappUrl;
+            whatsappBtn.target = '_blank';
+            whatsappBtn.rel = 'noopener noreferrer';
+            
+            whatsappBtn.innerHTML = `
+                <span class="business-ai-widget-external-btn-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                    </svg>
+                </span>
+                <span class="business-ai-widget-external-btn-text">Prefiero WhatsApp</span>
+                <span class="business-ai-widget-external-btn-arrow">→</span>
+            `;
+            
+            buttonsContainer.appendChild(whatsappBtn);
+        }
+        
+        // Botón de Messenger
+        if (widgetConfig.enableMessenger && widgetConfig.messengerPage) {
+            const messengerBtn = document.createElement('a');
+            messengerBtn.className = 'business-ai-widget-external-btn messenger';
+            
+            let messengerPage = widgetConfig.messengerPage.replace(/^@/, '').replace(/^https?:\/\/(www\.)?(facebook\.com|fb\.com)\//, '').replace(/\/$/, '');
+            messengerBtn.href = `https://m.me/${messengerPage}`;
+            messengerBtn.target = '_blank';
+            messengerBtn.rel = 'noopener noreferrer';
+            
+            messengerBtn.innerHTML = `
+                <span class="business-ai-widget-external-btn-icon">💙</span>
+                <span class="business-ai-widget-external-btn-text">Prefiero Messenger</span>
+                <span class="business-ai-widget-external-btn-arrow">→</span>
+            `;
+            
+            buttonsContainer.appendChild(messengerBtn);
+        }
+        
+        // Mostrar contenedor si hay botones
+        if (buttonsContainer.children.length > 0) {
+            buttonsContainer.style.display = 'flex';
+        } else {
+            buttonsContainer.style.display = 'none';
+        }
+    }
+    
     // Toggle widget
     function toggleWidget() {
         state.isOpen = !state.isOpen;
@@ -663,6 +817,9 @@
     function initWidget() {
         createWidgetStyles();
         createWidgetHTML();
+        
+        // Crear botones de WhatsApp/Messenger
+        createExternalChatButtons();
         
         // Event listeners
         document.getElementById('business-ai-widget-button').addEventListener('click', toggleWidget);

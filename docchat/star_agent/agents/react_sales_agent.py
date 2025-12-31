@@ -189,11 +189,11 @@ class ReactSalesAgent:
                     """Wrapper de AdvancedRAGManager como BaseRetriever para ScopeChecker."""
                     def __init__(self, rag_manager: AdvancedRAGManager):
                         super().__init__()
-                        self.rag_manager = rag_manager
+                        self._rag_manager = rag_manager
                     
                     def _get_relevant_documents(self, query: str) -> List:
                         """Retorna documentos relevantes usando AdvancedRAGManager."""
-                        result = self.rag_manager.retrieve_with_confidence(query)
+                        result = self._rag_manager.retrieve_with_confidence(query)
                         return result.get("documents", [])
                     
                     def get_relevant_documents(self, query: str, k: int = 5) -> List:
@@ -775,6 +775,38 @@ Responde en JSON:
         return {
             "messages": [AIMessage(content=final_text)],
             "closing_activated": closing_strategy is not None,
+        }
+    
+    def _handoff_node(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Nodo de Handoff.
+        
+        Inicia el proceso de transferencia a un agente humano.
+        """
+        user_query = state["messages"][-1].content if state["messages"] else "No message"
+        session_id = state["session_id"]
+        user_id = state["user_id"]
+        conversation_history = self._format_conversation_history(state["messages"])
+        
+        print(f"🚨 Iniciando handoff para sesión {session_id} a {self.handoff_manager.provider}")
+        
+        handoff_result = self.handoff_manager.create_ticket(
+            session_id=session_id,
+            user_id=user_id,
+            user_message=user_query,
+            conversation_history=conversation_history,
+            priority="high"  # Handoff suele ser alta prioridad
+        )
+        
+        handoff_message = handoff_result.get("message", "Se ha solicitado la transferencia a un agente humano.")
+        if handoff_result.get("success"):
+            handoff_message = f"✅ {handoff_message} Un agente se pondrá en contacto contigo pronto."
+        else:
+            handoff_message = f"⚠️ {handoff_message} Por favor, intenta contactarnos por otro medio."
+        
+        return {
+            "messages": [AIMessage(content=handoff_message)],
+            "needs_handoff": True,  # Mantener en true para señalizar que el handoff ocurrió
         }
     
     def _should_continue(self, state: AgentState) -> str:

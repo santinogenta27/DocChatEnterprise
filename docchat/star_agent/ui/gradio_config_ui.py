@@ -35,18 +35,28 @@ class StarAgentConfigUI:
     Diseñado para personas sin conocimiento técnico.
     """
     
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Optional[Path] = None, star_agent_mode=None):
         """
         Inicializa la UI de configuración.
         
         Args:
             config_path: Ruta donde guardar/cargar configuración (JSON)
+            star_agent_mode: Instancia de StarAgentMode (opcional, se puede establecer después)
         """
         self.config_path = config_path or Path("docchat/star_agent/config/star_agent_config.json")
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Cargar configuración existente
         self.current_config = self._load_config()
+        
+        # Referencia a StarAgentMode (para el servidor API del widget)
+        self.star_agent_mode = star_agent_mode
+        
+        # Estado del servidor API
+        self.api_server_process = None
+        self.api_server_thread = None
+        self.api_server_running = False
+        self.api_server_port = 7864
     
     def _load_config(self) -> Dict[str, Any]:
         """Carga configuración desde JSON."""
@@ -326,13 +336,19 @@ class StarAgentConfigUI:
                     
                     with gr.Accordion("🛡️ Manejo de Objeciones", open=True):
                         gr.Markdown("**Define cómo responder a objeciones comunes (formato JSON)**")
+                        # Asegurar que objection_responses sea siempre un dict válido
+                        objection_default = {
+                            "caro": "Entiendo. Justamente por eso incluye X, Y y Z que ahorran dinero a largo plazo.",
+                            "después": "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora?",
+                            "pensar": "Claro, es una decisión importante. ¿Hay algo específico en lo que pueda ayudarte a decidir?"
+                        }
+                        objection_value = self.current_config.get("objection_responses", objection_default)
+                        if not isinstance(objection_value, dict):
+                            objection_value = objection_default
+                        
                         objection_responses = gr.JSON(
                             label="Respuestas a Objeciones Comunes",
-                            value=self.current_config.get("objection_responses", {
-                                "caro": "Entiendo. Justamente por eso incluye X, Y y Z que ahorran dinero a largo plazo.",
-                                "después": "Tiene sentido. ¿Qué tendría que pasar para que lo veas útil ahora?",
-                                "pensar": "Claro, es una decisión importante. ¿Hay algo específico en lo que pueda ayudarte a decidir?"
-                            })
+                            value=objection_value
                         )
                 
                 # TAB 5: Integraciones
@@ -480,14 +496,21 @@ class StarAgentConfigUI:
                         gr.Markdown("**Define tus propios links personalizados con etiquetas**")
                         gr.Markdown("**Formato JSON:** `{'etiqueta': 'url', ...}`")
                         
+                        # Asegurar que custom_links sea siempre un dict válido
+                        custom_links_default = {
+                            "promocion_especial": "https://tu-tienda.com/promo",
+                            "nuevos_lanzamientos": "https://tu-tienda.com/nuevos"
+                        }
+                        custom_links_value = self.current_config.get("custom_links", custom_links_default)
+                        # Validar que sea un dict, si no, usar default
+                        if not isinstance(custom_links_value, dict):
+                            custom_links_value = custom_links_default
+                        
                         custom_links = gr.JSON(
                             label="Links Personalizados",
-                            value=self.current_config.get("custom_links", {
-                                "promocion_especial": "https://tu-tienda.com/promo",
-                                "nuevos_lanzamientos": "https://tu-tienda.com/nuevos"
-                            }),
-                            info="Define links personalizados con etiquetas para usar en respuestas"
+                            value=custom_links_value
                         )
+                        gr.Markdown("💡 Define links personalizados con etiquetas para usar en respuestas")
                 
                 # TAB 7: Canales
                 with gr.Tab("📱 Canales"):
@@ -771,9 +794,13 @@ class StarAgentConfigUI:
                     gr.Markdown("### Métricas y Analytics del Agente")
                     
                     with gr.Row():
+                        # Asegurar que metrics_display tenga un dict válido
+                        metrics_default = {}
+                        metrics_config = self.current_config.get("metrics", metrics_default)
+                        metrics_value = metrics_config if isinstance(metrics_config, dict) else metrics_default
                         metrics_display = gr.JSON(
                             label="Métricas Actuales",
-                            value={}
+                            value=metrics_value
                         )
                     
                     refresh_metrics_btn = gr.Button("🔄 Actualizar Métricas", variant="secondary")
@@ -787,6 +814,654 @@ class StarAgentConfigUI:
                     - Tiempo promedio de respuesta
                     - Etapas de venta más comunes
                     - Objeciones más frecuentes
+                    """)
+                
+                # TAB 10: Widget Embeddable - Generar Código
+                with gr.Tab("🔧 Generar Código"):
+                    with gr.Row():
+                        with gr.Column():
+                            widget_api_url = gr.Textbox(
+                                label="🌐 URL del Servidor",
+                                value="http://127.0.0.1:7864",
+                                placeholder="https://tu-servidor.com",
+                                info="URL donde está corriendo tu servidor STAR AGENT API"
+                            )
+                            widget_id = gr.Textbox(
+                                label="🆔 Widget ID",
+                                placeholder="widget_abc123",
+                                info="ID único para este widget (se genera automáticamente si lo dejas vacío)"
+                            )
+                            widget_brand_name = gr.Textbox(
+                                label="🏷️ Nombre de Marca",
+                                placeholder="Mi Empresa",
+                                value=self.current_config.get("brand_name", "Tu Marca"),
+                                info="Nombre que aparecerá en el widget"
+                            )
+                            widget_primary_color = gr.Textbox(
+                                label="🎨 Color Principal",
+                                value="#007bff",
+                                placeholder="#007bff",
+                                info="Color hexadecimal para el widget"
+                            )
+                            widget_position = gr.Radio(
+                                label="📍 Posición",
+                                choices=[("Esquina inferior derecha", "bottom-right"), ("Esquina inferior izquierda", "bottom-left")],
+                                value="bottom-right"
+                            )
+                            widget_welcome_message = gr.Textbox(
+                                label="💬 Mensaje de Bienvenida",
+                                value="👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?",
+                                lines=2,
+                                info="Mensaje que verá el usuario al abrir el chat"
+                            )
+                            
+                            gr.Markdown("---")
+                            gr.Markdown("### 💬 Integración WhatsApp y Messenger")
+                            
+                            widget_enable_whatsapp = gr.Checkbox(
+                                label="✅ Activar Botón de WhatsApp",
+                                value=False,
+                                info="Muestra botón 'Prefiero WhatsApp' dentro del chat"
+                            )
+                            widget_whatsapp_number = gr.Textbox(
+                                label="📱 Número de WhatsApp Business",
+                                placeholder="+1234567890",
+                                info="Número con código de país (ej: +1234567890)"
+                            )
+                            widget_whatsapp_message = gr.Textbox(
+                                label="💬 Mensaje Predefinido WhatsApp",
+                                value="Hola, vi tu producto en tu website",
+                                lines=2,
+                                info="Mensaje que aparecerá al abrir WhatsApp"
+                            )
+                            
+                            widget_enable_messenger = gr.Checkbox(
+                                label="✅ Activar Botón de Messenger",
+                                value=False,
+                                info="Muestra botón 'Prefiero Messenger' dentro del chat"
+                            )
+                            widget_messenger_page = gr.Textbox(
+                                label="📘 Página de Facebook",
+                                placeholder="tu-pagina-facebook",
+                                info="Nombre de tu página (sin @ ni facebook.com)"
+                            )
+                            
+                            generate_widget_code_btn = gr.Button("📋 Generar Código", variant="primary", size="lg")
+                        
+                        with gr.Column():
+                            widget_code_output = gr.Code(
+                                label="📋 Código HTML para Copiar y Pegar",
+                                language="html",
+                                lines=15,
+                                value="**💡 Configura los campos de la izquierda y haz click en 'Generar Código'**"
+                            )
+                            widget_preview = gr.Markdown(
+                                label="👁️ Preview",
+                                value="**El código generado aparecerá arriba**"
+                            )
+                    
+                    def generate_widget_code(api_url, widget_id_input, brand_name, primary_color, position, welcome_message,
+                                            enable_whatsapp, whatsapp_number, whatsapp_message,
+                                            enable_messenger, messenger_page):
+                        """Genera código HTML/JS para el widget embeddable"""
+                        try:
+                            import uuid
+                            
+                            # Generar widget_id si no se proporciona
+                            if not widget_id_input or not widget_id_input.strip():
+                                widget_id_final = f"widget_{uuid.uuid4().hex[:12]}"
+                            else:
+                                widget_id_final = widget_id_input.strip()
+                            
+                            # Validar URL
+                            if not api_url or not api_url.strip():
+                                return "⚠️ **URL del servidor es requerida**", "❌ Error: URL requerida"
+                            
+                            api_url_clean = api_url.strip().rstrip('/')
+                            
+                            # Construir código HTML con atributos base
+                            code_lines = [
+                                '<!-- STAR AGENT Widget -->',
+                                '<!-- Copia y pega este código antes de </body> en tu website -->',
+                                f'<script src="{api_url_clean}/static/business-ai-widget.js"',
+                                f'        data-api-url="{api_url_clean}"',
+                                f'        data-widget-id="{widget_id_final}"',
+                                f'        data-brand-name="{brand_name}"',
+                                f'        data-primary-color="{primary_color}"',
+                                f'        data-position="{position}"',
+                                f'        data-welcome-message="{welcome_message}"'
+                            ]
+                            
+                            # Agregar atributos de WhatsApp si está habilitado
+                            if enable_whatsapp and whatsapp_number and whatsapp_number.strip():
+                                code_lines.append(f'        data-enable-whatsapp="true"')
+                                code_lines.append(f'        data-whatsapp-number="{whatsapp_number.strip()}"')
+                                if whatsapp_message and whatsapp_message.strip():
+                                    code_lines.append(f'        data-whatsapp-message="{whatsapp_message.strip()}"')
+                            
+                            # Agregar atributos de Messenger si está habilitado
+                            if enable_messenger and messenger_page and messenger_page.strip():
+                                code_lines.append(f'        data-enable-messenger="true"')
+                                code_lines.append(f'        data-messenger-page="{messenger_page.strip()}"')
+                            
+                            code_lines.append('        async></script>')
+                            
+                            code = '\n'.join(code_lines)
+                            
+                            preview = f"""## ✅ Código Generado Exitosamente
+
+**Widget ID:** `{widget_id_final}`
+
+**Instrucciones:**
+1. Copia el código HTML de arriba
+2. Pégalo antes de `</body>` en tu website
+3. El widget aparecerá automáticamente en la esquina {position.replace('bottom-', 'inferior ').replace('right', 'derecha').replace('left', 'izquierda')}
+
+**Características del Widget:**
+- ✅ Chat flotante con interfaz moderna
+- ✅ Conectado con STAR AGENT
+- ✅ Ventas + Soporte 24/7
+- ✅ Carrito de compras integrado
+- ✅ Detección de sentimiento
+- ✅ Handoff humano automático
+- ✅ Procesamiento de imágenes
+- ✅ Botones de WhatsApp y Messenger (si están configurados)
+
+**URL del Widget:** `{api_url_clean}/static/business-ai-widget.js`
+
+**⚠️ IMPORTANTE:** El servidor API debe estar corriendo para que el widget funcione (ve a la pestaña "🚀 Servidor API")
+"""
+                            
+                            return code, preview
+                        except Exception as e:
+                            import traceback
+                            return f"❌ Error generando código: {str(e)}\n\n```\n{traceback.format_exc()}\n```", f"❌ Error: {str(e)}"
+                    
+                    generate_widget_code_btn.click(
+                        fn=generate_widget_code,
+                        inputs=[
+                            widget_api_url, widget_id, widget_brand_name, widget_primary_color, widget_position, widget_welcome_message,
+                            widget_enable_whatsapp, widget_whatsapp_number, widget_whatsapp_message,
+                            widget_enable_messenger, widget_messenger_page
+                        ],
+                        outputs=[widget_code_output, widget_preview]
+                    )
+                
+                # TAB 11: Configuración Enterprise
+                with gr.Tab("⚙️ Configuración Enterprise"):
+                    gr.Markdown("### ⚙️ Configuración Enterprise (Groq + PostgreSQL + n8n)")
+                    gr.Markdown("""
+                    **Para velocidad extrema y memoria de largo plazo:**
+                    - **Groq:** Responde en <0.5 segundos (Llama 3.3 70B)
+                    - **PostgreSQL:** Recuerda clientes meses después
+                    - **n8n:** Conecta con WhatsApp/Instagram automáticamente
+                    """)
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("### 🔥 Groq Cloud (Velocidad Extrema)")
+                            groq_api_key_input = gr.Textbox(
+                                label="🔑 Groq API Key",
+                                type="password",
+                                placeholder="gsk_...",
+                                value=os.getenv("GROQ_API_KEY", ""),
+                                info="Obtén tu API key gratis en https://console.groq.com"
+                            )
+                            use_groq_checkbox = gr.Checkbox(
+                                label="✅ Usar Groq (Llama 3.3 70B)",
+                                value=os.getenv("DOCCHAT_USE_GROQ", "false").lower() == "true",
+                                info="Activa para respuestas <0.5 segundos"
+                            )
+                            groq_model_select = gr.Dropdown(
+                                label="🤖 Modelo Groq",
+                                choices=[
+                                    ("llama-3.3-70b-versatile", "Llama 3.3 70B (Recomendado)"),
+                                    ("llama-3.1-70b-versatile", "Llama 3.1 70B"),
+                                    ("llama-3.1-8b-instant", "Llama 3.1 8B (Más rápido)")
+                                ],
+                                value=os.getenv("DOCCHAT_GROQ_MODEL", "llama-3.3-70b-versatile"),
+                                allow_custom_value=True
+                            )
+                            save_groq_btn = gr.Button("💾 Guardar Configuración Groq", variant="primary")
+                            groq_status = gr.Markdown(label="📊 Estado Groq")
+                        
+                        with gr.Column():
+                            gr.Markdown("### 🗄️ PostgreSQL (Memoria de Largo Plazo)")
+                            postgresql_url_input = gr.Textbox(
+                                label="🔗 Database URL",
+                                placeholder="postgresql://user:pass@host:port/db",
+                                type="password",
+                                value=os.getenv("DATABASE_URL", ""),
+                                info="URL de conexión PostgreSQL"
+                            )
+                            use_postgresql_checkbox = gr.Checkbox(
+                                label="✅ Usar PostgreSQL",
+                                value=os.getenv("DOCCHAT_POSTGRESQL_ENABLED", "false").lower() == "true",
+                                info="Activa para recordar clientes meses después"
+                            )
+                            save_postgresql_btn = gr.Button("💾 Guardar Configuración PostgreSQL", variant="primary")
+                            postgresql_status = gr.Markdown(label="📊 Estado PostgreSQL")
+                    
+                    gr.Markdown("---")
+                    gr.Markdown("### 🔗 n8n (WhatsApp/Instagram)")
+                    gr.Markdown("""
+                    **Para conectar con Meta (WhatsApp/Instagram):**
+                    1. Instala n8n (self-hosted o cloud)
+                    2. Configura webhook de Meta
+                    3. Crea workflow que llame a: `https://tu-servidor.com/star-agent/n8n/webhook`
+                    """)
+                    
+                    n8n_webhook_url_display = gr.Markdown(
+                        value="**Endpoint n8n:** `POST https://tu-servidor.com/star-agent/n8n/webhook`"
+                    )
+                    
+                    def save_groq_config(api_key, use_groq, model):
+                        """Guarda configuración de Groq en .env"""
+                        try:
+                            from pathlib import Path
+                            
+                            env_path = Path(".env")
+                            
+                            # Leer .env actual
+                            env_vars = {}
+                            if env_path.exists():
+                                with open(env_path, "r", encoding="utf-8") as f:
+                                    for line in f:
+                                        if "=" in line and not line.strip().startswith("#"):
+                                            parts = line.strip().split("=", 1)
+                                            if len(parts) == 2:
+                                                key, value = parts
+                                                env_vars[key] = value
+                            
+                            # Actualizar variables
+                            if api_key:
+                                env_vars["GROQ_API_KEY"] = api_key
+                            env_vars["DOCCHAT_USE_GROQ"] = "true" if use_groq else "false"
+                            env_vars["DOCCHAT_GROQ_MODEL"] = model
+                            
+                            # Escribir .env
+                            with open(env_path, "w", encoding="utf-8") as f:
+                                for key, value in env_vars.items():
+                                    f.write(f"{key}={value}\n")
+                            
+                            status = f"""✅ **Configuración Groq guardada**
+
+**Estado:**
+- API Key: {'✅ Configurada' if api_key else '❌ No configurada'}
+- Usar Groq: {'✅ Activado' if use_groq else '❌ Desactivado'}
+- Modelo: {model}
+
+**⚠️ IMPORTANTE:** Reinicia el servidor para aplicar cambios.
+```bash
+# Reinicia run_star_agent_ui.py
+```
+"""
+                            return status
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    def save_postgresql_config(db_url, use_postgresql):
+                        """Guarda configuración de PostgreSQL en .env"""
+                        try:
+                            from pathlib import Path
+                            
+                            env_path = Path(".env")
+                            
+                            # Leer .env actual
+                            env_vars = {}
+                            if env_path.exists():
+                                with open(env_path, "r", encoding="utf-8") as f:
+                                    for line in f:
+                                        if "=" in line and not line.strip().startswith("#"):
+                                            parts = line.strip().split("=", 1)
+                                            if len(parts) == 2:
+                                                key, value = parts
+                                                env_vars[key] = value
+                            
+                            # Actualizar variables
+                            if db_url:
+                                env_vars["DATABASE_URL"] = db_url
+                            env_vars["DOCCHAT_POSTGRESQL_ENABLED"] = "true" if use_postgresql else "false"
+                            
+                            # Escribir .env
+                            with open(env_path, "w", encoding="utf-8") as f:
+                                for key, value in env_vars.items():
+                                    f.write(f"{key}={value}\n")
+                            
+                            status = f"""✅ **Configuración PostgreSQL guardada**
+
+**Estado:**
+- Database URL: {'✅ Configurada' if db_url else '❌ No configurada'}
+- Usar PostgreSQL: {'✅ Activado' if use_postgresql else '❌ Desactivado'}
+
+**⚠️ IMPORTANTE:** 
+1. Instala psycopg2: `pip install psycopg2-binary`
+2. Reinicia el servidor para aplicar cambios.
+3. Las tablas se crearán automáticamente al iniciar.
+"""
+                            return status
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}"
+                    
+                    save_groq_btn.click(
+                        fn=save_groq_config,
+                        inputs=[groq_api_key_input, use_groq_checkbox, groq_model_select],
+                        outputs=[groq_status]
+                    )
+                    
+                    save_postgresql_btn.click(
+                        fn=save_postgresql_config,
+                        inputs=[postgresql_url_input, use_postgresql_checkbox],
+                        outputs=[postgresql_status]
+                    )
+                
+                # TAB 12: Servidor API
+                with gr.Tab("🚀 Servidor API"):
+                    gr.Markdown("### 🚀 Control del Servidor API para Widget Embeddable")
+                    gr.Markdown("""
+                    Inicia o detén el servidor API necesario para que el widget funcione en tu website.
+                    
+                    **📋 El servidor API proporciona:**
+                    - 🔗 Endpoints REST para el widget embeddable
+                    - 📦 Servicio del archivo JavaScript del widget (/static/business-ai-widget.js)
+                    - 🔌 Endpoints de chat para STAR AGENT
+                    - 📚 Documentación interactiva en /docs
+                    
+                    **⚠️ IMPORTANTE:** El servidor API debe estar corriendo para que el widget funcione en tu website.
+                    """)
+                    
+                    api_server_status = gr.Markdown(
+                        value="**Estado:** No iniciado",
+                        label="Estado del Servidor"
+                    )
+                    
+                    api_server_port = gr.Number(
+                        label="🔌 Puerto del Servidor API",
+                        value=7864,
+                        minimum=1000,
+                        maximum=65535,
+                        info="Puerto donde correrá el servidor API (por defecto: 7864)"
+                    )
+                    
+                    with gr.Row():
+                        start_api_server_btn = gr.Button("▶️ Iniciar Servidor API", variant="primary")
+                        stop_api_server_btn = gr.Button("⏹️ Detener Servidor API", variant="stop")
+                        check_api_server_btn = gr.Button("🔍 Verificar Estado", variant="secondary")
+                    
+                    api_server_logs = gr.Textbox(
+                        label="📋 Logs del Servidor",
+                        lines=10,
+                        interactive=False,
+                        value="Los logs aparecerán aquí cuando inicies el servidor..."
+                    )
+                    
+                    def start_api_server(port):
+                        """Inicia el servidor API en un thread separado"""
+                        try:
+                            import threading
+                            import time
+                            import sys
+                            
+                            # Verificar si ya está corriendo
+                            try:
+                                import requests
+                                response = requests.get(f"http://127.0.0.1:{int(port)}/api/widget/health", timeout=2)
+                                if response.status_code == 200:
+                                    return f"✅ **Servidor API ya está corriendo en puerto {port}**\n\n**URL:** http://127.0.0.1:{port}", "Servidor ya está corriendo"
+                            except:
+                                pass
+                            
+                            # Verificar que tengamos referencia a StarAgentMode
+                            if not self.star_agent_mode:
+                                return "❌ **Error: No hay referencia a StarAgentMode.**\n\nReinicia la aplicación.", "Error: StarAgentMode no disponible"
+                            
+                            # Si ya hay un thread corriendo, detenerlo primero
+                            if self.api_server_thread and self.api_server_thread.is_alive():
+                                return "⚠️ **El servidor ya está corriendo.**\n\nUsa 'Detener Servidor API' primero.", "Servidor ya está corriendo"
+                            
+                            # Crear la app FastAPI
+                            try:
+                                widget_app = self.star_agent_mode.get_widget_app()
+                                if not widget_app:
+                                    return "❌ **Error: No se pudo crear la aplicación FastAPI.**\n\nVerifica que FastAPI esté instalado: pip install fastapi uvicorn", "Error creando app"
+                            except Exception as e:
+                                return f"❌ **Error creando aplicación:** {str(e)}", f"Error: {str(e)}"
+                            
+                            # Función para ejecutar uvicorn en el thread
+                            def run_server():
+                                try:
+                                    import uvicorn
+                                    uvicorn.run(
+                                        widget_app,
+                                        host="0.0.0.0",
+                                        port=int(port),
+                                        log_level="info"
+                                    )
+                                except Exception as e:
+                                    print(f"❌ Error en servidor API: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                            
+                            # Iniciar thread del servidor
+                            self.api_server_thread = threading.Thread(
+                                target=run_server,
+                                daemon=True,
+                                name="API-Server-Thread"
+                            )
+                            self.api_server_thread.start()
+                            self.api_server_running = True
+                            self.api_server_port = int(port)
+                            
+                            # Esperar un poco para verificar que inició
+                            time.sleep(2)
+                            
+                            # Verificar que está corriendo
+                            try:
+                                import requests
+                                response = requests.get(f"http://127.0.0.1:{int(port)}/api/widget/health", timeout=2)
+                                if response.status_code == 200:
+                                    status = f"""✅ **Servidor API iniciado exitosamente en puerto {port}**
+
+**URL del Servidor:** http://127.0.0.1:{port}
+**Health Check:** http://127.0.0.1:{port}/api/widget/health
+**Docs:** http://127.0.0.1:{port}/docs
+**Widget JS:** http://127.0.0.1:{port}/static/business-ai-widget.js
+
+**El servidor está corriendo en background.**
+"""
+                                    logs = f"Servidor iniciado en puerto {port}\nThread: {self.api_server_thread.name}\nThread ID: {self.api_server_thread.ident}"
+                                    return status, logs
+                            except Exception as e:
+                                # El servidor puede estar iniciando aún
+                                status = f"""⚠️ **Servidor API iniciando...**
+
+**Puerto:** {port}
+
+**Espera unos segundos y verifica el estado con el botón 'Verificar Estado'.**
+
+Si el servidor no inicia, verifica que el puerto {port} no esté en uso.
+"""
+                                logs = f"Servidor iniciando en puerto {port}...\nError de verificación: {str(e)}"
+                                return status, logs
+                            
+                            status = f"""✅ **Servidor API iniciado en puerto {port}**
+
+**URL del Servidor:** http://127.0.0.1:{port}
+"""
+                            logs = f"Servidor iniciado en puerto {port}"
+                            return status, logs
+                        except Exception as e:
+                            import traceback
+                            error_detail = f"{str(e)}\n\n{traceback.format_exc()}"
+                            return f"❌ **Error iniciando servidor:**\n\n{error_detail}", f"Error: {error_detail}"
+                    
+                    def stop_api_server(port):
+                        """Detiene el servidor API"""
+                        try:
+                            if not self.api_server_thread or not self.api_server_thread.is_alive():
+                                return "⚠️ **El servidor no está corriendo.**", "Servidor no está corriendo"
+                            
+                            # El servidor está corriendo en un thread daemon
+                            # No podemos detenerlo directamente desde Python de forma limpia
+                            # Por ahora, informamos que se detendrá cuando termine la aplicación
+                            # O podríamos usar un flag compartido y modificar el servidor para escucharlo
+                            
+                            self.api_server_running = False
+                            
+                            # Verificar si realmente está corriendo
+                            try:
+                                import requests
+                                response = requests.get(f"http://127.0.0.1:{int(port)}/api/widget/health", timeout=1)
+                                if response.status_code == 200:
+                                    return "⚠️ **Para detener el servidor completamente, reinicia la aplicación Gradio.**\n\nEl servidor se detendrá automáticamente cuando cierres la aplicación.", "Servidor seguirá corriendo hasta reiniciar"
+                            except:
+                                pass
+                            
+                            return "✅ **Servidor API detenido**\n\nEl thread se ha marcado como detenido.", "Servidor detenido"
+                        except Exception as e:
+                            return f"❌ Error: {str(e)}", f"Error: {str(e)}"
+                    
+                    def check_api_server_status(port):
+                        """Verifica el estado del servidor API"""
+                        try:
+                            import requests
+                            # Health endpoint está en /api/widget/health
+                            response = requests.get(f"http://127.0.0.1:{int(port)}/api/widget/health", timeout=2)
+                            if response.status_code == 200:
+                                health_data = response.json()
+                                status_text = health_data.get("status", "unknown")
+                                return f"""✅ **Servidor API está corriendo**
+
+**Puerto:** {port}
+**Status:** {status_text}
+**URL:** http://127.0.0.1:{port}
+**Health:** http://127.0.0.1:{port}/api/widget/health
+**Docs:** http://127.0.0.1:{port}/docs
+**Widget JS:** http://127.0.0.1:{port}/static/business-ai-widget.js
+"""
+                            else:
+                                return f"⚠️ **Servidor API responde con error**\n\n**Status Code:** {response.status_code}"
+                        except requests.exceptions.ConnectionError:
+                            return f"""❌ **Servidor API no está corriendo**
+
+**Puerto:** {port}
+
+Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
+"""
+                        except Exception as e:
+                            return f"❌ **Error verificando servidor:** {str(e)}"
+                    
+                    start_api_server_btn.click(
+                        fn=start_api_server,
+                        inputs=[api_server_port],
+                        outputs=[api_server_status, api_server_logs]
+                    )
+                    
+                    stop_api_server_btn.click(
+                        fn=stop_api_server,
+                        inputs=[api_server_port],
+                        outputs=[api_server_status, api_server_logs]
+                    )
+                    
+                    check_api_server_btn.click(
+                        fn=check_api_server_status,
+                        inputs=[api_server_port],
+                        outputs=[api_server_status]
+                    )
+                
+                # TAB 13: Instrucciones
+                with gr.Tab("📖 Instrucciones"):
+                    gr.Markdown("### 📖 Cómo Usar el Widget en tu Website")
+                    gr.Markdown("""
+                    ## Paso 1: Genera tu Código
+                    
+                    1. Ve a la pestaña **"🔧 Generar Código"**
+                    2. Configura:
+                       - URL de tu servidor STAR AGENT API
+                       - Nombre de tu marca
+                       - Color principal del widget
+                       - Posición (derecha o izquierda)
+                       - Mensaje de bienvenida
+                    3. Haz click en **"📋 Generar Código"**
+                    
+                    ## Paso 2: Copia el Código
+                    
+                    Copia el código HTML que se genera
+                    
+                    ## Paso 3: Pega en tu Website
+                    
+                    1. Abre el código HTML de tu website
+                    2. Busca la etiqueta `</body>`
+                    3. Pega el código **ANTES** de `</body>`
+                    4. Guarda y publica tu website
+                    
+                    ## Paso 4: ¡Listo!
+                    
+                    - El widget aparecerá automáticamente en tu website
+                    - Los usuarios podrán chatear directamente
+                    - El agente responderá usando STAR AGENT
+                    
+                    ---
+                    
+                    ## 🎯 Características del Widget
+                    
+                    Basado en los mejores papers de e-commerce:
+                    - ✅ **Mix-ECom**: Manejo de diálogos mixtos (QA, recomendación, ventas, chit-chat)
+                    - ✅ **Retail-GPT**: RAG para recomendaciones de productos
+                    - ✅ **CSALES**: Personalización y persuasión estratégica
+                    - ✅ **MegaChat**: Generación de respuestas de alta calidad
+                    
+                    **Funcionalidades:**
+                    - 💬 Chat en tiempo real
+                    - 🛒 Carrito de compras integrado
+                    - 💳 Procesamiento de pagos
+                    - 📦 Gestión de pedidos
+                    - 🎯 Cross-selling inteligente
+                    - 📊 Análisis de sentimiento
+                    - 🔗 Handoff humano automático
+                    - 🖼️ Procesamiento de imágenes
+                    - 📍 Pixel tracking (sabe qué productos vio el usuario)
+                    
+                    ---
+                    
+                    ## 🔧 Configuración Avanzada
+                    
+                    **Personalización:**
+                    - Cambia el color con `data-primary-color`
+                    - Cambia la posición con `data-position`
+                    - Personaliza el mensaje con `data-welcome-message`
+                    
+                    **Ejemplo completo:**
+                    ```html
+                    <script src="https://tu-servidor.com/static/business-ai-widget.js" 
+                            data-api-url="https://tu-servidor.com"
+                            data-widget-id="mi-widget-123"
+                            data-brand-name="Mi Empresa"
+                            data-primary-color="#ff6b6b"
+                            data-position="bottom-left"
+                            data-welcome-message="¡Hola! ¿Cómo puedo ayudarte?"
+                            async></script>
+                    ```
+                    
+                    ---
+                    
+                    ## ⚙️ Configuración Enterprise
+                    
+                    Para máxima velocidad y memoria:
+                    1. Ve a la pestaña **"⚙️ Configuración Enterprise"**
+                    2. Configura Groq para respuestas <0.5 segundos
+                    3. Configura PostgreSQL para memoria de largo plazo
+                    4. Guarda y reinicia el servidor
+                    
+                    ---
+                    
+                    ## 🚀 Servidor API
+                    
+                    El widget requiere que el servidor API esté corriendo:
+                    1. Ve a la pestaña **"🚀 Servidor API"**
+                    2. Configura el puerto (por defecto: 7864)
+                    3. Inicia el servidor API
+                    4. Verifica que esté corriendo con "Verificar Estado"
                     """)
             
             # Botones de acción
@@ -1180,6 +1855,17 @@ class StarAgentConfigUI:
                     enable_whatsapp, whatsapp_phone_number_id, whatsapp_access_token, whatsapp_verify_token,
                     enable_messenger, messenger_page_id, messenger_page_access_token, messenger_verify_token,
                     enable_instagram_direct,
+                    # Handoff inputs
+                    enable_handoff, handoff_provider,
+                    handoff_zendesk_subdomain, handoff_zendesk_token, handoff_zendesk_queue,
+                    handoff_whatsapp_token, handoff_email,
+                    handoff_trigger_manual, handoff_trigger_low_confidence,
+                    handoff_trigger_strong_objection, handoff_trigger_frustration,
+                    # Ingestion inputs
+                    ingestion_scheduler_enabled, ingestion_interval_hours,
+                    ingestion_website_enabled, ingestion_website_url,
+                    ingestion_instagram_enabled, ingestion_instagram_token,
+                    ingestion_facebook_enabled, ingestion_facebook_token,
                 ],
                 outputs=[save_status]
             )
