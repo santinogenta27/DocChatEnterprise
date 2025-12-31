@@ -15,6 +15,8 @@ ENV/
 .docchat_audit/
 /cache/
 uploaded_files/
+docchat/star_agent/rag_storage/
+docchat/*/rag_storage/
 
 # Variables de entorno
 .env
