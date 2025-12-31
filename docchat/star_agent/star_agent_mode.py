@@ -140,6 +140,7 @@ class StarAgentMode:
                         enable_sales_closer=True,
                         enable_rag_advanced=True,
                         enable_verification=True,
+                        base_url=getattr(self.config, "base_url", None) or os.getenv("BASE_URL") or os.getenv("SHOPIFY_SHOP_URL"),  # URL base para links de productos
                     ),
                     app_config=self.config,
                 )

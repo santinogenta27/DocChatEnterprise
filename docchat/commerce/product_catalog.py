@@ -37,6 +37,8 @@ class Product:
     stock_quantity: int = 0
     in_stock: bool = True
     metadata: Dict[str, Any] = None
+    url: Optional[str] = None  # URL del producto en e-commerce
+    shopify_url: Optional[str] = None  # URL específica de Shopify (si aplica)
     
     def __post_init__(self):
         if self.tags is None:
@@ -188,8 +190,16 @@ class ProductCatalog:
         variants = shopify_product.get("variants", [])
         total_stock = sum(v.get("inventory_quantity", 0) for v in variants)
         
+        # Generar URL de Shopify para el producto
+        shopify_id = shopify_product.get("id", "")
+        handle = shopify_product.get("handle", "")
+        shopify_url = None
+        if self.shopify_shop_url and handle:
+            # URL formato: https://shop.myshopify.com/products/handle
+            shopify_url = f"https://{self.shopify_shop_url}/products/{handle}"
+        
         return Product(
-            id=shopify_product.get("id", ""),
+            id=str(shopify_id),  # Convertir a string
             title=shopify_product.get("title", ""),
             description=shopify_product.get("body_html", ""),
             price=float(variants[0].get("price", 0)) if variants else 0.0,
@@ -207,7 +217,8 @@ class ProductCatalog:
             } for v in variants],
             stock_quantity=total_stock,
             in_stock=total_stock > 0,
-            metadata={"shopify_id": shopify_product.get("id")}
+            shopify_url=shopify_url,  # Agregar URL de Shopify
+            metadata={"shopify_id": shopify_id}
         )
     
     def _save_product_to_db(self, cursor: sqlite3.Cursor, product: Product):
@@ -215,8 +226,8 @@ class ProductCatalog:
         cursor.execute("""
             INSERT OR REPLACE INTO products 
             (id, title, description, price, currency, image_url, product_type, vendor, 
-             tags, variants, stock_quantity, in_stock, metadata, updated_at, shopify_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             tags, variants, stock_quantity, in_stock, metadata, updated_at, shopify_id, url, shopify_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             product.id,
             product.title,
@@ -232,7 +243,9 @@ class ProductCatalog:
             1 if product.in_stock else 0,
             json.dumps(product.metadata),
             datetime.now().isoformat(),
-            product.metadata.get("shopify_id")
+            product.metadata.get("shopify_id") if product.metadata else None,
+            product.url,  # Agregar URL
+            product.shopify_url  # Agregar shopify_url
         ))
     
     def search_products(
@@ -315,6 +328,10 @@ class ProductCatalog:
     
     def _row_to_product(self, row: tuple) -> Product:
         """Convierte una fila de la BD a Product."""
+        # Manejar columnas antiguas (sin url) y nuevas (con url)
+        url = row[14] if len(row) > 14 else None
+        shopify_url = row[15] if len(row) > 15 else None
+        
         return Product(
             id=row[0],
             title=row[1],
@@ -328,7 +345,9 @@ class ProductCatalog:
             variants=json.loads(row[9]) if row[9] else [],
             stock_quantity=row[10] or 0,
             in_stock=bool(row[11]),
-            metadata=json.loads(row[12]) if row[12] else {}
+            metadata=json.loads(row[12]) if row[12] else {},
+            url=url,
+            shopify_url=shopify_url
         )
     
     def get_product(self, product_id: str) -> Optional[Product]:

@@ -404,20 +404,32 @@ class StarAgentConfigUI:
                     """)
                     
                     with gr.Accordion("📋 Links de Productos", open=True):
-                        gr.Markdown("**Links relacionados con productos (catálogo, tienda, etc.)**")
+                        gr.Markdown("""
+                        **⚠️ IMPORTANTE: URL Base para Links de Productos**
+                        
+                        El agente necesita esta URL para generar links automáticamente cuando un cliente pregunta por productos.
+                        Ejemplo: Si pones `https://tu-tienda.com`, el agente generará links como `https://tu-tienda.com/products/producto-123`
+                        """)
+                        
+                        base_url = gr.Textbox(
+                            label="🔗 URL Base para Links de Productos (REQUERIDO)",
+                            value=self.current_config.get("base_url", ""),
+                            placeholder="https://tu-tienda.com",
+                            info="URL base de tu e-commerce (sin / al final). El agente usará esto para generar links automáticos a productos."
+                        )
                         
                         product_catalog_link = gr.Textbox(
                             label="Link del Catálogo de Productos",
                             value=self.current_config.get("product_catalog_link", ""),
                             placeholder="https://tu-tienda.com/productos",
-                            info="Link al catálogo completo de productos"
+                            info="Link al catálogo completo de productos (opcional)"
                         )
                         
                         store_link = gr.Textbox(
                             label="Link de la Tienda",
                             value=self.current_config.get("store_link", ""),
                             placeholder="https://tu-tienda.com",
-                            info="Link principal de tu tienda/sitio web"
+                            info="Link principal de tu tienda/sitio web (opcional)"
                         )
                     
                     with gr.Accordion("💳 Links de Pago y Checkout", open=True):
@@ -1486,6 +1498,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                 stripe_enable, stripe_key,
                 ga_enable, ga_id,
                 pixel_enable, pixel_id,
+                base_url_val,
                 product_catalog_link, store_link,
                 checkout_link, payment_methods_link,
                 support_link, contact_link, faq_link,
@@ -1548,6 +1561,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                     "meta_pixel_id": pixel_id,
                     
                     # Links y URLs
+                    "base_url": base_url_val,  # URL base para generar links de productos automáticamente
                     "product_catalog_link": product_catalog_link,
                     "store_link": store_link,
                     "checkout_link": checkout_link,
@@ -1639,6 +1653,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                     config.get("google_analytics_id", ""),
                     config.get("enable_meta_pixel", False),
                     config.get("meta_pixel_id", ""),
+                    config.get("base_url", ""),  # URL base para links de productos
                     config.get("product_catalog_link", ""),
                     config.get("store_link", ""),
                     config.get("checkout_link", ""),
@@ -1718,6 +1733,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                     "google_analytics_id": "",
                     "enable_meta_pixel": False,
                     "meta_pixel_id": "",
+                    "base_url": "",  # URL base para links de productos
                     "product_catalog_link": "",
                     "store_link": "",
                     "checkout_link": "",
@@ -1846,6 +1862,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                     enable_stripe, stripe_secret_key,
                     enable_google_analytics, google_analytics_id,
                     enable_meta_pixel, meta_pixel_id,
+                    base_url,  # Agregar base_url aquí en load outputs
                     product_catalog_link, store_link,
                     checkout_link, payment_methods_link,
                     support_link, contact_link, faq_link,
@@ -1885,6 +1902,7 @@ Inicia el servidor usando el botón '▶️ Iniciar Servidor API' arriba.
                     enable_stripe, stripe_secret_key,
                     enable_google_analytics, google_analytics_id,
                     enable_meta_pixel, meta_pixel_id,
+                    base_url,  # Agregar base_url aquí en load outputs
                     product_catalog_link, store_link,
                     checkout_link, payment_methods_link,
                     support_link, contact_link, faq_link,

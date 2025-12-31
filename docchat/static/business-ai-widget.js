@@ -19,7 +19,7 @@
         apiUrl: window.location.origin || 'http://localhost:7860',
         widgetId: null,
         position: 'bottom-right', // bottom-right, bottom-left
-        primaryColor: '#007bff',
+        primaryColor: '#007AFF', // Azul iOS elegante (estilo Steve Jobs)
         welcomeMessage: '👋 ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?',
         brandName: 'Tu Marca',
         language: 'es',
@@ -154,19 +154,42 @@
         document.body.insertAdjacentHTML('beforeend', widgetHTML);
     }
     
-    // Crear estilos CSS
+    // Crear estilos CSS - Diseño estilo Steve Jobs (Minimalismo Elegante)
     function createWidgetStyles() {
-        const primaryColor = widgetConfig.primaryColor || '#007bff';
+        // Paleta de colores refinada estilo iOS
+        const primaryColor = widgetConfig.primaryColor || '#007AFF'; // Azul iOS elegante
         const position = widgetConfig.position === 'bottom-left' ? 'left: 20px;' : 'right: 20px;';
+        
+        // Variables CSS para consistencia
+        const colors = {
+            primary: primaryColor,
+            primaryDark: '#0051D5',
+            primaryLight: '#5AC8FA',
+            gray50: '#F9F9F9',
+            gray100: '#F2F2F7',
+            gray200: '#E5E5EA',
+            gray600: '#8E8E93',
+            gray900: '#1C1C1E',
+            whatsappGreen: '#25D366',
+            whatsappGreenDark: '#20BA5A'
+        };
         
         const styles = `
             <style id="business-ai-widget-styles">
+                /* Tipografía elegante - Sistema SF Pro Display / Apple */
+                .business-ai-widget-right,
+                .business-ai-widget-left {
+                    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
+                    letter-spacing: -0.01em;
+                }
+                
                 .business-ai-widget-right {
                     position: fixed;
                     bottom: 20px;
                     ${position}
                     z-index: 999999;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
                 }
                 
                 .business-ai-widget-left {
@@ -174,46 +197,58 @@
                     bottom: 20px;
                     left: 20px;
                     z-index: 999999;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
                 }
                 
+                /* Botón flotante - Elegante y con animación suave */
                 .business-ai-widget-btn {
                     width: 60px;
                     height: 60px;
                     border-radius: 50%;
-                    background: ${primaryColor};
+                    background: ${colors.primary};
                     color: white;
                     border: none;
                     cursor: pointer;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-                    transition: transform 0.2s, box-shadow 0.2s;
+                    box-shadow: 
+                        0 2px 8px rgba(0, 0, 0, 0.12),
+                        0 8px 24px rgba(0, 0, 0, 0.16);
+                    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                     position: relative;
                 }
                 
                 .business-ai-widget-btn:hover {
-                    transform: scale(1.1);
-                    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+                    transform: scale(1.08);
+                    box-shadow: 
+                        0 4px 12px rgba(0, 0, 0, 0.16),
+                        0 12px 32px rgba(0, 0, 0, 0.24);
                 }
                 
+                .business-ai-widget-btn:active {
+                    transform: scale(0.97);
+                    transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+                }
+                
+                /* Badge - Más elegante */
                 .business-ai-widget-badge {
                     position: absolute;
-                    top: -5px;
-                    right: -5px;
-                    background: #ff4444;
+                    top: -4px;
+                    right: -4px;
+                    background: #FF3B30; /* Rojo iOS elegante */
                     color: white;
                     border-radius: 50%;
-                    width: 24px;
-                    height: 24px;
+                    width: 22px;
+                    height: 22px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     font-size: 12px;
-                    font-weight: bold;
+                    font-weight: 600; /* Semibold */
+                    box-shadow: 0 2px 4px rgba(255, 59, 48, 0.3);
                 }
                 
+                /* Ventana de chat - Bordes y sombras elegantes */
                 .business-ai-widget-window {
                     position: absolute;
                     bottom: 80px;
@@ -221,18 +256,34 @@
                     width: 380px;
                     height: 600px;
                     max-height: 80vh;
-                    background: white;
+                    background: ${colors.gray50};
                     border-radius: 12px;
-                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+                    box-shadow: 
+                        0 2px 8px rgba(0, 0, 0, 0.08),
+                        0 8px 24px rgba(0, 0, 0, 0.12),
+                        0 16px 48px rgba(0, 0, 0, 0.08);
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
+                    animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
                 
+                @keyframes slideUpFade {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                /* Header - Espaciado generoso y tipografía elegante */
                 .business-ai-widget-header {
-                    background: ${primaryColor};
+                    background: ${colors.primary};
                     color: white;
-                    padding: 16px;
+                    padding: 20px 20px 20px 20px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
@@ -241,7 +292,7 @@
                 .business-ai-widget-header-content {
                     display: flex;
                     align-items: center;
-                    gap: 12px;
+                    gap: 16px;
                 }
                 
                 .business-ai-widget-avatar {
@@ -252,80 +303,115 @@
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    font-size: 20px;
+                    font-size: 24px;
+                    flex-shrink: 0;
                 }
                 
                 .business-ai-widget-title {
-                    font-weight: 600;
-                    font-size: 16px;
+                    font-weight: 600; /* Semibold */
+                    font-size: 17px;
+                    line-height: 1.3;
+                    letter-spacing: -0.01em;
                 }
                 
                 .business-ai-widget-status {
-                    font-size: 12px;
-                    opacity: 0.9;
+                    font-size: 13px; /* Caption */
+                    font-weight: 400; /* Regular */
+                    opacity: 0.85;
+                    line-height: 1.4;
+                    margin-top: 2px;
                 }
                 
+                /* Botón cerrar - Sutil y elegante */
                 .business-ai-widget-close {
                     background: none;
                     border: none;
                     color: white;
-                    font-size: 24px;
+                    font-size: 28px;
                     cursor: pointer;
-                    width: 32px;
-                    height: 32px;
+                    width: 36px;
+                    height: 36px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    border-radius: 4px;
-                    transition: background 0.2s;
+                    border-radius: 8px;
+                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                    opacity: 0.9;
                 }
                 
                 .business-ai-widget-close:hover {
-                    background: rgba(255, 255, 255, 0.2);
+                    background: rgba(255, 255, 255, 0.15);
+                    opacity: 1;
                 }
                 
+                .business-ai-widget-close:active {
+                    transform: scale(0.95);
+                }
+                
+                /* Área de mensajes - Espaciado generoso */
                 .business-ai-widget-messages {
                     flex: 1;
                     overflow-y: auto;
-                    padding: 16px;
+                    padding: 24px 20px;
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
-                    background: #f5f5f5;
+                    gap: 24px; /* Espaciado generoso entre mensajes */
+                    background: ${colors.gray50};
                 }
                 
+                /* Mensaje de bienvenida - Más espacio y tipografía refinada */
                 .business-ai-widget-welcome {
                     background: white;
-                    padding: 12px 16px;
-                    border-radius: 12px;
-                    margin-bottom: 8px;
-                    font-size: 14px;
+                    padding: 16px 20px;
+                    border-radius: 18px; /* Más redondeado */
+                    margin-bottom: 0;
+                    font-size: 15px; /* Body */
+                    font-weight: 400; /* Regular */
                     line-height: 1.5;
-                    color: #000000;
+                    color: ${colors.gray900};
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+                    animation: messageSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
                 
+                @keyframes messageSlideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(8px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                /* Mensajes - Bordes elegantes y animación */
                 .business-ai-widget-message {
                     max-width: 80%;
-                    padding: 12px 16px;
-                    border-radius: 12px;
-                    font-size: 14px;
+                    padding: 14px 18px;
+                    border-radius: 18px; /* Más redondeado */
+                    font-size: 15px; /* Body */
+                    font-weight: 400; /* Regular */
                     line-height: 1.5;
                     word-wrap: break-word;
+                    animation: messageSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
                 
                 .business-ai-widget-message.user {
-                    background: ${primaryColor};
+                    background: ${colors.primary};
                     color: white;
                     align-self: flex-end;
                     border-bottom-right-radius: 4px;
+                    font-weight: 400;
                 }
                 
                 .business-ai-widget-message.assistant {
                     background: white;
-                    color: #333;
+                    color: ${colors.gray900};
                     align-self: flex-start;
                     border-bottom-left-radius: 4px;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+                    box-shadow: 
+                        0 1px 2px rgba(0, 0, 0, 0.08),
+                        0 2px 4px rgba(0, 0, 0, 0.04);
                 }
                 
                 .business-ai-widget-message.loading {
@@ -343,7 +429,7 @@
                     width: 8px;
                     height: 8px;
                     border-radius: 50%;
-                    background: #ccc;
+                    background: ${colors.gray600};
                     animation: business-ai-widget-bounce 1.4s infinite ease-in-out both;
                 }
                 
@@ -355,90 +441,125 @@
                     40% { transform: scale(1); }
                 }
                 
+                /* Input container - Espaciado generoso */
                 .business-ai-widget-input-container {
                     display: flex;
-                    padding: 12px;
+                    padding: 16px 20px;
                     background: white;
-                    border-top: 1px solid #e0e0e0;
-                    gap: 8px;
+                    border-top: 1px solid ${colors.gray200};
+                    gap: 12px;
+                    align-items: center;
                 }
                 
+                /* Input field - Siempre activo con borde celeste y fondo blanco */
                 .business-ai-widget-input {
                     flex: 1;
-                    border: 1px solid #e0e0e0;
-                    border-radius: 20px;
-                    padding: 10px 16px;
-                    font-size: 14px;
+                    border: 1px solid ${colors.primary}; /* Siempre borde celeste/azul */
+                    border-radius: 20px; /* Más redondeado */
+                    padding: 12px 20px;
+                    font-size: 15px; /* Body */
+                    font-weight: 400;
                     outline: none;
-                    transition: border-color 0.2s;
+                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                    background: white; /* Siempre fondo blanco */
+                    color: ${colors.gray900};
+                    font-family: inherit;
+                    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1); /* Siempre sombra azul sutil */
+                }
+                
+                .business-ai-widget-input::placeholder {
+                    color: ${colors.gray600};
+                    opacity: 0.8;
                 }
                 
                 .business-ai-widget-input:focus {
-                    border-color: ${primaryColor};
+                    border-color: ${colors.primary};
+                    background: white;
+                    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15); /* Sombra un poco más intensa al hacer focus */
                 }
                 
+                /* Botón enviar - Círculo perfecto con animación */
                 .business-ai-widget-send {
-                    width: 40px;
-                    height: 40px;
+                    width: 36px;
+                    height: 36px;
                     border-radius: 50%;
-                    background: ${primaryColor};
+                    background: ${colors.primary};
                     color: white;
                     border: none;
                     cursor: pointer;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    transition: background 0.2s;
+                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                    flex-shrink: 0;
                 }
                 
                 .business-ai-widget-send:hover {
-                    opacity: 0.9;
+                    background: ${colors.primaryDark};
+                    transform: scale(1.05);
+                }
+                
+                .business-ai-widget-send:active {
+                    transform: scale(0.95);
                 }
                 
                 .business-ai-widget-send:disabled {
-                    background: #ccc;
+                    background: ${colors.gray200};
                     cursor: not-allowed;
+                    transform: none;
                 }
                 
+                /* Botones externos - Espaciado generoso y diseño refinado */
                 .business-ai-widget-external-chat-buttons {
                     display: flex;
                     flex-direction: column;
-                    gap: 8px;
-                    margin-top: 12px;
-                    margin-bottom: 8px;
+                    gap: 12px;
+                    margin-top: 16px;
+                    margin-bottom: 0;
                 }
                 
                 .business-ai-widget-external-btn {
                     display: flex;
                     align-items: center;
-                    gap: 10px;
-                    padding: 12px 16px;
-                    border-radius: 8px;
-                    border: 1px solid #e0e0e0;
+                    gap: 12px;
+                    padding: 14px 20px; /* Más espacio interno */
+                    border-radius: 12px; /* Más redondeado */
+                    border: 1px solid ${colors.gray200}; /* Borde más sutil */
                     background: white;
                     cursor: pointer;
-                    transition: all 0.2s;
-                    font-size: 14px;
-                    font-weight: 500;
+                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                    font-size: 15px; /* Body */
+                    font-weight: 500; /* Medium */
                     text-decoration: none;
-                    color: #333;
+                    color: ${colors.gray900};
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
                 }
                 
                 .business-ai-widget-external-btn:hover {
-                    background: #f5f5f5;
-                    border-color: ${primaryColor};
+                    background: ${colors.gray50};
+                    border-color: ${colors.primary};
                     transform: translateY(-1px);
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                    box-shadow: 
+                        0 4px 12px rgba(0, 122, 255, 0.15),
+                        0 2px 4px rgba(0, 0, 0, 0.08);
+                }
+                
+                .business-ai-widget-external-btn:active {
+                    transform: translateY(0);
+                    transition: transform 0.1s;
                 }
                 
                 .business-ai-widget-external-btn.whatsapp {
-                    border-color: #25D366;
+                    border-color: ${colors.gray200};
                 }
                 
                 .business-ai-widget-external-btn.whatsapp:hover {
-                    background: #25D366;
+                    background: ${colors.whatsappGreen};
                     color: white;
-                    border-color: #25D366;
+                    border-color: ${colors.whatsappGreen};
+                    box-shadow: 
+                        0 4px 12px rgba(37, 211, 102, 0.25),
+                        0 2px 4px rgba(0, 0, 0, 0.08);
                 }
                 
                 .business-ai-widget-external-btn.messenger {
@@ -451,6 +572,7 @@
                     border-color: #0084ff;
                 }
                 
+                /* Iconos - Tamaños consistentes */
                 .business-ai-widget-external-btn-icon {
                     font-size: 20px;
                     display: flex;
@@ -464,10 +586,12 @@
                 .business-ai-widget-external-btn-icon svg {
                     width: 100%;
                     height: 100%;
+                    fill: currentColor;
+                    transition: fill 0.2s;
                 }
                 
                 .business-ai-widget-external-btn.whatsapp .business-ai-widget-external-btn-icon svg {
-                    fill: #25D366;
+                    fill: ${colors.whatsappGreen};
                 }
                 
                 .business-ai-widget-external-btn.whatsapp:hover .business-ai-widget-external-btn-icon svg {
@@ -476,11 +600,13 @@
                 
                 .business-ai-widget-external-btn-text {
                     flex: 1;
+                    line-height: 1.4;
                 }
                 
                 .business-ai-widget-external-btn-arrow {
-                    font-size: 12px;
-                    opacity: 0.6;
+                    font-size: 16px;
+                    opacity: 0.5;
+                    font-weight: 300;
                 }
                 
                 .business-ai-widget-product-card {

@@ -135,6 +135,13 @@ class ChatbotConfigLoader:
                 # Guardar en app_config para Sales Closer Elite
                 app_config.stripe_api_key = stripe_key
         
+        # Cargar base_url para generar links de productos automáticamente
+        if "base_url" in config_dict:
+            app_config.base_url = config_dict["base_url"]
+            # También guardar como variable de entorno para uso directo
+            import os
+            os.environ["BASE_URL"] = config_dict["base_url"]
+        
         # Cargar links configurados si existen
         links_fields = [
             "product_catalog_link", "store_link", "checkout_link", "payment_methods_link",

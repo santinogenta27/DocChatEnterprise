@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import os
 from typing import Dict, Any, Optional, List, TypedDict, Annotated, Sequence
 from enum import Enum
 
@@ -98,6 +99,7 @@ class ReactSalesAgentConfig:
     ):
         self.brand_name = brand_name
         self.language = language
+        self.base_url = os.getenv("BASE_URL") or os.getenv("SHOPIFY_SHOP_URL")  # URL base para generar links
         self.enable_sales_closer = enable_sales_closer
         self.enable_rag_advanced = enable_rag_advanced
         self.enable_verification = enable_verification
@@ -549,8 +551,13 @@ class ReactSalesAgent:
             try:
                 if tool_name == "search_products":
                     query = tool_args.get("query", "")
-                    result = self.catalog_tool.search_products(query=query, limit=5)
+                    # Usar get_products_with_links para generar links automáticamente
+                    base_url = getattr(self.config, 'base_url', None) or os.getenv("BASE_URL")
+                    result = self.catalog_tool.get_products_with_links(query=query, base_url=base_url, limit=5)
                     executed_tools["products"] = result
+                    # También guardar resultado compatible con formato anterior
+                    if isinstance(result, dict) and "products" in result:
+                        executed_tools["products_list"] = result["products"]
                 
                 elif tool_name == "add_to_cart":
                     product_id = tool_args.get("product_id")
@@ -638,8 +645,15 @@ class ReactSalesAgent:
         messages = state["messages"]
         tool_results = state.get("tool_results", {})
         
+        # Obtener etapa de venta e intención del estado
+        sales_stage = state.get("sales_stage", "interest")
+        intent = state.get("intent", "general")
+        
+        # Determinar si debe enviar links basado en etapa de venta e intención
+        should_include_links = self._should_include_product_links(sales_stage, intent, state)
+        
         # Construir contexto de observación
-        observation_context = self._build_observation_context(tool_results)
+        observation_context = self._build_observation_context(tool_results, include_links=should_include_links)
         
         # Invocar LLM para procesar observaciones
         observation_prompt = f"""
@@ -648,12 +662,18 @@ Analiza los resultados de las herramientas ejecutadas y decide el siguiente paso
 **Resultados de herramientas:**
 {observation_context}
 
-**Instrucciones:**
-1. Si hay productos encontrados, prepara una respuesta que los presente de forma persuasiva.
-2. Si hay un carrito actualizado, menciona los productos agregados.
-3. Si hay un payment_link, inclúyelo en la respuesta.
-4. Si hay errores, explica qué salió mal.
-5. Decide si necesitas más información o si puedes generar la respuesta final.
+**Etapa de venta actual:** {sales_stage}
+**Intención detectada:** {intent}
+
+**Instrucciones CRÍTICAS sobre LINKS:**
+{"✅ INCLUYE LINKS:" if should_include_links else "❌ NO INCLUYAS LINKS:"}
+{self._get_link_instructions(sales_stage, intent, should_include_links)}
+
+**Otras instrucciones:**
+1. Si hay un carrito actualizado, menciona los productos agregados.
+2. Si hay un payment_link, inclúyelo claramente con un CTA: [Pagar ahora](payment_link).
+3. Si hay errores, explica qué salió mal.
+4. Decide si necesitas más información o si puedes generar la respuesta final.
 
 Responde en JSON:
 {{
@@ -752,6 +772,9 @@ Responde en JSON:
                 closing_message = self._close_sale()
             closing_strategy = self._select_sales_strategy(sales_stage, intent, tool_results)
         
+        # Determinar si debe incluir links
+        should_include_links = self._should_include_product_links(sales_stage, intent, state)
+        
         # Construir prompt de cierre
         close_prompt = self._build_close_prompt(
             sales_stage=sales_stage,
@@ -759,6 +782,7 @@ Responde en JSON:
             tool_results=tool_results,
             context=context,
             closing_strategy=closing_strategy,
+            state=state,
         )
         
         # Generar respuesta final
@@ -962,10 +986,16 @@ Eres un asistente virtual 24/7 para {self.config.brand_name}.
 **Etapa de venta detectada:** {sales_stage}
 **Intención detectada:** {intent}
 
-**Instrucciones:**
+**Instrucciones CRÍTICAS sobre LINKS de productos:**
+- NO incluyas links cuando el usuario solo está explorando ("qué tienen", "muéstrame", "qué venden").
+- SÍ incluye links cuando el usuario muestra intención de compra ("quiero", "comprar", "me interesa", "precio").
+- SÍ incluye links cuando está en etapa READY o CLOSING.
+- En etapa CONSIDERATION, solo incluye links si pregunta específicamente por un producto.
+
+**Otras instrucciones:**
 1. Analiza el mensaje del usuario paso a paso.
 2. Decide qué herramientas necesitas usar.
-3. Si es sobre productos, usa search_products.
+3. Si es sobre productos, usa search_products o get_products_with_links (este último incluye links automáticamente).
 4. Si quiere comprar, usa add_to_cart y luego create_payment.
 5. Si necesita soporte, usa create_ticket.
 
@@ -983,15 +1013,133 @@ Responde en formato JSON con tu decisión:
 """
         return prompt
     
-    def _build_observation_context(self, tool_results: Dict[str, Any]) -> str:
-        """Construye contexto de observación desde resultados de herramientas."""
+    def _should_include_product_links(self, sales_stage: str, intent: str, state: Dict[str, Any]) -> bool:
+        """
+        Determina si debe incluir links de productos en la respuesta.
+        
+        Reglas:
+        - READY/CLOSING: SIEMPRE incluir links (usuario quiere comprar)
+        - CONSIDERATION: Solo si pregunta específicamente por un producto
+        - INTEREST: NO incluir links (solo explorando)
+        - Si dice "quiero", "comprar", "me interesa": SIEMPRE incluir
+        - Si pregunta "qué tienen", "muéstrame": NO incluir links (solo exploración)
+        
+        Args:
+            sales_stage: Etapa de venta (interest, consideration, ready, closing)
+            intent: Intención detectada
+            state: Estado completo del agente
+            
+        Returns:
+            True si debe incluir links, False si no
+        """
+        # Etapas donde SIEMPRE incluir links
+        if sales_stage in ["ready", "closing"]:
+            return True
+        
+        # Verificar mensaje del usuario para palabras clave de compra
+        messages = state.get("messages", [])
+        last_user_message = None
+        for msg in reversed(messages):
+            if hasattr(msg, 'content') and isinstance(msg.content, str):
+                last_user_message = msg.content.lower()
+                break
+        
+        if last_user_message:
+            # Palabras que indican intención de compra -> INCLUIR LINKS
+            purchase_keywords = [
+                "quiero", "comprar", "me interesa", "dame", "necesito comprar",
+                "precio de", "cuánto cuesta", "agregar al carrito", "añadir"
+            ]
+            if any(keyword in last_user_message for keyword in purchase_keywords):
+                return True
+            
+            # Palabras que indican solo exploración -> NO INCLUIR LINKS
+            exploration_keywords = [
+                "qué tienen", "qué venden", "muéstrame", "muéstrenme",
+                "qué productos", "catálogo", "listado", "opciones"
+            ]
+            if any(keyword in last_user_message for keyword in exploration_keywords):
+                return False
+        
+        # CONSIDERATION: Solo si pregunta específicamente por un producto
+        if sales_stage == "consideration":
+            # Si pregunta por características específicas de un producto, incluir link
+            if last_user_message and any(word in last_user_message for word in ["este", "ese", "ese producto", "este producto"]):
+                return True
+            return False
+        
+        # INTEREST: NO incluir links por defecto
+        return False
+    
+    def _get_link_instructions(self, sales_stage: str, intent: str, should_include: bool) -> str:
+        """
+        Genera instrucciones específicas sobre cuándo incluir links.
+        
+        Args:
+            sales_stage: Etapa de venta
+            intent: Intención detectada
+            should_include: Si debe incluir links
+            
+        Returns:
+            Instrucciones en texto
+        """
+        if should_include:
+            return f"""
+- El usuario está en etapa {sales_stage.upper()} y muestra intención de compra.
+- SIEMPRE incluye links a productos en formato Markdown: [Ver producto](url) o [Comprar ahora](url).
+- Haz los links clickeables y atractivos.
+- Si hay múltiples productos, incluye link a cada uno."""
+        else:
+            return f"""
+- El usuario está en etapa {sales_stage.upper()} y solo está explorando.
+- NO incluyas links de productos todavía.
+- Solo menciona los productos sin links.
+- Si el usuario muestra interés real, entonces sí incluye links."""
+    
+    def _build_observation_context(self, tool_results: Dict[str, Any], include_links: bool = True) -> str:
+        """
+        Construye contexto de observación desde resultados de herramientas.
+        
+        Args:
+            tool_results: Resultados de herramientas ejecutadas
+            include_links: Si debe incluir links en el contexto (default: True)
+        """
         context_parts = []
         
         if "products" in tool_results:
             products = tool_results["products"]
+            products_list = []
             if hasattr(products, 'products'):
-                products = products.products
-            context_parts.append(f"Productos encontrados: {len(products) if isinstance(products, list) else 'N/A'}")
+                products_list = products.products
+            elif isinstance(products, dict) and "products" in products:
+                products_list = products["products"]
+            elif isinstance(products, list):
+                products_list = products
+            
+            # Formatear productos con o sin links según include_links
+            product_info = []
+            for p in products_list[:5]:
+                if isinstance(p, dict):
+                    title = p.get('title', p.get('name', 'Product'))
+                    price = p.get('price', 0)
+                    link = p.get('url', None)
+                    if include_links and link:
+                        product_info.append(f"- {title}: ${price:.2f} [Ver producto]({link})")
+                    else:
+                        product_info.append(f"- {title}: ${price:.2f}")
+                elif hasattr(p, 'title'):
+                    title = p.title
+                    price = p.price if hasattr(p, 'price') else 0
+                    link = p.url if hasattr(p, 'url') and p.url else None
+                    if include_links and link:
+                        product_info.append(f"- {title}: ${price:.2f} [Ver producto]({link})")
+                    else:
+                        product_info.append(f"- {title}: ${price:.2f}")
+            
+            if product_info:
+                context_parts.append(f"Productos encontrados ({len(products_list)}):\n" + "\n".join(product_info))
+            else:
+                context_parts.append(f"Productos encontrados: {len(products_list)}")
         
         if "cart" in tool_results:
             cart = tool_results["cart"]
@@ -1013,8 +1161,24 @@ Responde en formato JSON con tu decisión:
         tool_results: Dict[str, Any],
         context: str,
         closing_strategy: Optional[SalesStrategy],
+        state: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Construye prompt de cierre optimizado para widget."""
+        """
+        Construye prompt de cierre optimizado para widget.
+        
+        Args:
+            sales_stage: Etapa de venta
+            intent: Intención detectada
+            tool_results: Resultados de herramientas
+            context: Contexto recuperado
+            closing_strategy: Estrategia de cierre
+            state: Estado completo del agente (para determinar si incluir links)
+        """
+        # Determinar si debe incluir links
+        should_include_links = True  # En cierre, siempre incluir links si hay productos
+        if state:
+            should_include_links = self._should_include_product_links(sales_stage, intent, state)
+        
         prompt = f"""
 Eres un asistente virtual de ventas para {self.config.brand_name}.
 
@@ -1025,11 +1189,14 @@ Eres un asistente virtual de ventas para {self.config.brand_name}.
 **Resultados de herramientas:**
 {json.dumps(tool_results, default=str)[:2000]}
 
-**Instrucciones para respuesta final:**
+**Instrucciones CRÍTICAS sobre LINKS:**
+{self._get_link_instructions(sales_stage, intent, should_include_links)}
+
+**Otras instrucciones para respuesta final:**
 1. Sé directo y conciso (máximo 300 caracteres para widget).
 2. Si hay productos, preséntalos con nombres y precios específicos.
-3. Si hay payment_link, inclúyelo claramente.
-4. Si estás en etapa READY o CLOSING, incluye un CTA claro.
+3. Si hay payment_link, inclúyelo claramente con CTA: [Pagar ahora](payment_link).
+4. Si estás en etapa READY o CLOSING, incluye un CTA claro con link de checkout.
 5. Usa la estrategia de cierre {closing_strategy.value if closing_strategy else "standard"}.
 6. Sé persuasivo pero ético.
 
