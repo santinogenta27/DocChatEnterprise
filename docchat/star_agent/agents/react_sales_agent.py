@@ -172,9 +172,12 @@ class ReactSalesAgent:
         # Guardrails completos
         self.guardrails = Guardrails()
         
-        # Links Manager - Para acceder a links configurados desde UI
+        # Links Manager - Para acceder a links configurados desde UI (con sistema de 3 capas)
         from ..config.links_manager import LinksManager
+        from ..config.intent_link_mapper import UserIntent, LinkType
         self.links_manager = LinksManager()
+        self.user_intent_type = UserIntent  # Para acceso a UserIntent
+        self.link_type = LinkType  # Para acceso a LinkType
         
         # Handoff Manager - Para transferir conversaciones a humanos
         from ..integrations.handoff_manager import HandoffManager
@@ -665,9 +668,13 @@ Analiza los resultados de las herramientas ejecutadas y decide el siguiente paso
 **Etapa de venta actual:** {sales_stage}
 **Intención detectada:** {intent}
 
-**Instrucciones CRÍTICAS sobre LINKS:**
-{"✅ INCLUYE LINKS:" if should_include_links else "❌ NO INCLUYAS LINKS:"}
-{self._get_link_instructions(sales_stage, intent, should_include_links)}
+**Instrucciones CRÍTICAS sobre LINKS (OBLIGATORIO):**
+- Si hay "🔗 LINK OBLIGATORIO" en el contexto, DEBES incluirlo en tu respuesta.
+- Los links son el 90% del producto - SIEMPRE inclúyelos cuando están disponibles.
+- Formato: [Texto](url) en Markdown.
+- NO elijas links al azar - usa SOLO los links proporcionados.
+{"✅ INCLUYE LINKS DE PRODUCTOS:" if should_include_product_links else "❌ NO INCLUYAS LINKS DE PRODUCTOS todavía:"}
+{self._get_link_instructions(sales_stage, intent, should_include_product_links)}
 
 **Otras instrucciones:**
 1. Si hay un carrito actualizado, menciona los productos agregados.
@@ -970,11 +977,19 @@ Responde en JSON:
     ) -> str:
         """Construye prompt de razonamiento."""
         
-        # Obtener links relevantes para la consulta
-        relevant_links_list = self.links_manager.get_relevant_links_for_query(user_query)
+        # Obtener links relevantes usando sistema de 3 capas (CAPA 1+2+3)
+        relevant_links_list = self.links_manager.get_relevant_links_for_query(user_query, sales_stage)
+        
+        # Detectar intención para incluir en prompt
+        user_intent = self.links_manager.intent_mapper.detect_intent(user_query, sales_stage)
+        link_for_intent = self.links_manager.format_link_for_intent(user_intent, sales_stage)
+        
         links_context = ""
-        if relevant_links_list:
-            links_context = f"\n\n**Links relevantes disponibles (usa cuando sea apropiado):**\n" + "\n".join(relevant_links_list)
+        if relevant_links_list or link_for_intent:
+            links_to_show = relevant_links_list if relevant_links_list else ([link_for_intent] if link_for_intent else [])
+            if links_to_show:
+                links_context = f"\n\n**🔗 LINK OBLIGATORIO para incluir en la respuesta:**\n" + "\n".join(links_to_show)
+                links_context += f"\n\n**Intención detectada:** {user_intent.value}\n**Acción:** INCLUYE este link en tu respuesta."
         
         prompt = f"""
 Eres un asistente virtual 24/7 para {self.config.brand_name}.

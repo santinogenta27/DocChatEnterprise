@@ -3,6 +3,11 @@ Links Manager - Gestor de Links para STAR AGENT.
 
 Permite que el agente acceda a links configurados desde la UI
 y los use/envíe a los clientes dinámicamente.
+
+Integrado con IntentLinkMapper para las 3 capas obligatorias:
+1. Detectar INTENCIÓN
+2. Mapear INTENCIÓN → TIPO DE LINK
+3. Gate de CUÁNDO enviar
 """
 
 from __future__ import annotations
@@ -11,6 +16,8 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+
+from .intent_link_mapper import IntentLinkMapper, UserIntent, LinkType
 
 
 class LinksManager:
@@ -31,6 +38,7 @@ class LinksManager:
         self.config_path = config_path or Path("docchat/star_agent/config/star_agent_config.json")
         self._links_cache: Optional[Dict[str, str]] = None
         self._custom_links_cache: Optional[Dict[str, str]] = None
+        self.intent_mapper = IntentLinkMapper()  # Mapper de intención → link
     
     def _load_config(self) -> Dict[str, Any]:
         """Carga configuración desde JSON."""
@@ -46,8 +54,20 @@ class LinksManager:
         """Refresca el cache de links desde la configuración."""
         config = self._load_config()
         
-        # Links estándar
+        # Links estándar (mapeo directo a LinkType)
         self._links_cache = {
+            LinkType.CATALOG.value: config.get("product_catalog_link", ""),
+            LinkType.STORE.value: config.get("store_link", ""),
+            LinkType.CHECKOUT.value: config.get("checkout_link", ""),
+            LinkType.PAYMENT_METHODS.value: config.get("payment_methods_link", ""),
+            LinkType.SUPPORT.value: config.get("support_link", ""),
+            LinkType.CONTACT.value: config.get("contact_link", ""),
+            LinkType.FAQ.value: config.get("faq_link", ""),
+            LinkType.SHIPPING.value: config.get("shipping_link", ""),
+            LinkType.RETURNS.value: config.get("returns_link", ""),
+            LinkType.PRIVACY_POLICY.value: config.get("privacy_policy_link", ""),
+            LinkType.TERMS.value: config.get("terms_link", ""),
+            # Mantener compatibilidad con nombres antiguos
             "product_catalog": config.get("product_catalog_link", ""),
             "store": config.get("store_link", ""),
             "checkout": config.get("checkout_link", ""),
@@ -151,49 +171,92 @@ class LinksManager:
         label = label or link_type.replace("_", " ").title()
         return f"[{label}]({link})"
     
-    def get_relevant_links_for_query(self, query: str) -> List[str]:
+    def get_link_for_intent(self, intent: UserIntent, sales_stage: Optional[str] = None) -> Optional[str]:
         """
-        Obtiene links relevantes para una consulta del usuario.
+        Obtiene el link correcto para una intención específica (CAPA 2).
+        
+        Implementa el mapeo INTENCIÓN → TIPO DE LINK → URL.
+        
+        Args:
+            intent: Intención detectada del usuario
+            sales_stage: Etapa de venta (opcional, para gate)
+            
+        Returns:
+            URL del link correspondiente o None
+        """
+        # Gate de CUÁNDO enviar (CAPA 3)
+        if not self.intent_mapper.should_include_link(intent, sales_stage):
+            return None
+        
+        # Mapear INTENCIÓN → TIPO DE LINK (CAPA 2)
+        link_type = self.intent_mapper.get_link_type_for_intent(intent)
+        if not link_type:
+            return None
+        
+        # Obtener URL del link
+        return self.get_link(link_type.value)
+    
+    def format_link_for_intent(self, intent: UserIntent, sales_stage: Optional[str] = None, label: Optional[str] = None) -> str:
+        """
+        Formatea un link para una intención específica.
+        
+        Args:
+            intent: Intención detectada
+            sales_stage: Etapa de venta
+            label: Etiqueta personalizada para el link
+            
+        Returns:
+            Link formateado en Markdown o string vacío
+        """
+        link_url = self.get_link_for_intent(intent, sales_stage)
+        if not link_url:
+            return ""
+        
+        link_type = self.intent_mapper.get_link_type_for_intent(intent)
+        if not link_type:
+            return ""
+        
+        # Generar label si no se proporciona
+        if not label:
+            label_map = {
+                LinkType.CATALOG: "Ver catálogo",
+                LinkType.CHECKOUT: "Ir al checkout",
+                LinkType.PAYMENT_METHODS: "Ver métodos de pago",
+                LinkType.SHIPPING: "Ver info de envíos",
+                LinkType.RETURNS: "Ver política de devoluciones",
+                LinkType.SUPPORT: "Contactar soporte",
+                LinkType.FAQ: "Ver preguntas frecuentes",
+                LinkType.CONTACT: "Contactar",
+                LinkType.STORE: "Ir a la tienda",
+            }
+            label = label_map.get(link_type, link_type.value.replace("_", " ").title())
+        
+        return f"[{label}]({link_url})"
+    
+    def get_relevant_links_for_query(self, query: str, sales_stage: Optional[str] = None) -> List[str]:
+        """
+        Obtiene links relevantes para una consulta usando el sistema de 3 capas.
+        
+        Implementa:
+        1. Detecta INTENCIÓN (CAPA 1)
+        2. Mapea INTENCIÓN → TIPO DE LINK (CAPA 2)
+        3. Aplica gate de CUÁNDO enviar (CAPA 3)
         
         Args:
             query: Consulta del usuario
+            sales_stage: Etapa de venta (opcional)
         
         Returns:
             Lista de links formateados relevantes para la consulta
         """
-        query_lower = query.lower()
-        relevant_links = []
+        # CAPA 1: Detectar INTENCIÓN
+        intent = self.intent_mapper.detect_intent(query, sales_stage)
         
-        # Mapeo de palabras clave a tipos de links
-        keyword_mapping = {
-            "producto": "product_catalog",
-            "catálogo": "product_catalog",
-            "tienda": "store",
-            "comprar": "checkout",
-            "pagar": "checkout",
-            "pago": "payment_methods",
-            "método de pago": "payment_methods",
-            "soporte": "support",
-            "ayuda": "support",
-            "contacto": "contact",
-            "pregunta": "faq",
-            "frecuente": "faq",
-            "envío": "shipping",
-            "entrega": "shipping",
-            "devolución": "returns",
-            "política": "privacy_policy",
-            "privacidad": "privacy_policy",
-            "término": "terms",
-            "condición": "terms",
-        }
+        # CAPA 2 + 3: Mapear y aplicar gate
+        link_formatted = self.format_link_for_intent(intent, sales_stage)
         
-        for keyword, link_type in keyword_mapping.items():
-            if keyword in query_lower:
-                link = self.get_link(link_type)
-                if link:
-                    formatted = self.format_link_in_response(link_type)
-                    if formatted and formatted not in relevant_links:
-                        relevant_links.append(formatted)
+        if link_formatted:
+            return [link_formatted]
         
-        return relevant_links
+        return []
 
