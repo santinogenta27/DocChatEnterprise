@@ -30,6 +30,7 @@
   "google_analytics_id": "",
   "enable_meta_pixel": false,
   "meta_pixel_id": "",
+  "base_url": "",
   "product_catalog_link": "",
   "store_link": "",
   "checkout_link": "",

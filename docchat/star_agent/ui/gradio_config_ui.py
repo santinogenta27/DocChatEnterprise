@@ -931,10 +931,8 @@ class StarAgentConfigUI:
                             
                             api_url_clean = api_url.strip().rstrip('/')
                             
-                            # Construir código HTML con atributos base
+                            # Construir código HTML con atributos base (SIN comentarios HTML)
                             code_lines = [
-                                '<!-- STAR AGENT Widget -->',
-                                '<!-- Copia y pega este código antes de </body> en tu website -->',
                                 f'<script src="{api_url_clean}/static/business-ai-widget.js"',
                                 f'        data-api-url="{api_url_clean}"',
                                 f'        data-widget-id="{widget_id_final}"',
