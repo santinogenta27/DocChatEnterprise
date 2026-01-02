@@ -19570,12 +19570,9 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                     ],
                     value="balanced",
                 )
-                chat2_provider_toggle = gr.Radio(
-                    label="🤖 AI Engine",
-                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
-                    value="openai",
-                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
-                )
+                # Provider eliminado - Siempre usa Groq (Llama 3.3 70B Versatile)
+                chat2_provider_toggle = gr.State(value="groq")  # Siempre usar Groq
+                gr.Markdown("**🤖 AI Engine:** Groq (Llama 3.3 70B Versatile) - Velocidad <0.5 seg")
             
             # Chatbot component
             chat2_bot = gr.Chatbot(
@@ -19800,7 +19797,7 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
             """)
             
             # Generar session_id único
-            alien_session_id = gr.State(value=str(uuid.uuid4()))
+            alien_session_id = gr.State(value="gradio_user")  # Usar session_id fijo para compartir con widget
             
             with gr.Row():
                 alien_files = gr.Files(
@@ -19977,6 +19974,39 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 lambda: "", None, alien_input
             )
             
+
+            # Handler para procesar archivos automÃ¡ticamente cuando se suben
+            def process_alien_files(files, session_id):
+                """Procesa archivos automÃ¡ticamente cuando se suben."""
+                if not files:
+                    return "No hay archivos para procesar."
+                
+                try:
+                    alien_mode = get_alien_mode(
+                        config=config,
+                        processor=processor,
+                        retriever_builder=retriever_builder,
+                        context_manager=context_manager
+                    )
+                    
+                    result = alien_mode.process_documents(session_id, files)
+                    
+                    if result.get("status") == "error":
+                        return f"Error procesando documentos: {result.get('error')}"
+                    elif result.get("status") == "no_new_files":
+                        return f"Documentos ya procesados. Total: {result.get('total_docs')} chunks"
+                    else:
+                        return f"Documentos procesados exitosamente: {result.get('new_docs', 0)} nuevos, {result.get('total_docs', 0)} total"
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            
+            # Conectar handler a alien_files
+            alien_files.change(
+                fn=process_alien_files,
+                inputs=[alien_files, alien_session_id],
+                outputs=[alien_status]
+            )
+            
             clear_alien_btn.click(
                 fn=clear_alien,
                 inputs=[alien_bot, alien_session_id],
@@ -19994,6 +20024,35 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 inputs=[alien_session_id],
                 outputs=[alien_stats_output],
             )
+            
+            # ==================== TABS DE WIDGET ====================
+            # Agregar tabs para widget embeddable (Generar Código, Configuración, Servidor API, Instrucciones)
+            gr.Markdown("---")
+            gr.Markdown("### 🌐 Widget Embeddable - Integra Alien Mode en tu Website")
+            gr.Markdown("""
+            **Usa estos tabs para generar código HTML que puedes pegar en tu website.**
+            
+            El widget permitirá que los visitantes de tu website conversen con Alien Mode directamente,
+            usando los documentos que subiste arriba. Las respuestas aparecerán tanto en la UI de Gradio
+            como en el widget embebido en tu website.
+            """)
+            
+            try:
+                from docchat.alien_mode_widget.ui.integrated_widget_tabs import create_widget_tabs_in_alien_mode
+                # Obtener instancia de Alien Mode (la misma que usa el chat arriba)
+                alien_mode_instance = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                # Crear tabs de widget pasando config y alien_mode
+                widget_tabs_creator = create_widget_tabs_in_alien_mode(config, alien_mode_instance)
+                widget_tabs_creator()
+            except Exception as e:
+                gr.Markdown(f"⚠️ Error cargando tabs de widget: {e}")
+                import traceback
+                gr.Markdown(f"```\n{traceback.format_exc()}\n```")
 
         # Tab 4.5.5.5.1: PDF Agent Mode - Clon de Alien Mode
         with gr.Tab("📄 PDF Agent"):

@@ -22,7 +22,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
-from langchain_openai import ChatOpenAI
 
 from .config import AppConfig
 from .document_processor import DocumentProcessor
@@ -63,16 +62,26 @@ class ChatConversational2:
         self.retriever_builder = retriever_builder
         self.context_manager = context_manager
         
-        # LLM para generación
-        if not config.openai_api_key:
-            raise ValueError("OPENAI_API_KEY requerida para Chat Conversacional 2")
+        # LLM para generación - Usar Groq (Llama 3.3 70B Versatile)
+        import os
+        groq_api_key = config.groq_api_key or os.getenv("GROQ_API_KEY", "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")
+        if not groq_api_key:
+            raise ValueError("GROQ_API_KEY requerida para Chat Conversacional 2. Configura en .env: GROQ_API_KEY=tu-clave")
         
-        self.llm = ChatOpenAI(
-            model=config.research_model or "gpt-4o",
-            temperature=0.2,
-            api_key=config.openai_api_key,
-            max_tokens=4000
-        )
+        try:
+            from langchain_groq import ChatGroq
+            # SIEMPRE usar Groq Llama 3.3 70B Versatile para Chat Conversacional 2
+            self.llm = ChatGroq(
+                model="llama-3.3-70b-versatile",  # Modelo fijo: Llama 3.3 70B Versatile
+                temperature=0.2,
+                groq_api_key=groq_api_key,
+                max_tokens=4000,
+            )
+            print("✅ Chat Conversacional 2 usando Groq (Llama 3.3 70B Versatile) - Velocidad <0.5 seg")
+        except ImportError:
+            raise ImportError("langchain-groq no está instalado. Instala con: pip install langchain-groq")
+        except Exception as e:
+            raise ValueError(f"Error inicializando Groq: {e}. Verifica que GROQ_API_KEY sea válida.")
         
         # Inicializar módulos avanzados
         self.context_folder = ContextFolder(
@@ -785,7 +794,7 @@ class ChatConversational2:
         history: List[Tuple[str, str]],
         docs_by_source: Dict[str, List[Document]],
         speed_mode: str = "balanced",
-        provider: str = "openai"
+        provider: str = "groq"  # Siempre usar Groq, provider se mantiene para compatibilidad pero se ignora
     ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
         """
         Procesa consulta con procesamiento paralelo de documentos.
@@ -795,19 +804,23 @@ class ChatConversational2:
         session = self.sessions.get(session_id, {})
         start_time = time.time()
         
-        # Crear LLM sin límite de max_tokens para respuestas largas y completas
-        from docchat.utils.llm_factory import create_llm
-        api_key = self.config.openai_api_key if provider == "openai" else self.config.anthropic_api_key
-        # IMPORTANTE: Cada PDF se analiza en una llamada SEPARADA al LLM
-        # Limitar max_tokens de salida para evitar problemas con límites
-        parallel_llm = create_llm(
-            provider=provider,
-            model=self.config.research_model or "gpt-4o",
-            temperature=0.1,  # Temperatura más baja para respuestas más precisas
-            api_key=api_key,
-            request_timeout=600,  # Timeout más largo para documentos grandes
-            max_tokens=4000  # Limitar tokens de salida para evitar problemas
-        )
+        # Crear LLM - SIEMPRE usar Groq (Llama 3.3 70B Versatile)
+        import os
+        groq_api_key = self.config.groq_api_key or os.getenv("GROQ_API_KEY", "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")
+        try:
+            from langchain_groq import ChatGroq
+            # SIEMPRE usar Groq para procesamiento paralelo
+            parallel_llm = ChatGroq(
+                model="llama-3.3-70b-versatile",  # Modelo fijo: Llama 3.3 70B Versatile
+                temperature=0.1,  # Temperatura más baja para respuestas más precisas
+                groq_api_key=groq_api_key,
+                max_tokens=4000,  # Limitar tokens de salida para evitar problemas
+                timeout=600  # Timeout más largo para documentos grandes
+            )
+        except ImportError:
+            raise ImportError("langchain-groq no está instalado. Instala con: pip install langchain-groq")
+        except Exception as e:
+            raise ValueError(f"Error inicializando Groq para procesamiento paralelo: {e}")
         
         # Construir contexto de conversación
         conversation_context = self._build_folded_context(session, history)
@@ -1205,7 +1218,7 @@ def run_chat_conversational_2(
     files: List[Any],
     session_id: str,
     speed_mode: str = "balanced",
-    provider: str = "openai",
+    provider: str = "groq",  # Siempre usar Groq, provider se mantiene para compatibilidad pero se ignora
     config: Optional[AppConfig] = None,
     processor: Optional[DocumentProcessor] = None,
     retriever_builder: Optional[RetrieverBuilder] = None,

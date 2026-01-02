@@ -10,7 +10,6 @@ from pathlib import Path
 
 try:
     from langchain_community.retrievers import BM25Retriever
-    from langchain_community.vectorstores import Chroma
     from langchain_core.retrievers import BaseRetriever
     from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
@@ -19,6 +18,16 @@ except ImportError:
     BM25_AVAILABLE = False
     BM25Retriever = None
     BaseRetriever = None
+
+try:
+    # Intentar usar la nueva versión de langchain-chroma
+    from langchain_chroma import Chroma
+except ImportError:
+    # Fallback a la versión antigua
+    try:
+        from langchain_community.vectorstores import Chroma
+    except ImportError:
+        Chroma = None
 
 try:
     import chromadb
@@ -193,15 +202,26 @@ def build_hybrid_retriever(
         
     Returns:
         HybridRetriever configurado
+        
+    Raises:
+        ValueError: Si la lista de documentos está vacía
+        ImportError: Si las dependencias requeridas no están disponibles
     """
     if not BM25_AVAILABLE:
         raise ImportError(
             "BM25Retriever no disponible. Instala langchain-community"
         )
     
-    if not CHROMADB_AVAILABLE:
+    if not CHROMADB_AVAILABLE or Chroma is None:
         raise ImportError(
-            "ChromaDB no disponible. Instala con: pip install chromadb"
+            "ChromaDB no disponible. Instala con: pip install chromadb langchain-chroma"
+        )
+    
+    # Validar que la lista de documentos no esté vacía
+    if not documents or len(documents) == 0:
+        raise ValueError(
+            "No se puede crear un HybridRetriever con una lista de documentos vacía. "
+            "Agrega al menos un documento antes de construir el retriever."
         )
     
     # Crear BM25 retriever (siempre reconstruir con todos los documentos para mantener consistencia)

@@ -78,78 +78,147 @@ class WidgetOptimizer:
         intent: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Optimiza respuesta para widget web según especificaciones.
+        Optimiza respuesta para widget web según especificaciones completas.
+        
+        Implementa flujo Siente→Piensa→Actúa→Aprende:
+        - Siente: Analiza etapa de venta e intención
+        - Piensa: Optimiza respuesta según contexto
+        - Actúa: Agrega CTAs y acciones específicas
+        - Aprende: Trackea métricas para mejora continua
         
         Optimizaciones:
-        - Respuestas cortas y directas (máx 300 chars para widget)
-        - Orientadas a ventas cuando corresponde
-        - Incluye CTAs (Call-to-Action) cuando es apropiado
-        - Formato optimizado para UI del widget
+        - Respuestas cortas y directas (máx 400 chars para widget, pero priorizando contexto)
+        - Orientadas a ventas cuando corresponde (Sales Closer Elite)
+        - Incluye CTAs (Call-to-Action) inteligentes según etapa de venta
+        - Formato optimizado para UI del widget con Markdown
+        - Preserva links de productos y pagos
+        - Tracking completo de conversión
         
         Args:
             response: Respuesta del agente
-            sales_stage: Etapa de venta actual
-            intent: Intención detectada
+            sales_stage: Etapa de venta actual (interest, consideration, ready, closing)
+            intent: Intención detectada (general, productos, checkout, soporte)
             
         Returns:
-            Respuesta optimizada para widget
+            Respuesta optimizada para widget con metadata completa
         """
         text = response.get("text", "")
         original_length = len(text)
         
-        # Optimización 1: Truncar inteligentemente si es muy larga
-        # Widget tiene espacio limitado, máximo 300 caracteres recomendado
-        if len(text) > 300:
-            # Intentar truncar en punto lógico (punto, nueva línea, etc.)
-            truncate_points = [". ", "\n", "! ", "? "]
-            truncated = False
+        # SIENTE: Analizar contexto y necesidades
+        sales_stage = sales_stage or response.get("sales_stage", "interest")
+        intent = intent or response.get("intent", "general")
+        has_payment_link = bool(response.get("payment_link"))
+        has_cart = bool(response.get("cart") and response.get("cart").get("items"))
+        
+        # PIENSA: Decidir optimizaciones necesarias
+        # 1. Preservar links (productos, pagos) - CRÍTICO para conversión
+        # Extraer y preservar todos los links Markdown
+        import re
+        links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', text)
+        
+        # 2. Truncar inteligentemente si es muy larga (pero preservar links)
+        max_length = 400  # Aumentado para mejor contexto
+        if len(text) > max_length:
+            # Priorizar: preservar párrafo con links
+            paragraphs = text.split('\n\n')
+            optimized_paragraphs = []
+            total_length = 0
             
-            for point in truncate_points:
-                idx = text[:300].rfind(point)
-                if idx > 200:  # Asegurar que no sea muy corto
-                    text = text[:idx + len(point)].strip()
-                    truncated = True
+            for para in paragraphs:
+                para_length = len(para)
+                # Si el párrafo contiene links, priorizarlo
+                has_links = bool(re.search(r'\[([^\]]+)\]\(([^)]+)\)', para))
+                
+                if has_links or total_length + para_length <= max_length - 100:  # Reservar 100 chars para CTA
+                    optimized_paragraphs.append(para)
+                    total_length += para_length + 2  # +2 para \n\n
+                else:
                     break
             
-            if not truncated:
-                # Fallback: truncar en palabra completa
-                words = text[:300].split()
-                if len(words) > 1:
-                    text = " ".join(words[:-1]) + "..."
-                else:
-                    text = text[:297] + "..."
-        
-        # Optimización 2: Agregar CTA si está en etapa de cierre (Sales Closer Elite)
-        if sales_stage in ["ready", "closing"] and "comprar" not in text.lower() and "pagar" not in text.lower():
-            # Agregar CTA sutil pero persuasivo
-            if not text.endswith(".") and not text.endswith("!"):
-                text += "."
-            # CTA optimizado según etapa
-            if sales_stage == "closing":
-                text += " ¿Querés que lo procesemos ahora y te lo envío enseguida?"
+            if optimized_paragraphs:
+                text = '\n\n'.join(optimized_paragraphs)
+                if len(text) < original_length:
+                    text += "..."
             else:
+                # Fallback: truncar en punto lógico pero preservar último link si existe
+                truncate_points = [". ", "\n", "! ", "? "]
+                truncated = False
+                
+                for point in truncate_points:
+                    idx = text[:max_length].rfind(point)
+                    if idx > 250:  # Asegurar contexto suficiente
+                        text = text[:idx + len(point)].strip()
+                        truncated = True
+                        break
+                
+                if not truncated:
+                    # Último recurso: truncar en palabra pero preservar links
+                    words = text[:max_length].split()
+                    if len(words) > 1:
+                        text = " ".join(words[:-1])
+                        # Verificar si hay links después del truncamiento
+                        if not re.search(r'\[([^\]]+)\]\(([^)]+)\)', text):
+                            # Buscar último link completo y agregarlo si está cerca
+                            if links:
+                                last_link = links[-1]
+                                link_text = f"[{last_link[0]}]({last_link[1]})"
+                                if len(text) + len(link_text) < max_length:
+                                    text += f" {link_text}"
+                        text += "..."
+        
+        # ACTÚA: Agregar CTAs inteligentes según Sales Closer Elite
+        # Etapa CLOSING: CTA directo de cierre
+        if sales_stage == "closing" and not has_payment_link:
+            # Ya tiene payment_link, no agregar CTA redundante
+            if "comprar" not in text.lower() and "pagar" not in text.lower() and "procesemos" not in text.lower():
+                if not text.endswith(".") and not text.endswith("!") and not text.endswith("?"):
+                    text += "."
+                text += " ¿Querés que lo procesemos ahora y te lo envío enseguida?"
+        
+        # Etapa READY: CTA para completar compra
+        elif sales_stage == "ready" and has_cart and not has_payment_link:
+            if "completar" not in text.lower() and "pagar" not in text.lower():
+                if not text.endswith(".") and not text.endswith("!") and not text.endswith("?"):
+                    text += "."
                 text += " ¿Te ayudo a completar tu compra?"
+        
+        # Etapa CONSIDERATION: CTA suave para avanzar
+        elif sales_stage == "consideration":
+            if "más información" not in text.lower() and "ayuda" not in text.lower():
+                if not text.endswith(".") and not text.endswith("!") and not text.endswith("?"):
+                    text += "."
+                text += " ¿Necesitás más información sobre algún producto?"
         
         # Optimización 3: Formato para widget (emojis, estructura)
         # Mantener emojis si existen, pero no agregar si no hay
         
-        # Optimización 4: Agregar metadata completa
+        # APRENDE: Preparar metadata completa para tracking
         optimized = {
             "text": text,
             "widget_optimized": True,
             "timestamp": datetime.now().isoformat(),
             "original_length": original_length,
             "optimized_length": len(text),
-            "sales_stage": sales_stage or response.get("sales_stage"),
-            "intent": intent or response.get("intent"),
+            "sales_stage": sales_stage,
+            "intent": intent,
             "needs_handoff": response.get("needs_handoff", False),
             "cart": response.get("cart"),
             "payment_link": response.get("payment_link"),
             "conversion_tracked": response.get("conversion_tracked", False),
+            # Metadata adicional para tracking y aprendizaje
+            "lead_score": response.get("lead_score"),
+            "lead_temperature": response.get("lead_temperature"),
+            "clear_intent": response.get("clear_intent"),
+            "recommendations": response.get("recommendations"),
+            "objection_detected": response.get("objection_detected", False),
+            "objection_type": response.get("objection_type"),
         }
         
-        # Agregar otros campos del response original
-        for key in ["intent", "sales_stage", "cart", "payment_link", "needs_handoff"]:
+        # Agregar otros campos del response original (preservar todo)
+        for key in ["intent", "sales_stage", "cart", "payment_link", "needs_handoff", 
+                   "lead_score", "lead_temperature", "clear_intent", "recommendations",
+                   "objection_detected", "objection_type", "tools", "user_profile"]:
             if key not in optimized and key in response:
                 optimized[key] = response[key]
         
@@ -377,7 +446,13 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
     @app.post("/api/widget/chat")
     async def widget_chat(payload: Dict[str, Any], request: Request):
         """
-        Endpoint REST de chat para widget web.
+        Endpoint REST de chat para widget web - Flujo completo Siente→Piensa→Actúa→Aprende.
+        
+        Implementa:
+        - SIENTE: Detecta intención, etapa de venta, sentimiento
+        - PIENSA: RAG avanzado, orquestador, Sales Closer Elite
+        - ACTÚA: Ejecuta herramientas (catálogo, carrito, pago, orden)
+        - APRENDE: Trackea métricas, conversiones, objeciones
         
         Payload:
         {
@@ -389,12 +464,14 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
         
         Returns:
         {
-            "text": "respuesta del agente",
+            "text": "respuesta del agente optimizada",
             "sales_stage": "ready",
             "intent": "checkout",
             "cart": {...},
             "payment_link": "https://...",
             "widget_optimized": true,
+            "lead_score": 75,
+            "lead_temperature": "hot",
             ...
         }
         """
@@ -410,69 +487,122 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
                     content={"error": "Mensaje vacío", "text": "Por favor, envía un mensaje."}
                 )
             
-            # Verificar cache (solo para queries simples, no para checkout/pago)
-            if "comprar" not in query.lower() and "pagar" not in query.lower():
+            # SIENTE: Pre-análisis rápido (cache check)
+            # Verificar cache (solo para queries simples, no para checkout/pago/acciones críticas)
+            is_critical_action = any(keyword in query.lower() for keyword in [
+                "comprar", "pagar", "checkout", "orden", "agregar", "eliminar", 
+                "carrito", "cantidad", "talla", "color"
+            ])
+            
+            if not is_critical_action:
                 cached_response = optimizer.get_cached_response(query, session_id)
                 if cached_response:
                     optimizer.metrics["total_requests"] += 1
+                    optimizer.metrics["cache_hits"] += 1
                     return JSONResponse(content=cached_response)
             
-            # Procesar con STAR AGENT (flujo completo Siente→Piensa→Actúa→Aprende)
-            # Si es ReactSalesAgent, ya tiene ReAct pattern integrado
+            # PIENSA + ACTÚA: Procesar con STAR AGENT (flujo completo ReAct)
+            # Si es ReactSalesAgent, ya tiene ReAct pattern + Multi-Agent RAG integrado
+            # El agente implementa:
+            # - Relevance Check (Scope Checker)
+            # - Research Agent (respuesta inicial)
+            # - Think (razonamiento paso a paso)
+            # - Act (uso de herramientas)
+            # - Close (cierre de ventas)
             result = star_agent_mode.process_message(payload, channel="web")
             
-            # Asegurar que sales_stage e intent estén presentes
+            # Asegurar que sales_stage e intent estén presentes (valores por defecto)
             if "sales_stage" not in result:
                 result["sales_stage"] = "interest"
             if "intent" not in result:
                 result["intent"] = "general"
             
-            # Extraer información para optimización
+            # Extraer información para optimización (SIENTE)
             sales_stage = result.get("sales_stage")
             intent = result.get("intent")
+            lead_score = result.get("lead_score")
+            lead_temperature = result.get("lead_temperature")
+            objection_detected = result.get("objection_detected", False)
+            objection_type = result.get("objection_type")
             
-            # Optimizar para widget
+            # ACTÚA: Optimizar para widget (aplicar optimizaciones específicas)
             optimized = optimizer.optimize_response_for_widget(
                 result,
                 sales_stage=sales_stage,
                 intent=intent
             )
             
-            # Cachear (excepto para checkout/pago)
-            if "comprar" not in query.lower() and "pagar" not in query.lower():
+            # APRENDE: Cachear y trackear (excepto para acciones críticas)
+            if not is_critical_action:
                 optimizer.cache_response(query, optimized, session_id)
             
-            # Trackear métricas
+            # Trackear métricas completas
             optimizer.metrics["total_requests"] += 1
+            if not is_critical_action:
+                optimizer.metrics["cache_misses"] += 1
             
-            # Trackear conversión si aplica
+            # Trackear conversión si aplica (APRENDE)
             if optimized.get("conversion_tracked"):
                 optimizer.track_conversion("conversion", {
                     "sales_stage": sales_stage,
                     "intent": intent,
+                    "lead_score": lead_score,
+                    "lead_temperature": lead_temperature,
+                    "revenue": result.get("revenue"),
                 })
             
-            if optimized.get("cart"):
+            if optimized.get("cart") and optimized.get("cart").get("items"):
                 optimizer.track_conversion("cart_add", {
                     "sales_stage": sales_stage,
                     "intent": intent,
+                    "cart_items": len(optimized.get("cart", {}).get("items", [])),
                 })
             
             if optimized.get("payment_link"):
+                cart = optimized.get("cart", {})
+                total = sum(
+                    item.get("price", 0) * item.get("quantity", 1)
+                    for item in cart.get("items", [])
+                    if isinstance(item, dict)
+                ) if isinstance(cart, dict) else 0
+                
                 optimizer.track_conversion("payment_initiated", {
                     "sales_stage": sales_stage,
                     "intent": intent,
+                    "total": total,
+                    "lead_score": lead_score,
                 })
             
             if optimized.get("needs_handoff"):
                 optimizer.track_conversion("handoff", {
                     "sales_stage": sales_stage,
                     "intent": intent,
+                    "reason": result.get("handoff_reason", "unknown"),
                 })
             
-            # Registrar tiempo de respuesta
+            # Trackear objeciones (APRENDE)
+            if objection_detected and objection_type:
+                optimizer.track_conversion("objection", {
+                    "objection_type": objection_type,
+                    "sales_stage": sales_stage,
+                    "intent": intent,
+                })
+            
+            # Trackear sales_stage e intent (APRENDE)
+            optimizer.track_conversion("interaction", {
+                "sales_stage": sales_stage,
+                "intent": intent,
+                "lead_score": lead_score,
+                "lead_temperature": lead_temperature,
+            })
+            
+            # Registrar tiempo de respuesta (APRENDE)
             response_time = time.time() - start_time
             optimizer.record_response_time(response_time)
+            
+            # Agregar metadata de tracking al response
+            optimized["response_time_ms"] = round(response_time * 1000, 2)
+            optimized["cache_hit"] = False  # Ya verificamos cache antes
             
             return JSONResponse(content=optimized)
             
@@ -480,24 +610,31 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
             print(f"❌ Error en widget_chat: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Trackear error (APRENDE)
+            optimizer.metrics["total_requests"] += 1
+            error_response_time = time.time() - start_time
+            optimizer.record_response_time(error_response_time)
+            
             return JSONResponse(
                 status_code=500,
                 content={
                     "text": "Lo siento, hubo un error procesando tu mensaje. Por favor, intenta de nuevo.",
                     "error": True,
                     "error_message": str(e) if app.debug else None,
+                    "response_time_ms": round(error_response_time * 1000, 2),
                 }
             )
     
     @app.websocket("/ws/widget")
     async def websocket_chat(websocket: WebSocket):
         """
-        WebSocket para chat en tiempo real.
+        WebSocket para chat en tiempo real - Flujo completo Siente→Piensa→Actúa→Aprende.
         
-        Permite comunicación bidireccional para widget.
+        Permite comunicación bidireccional para widget con optimización completa.
         Formato de mensajes:
         - Cliente → Servidor: {"message": "...", "session_id": "...", "user_id": "..."}
-        - Servidor → Cliente: {"text": "...", "sales_stage": "...", ...}
+        - Servidor → Cliente: {"text": "...", "sales_stage": "...", "widget_optimized": true, ...}
         """
         await websocket.accept()
         session_id = None
@@ -518,21 +655,25 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
                     })
                     continue
                 
-                # Procesar con STAR AGENT
+                # SIENTE + PIENSA + ACTÚA: Procesar con STAR AGENT (mismo flujo que REST)
                 result = star_agent_mode.process_message(data, channel="web")
                 
-                # Extraer información
-                sales_stage = result.get("sales_stage")
-                intent = result.get("intent")
+                # Extraer información (SIENTE)
+                sales_stage = result.get("sales_stage", "interest")
+                intent = result.get("intent", "general")
+                lead_score = result.get("lead_score")
+                lead_temperature = result.get("lead_temperature")
+                objection_detected = result.get("objection_detected", False)
+                objection_type = result.get("objection_type")
                 
-                # Optimizar para widget
+                # ACTÚA: Optimizar para widget
                 optimized = optimizer.optimize_response_for_widget(
                     result,
                     sales_stage=sales_stage,
                     intent=intent
                 )
                 
-                # Trackear métricas
+                # APRENDE: Trackear métricas completas
                 optimizer.metrics["total_requests"] += 1
                 
                 # Trackear conversión si aplica
@@ -540,25 +681,61 @@ def create_widget_app(star_agent_mode, static_dir: Optional[Path] = None) -> Opt
                     optimizer.track_conversion("conversion", {
                         "sales_stage": sales_stage,
                         "intent": intent,
+                        "lead_score": lead_score,
+                        "lead_temperature": lead_temperature,
                     })
                 
-                if optimized.get("cart"):
+                if optimized.get("cart") and optimized.get("cart").get("items"):
                     optimizer.track_conversion("cart_add", {
                         "sales_stage": sales_stage,
                         "intent": intent,
+                        "cart_items": len(optimized.get("cart", {}).get("items", [])),
                     })
                 
                 if optimized.get("payment_link"):
+                    cart = optimized.get("cart", {})
+                    total = sum(
+                        item.get("price", 0) * item.get("quantity", 1)
+                        for item in cart.get("items", [])
+                        if isinstance(item, dict)
+                    ) if isinstance(cart, dict) else 0
+                    
                     optimizer.track_conversion("payment_initiated", {
                         "sales_stage": sales_stage,
                         "intent": intent,
+                        "total": total,
                     })
+                
+                if optimized.get("needs_handoff"):
+                    optimizer.track_conversion("handoff", {
+                        "sales_stage": sales_stage,
+                        "intent": intent,
+                    })
+                
+                # Trackear objeciones
+                if objection_detected and objection_type:
+                    optimizer.track_conversion("objection", {
+                        "objection_type": objection_type,
+                        "sales_stage": sales_stage,
+                        "intent": intent,
+                    })
+                
+                # Trackear sales_stage e intent
+                optimizer.track_conversion("interaction", {
+                    "sales_stage": sales_stage,
+                    "intent": intent,
+                    "lead_score": lead_score,
+                    "lead_temperature": lead_temperature,
+                })
                 
                 # Registrar tiempo de respuesta
                 response_time = time.time() - start_time
                 optimizer.record_response_time(response_time)
                 
-                # Enviar respuesta
+                # Agregar metadata de tracking
+                optimized["response_time_ms"] = round(response_time * 1000, 2)
+                
+                # Enviar respuesta optimizada
                 await websocket.send_json(optimized)
         
         except WebSocketDisconnect:

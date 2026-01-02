@@ -163,7 +163,25 @@ class ResearchAgent:
         
         # Prompt SUPER MEJORADO para chat conversacional (respuestas MUY largas, completas e inteligentes)
         # CON CHAIN OF THOUGHT REASONING Y MEMORIA A CORTO PLAZO (CONTEXT WINDOW)
-        if conversational_mode:
+        
+        # Detectar modo comercial: si la pregunta contiene el prompt comercial del widget
+        is_commercial_mode = "CONTEXTO" in question and "ROL DEL AGENTE" in question and "Sales + Customer Service" in question
+        
+        if is_commercial_mode:
+            # MODO COMERCIAL: Respuestas rÃ¡pidas, naturales y orientadas a ventas
+            # El prompt comercial ya estÃ¡ en la pregunta (question)
+            prompt = (
+                f"{question}\n\n"
+                f"INFORMACIÃ“N DE LOS DOCUMENTOS ({num_sources} documento(s) con {len(documents)} fragmentos):\n{context}\n\n"
+                "INSTRUCCIONES FINALES:\n"
+                "- Responde SOLO con el contenido comercial, sin mencionar procesos tÃ©cnicos, verificaciones, fuentes ni metadata.\n"
+                "- NO incluyas secciones como 'Proceso Multi-Agente', 'VerificaciÃ³n', 'Fuentes Consultadas', etc.\n"
+                "- Responde de forma natural, comercial y humana.\n"
+                "- Responde DIRECTAMENTE la pregunta del usuario usando la informaciÃ³n de los documentos.\n"
+                "- Al final, incluye una pregunta o CTA suave para avanzar la conversaciÃ³n.\n\n"
+                "RESPUESTA COMERCIAL:"
+            )
+        elif conversational_mode:
             prompt = (
                 "Eres un asistente experto de nivel mundial con conocimiento profundo en múltiples áreas. "
                 "Tu objetivo es proporcionar respuestas EXTREMADAMENTE COMPLETAS, DETALLADAS Y PERFECTAS. "

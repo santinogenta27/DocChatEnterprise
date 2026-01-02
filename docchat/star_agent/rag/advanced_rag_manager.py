@@ -21,10 +21,19 @@ from langchain_core.retrievers import BaseRetriever
 
 try:
     from langchain_community.retrievers import BM25Retriever
-    from langchain_community.vectorstores import Chroma
     BM25_AVAILABLE = True
 except ImportError:
     BM25_AVAILABLE = False
+
+try:
+    # Intentar usar la nueva versión de langchain-chroma
+    from langchain_chroma import Chroma
+except ImportError:
+    # Fallback a la versión antigua
+    try:
+        from langchain_community.vectorstores import Chroma
+    except ImportError:
+        Chroma = None
 
 try:
     import chromadb
@@ -89,73 +98,79 @@ class AdvancedRAGManager:
         self._initialize_stores()
     
     def _initialize_stores(self):
-        """Inicializa los índices separados para cada intención."""
+        """Inicializa los índices separados para cada intención (lazy initialization)."""
         for intent in IntentType:
             intent_key = intent.value
             store_dir = self.base_dir / intent_key
             
-            # Crear documentos vacíos para inicializar
-            empty_docs = []
-            
             try:
-                # Intentar cargar índice existente
-                if store_dir.exists() and CHROMADB_AVAILABLE:
-                    vector_store = Chroma(
-                        persist_directory=str(store_dir),
-                        embedding_function=self.embeddings,
-                    )
-                    count = vector_store._collection.count()
-                    if count > 0:
-                        # Hay documentos, cargar desde ChromaDB para construir BM25 correctamente
-                        # Obtener todos los documentos del vector store
-                        try:
-                            all_docs = vector_store.get(include=['documents', 'metadatas'])
-                            documents_list = []
+                # Intentar cargar índice existente solo si existe el directorio y Chroma está disponible
+                if store_dir.exists() and CHROMADB_AVAILABLE and Chroma is not None:
+                    try:
+                        vector_store = Chroma(
+                            persist_directory=str(store_dir),
+                            embedding_function=self.embeddings,
+                        )
+                        count = vector_store._collection.count()
+                        
+                        if count > 0:
+                            # Hay documentos existentes - OPTIMIZACIÓN: no reconstruir desde cero
+                            # Usar el vector store existente directamente (ya tiene embeddings en ChromaDB)
+                            print(f"ℹ️ Índice {intent_key} existe con {count} documentos - cargando directamente (sin reconstruir embeddings)")
                             
-                            # Convertir resultados de ChromaDB a Document objects
-                            if all_docs and 'documents' in all_docs:
-                                from langchain_core.documents import Document
-                                docs_data = all_docs['documents']
-                                metadatas = all_docs.get('metadatas', [])
-                                
-                                for idx, doc_text in enumerate(docs_data):
-                                    metadata = metadatas[idx] if idx < len(metadatas) else {}
-                                    documents_list.append(Document(page_content=doc_text, metadata=metadata))
-                            
-                            # Crear retriever híbrido con documentos cargados
-                            if BM25_AVAILABLE and documents_list:
-                                try:
-                                    self.stores[intent_key] = build_hybrid_retriever(
-                                        documents=documents_list,
-                                        embeddings=self.embeddings,
-                                        persist_directory=store_dir,
-                                        k=self.k,
-                                        weights=(0.4, 0.6),
-                                    )
-                                    # Guardar documentos en documents_by_intent para referencia
-                                    self.documents_by_intent[intent_key] = documents_list
-                                    print(f"✅ Índice {intent_key} cargado: {len(documents_list)} documentos")
-                                except Exception as build_error:
-                                    print(f"⚠️ Error construyendo hybrid retriever para {intent_key}: {build_error}")
-                                    # Fallback: usar solo vector retriever
-                                    self.stores[intent_key] = vector_store.as_retriever(
-                                        search_kwargs={"k": self.k}
-                                    )
-                            else:
-                                # Si no hay BM25 o documentos, usar solo vector retriever
+                            # Usar el vector retriever directamente (ya tiene embeddings)
+                            # Esto es MUCHO más rápido que reconstruir todo el hybrid retriever
+                            try:
                                 self.stores[intent_key] = vector_store.as_retriever(
                                     search_kwargs={"k": self.k}
                                 )
-                        except Exception as load_error:
-                            print(f"⚠️ Error cargando documentos desde ChromaDB para {intent_key}: {load_error}")
-                            # Fallback: usar solo vector retriever
+                                
+                                # Cargar documentos solo para referencia (sin crear embeddings)
+                                # Esto es rápido porque solo lee texto desde ChromaDB
+                                try:
+                                    all_docs = vector_store.get(include=['documents', 'metadatas'], limit=1000)  # Limitar a 1000 para no cargar todo
+                                    documents_list = []
+                                    
+                                    if all_docs and 'documents' in all_docs:
+                                        from langchain_core.documents import Document
+                                        docs_data = all_docs['documents']
+                                        metadatas = all_docs.get('metadatas', [])
+                                        
+                                        for idx, doc_text in enumerate(docs_data):
+                                            metadata = metadatas[idx] if idx < len(metadatas) else {}
+                                            documents_list.append(Document(page_content=doc_text, metadata=metadata))
+                                    
+                                    # Guardar documentos para referencia (BM25 se construirá lazy cuando se use)
+                                    self.documents_by_intent[intent_key] = documents_list
+                                    print(f"✅ Índice {intent_key} cargado: {len(documents_list)} documentos (solo Vector Search - BM25 lazy si se necesita)")
+                                except Exception as load_error:
+                                    print(f"⚠️ Error cargando metadatos para {intent_key}: {load_error}")
+                                    # Continuar con solo vector retriever
+                                
+                                continue  # Saltar al siguiente intent
+                                
+                            except Exception as vector_error:
+                                print(f"⚠️ Error creando vector retriever para {intent_key}: {vector_error}")
+                                # Continuar sin inicializar este store, se creará lazy cuando se agreguen documentos
+                        else:
+                            # Store existe pero está vacío, crear retriever placeholder
                             self.stores[intent_key] = vector_store.as_retriever(
                                 search_kwargs={"k": self.k}
                             )
+                            print(f"ℹ️ Índice {intent_key} inicializado (vacío)")
+                    except Exception as chroma_error:
+                        print(f"⚠️ Error accediendo a ChromaDB para {intent_key}: {chroma_error}")
+                        # Continuar sin inicializar este store, se creará lazy cuando se agreguen documentos
+                
+                # Si no existe el directorio o no hay ChromaDB, no crear nada (lazy initialization)
+                # El store se creará cuando se agreguen documentos por primera vez
+                if intent_key not in self.stores:
+                    print(f"ℹ️ Índice {intent_key} se inicializará lazy cuando se agreguen documentos")
+                    
             except Exception as e:
                 print(f"⚠️ Error inicializando índice {intent_key}: {e}")
-                import traceback
-                traceback.print_exc()
+                # No hacer traceback completo para evitar spam, solo continuar
+                # El store se inicializará lazy cuando se necesite
     
     def detect_intent(self, query: str) -> IntentType:
         """

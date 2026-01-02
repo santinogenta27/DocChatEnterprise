@@ -144,6 +144,9 @@ class AlienMode:
         # MCP Manager potenciado
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
+        
+        # Sesiones activas
+        self.sessions: Dict[str, Dict[str, Any]] = {}
     
     def _get_llm_for_provider(self, provider: str = "openai"):
         """Crea un LLM dinámico según el provider especificado."""
@@ -194,17 +197,79 @@ class AlienMode:
         if hasattr(self.mcp_manager, 'llm'):
             self.mcp_manager.llm = llm
         
-        # Sesiones activas
-        self.sessions: Dict[str, Dict[str, Any]] = {}
+
+    def _get_session_metadata_path(self, session_id: str) -> Path:
+        """Obtiene la ruta del archivo de metadata de sesiÃ³n."""
+        return self.config.memory_dir / f"session_{session_id}.json"
+    
+    def _save_session_metadata(self, session_id: str, metadata: dict):
+        """Guarda metadata de sesiÃ³n en archivo JSON."""
+        try:
+            metadata_path = self._get_session_metadata_path(session_id)
+            metadata_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"âš ï¸ [Persistencia] Error guardando metadata: {e}")
+    
+    def _load_session_metadata(self, session_id: str) -> dict:
+        """Carga metadata de sesiÃ³n desde archivo JSON."""
+        try:
+            metadata_path = self._get_session_metadata_path(session_id)
+            if metadata_path.exists():
+                with open(metadata_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"âš ï¸ [Persistencia] Error cargando metadata: {e}")
+        return {}
+    
+    def _load_persisted_documents(self, session_id: str) -> List[Any]:
+        """Carga documentos persistidos desde ChromaDB."""
+        try:
+            from langchain_community.vectorstores import Chroma
+            from langchain_core.documents import Document
+            
+            persist_dir = Path(self.config.persist_dir) / session_id
+            if not persist_dir.exists():
+                return []
+            
+            # Cargar vectorstore existente
+            vectorstore = Chroma(
+                persist_directory=str(persist_dir),
+                embedding_function=self.retriever_builder.embeddings
+            )
+            
+            # Obtener documentos
+            all_data = vectorstore.get()
+            documents = all_data.get("documents", [])
+            metadatas = all_data.get("metadatas", [{}] * len(documents))
+            
+            # Convertir a Document objects
+            docs = [
+                Document(page_content=content, metadata=meta)
+                for content, meta in zip(documents, metadatas)
+            ]
+            
+            if docs:
+                print(f"âœ… [Persistencia] Cargados {len(docs)} documentos persistidos para sesiÃ³n '{session_id}'")
+            return docs
+        except Exception as e:
+            print(f"âš ï¸ [Persistencia] Error cargando documentos persistidos: {e}")
+            return []
+
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
-        """Inicializa una nueva sesión."""
+        """Inicializa una nueva sesion y carga documentos persistidos si existen."""
         if session_id not in self.sessions:
+            # Cargar documentos persistidos si existen
+            persisted_docs = self._load_persisted_documents(session_id)
+            persisted_metadata = self._load_session_metadata(session_id)
+            
             self.sessions[session_id] = {
-                "docs": [],
+                "docs": persisted_docs if persisted_docs else [],
                 "retriever": None,
-                "processed_files": set(),
-                "history": [],
+                "processed_files": set(persisted_metadata.get("processed_files", [])),
+                "history": persisted_metadata.get("history", []),
                 "context_folder": ContextFolder(
                     config=self.config,
                     llm=self.llm,
@@ -214,10 +279,21 @@ class AlienMode:
                 "chain_id": None,
                 "rl_tree_id": None,
                 "mcp_queries": [],
-                "created_at": time.time()
+                "created_at": persisted_metadata.get("created_at", time.time())
             }
+            
+            # Si hay documentos persistidos, reconstruir el retriever
+            if persisted_docs:
+                print(f"[Alien Mode] Cargando {len(persisted_docs)} documentos persistidos para sesion '''{session_id}'''...")
+                self.sessions[session_id]["retriever"] = self.retriever_builder.build_hybrid_retriever(
+                    persisted_docs,
+                    namespace=session_id,
+                    load_existing=True
+                )
+                print(f"[Alien Mode] Retriever reconstruido con {len(persisted_docs)} documentos persistidos")
+        
         return self.sessions[session_id]
-    
+
     def process_documents(
         self,
         session_id: str,
@@ -254,9 +330,19 @@ class AlienMode:
                     session["provenances"] = []
                 session["provenances"].append(provenance)
             
-            # Reconstruir retriever
+            # Reconstruir retriever usando session_id como namespace para persistencia
             if session["docs"]:
-                session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
+                session["retriever"] = self.retriever_builder.build_hybrid_retriever(
+                    session["docs"], 
+                    namespace=session_id  # Usar session_id como namespace para persistencia
+                )
+                # Guardar metadata de sesiÃ³n
+                self._save_session_metadata(session_id, {
+                    "processed_files": list(session["processed_files"]),
+                    "history": session["history"],
+                    "created_at": session["created_at"],
+                    "docs_count": len(session["docs"])
+                })
                 print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {

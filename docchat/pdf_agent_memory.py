@@ -194,9 +194,14 @@ class PDFAgentMemory:
                 user_message TEXT NOT NULL,
                 assistant_message TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
-                metadata TEXT,
-                INDEX idx_session_timestamp (session_id, timestamp)
+                metadata TEXT
             )
+        """)
+        
+        # Índices para conversaciones
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_session_timestamp 
+            ON conversations(session_id, timestamp)
         """)
         
         # Tabla de triplets (Memoria Semántica - KG)
@@ -209,10 +214,18 @@ class PDFAgentMemory:
                 timestamp TEXT NOT NULL,
                 source_message TEXT,
                 user_name TEXT,
-                weight REAL DEFAULT 1.0,
-                INDEX idx_user_timestamp (user_name, timestamp),
-                INDEX idx_subject (subject)
+                weight REAL DEFAULT 1.0
             )
+        """)
+        
+        # Índices para triplets
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_timestamp 
+            ON triplets(user_name, timestamp)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_subject 
+            ON triplets(subject)
         """)
         
         # Tabla de resúmenes de sesión
@@ -236,9 +249,14 @@ class PDFAgentMemory:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 usage_count INTEGER DEFAULT 0,
-                UNIQUE(user_name, preference_type),
-                INDEX idx_user_type (user_name, preference_type)
+                UNIQUE(user_name, preference_type)
             )
+        """)
+        
+        # Índice para user_preferences
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_type 
+            ON user_preferences(user_name, preference_type)
         """)
         
         # Tabla de metadatos de documentos
@@ -253,9 +271,14 @@ class PDFAgentMemory:
                 author TEXT,
                 version TEXT,
                 indexed_at TEXT NOT NULL,
-                UNIQUE(file_name),
-                INDEX idx_file_name (file_name)
+                UNIQUE(file_name)
             )
+        """)
+        
+        # Índice para document_metadata
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_file_name 
+            ON document_metadata(file_name)
         """)
         
         conn.commit()

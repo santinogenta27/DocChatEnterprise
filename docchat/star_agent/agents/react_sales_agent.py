@@ -461,7 +461,12 @@ class ReactSalesAgent:
             try:
                 # Usar sentence-transformers (gratis, local) en lugar de OpenAI embeddings
                 # Claude/Anthropic no tiene modelo de embeddings dedicado
-                from langchain_community.embeddings import HuggingFaceEmbeddings
+                try:
+                    # Intentar usar la nueva versión de langchain-huggingface
+                    from langchain_huggingface import HuggingFaceEmbeddings
+                except ImportError:
+                    # Fallback a la versión antigua
+                    from langchain_community.embeddings import HuggingFaceEmbeddings
                 import os
                 
                 # Usar modelo multilingüe que funciona bien en español
@@ -622,6 +627,9 @@ class ReactSalesAgent:
         
         Verifica si la pregunta está en scope antes de procesar.
         Retorna: "CAN_ANSWER", "PARTIAL", o "NO_MATCH"
+        
+        NOTA: Para preguntas sobre productos/catálogo, siempre permite continuar
+        aunque NO_MATCH, porque podemos usar el catálogo de productos.
         """
         if not self.scope_checker:
             return {"relevance_label": "CAN_ANSWER"}
@@ -633,12 +641,30 @@ class ReactSalesAgent:
             return {"relevance_label": "CAN_ANSWER"}
         
         question = last_message.content
+        question_lower = question.lower()
+        
+        # Si es pregunta sobre productos/catálogo, siempre permitir continuar
+        # (podemos usar catalog_tool aunque el RAG no tenga documentos)
+        product_keywords = [
+            "producto", "productos", "catálogo", "catalogo", "catálogos",
+            "qué tienen", "qué venden", "qué hay", "disponible", "stock",
+            "remera", "camiseta", "pantalón", "zapato", "vestido", "chaqueta",
+            "comprar", "precio", "cuánto cuesta", "tiene", "tenes", "tienes"
+        ]
+        
+        is_product_query = any(keyword in question_lower for keyword in product_keywords)
         
         try:
             relevance_label = self.scope_checker.check(question, k=5)
             print(f"🔍 Relevance Check: {relevance_label}")
             
-            # Si es NO_MATCH, preparar mensaje de respuesta
+            # Si es NO_MATCH PERO es pregunta sobre productos, permitir continuar
+            # (usaremos catalog_tool en lugar del RAG)
+            if relevance_label == "NO_MATCH" and is_product_query:
+                print(f"ℹ️ NO_MATCH pero es pregunta de productos - continuando con catalog_tool")
+                return {"relevance_label": "PARTIAL"}  # Tratar como PARTIAL para continuar
+            
+            # Si es NO_MATCH y NO es pregunta de productos, rechazar
             if relevance_label == "NO_MATCH":
                 return {
                     "relevance_label": relevance_label,
@@ -650,6 +676,9 @@ class ReactSalesAgent:
             
         except Exception as e:
             print(f"⚠️ Error en Relevance Check: {e}")
+            # Si hay error pero es pregunta de productos, permitir continuar
+            if is_product_query:
+                return {"relevance_label": "PARTIAL"}
             return {"relevance_label": "CAN_ANSWER"}  # Default: permitir continuar
     
     def _research_node(self, state: AgentState) -> Dict[str, Any]:
@@ -1426,6 +1455,145 @@ Responde en JSON:
         return self.sales_closer.detect_sales_stage(query)
         
         return SalesStage.INTEREST.value
+    
+    def _update_personalization(
+        self,
+        user_query: str,
+        personalization: Dict[str, Any],
+        messages: Sequence[BaseMessage]
+    ) -> Dict[str, Any]:
+        """
+        Actualiza información de personalización extrayendo datos del query y mensajes.
+        
+        Extrae:
+        - Productos mencionados
+        - Talla (S, M, L, XL, XXL, etc.)
+        - Color mencionado
+        
+        Args:
+            user_query: Query actual del usuario
+            personalization: Diccionario de personalización existente
+            messages: Historial de mensajes de la conversación
+            
+        Returns:
+            Diccionario de personalización actualizado
+        """
+        if personalization is None:
+            personalization = {
+                "products_mentioned": [],
+                "talla": None,
+                "color": None,
+                "last_strong_intent": None,
+            }
+        
+        query_lower = user_query.lower()
+        
+        # Extraer productos mencionados
+        products_mentioned = personalization.get("products_mentioned", [])
+        if not isinstance(products_mentioned, list):
+            products_mentioned = []
+        
+        # Palabras clave de productos comunes
+        product_keywords = [
+            "remera", "camiseta", "pantalón", "pantalones", "zapato", "zapatos",
+            "vestido", "chaqueta", "camisa", "short", "shorts", "medias",
+            "producto", "artículo", "item", "catálogo"
+        ]
+        
+        # Buscar productos en el query actual
+        words = query_lower.split()
+        for i, word in enumerate(words):
+            # Si encuentra una palabra clave de producto, buscar el producto mencionado
+            if any(keyword in word for keyword in product_keywords):
+                # Intentar capturar el producto completo (palabra anterior o siguiente)
+                if i > 0 and words[i-1] not in product_keywords:
+                    product = words[i-1] + " " + word
+                    if product not in products_mentioned:
+                        products_mentioned.append(product)
+                elif i < len(words) - 1:
+                    product = word + " " + words[i+1]
+                    if product not in products_mentioned:
+                        products_mentioned.append(product)
+        
+        # También buscar en mensajes anteriores
+        for msg in messages:
+            if isinstance(msg, HumanMessage) and msg.content:
+                msg_content_lower = msg.content.lower()
+                for keyword in product_keywords:
+                    if keyword in msg_content_lower:
+                        # Extraer contexto alrededor de la palabra clave
+                        idx = msg_content_lower.find(keyword)
+                        if idx > 0:
+                            # Intentar capturar palabra anterior
+                            words_before = msg_content_lower[:idx].split()
+                            if words_before and words_before[-1] not in product_keywords:
+                                product = words_before[-1] + " " + keyword
+                                if product not in products_mentioned:
+                                    products_mentioned.append(product)
+        
+        # Extraer talla
+        talla_patterns = [
+            r'\b(s|m|l|xl|xxl|xxxl|xs|xxs)\b',
+            r'talla\s+(s|m|l|xl|xxl|xxxl|xs|xxs)',
+            r'size\s+(s|m|l|xl|xxl|xxxl|xs|xxs)',
+        ]
+        
+        import re
+        talla = personalization.get("talla")
+        for pattern in talla_patterns:
+            match = re.search(pattern, query_lower)
+            if match:
+                talla = match.group(1).upper()
+                break
+        
+        # Si no se encontró en el query actual, buscar en mensajes anteriores
+        if not talla:
+            for msg in messages:
+                if isinstance(msg, HumanMessage) and msg.content:
+                    msg_content_lower = msg.content.lower()
+                    for pattern in talla_patterns:
+                        match = re.search(pattern, msg_content_lower)
+                        if match:
+                            talla = match.group(1).upper()
+                            break
+                    if talla:
+                        break
+        
+        # Extraer color
+        color_keywords = [
+            "negro", "negro", "blanco", "blanco", "rojo", "rojo", "azul", "azul",
+            "verde", "verde", "amarillo", "amarillo", "gris", "gris", "beige", "beige",
+            "rosa", "rosa", "morado", "morado", "naranja", "naranja", "marron", "marrón",
+            "black", "white", "red", "blue", "green", "yellow", "gray", "grey",
+            "pink", "purple", "orange", "brown"
+        ]
+        
+        color = personalization.get("color")
+        for color_word in color_keywords:
+            if color_word in query_lower:
+                color = color_word.capitalize()
+                break
+        
+        # Si no se encontró en el query actual, buscar en mensajes anteriores
+        if not color:
+            for msg in messages:
+                if isinstance(msg, HumanMessage) and msg.content:
+                    msg_content_lower = msg.content.lower()
+                    for color_word in color_keywords:
+                        if color_word in msg_content_lower:
+                            color = color_word.capitalize()
+                            break
+                    if color:
+                        break
+        
+        # Actualizar personalización
+        personalization["products_mentioned"] = products_mentioned
+        if talla:
+            personalization["talla"] = talla
+        if color:
+            personalization["color"] = color
+        
+        return personalization
     
     def _select_sales_strategy(
         self,

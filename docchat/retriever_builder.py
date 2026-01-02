@@ -110,7 +110,9 @@ class RetrieverBuilder:
             request_timeout=120  # Timeout más largo
         )
 
-    def build_hybrid_retriever(self, docs: Iterable[Document], namespace: Optional[str] = None) -> HybridRetriever:
+    def build_hybrid_retriever(self, docs: Iterable[Document], namespace: Optional[str] = None, load_existing: bool = False) -> HybridRetriever:
+        # Asegurar que Chroma estÃ© disponible (ya importado al inicio del mÃ³dulo)
+        from langchain_community.vectorstores import Chroma as ChromaVectorStore
         docs = list(docs)
         if not docs:
             raise ValueError("No hay documentos procesados para indexar.")
@@ -128,17 +130,40 @@ class RetrieverBuilder:
         
         # Limpiar directorio persistente si existe para evitar mezclar con documentos previos
         # Esto asegura que cada sesión solo use los documentos actuales
-        if persist_dir.exists():
+        # Si load_existing=True y el directorio existe, cargar documentos existentes
+        if load_existing and persist_dir.exists():
+            try:
+                existing_vectorstore = ChromaVectorStore(
+                    persist_directory=str(persist_dir),
+                    embedding_function=self.embeddings
+                )
+                existing_data = existing_vectorstore.get()
+                existing_docs_list = existing_data.get("documents", [])
+                existing_metas = existing_data.get("metadatas", [{}] * len(existing_docs_list))
+                existing_doc_objects = [
+                    Document(page_content=content, metadata=meta)
+                    for content, meta in zip(existing_docs_list, existing_metas)
+                ]
+                docs_list = list(docs)
+                all_docs_combined = existing_doc_objects + docs_list
+                docs = all_docs_combined
+                print(f"[Retriever] Cargados {len(existing_doc_objects)} documentos existentes, agregando {len(docs_list)} nuevos")
+            except Exception as e:
+                print(f"[Retriever] Error cargando documentos existentes, creando nuevo: {e}")
+                import shutil
+                if persist_dir.exists():
+                    shutil.rmtree(persist_dir)
+        elif persist_dir.exists() and not load_existing:
+            # Solo limpiar si NO estamos cargando existentes
             import shutil
             try:
                 shutil.rmtree(persist_dir)
             except Exception as e:
-                print(f"   ⚠️ No se pudo limpiar directorio persistente: {e}")
-        
-        # Chroma.from_documents genera embeddings automáticamente
+                print(f"[Retriever] No se pudo limpiar directorio persistente: {e}")
+        # ChromaVectorStore.from_documents genera embeddings automáticamente
         # Con muchos documentos, esto puede tardar pero funciona correctamente
         # IMPORTANTE: Solo usa los documentos pasados como parámetro, no carga documentos previos
-        vector_store = Chroma.from_documents(
+        vector_store = ChromaVectorStore.from_documents(
             documents=docs,  # Solo estos documentos, no documentos previos
             embedding=self.embeddings,
             persist_directory=str(persist_dir),
