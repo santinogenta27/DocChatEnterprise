@@ -5513,7 +5513,7 @@ div[class*="event_bus_bot"] {
 """
 
 # Interfaz Gradio - Tema Profesional Azul DeepSeek
-with gr.Blocks(title="Data 📊", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
+with gr.Blocks(title="ENTERPRISE DATA AI", theme=gr.themes.Soft(primary_hue="blue", secondary_hue="slate", neutral_hue="gray"), css=CUSTOM_CSS) as demo:
     
     # ==================== MENÚ DE CONFIGURACIÓN DE API KEYS ====================
     # Estado para almacenar las API keys del usuario
