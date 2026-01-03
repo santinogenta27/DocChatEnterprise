@@ -1,5 +1,5 @@
 """
-Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad
+RULES Mode - Sistema Multi-Agente RAG de Máxima Calidad
 Integra el sistema completo de DocChat Multi-Agent RAG:
 
 SISTEMA MULTI-AGENTE DOCCHAT:
@@ -23,6 +23,7 @@ CAPACIDADES AVANZADAS ADICIONALES:
 from __future__ import annotations
 
 import json
+import os
 import time
 import asyncio
 from typing import List, Dict, Optional, Any, Tuple, Iterator
@@ -48,10 +49,37 @@ from .person_in_the_loop import PersonInTheLoop, DecisionCriticality
 from .reinforcement_planning import ReinforcementPlanner, DecisionTree
 from .mcp_manager import MCPManager
 
+# Importar Confluent para streaming en tiempo real (opcional)
+try:
+    from .confluent_streaming import (
+        ConfluentStreamingProducer,
+        ConfluentStreamingManager,
+        StreamingEvent,
+        EventType
+    )
+    CONFLUENT_STREAMING_AVAILABLE = True
+except ImportError:
+    ConfluentStreamingProducer = None  # type: ignore
+    ConfluentStreamingManager = None  # type: ignore
+    StreamingEvent = None  # type: ignore
+    EventType = None  # type: ignore
+    CONFLUENT_STREAMING_AVAILABLE = False
 
-class AlienMode:
+# Importar SimpleEventBus para streaming interno
+try:
+    from .event_bus_mode import SimpleEventBus
+except ImportError:
+    # Si no está disponible, crear una versión simple
+    class SimpleEventBus:
+        def __init__(self):
+            self.subscribers = {}
+        def publish(self, event_type: str, data: Dict[str, Any]):
+            pass
+
+
+class RulesMode:
     """
-    Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
+    RULES Mode - Sistema Multi-Agente RAG de Máxima Calidad para Empresas.
     
     Integra el sistema completo de DocChat Multi-Agent RAG con capacidades avanzadas:
     
@@ -88,7 +116,7 @@ class AlienMode:
         # LLM para generación - Se creará dinámicamente según el provider
         # Por defecto, usar OpenAI para compatibilidad
         if not config.openai_api_key and not config.anthropic_api_key:
-            raise ValueError("OPENAI_API_KEY o ANTHROPIC_API_KEY requerida para Alien Mode")
+            raise ValueError("OPENAI_API_KEY o ANTHROPIC_API_KEY requerida para RULES Mode")
         
         # LLM por defecto (se actualizará dinámicamente según el provider)
         self.llm = ChatOpenAI(
@@ -145,6 +173,39 @@ class AlienMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # Event Bus interno para streaming en tiempo real
+        self.event_bus = SimpleEventBus()
+        
+        # REAL-TIME CONTEXT ENGINE: Similar al Real-Time Context Engine de Confluent
+        # Materializa datos enriquecidos en cache en memoria y sirve contexto en tiempo real
+        from .real_time_context_engine import get_real_time_context_engine
+        
+        bootstrap_servers = getattr(config, 'confluent_bootstrap_servers', None) or os.getenv('CONFLUENT_BOOTSTRAP_SERVERS')
+        self.real_time_context_engine = get_real_time_context_engine(
+            bootstrap_servers=bootstrap_servers,
+            enabled=True
+        )
+        
+        # Confluent Streaming para tiempo real (opcional - mejor performance)
+        self.confluent_producer = None
+        self.confluent_enabled = False
+        if CONFLUENT_STREAMING_AVAILABLE:
+            # Intentar inicializar Confluent si está configurado
+            if bootstrap_servers:
+                try:
+                    self.confluent_producer = ConfluentStreamingProducer(
+                        bootstrap_servers=bootstrap_servers,
+                        security_config=getattr(config, 'confluent_security_config', None),
+                        enabled=True
+                    )
+                    self.confluent_enabled = True
+                    print("✅ [RULES Mode] Real-Time Context Engine + Confluent Streaming habilitado")
+                except Exception as e:
+                    print(f"⚠️ [RULES Mode] No se pudo inicializar Confluent (usando Event Bus interno): {e}")
+                    self.confluent_enabled = False
+        else:
+            print("✅ [RULES Mode] Real-Time Context Engine habilitado (Event Bus interno)")
+        
         # Sesiones activas
         self.sessions: Dict[str, Dict[str, Any]] = {}
     
@@ -158,14 +219,14 @@ class AlienMode:
             provider_to_use = "claude"
             api_key = self.config.anthropic_api_key
             if not api_key:
-                print(f"⚠️ [Alien Mode] ANTHROPIC_API_KEY no configurada, usando OpenAI como fallback")
+                print(f"⚠️ [RULES Mode] ANTHROPIC_API_KEY no configurada, usando OpenAI como fallback")
                 provider_to_use = "openai"
                 api_key = self.config.openai_api_key
         else:
             provider_to_use = "openai"
             api_key = self.config.openai_api_key
             if not api_key:
-                raise ValueError("OPENAI_API_KEY requerida para Alien Mode")
+                raise ValueError("OPENAI_API_KEY requerida para RULES Mode")
         
         return create_llm(
             provider=provider_to_use,
@@ -182,8 +243,6 @@ class AlienMode:
         self.llm = llm
         
         # Actualizar módulos que usan el LLM
-        # Nota: Algunos módulos pueden no tener método para actualizar el LLM
-        # En ese caso, se recrean temporalmente o se usa el LLM directamente
         if hasattr(self.context_folder, 'llm'):
             self.context_folder.llm = llm
         if hasattr(self.chain_reasoner, 'llm'):
@@ -196,80 +255,15 @@ class AlienMode:
             self.reinforcement_planner.llm = llm
         if hasattr(self.mcp_manager, 'llm'):
             self.mcp_manager.llm = llm
-        
-
-    def _get_session_metadata_path(self, session_id: str) -> Path:
-        """Obtiene la ruta del archivo de metadata de sesiÃ³n."""
-        return self.config.memory_dir / f"session_{session_id}.json"
-    
-    def _save_session_metadata(self, session_id: str, metadata: dict):
-        """Guarda metadata de sesiÃ³n en archivo JSON."""
-        try:
-            metadata_path = self._get_session_metadata_path(session_id)
-            metadata_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(metadata_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"âš ï¸ [Persistencia] Error guardando metadata: {e}")
-    
-    def _load_session_metadata(self, session_id: str) -> dict:
-        """Carga metadata de sesiÃ³n desde archivo JSON."""
-        try:
-            metadata_path = self._get_session_metadata_path(session_id)
-            if metadata_path.exists():
-                with open(metadata_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"âš ï¸ [Persistencia] Error cargando metadata: {e}")
-        return {}
-    
-    def _load_persisted_documents(self, session_id: str) -> List[Any]:
-        """Carga documentos persistidos desde ChromaDB."""
-        try:
-            from langchain_community.vectorstores import Chroma
-            from langchain_core.documents import Document
-            
-            persist_dir = Path(self.config.persist_dir) / session_id
-            if not persist_dir.exists():
-                return []
-            
-            # Cargar vectorstore existente
-            vectorstore = Chroma(
-                persist_directory=str(persist_dir),
-                embedding_function=self.retriever_builder.embeddings
-            )
-            
-            # Obtener documentos
-            all_data = vectorstore.get()
-            documents = all_data.get("documents", [])
-            metadatas = all_data.get("metadatas", [{}] * len(documents))
-            
-            # Convertir a Document objects
-            docs = [
-                Document(page_content=content, metadata=meta)
-                for content, meta in zip(documents, metadatas)
-            ]
-            
-            if docs:
-                print(f"âœ… [Persistencia] Cargados {len(docs)} documentos persistidos para sesiÃ³n '{session_id}'")
-            return docs
-        except Exception as e:
-            print(f"âš ï¸ [Persistencia] Error cargando documentos persistidos: {e}")
-            return []
-
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
-        """Inicializa una nueva sesion y carga documentos persistidos si existen."""
+        """Inicializa una nueva sesión."""
         if session_id not in self.sessions:
-            # Cargar documentos persistidos si existen
-            persisted_docs = self._load_persisted_documents(session_id)
-            persisted_metadata = self._load_session_metadata(session_id)
-            
             self.sessions[session_id] = {
-                "docs": persisted_docs if persisted_docs else [],
+                "docs": [],
                 "retriever": None,
-                "processed_files": set(persisted_metadata.get("processed_files", [])),
-                "history": persisted_metadata.get("history", []),
+                "processed_files": set(),
+                "history": [],
                 "context_folder": ContextFolder(
                     config=self.config,
                     llm=self.llm,
@@ -279,21 +273,10 @@ class AlienMode:
                 "chain_id": None,
                 "rl_tree_id": None,
                 "mcp_queries": [],
-                "created_at": persisted_metadata.get("created_at", time.time())
+                "created_at": time.time()
             }
-            
-            # Si hay documentos persistidos, reconstruir el retriever
-            if persisted_docs:
-                print(f"[Alien Mode] Cargando {len(persisted_docs)} documentos persistidos para sesion '''{session_id}'''...")
-                self.sessions[session_id]["retriever"] = self.retriever_builder.build_hybrid_retriever(
-                    persisted_docs,
-                    namespace=session_id,
-                    load_existing=True
-                )
-                print(f"[Alien Mode] Retriever reconstruido con {len(persisted_docs)} documentos persistidos")
-        
         return self.sessions[session_id]
-
+    
     def process_documents(
         self,
         session_id: str,
@@ -318,7 +301,7 @@ class AlienMode:
             }
         
         try:
-            print(f"📄 [Alien Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [RULES Mode] Procesando {len(new_files)} nuevos documentos...")
             new_docs = self.processor.process(new_files)
             session["docs"].extend(new_docs)
             
@@ -330,20 +313,10 @@ class AlienMode:
                     session["provenances"] = []
                 session["provenances"].append(provenance)
             
-            # Reconstruir retriever usando session_id como namespace para persistencia
+            # Reconstruir retriever
             if session["docs"]:
-                session["retriever"] = self.retriever_builder.build_hybrid_retriever(
-                    session["docs"], 
-                    namespace=session_id  # Usar session_id como namespace para persistencia
-                )
-                # Guardar metadata de sesiÃ³n
-                self._save_session_metadata(session_id, {
-                    "processed_files": list(session["processed_files"]),
-                    "history": session["history"],
-                    "created_at": session["created_at"],
-                    "docs_count": len(session["docs"])
-                })
-                print(f"✅ [Alien Mode] Retriever actualizado: {len(session['docs'])} chunks")
+                session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
+                print(f"✅ [RULES Mode] Retriever actualizado: {len(session['docs'])} chunks")
             
             return {
                 "status": "success",
@@ -353,7 +326,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"❌ [Alien Mode] Error procesando documentos: {e}")
+            print(f"❌ [RULES Mode] Error procesando documentos: {e}")
             return {
                 "status": "error",
                 "error": str(e)
@@ -366,11 +339,12 @@ class AlienMode:
         history: List[Tuple[str, str]],
         speed_mode: str = "balanced",
         provider: str = "openai"
-    ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
+    ):
         """
         Procesa una consulta con todas las capacidades avanzadas.
+        YIELD actualizaciones progresivas para streaming en tiempo real.
         
-        Returns:
+        Yields:
             (history, error, metadata): Historial actualizado, error si hay, metadatos
         """
         # ACTUALIZAR LLM SEGÚN EL PROVIDER - CRÍTICO para usar Claude cuando se selecciona
@@ -380,12 +354,14 @@ class AlienMode:
         session = self.initialize_session(session_id)
         
         if not session["retriever"]:
-            return history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+            yield history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+            return
         
         # DETECTAR si hay muchos documentos para usar procesamiento paralelo
         all_docs = session.get("docs", [])
         if not all_docs:
-            return history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+            yield history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
+            return
         
         # Agrupar documentos por fuente
         docs_by_source = defaultdict(list)
@@ -395,21 +371,27 @@ class AlienMode:
         
         num_unique_documents = len(docs_by_source)
         
-        # Si hay 10+ documentos, usar procesamiento paralelo (como Enterprise API)
-        use_parallel_processing = num_unique_documents >= 1  # Siempre usar procesamiento paralelo como ChatPDF
+        # SIEMPRE usar procesamiento paralelo cuando hay documentos (1 o más)
+        # Comportamiento equivalente a ChatGPT: cada PDF se analiza individualmente
+        # Si envías 500 PDFs, recibirás 500 respuestas (1 análisis por PDF)
+        use_parallel_processing = num_unique_documents >= 1
         
         start_time = time.time()
         
-        # Si usar procesamiento paralelo, procesar cada documento por separado
+        # SIEMPRE usar procesamiento paralelo cuando hay documentos (1 o más)
+        # Comportamiento equivalente a ChatGPT: cada PDF se analiza individualmente
+        # YIELD actualizaciones progresivas para streaming en tiempo real
         if use_parallel_processing:
-            return await self._process_query_parallel(
+            async for update in self._process_query_parallel(
                 session_id=session_id,
                 message=message,
                 history=history,
                 docs_by_source=docs_by_source,
                 speed_mode=speed_mode,
                 provider=provider
-            )
+            ):
+                yield update
+            return
         
         # 1. Crear cadena de razonamiento
         chain_id = self.chain_reasoner.create_chain(message)
@@ -422,7 +404,7 @@ class AlienMode:
         try:
             await self.chain_reasoner.add_reasoning_steps(chain_id, conversation_context)
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error agregando pasos de razonamiento: {e}")
+            print(f"⚠️ [RULES Mode] Error agregando pasos de razonamiento: {e}")
             # Continuar sin pasos de razonamiento si falla
         
         # 4. Determinar si requiere aprobación humana
@@ -458,7 +440,7 @@ class AlienMode:
             session["rl_tree_id"] = rl_result.get("tree_id")
             best_strategy = rl_result.get("best_result")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Reinforcement Planning: {e}")
+            print(f"⚠️ [RULES Mode] Error en Reinforcement Planning: {e}")
             # Continuar sin RL si falla
             rl_result = {"tree_id": None, "best_result": None, "total_explorations": 0}
         
@@ -475,7 +457,7 @@ class AlienMode:
             
             best_approach = path_result.get("best_path", {}).get("approach")
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en Path-dependent Reasoning: {e}")
+            print(f"⚠️ [RULES Mode] Error en Path-dependent Reasoning: {e}")
             # Continuar sin path reasoning si falla
             path_result = {"best_path": {"approach": None}, "paths_tested": 0}
         
@@ -488,7 +470,7 @@ class AlienMode:
                 # Agregar datos de MCP al contexto
                 conversation_context += f"\n\n📡 DATOS DE SISTEMAS EXTERNOS (MCP):\n{mcp_data.get('summary', '')}"
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error consultando MCP: {e}")
+            print(f"⚠️ [RULES Mode] Error consultando MCP: {e}")
             # Continuar sin datos MCP si falla
         
         # Aplicar modo de velocidad
@@ -659,7 +641,7 @@ class AlienMode:
                     answer=answer,
                     sources=[prov.source_name for prov in source_provenances],
                     metadata={
-                        "mode": "alien_mode",
+                        "mode": "rules_mode",
                         "session_id": session_id,
                         "conversation_turn": len(session["history"]),
                         "provenance_record_id": record_id,
@@ -690,7 +672,9 @@ class AlienMode:
                 "sources_count": len(sources)
             }
             
-            return history, None, metadata
+            # YIELD en lugar de return (es un generador async)
+            yield history, None, metadata
+            return
             
         except Exception as e:
             error_msg = f"❌ Error en chat: {str(e)}"
@@ -725,7 +709,9 @@ class AlienMode:
             
             history.append((message, error_msg))
             
-            return history, error_msg, {}
+            # YIELD en lugar de return (es un generador async)
+            yield history, error_msg, {}
+            return
     
     def _build_folded_context(
         self,
@@ -1051,7 +1037,7 @@ class AlienMode:
                             })
                 
                 except Exception as e:
-                    print(f"⚠️ [Alien Mode] Error consultando MCP {connection.name}: {e}")
+                    print(f"⚠️ [RULES Mode] Error consultando MCP {connection.name}: {e}")
                     continue
             
             if not mcp_results:
@@ -1070,7 +1056,7 @@ class AlienMode:
             }
             
         except Exception as e:
-            print(f"⚠️ [Alien Mode] Error en consulta MCP: {e}")
+            print(f"⚠️ [RULES Mode] Error en consulta MCP: {e}")
             return None
     
     async def _needs_external_data(
@@ -1141,7 +1127,14 @@ class AlienMode:
         docs_by_source: Dict[str, List[Document]],
         speed_mode: str = "balanced",
         provider: str = "openai"
-    ) -> Tuple[List[Tuple[str, str]], Optional[str], Dict[str, Any]]:
+    ):
+        """
+        Procesa consulta con procesamiento paralelo de documentos (como Enterprise API).
+        Analiza cada documento por separado aplicando el prompt del usuario,
+        luego combina todos los análisis en una respuesta final.
+        
+        YIELD actualizaciones progresivas para streaming en tiempo real en la UI.
+        """
         """
         Procesa consulta con procesamiento paralelo de documentos (como Enterprise API).
         Analiza cada documento por separado aplicando el prompt del usuario,
@@ -1165,196 +1158,563 @@ class AlienMode:
         # Construir contexto de conversación (sin documentos, solo historial)
         conversation_context = self._build_folded_context(session, history)
         
-        # Procesar cada documento en paralelo
+        # Procesar cada documento en paralelo con RATE LIMITING para evitar errores 429
         individual_analyses = {}
-        max_workers = min(5, len(docs_by_source))  # Máximo 5 documentos en paralelo
+        
+        # RATE LIMITING: Reducir workers cuando hay muchos documentos para evitar exceder límites de OpenAI
+        # OpenAI tiene límite de 30,000 TPM (tokens per minute)
+        # Con muchos documentos, necesitamos procesar en lotes más pequeños
+        num_docs = len(docs_by_source)
+        if num_docs <= 5:
+            max_workers = num_docs  # Pocos documentos: procesar todos en paralelo
+        elif num_docs <= 10:
+            max_workers = 5  # 5-10 documentos: máximo 5 workers
+        elif num_docs <= 20:
+            max_workers = 4  # 10-20 documentos: máximo 4 workers
+        else:
+            max_workers = 3  # Más de 20 documentos: máximo 3 workers para evitar rate limits
+        
+        print(f"🔄 [RULES Mode] Procesando {num_docs} documentos con {max_workers} workers (rate limiting activo para evitar errores 429)")
         
         def analyze_single_document(source_name: str, file_docs: List[Document]) -> Tuple[str, str]:
-            """Analiza un solo documento con el prompt del usuario."""
+            """Analiza un solo documento con el prompt del usuario - PROMPT ULTRA MEJORADO."""
             try:
-                # Construir contexto del documento (todos los chunks de este documento)
+                # Construir contexto del documento - LIMITAR para evitar exceder límites de tokens
                 doc_content = "\n\n".join([doc.page_content for doc in file_docs])
-                # Limitar contenido a ~4000 caracteres por documento para evitar límites
-                if len(doc_content) > 4000:
-                    doc_content = doc_content[:4000] + "..."
                 
-                # Prompt CENTRADO EN EL PROMPT DEL USUARIO - Cada PDF responde exactamente lo que el usuario pregunta
-                prompt = f"""Eres un analista estratégico de nivel C-Suite. Tu tarea es analizar ESTE documento específico para responder DIRECTAMENTE la pregunta del usuario.
-
-PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
-{message}
-
-CONTENIDO DE ESTE DOCUMENTO:
-{doc_content}
-
-INSTRUCCIONES CRÍTICAS:
-
-1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
-   - Tu objetivo PRINCIPAL es responder: "{message}"
-   - Analiza este documento ESPECÍFICAMENTE para encontrar información que responda esa pregunta
-   - Si el usuario pregunta "información más valiosa" → identifica la información MÁS VALIOSA de este documento
-   - Si el usuario pregunta "qué recomendarías hacer" → proporciona recomendaciones ESPECÍFICAS basadas en este documento
-   - Si el usuario pregunta "cuál es el mejor documento" → evalúa este documento en relación a la pregunta
-   - ADÁPTATE al tipo de pregunta del usuario - no uses un formato genérico
-
-2. ANÁLISIS ESPECÍFICO PARA ESTE DOCUMENTO:
-   - Extrae información del documento que responda DIRECTAMENTE a la pregunta del usuario
-   - Cita datos concretos del documento (números, porcentajes, fechas, nombres, métricas)
-   - Identifica entidades, metodologías, frameworks, o conceptos relevantes para la pregunta
-   - Si la pregunta requiere comparación o evaluación, evalúa este documento específicamente
-
-3. RESPUESTA ESTRUCTURADA (300-500 palabras):
-   - **Respuesta Directa** (1-2 párrafos): Responde la pregunta del usuario usando información de este documento
-   - **Información Específica** (1-2 párrafos): Detalles concretos del documento que apoyan tu respuesta
-   - **Recomendaciones/Insights** (1 párrafo): Si la pregunta lo requiere, proporciona recomendaciones o insights específicos
-
-4. ADAPTACIÓN AL TIPO DE PREGUNTA:
-   - Si pregunta por "información valiosa" → identifica y explica la información MÁS VALIOSA
-   - Si pregunta por "recomendaciones" → proporciona recomendaciones ESPECÍFICAS y ACCIONABLES
-   - Si pregunta por "mejor documento" → evalúa este documento y explica por qué es o no es el mejor
-   - Si pregunta por "análisis" → proporciona análisis profundo relacionado con la pregunta
-   - ADÁPTATE - no uses un formato genérico, responde lo que el usuario realmente pregunta
-
-5. PROFESIONALISMO ENTERPRISE:
-   - Lenguaje claro y directo (nivel C-Suite)
-   - Enfoque en responder la pregunta específica del usuario
-   - Información accionable y específica del documento
-   - Estructura clara y escaneable
-
-IMPORTANTE:
-- NO uses un formato genérico - ADÁPTATE al tipo de pregunta del usuario
-- NO describas el documento en general - RESPONDE la pregunta específica
-- SÍ extrae información específica del documento que responda la pregunta
-- SÍ proporciona recomendaciones/insights si la pregunta lo requiere
-
-RESPUESTA ESPECÍFICA A LA PREGUNTA DEL USUARIO (300-500 palabras):"""
+                # CRÍTICO: Limitar contenido a ~15000 tokens (~60000 caracteres) para evitar error 429
+                MAX_CHARS_PER_DOC = 60000  # ~15000 tokens (4 chars/token promedio)
                 
-                # Generar análisis con LLM (sin límite de max_tokens)
-                response = parallel_llm.invoke(prompt)
-                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                if len(doc_content) > MAX_CHARS_PER_DOC:
+                    print(f"⚠️ [RULES Mode] Documento muy grande ({len(doc_content)} caracteres), limitando a {MAX_CHARS_PER_DOC} para análisis individual...")
+                    # Tomar el inicio y el final para mantener contexto relevante
+                    half_chars = MAX_CHARS_PER_DOC // 2
+                    doc_content = doc_content[:half_chars] + "\n\n... [CONTENIDO TRUNCADO PARA EVITAR LÍMITES DE TOKENS] ...\n\n" + doc_content[-half_chars:]
                 
-                return source_name, analysis
+                # PROMPT OPTIMIZADO - Reglas estrictas
+                prompt = f"""Solo respondÃ© la pregunta.
+
+                NO agregues anÃ¡lisis, opiniones, recomendaciones ni conclusiones.
+
+
+                MÃ¡x 10-15 lÃ­neas.
+
+
+                Fuente obligatoria.
+
+
+                Formato: Respuesta â†’ Lista / dato â†’ Fuente.
+
+
+                Nada de emojis, marketing o resÃºmenes largos.
+
+
+                PREGUNTA DEL USUARIO:
+
+                {message}
+
+
+                CONTENIDO DEL DOCUMENTO:
+
+                {doc_content}
+
+
+                INSTRUCCIONES:
+
+                - Responde SOLO la pregunta directamente
+
+                - MÃ¡ximo 10-15 lÃ­neas
+
+                - Formato: Respuesta â†’ Lista/dato â†’ Fuente: [nombre del documento]
+
+                - NO agregues anÃ¡lisis, opiniones, recomendaciones ni conclusiones
+
+                - NO uses emojis
+
+                - NO hagas marketing
+
+                - NO escribas resÃºmenes largos
+
+                - Si no hay informaciÃ³n, di "No hay informaciÃ³n en el documento"
+
+
+                """
+                
+                # STREAMING EN TIEMPO REAL - Usar astream para respuesta progresiva (como ChatGPT)
+                from langchain_core.messages import HumanMessage
+                analysis = ""
+                chunk_count = 0
+                
+                # Stream tokens en tiempo real usando asyncio.run en el thread
+                async def stream_analysis():
+                    nonlocal analysis, chunk_count
+                    async for chunk in parallel_llm.astream([HumanMessage(content=prompt)], max_tokens=4000):
+                        if hasattr(chunk, 'content'):
+                            token = chunk.content
+                        else:
+                            token = str(chunk)
+                        analysis += token
+                        chunk_count += 1
+                        
+                        # Publicar progreso cada 10 tokens para streaming en tiempo real
+                        if chunk_count % 10 == 0:
+                            # Publicar al Event Bus interno
+                            try:
+                                self.event_bus.publish('document_analysis_streaming', {
+                                    'session_id': session_id,
+                                    'document': Path(source_name).name,
+                                    'current_text': analysis[-300:],  # Últimos 300 caracteres
+                                    'chunk_count': chunk_count
+                                })
+                                
+                                # Si Confluent está habilitado, publicar también allí para mejor performance
+                                if self.confluent_enabled and self.confluent_producer and CONFLUENT_STREAMING_AVAILABLE:
+                                    try:
+                                        event = StreamingEvent(
+                                            event_id=f"{session_id}_{Path(source_name).name}_{chunk_count}",
+                                            event_type=EventType.STREAMING_DATA,
+                                            timestamp=datetime.now(),
+                                            data={
+                                                'session_id': session_id,
+                                                'document': Path(source_name).name,
+                                                'current_text': analysis[-300:],
+                                                'chunk_count': chunk_count,
+                                                'type': 'document_analysis_streaming'
+                                            },
+                                            source="rules_mode",
+                                            metadata={'mode': 'rules_mode'}
+                                        )
+                                        self.confluent_producer.produce_event(
+                                            topic="docchat_streaming_events",
+                                            event=event
+                                        )
+                                    except Exception as pub_error:
+                                        print(f"⚠️ [RULES Mode] Error publicando a Confluent: {pub_error}")
+                            except Exception as pub_error:
+                                print(f"⚠️ [RULES Mode] Error publicando evento de streaming: {pub_error}")
+                
+                # Ejecutar streaming en el thread (sin nest_asyncio - más simple)
+                try:
+                    # Crear nuevo event loop para este thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(stream_analysis())
+                    finally:
+                        loop.close()
+                except Exception as stream_error:
+                    # Fallback a invoke si streaming falla (más robusto)
+                    error_str = str(stream_error).lower()
+                    is_overloaded = "529" in error_str or "overloaded" in error_str
+                    
+                    if is_overloaded:
+                        print(f"⚠️ [RULES Mode] API de Anthropic sobrecargada (529), reintentando con backoff exponencial...")
+                        # Retry con backoff exponencial para errores 529
+                        max_retries = 5
+                        retry_delay = 5  # Empezar con 5 segundos
+                        analysis = None
+                        
+                        for retry in range(max_retries):
+                            try:
+                                if retry > 0:
+                                    wait_time = retry_delay * (2 ** (retry - 1))  # 5s, 10s, 20s, 40s, 80s
+                                    print(f"⏳ [RULES Mode] Reintentando en {wait_time}s (intento {retry + 1}/{max_retries})...")
+                                    time.sleep(wait_time)
+                                
+                                response = parallel_llm.invoke(prompt, max_tokens=4000)
+                                analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                                print(f"✅ [RULES Mode] Análisis completado después de {retry + 1} intentos")
+                                break
+                            except Exception as retry_error:
+                                retry_error_str = str(retry_error).lower()
+                                if "529" in retry_error_str or "overloaded" in retry_error_str:
+                                    if retry == max_retries - 1:
+                                        analysis = f"⚠️ **API de Anthropic sobrecargada**: La API de Claude está temporalmente sobrecargada. Por favor, intenta de nuevo en unos minutos. Error: {str(retry_error)[:150]}"
+                                        print(f"❌ [RULES Mode] API sobrecargada después de {max_retries} intentos")
+                                else:
+                                    analysis = f"❌ Error analizando documento: {str(retry_error)[:200]}"
+                                    break
+                        
+                        if not analysis:
+                            analysis = f"⚠️ **API de Anthropic sobrecargada**: La API de Claude está temporalmente sobrecargada. Por favor, intenta de nuevo en unos minutos."
+                    else:
+                        print(f"⚠️ [RULES Mode] Streaming falló para {source_name}, usando invoke: {stream_error}")
+                        try:
+                            response = parallel_llm.invoke(prompt, max_tokens=4000)
+                            analysis = response.content.strip() if hasattr(response, 'content') else str(response).strip()
+                        except Exception as invoke_error:
+                            error_str_invoke = str(invoke_error).lower()
+                            if "529" in error_str_invoke or "overloaded" in error_str_invoke:
+                                analysis = f"⚠️ **API de Anthropic sobrecargada**: La API de Claude está temporalmente sobrecargada. Por favor, intenta de nuevo en unos minutos. Error: {str(invoke_error)[:150]}"
+                            else:
+                                print(f"❌ [RULES Mode] Error con invoke también: {invoke_error}")
+                                analysis = f"❌ Error analizando documento: {str(stream_error)[:200]}"
+                
+                # Asegurar que analysis nunca sea None
+                if not analysis:
+                    analysis = f"⚠️ **Error desconocido**: No se pudo analizar el documento. Por favor, intenta de nuevo."
+                
+                return source_name, analysis.strip() if isinstance(analysis, str) else str(analysis).strip()
             except Exception as e:
                 return source_name, f"❌ Error analizando documento: {str(e)[:200]}"
         
-        # Ejecutar análisis en paralelo
-        print(f"🔄 [Alien Mode] Procesando {len(docs_by_source)} documentos en paralelo...")
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(analyze_single_document, source_name, file_docs): source_name
-                for source_name, file_docs in docs_by_source.items()
-            }
-            
-            for future in as_completed(futures):
-                source_name = futures[future]
-                try:
-                    doc_name, analysis = future.result()
-                    individual_analyses[doc_name] = analysis
-                    print(f"✅ [Alien Mode] Análisis completado para: {Path(doc_name).name}")
-                except Exception as e:
-                    print(f"❌ [Alien Mode] Error procesando {source_name}: {e}")
-                    individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
+        # Ejecutar análisis en paralelo con RATE LIMITING por lotes
+        # Procesar documentos en lotes para evitar exceder límites de rate limit de OpenAI
+        docs_items = list(docs_by_source.items())
+        batch_size = max_workers  # Procesar en lotes del tamaño de max_workers
         
-        # OPCIÓN A: Mostrar todos los análisis individuales
-        individual_analyses_text = "## 📄 Análisis Individuales por Documento\n\n"
+        for batch_start in range(0, len(docs_items), batch_size):
+            batch = docs_items[batch_start:batch_start + batch_size]
+            batch_num = (batch_start // batch_size) + 1
+            total_batches = (len(docs_items) + batch_size - 1) // batch_size
+            
+            print(f"📦 [RULES Mode] Procesando lote {batch_num}/{total_batches} ({len(batch)} documentos)...")
+            
+            with ThreadPoolExecutor(max_workers=min(max_workers, len(batch))) as executor:
+                futures = {
+                    executor.submit(analyze_single_document, source_name, file_docs): source_name
+                    for source_name, file_docs in batch
+                }
+            
+                for future in as_completed(futures):
+                    source_name = futures[future]
+                    try:
+                        doc_name, analysis = future.result()
+                        individual_analyses[doc_name] = analysis
+                        print(f"✅ [RULES Mode] Análisis completado para: {Path(doc_name).name}")
+                    except Exception as e:
+                        print(f"❌ [RULES Mode] Error procesando {source_name}: {e}")
+                        individual_analyses[source_name] = f"❌ Error: {str(e)[:200]}"
+        
+            # RATE LIMITING: Esperar entre lotes para evitar exceder límites de tokens por minuto
+            # OpenAI tiene límite de 30,000 TPM, así que esperamos un poco entre lotes
+            if batch_start + batch_size < len(docs_items):  # No esperar después del último lote
+                wait_time = 2.0  # Esperar 2 segundos entre lotes
+                print(f"⏳ [RULES Mode] Esperando {wait_time}s antes del siguiente lote (rate limiting)...")
+                time.sleep(wait_time)
+        
+        # Mostrar todos los análisis individuales - SIEMPRE mostrar todas las respuestas
+        # Si envías 500 PDFs, recibirás 500 respuestas (1 análisis por PDF)
+        individual_analyses_text = f"## 📄 Análisis Individuales por Documento ({len(individual_analyses)} documentos analizados)\n\n"
         for doc_name, analysis in individual_analyses.items():
             clean_name = Path(doc_name).name
             individual_analyses_text += f"### 📄 {clean_name}\n\n"
             individual_analyses_text += f"{analysis}\n\n"
             individual_analyses_text += "---\n\n"
         
-        # OPCIÓN B: Combinar todos los análisis en una respuesta final
+        # OPCIÓN B: Combinar todos los análisis en una respuesta final (opcional)
         combined_context = "\n\n".join([
             f"=== DOCUMENTO: {Path(doc_name).name} ===\n{analysis}"
             for doc_name, analysis in individual_analyses.items()
         ])
         
         # Generar respuesta combinada que RESPONDE DIRECTAMENTE al prompt del usuario
-        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario.
+        # PROMPT OPTIMIZADO - Reglas estrictas
+        prompt = f"""Solo respondÃ© la pregunta.
 
-TU TAREA PRINCIPAL: Combinar todos los análisis individuales para responder DIRECTAMENTE la pregunta del usuario de manera completa y estratégica.
+NO agregues anÃ¡lisis, opiniones, recomendaciones ni conclusiones.
 
-PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
+MÃ¡x 10-15 lÃ­neas.
+
+Fuente obligatoria.
+
+Formato: Respuesta â†’ Lista / dato â†’ Fuente.
+
+Nada de emojis, marketing o resÃºmenes largos.
+
+PREGUNTA DEL USUARIO:
 {message}
 
-ANÁLISIS INDIVIDUALES DE CADA DOCUMENTO (cada uno ya respondió la pregunta del usuario):
+CONTENIDO DE LOS DOCUMENTOS:
 {combined_context}
 
-INSTRUCCIONES PARA RESPUESTA FINAL COMBINADA (800-1200 palabras):
+        INSTRUCCIONES:
+        - Responde SOLO la pregunta directamente
+        - MÃ¡ximo 10-15 lÃ­neas
+        - Formato: Respuesta â†’ Lista/dato â†’ Fuente: [nombre del documento]
+        - NO agregues anÃ¡lisis, opiniones, recomendaciones ni conclusiones
+        - NO uses emojis
+        - NO hagas marketing
+        - NO escribas resÃºmenes largos
+        - Si no hay informaciÃ³n, di "No hay informaciÃ³n en el documento"
 
-1. RESPUESTA DIRECTA AL PROMPT DEL USUARIO:
-   - Tu objetivo es responder: "{message}"
-   - Combina información de todos los análisis individuales para dar una respuesta COMPLETA
-   - Si el usuario pregunta "información más valiosa de cada PDF" → sintetiza la información más valiosa de TODOS los PDFs
-   - Si el usuario pregunta "qué me recomendarías hacer" → proporciona recomendaciones basadas en TODOS los documentos
-   - Si el usuario pregunta "cuál es el mejor documento" → compara y evalúa todos los documentos
-   - ADÁPTATE al tipo de pregunta - no uses un formato genérico
-
-2. SÍNTESIS ESTRATÉGICA:
-   - Combina los análisis individuales en una respuesta coherente
-   - Identifica patrones comunes, contradicciones, o tensiones entre documentos
-   - Proporciona una visión holística que responda completamente la pregunta
-   - Compara y contrasta información de diferentes documentos cuando sea relevante
-
-3. ESTRUCTURA ADAPTATIVA (según el tipo de pregunta):
-   
-   Si pregunta por "información valiosa" o "recomendaciones":
-   - **Respuesta Directa** (2-3 párrafos): Responde la pregunta combinando información de todos los documentos
-   - **Información Clave por Documento** (resumen de lo más valioso de cada uno)
-   - **Recomendaciones Finales** (basadas en toda la información combinada)
-   - **Documentos Más Relevantes** (cuáles aportan más valor y por qué)
-   
-   Si pregunta por "mejor documento" o "comparación":
-   - **Evaluación Comparativa** (compara todos los documentos en relación a la pregunta)
-   - **Documento(s) Recomendado(s)** (cuál es el mejor y por qué)
-   - **Análisis de Fortalezas y Debilidades** (de cada documento relevante)
-   - **Recomendación Final** (qué documento usar y por qué)
-   
-   Si pregunta por "análisis" o "insights":
-   - **Análisis Holístico** (insights que emergen de ver todos los documentos juntos)
-   - **Patrones y Tendencias** (qué patrones se repiten o contradicen)
-   - **Insights Estratégicos** (hallazgos que ningún documento individual puede dar)
-   - **Recomendaciones Basadas en el Análisis Completo**
-
-4. PROFESIONALISMO ENTERPRISE:
-   - Lenguaje claro y directo (nivel C-Suite)
-   - Enfoque en responder la pregunta específica del usuario
-   - Estructura clara y escaneable
-   - Información accionable y específica
-
-5. LONGITUD Y EFECTIVIDAD:
-   - 800-1200 palabras (completo pero no abrumador)
-   - Prioriza responder la pregunta sobre volumen de texto
-   - Cada sección debe aportar valor único para responder la pregunta
-   - Balance entre completitud y concisión
-
-IMPORTANTE:
-- RESPONDE DIRECTAMENTE la pregunta del usuario: "{message}"
-- NO uses un formato genérico - ADÁPTATE al tipo de pregunta
-- SÍ combina información de todos los análisis individuales
-- SÍ proporciona una conclusión o recomendación final que responda la pregunta
-- SÉ ESPECÍFICO: usa información concreta de los documentos, no generalidades
-
-RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 palabras):"""
+        RESPUESTA:"""
+        
+        # STREAMING EN TIEMPO REAL - YIELD actualizaciones progresivas para la UI
+        # Primero mostrar análisis individuales, luego síntesis con streaming
+        from langchain_core.messages import HumanMessage
+        
+        # 1. Mostrar análisis individuales completados
+        # Asegurar que history no sea None
+        if history is None:
+            history = []
+        
+        if individual_analyses:
+            individual_analyses_text_temp = f"## 📄 Análisis Individuales por Documento ({len(individual_analyses)} documentos analizados)\n\n"
+            for doc_name, analysis in individual_analyses.items():
+                clean_name = Path(doc_name).name
+                # Asegurar que analysis no sea None
+                if analysis is None:
+                    analysis = "⚠️ No se pudo analizar este documento."
+                individual_analyses_text_temp += f"### 📄 {clean_name}\n\n"
+                individual_analyses_text_temp += f"{analysis}\n\n"
+                individual_analyses_text_temp += "---\n\n"
+            
+            # Yield análisis individuales primero
+            temp_formatted = "## 📄 Análisis Individuales Completados\n\n" + individual_analyses_text_temp
+            temp_history = history + [(message, temp_formatted)]
+            yield temp_history, None, {"stage": "individual_analyses", "documents_analyzed": len(individual_analyses)}
+        
+        # 2. STREAMING: Generar síntesis final token por token en tiempo real (como ChatGPT)
+        print("🚀 [RULES Mode] Generando respuesta final con streaming en tiempo real (Confluent optimizado)...")
+        combined_answer = ""
+        chunk_count = 0
+        
+        # Construir respuesta base con análisis individuales
+        individual_analyses_text = f"## 📄 Análisis Individuales por Documento ({len(individual_analyses)} documentos analizados)\n\n"
+        for doc_name, analysis in individual_analyses.items():
+            clean_name = Path(doc_name).name
+            individual_analyses_text += f"### 📄 {clean_name}\n\n"
+            individual_analyses_text += f"{analysis}\n\n"
+            individual_analyses_text += "---\n\n"
+        
+        # STREAMING EN TIEMPO REAL: Usar threading para streaming async que funciona con Gradio
+        # Similar a Event Bus Mode pero adaptado para RULES
+        import threading
+        import queue as thread_queue
+        
+        token_queue = thread_queue.Queue()
+        streaming_error = [None]  # Usar lista para poder modificar desde thread
+        
+        def run_async_streaming():
+            """Ejecuta streaming async en thread separado"""
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                async def collect_stream():
+                    async for chunk in parallel_llm.astream([HumanMessage(content=prompt)]):
+                        if hasattr(chunk, 'content'):
+                            token = chunk.content
+                        else:
+                            token = str(chunk)
+                        token_queue.put(('token', token))
+                    token_queue.put(('done', None))
+                
+                new_loop.run_until_complete(collect_stream())
+            except Exception as e:
+                token_queue.put(('error', str(e)))
+                streaming_error[0] = e
+            finally:
+                new_loop.close()
+        
+        # Iniciar streaming en thread separado
+        stream_thread = threading.Thread(target=run_async_streaming, daemon=True)
+        stream_thread.start()
+        
+        # REAL-TIME CONTEXT ENGINE: Emitir actualizaciones INMEDIATAS token por token
+        # Similar al Real-Time Context Engine de Confluent - streaming ultra fluido
+        # Emite cada token inmediatamente sin esperas para máxima fluidez
+        last_yield_time = time.time()
+        max_wait_time = 0.02  # Máximo 20ms entre yields para ultra fluidez (como ChatGPT)
         
         try:
-            synthesis_response = parallel_llm.invoke(synthesis_prompt)
-            combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
+            # Emitir mensaje inicial de "generando..."
+            initial_message = "## 📊 Resumen Ejecutivo Combinado\n\n🔄 Generando respuesta en tiempo real...\n\n---\n\n" + individual_analyses_text
+            temp_history = history + [(message, initial_message)]
+            yield temp_history, None, {
+                "stage": "synthesis_streaming",
+                "chunk_count": 0,
+                "documents_analyzed": len(individual_analyses)
+            }
+            
+            # Leer tokens y emitir actualizaciones INMEDIATAS (cada token)
+            while stream_thread.is_alive() or not token_queue.empty():
+                try:
+                    # REAL-TIME CONTEXT ENGINE: Obtener token con timeout ultra corto
+                    # Emitir cada token inmediatamente sin esperas para máxima fluidez
+                    try:
+                        item_type, item_data = token_queue.get(timeout=0.005)  # 5ms para máxima fluidez
+                    except thread_queue.Empty:
+                        # No hay tokens aún, pero emitir actualización parcial si hay algo
+                        if combined_answer:
+                            elapsed = time.time() - last_yield_time
+                            if elapsed >= 0.02:  # Emitir cada 20ms mínimo para mantener fluidez
+                                formatted_answer_partial = "## 📊 Resumen Ejecutivo Combinado\n\n"
+                                formatted_answer_partial += combined_answer + "▊"  # Cursor parpadeante
+                                formatted_answer_partial += "\n\n---\n\n"
+                                formatted_answer_partial += individual_analyses_text
+                                
+                                temp_history = history + [(message, formatted_answer_partial)]
+                                yield temp_history, None, {
+                                    "stage": "synthesis_streaming",
+                                    "chunk_count": chunk_count,
+                                    "documents_analyzed": len(individual_analyses)
+                                }
+                                last_yield_time = time.time()
+                        continue
+                    
+                    if item_type == 'token':
+                        combined_answer += item_data
+                        chunk_count += 1
+                        
+                        # REAL-TIME CONTEXT ENGINE: Materializar contexto en cache en tiempo real
+                        # Similar al Real-Time Context Engine de Confluent
+                        context_id = f"{session_id}_synthesis"
+                        self.real_time_context_engine.update_context_streaming(
+                            context_id=context_id,
+                            token=item_data,
+                            session_id=session_id
+                        )
+                        
+                        # YIELD INMEDIATO - CADA TOKEN para streaming ultra fluido (como ChatGPT)
+                        # REAL-TIME CONTEXT ENGINE: Emitir inmediatamente sin esperas
+                        # Esto es crítico para que aparezca en tiempo real en la UI
+                        formatted_answer_partial = "## 📊 Resumen Ejecutivo Combinado\n\n"
+                        formatted_answer_partial += combined_answer + "▊"  # Cursor parpadeante
+                        formatted_answer_partial += "\n\n---\n\n"
+                        formatted_answer_partial += individual_analyses_text
+                        
+                        temp_history = history + [(message, formatted_answer_partial)]
+                        # YIELD INMEDIATO - sin condiciones, cada token se emite inmediatamente
+                        yield temp_history, None, {
+                            "stage": "synthesis_streaming",
+                            "chunk_count": chunk_count,
+                            "documents_analyzed": len(individual_analyses),
+                            "real_time": True,  # Marcar como streaming en tiempo real
+                            "context_engine": True  # Marcar que usa Real-Time Context Engine
+                        }
+                        last_yield_time = time.time()
+                        
+                        # Publicar al Event Bus y Confluent (cada 5 tokens para no saturar)
+                        if chunk_count % 5 == 0:
+                            try:
+                                self.event_bus.publish('streaming_token', {
+                                    'session_id': session_id,
+                                    'current_text': combined_answer,
+                                    'chunk_count': chunk_count,
+                                    'type': 'synthesis_final'
+                                })
+                                
+                                # REAL-TIME CONTEXT ENGINE: Publicar a Confluent para streaming optimizado
+                                if self.confluent_enabled and self.confluent_producer and CONFLUENT_STREAMING_AVAILABLE:
+                                    try:
+                                        event = StreamingEvent(
+                                            event_id=f"{session_id}_synthesis_{chunk_count}",
+                                            event_type=EventType.STREAMING_DATA,
+                                            timestamp=datetime.now(),
+                                            data={
+                                                'session_id': session_id,
+                                                'current_text': combined_answer,
+                                                'chunk_count': chunk_count,
+                                                'type': 'synthesis_final',
+                                                'real_time_context': True  # Marcar como contexto en tiempo real
+                                            },
+                                            source="rules_mode",
+                                            metadata={
+                                                'mode': 'rules_mode', 
+                                                'stage': 'synthesis',
+                                                'real_time_engine': True
+                                            }
+                                        )
+                                        self.confluent_producer.produce_event(
+                                            topic="docchat_streaming_events",
+                                            event=event
+                                        )
+                                    except Exception as pub_error:
+                                        print(f"⚠️ [RULES Mode] Error publicando síntesis a Confluent: {pub_error}")
+                            except Exception as pub_error:
+                                print(f"⚠️ [RULES Mode] Error publicando evento de streaming: {pub_error}")
+                    elif item_type == 'done':
+                        # Emitir respuesta final sin cursor
+                        formatted_answer_final = "## 📊 Resumen Ejecutivo Combinado\n\n"
+                        formatted_answer_final += combined_answer
+                        formatted_answer_final += "\n\n---\n\n"
+                        formatted_answer_final += individual_analyses_text
+                        
+                        temp_history = history + [(message, formatted_answer_final)]
+                        yield temp_history, None, {
+                            "stage": "synthesis_complete",
+                            "chunk_count": chunk_count,
+                            "documents_analyzed": len(individual_analyses)
+                        }
+                        break
+                    elif item_type == 'error':
+                        raise Exception(f"Error en streaming: {item_data}")
+                except Exception as e:
+                    print(f"⚠️ [RULES Mode] Error procesando tokens: {e}")
+                    break
+            
+            # Esperar a que termine el thread
+            stream_thread.join(timeout=10.0)
+            
+            # Si hubo error, lanzarlo
+            if streaming_error[0]:
+                raise streaming_error[0]
+                        
         except Exception as e:
-            combined_answer = f"❌ Error generando respuesta combinada: {str(e)[:200]}"
+            # Fallback a invoke si streaming falla
+            error_str = str(e).lower()
+            is_overloaded = "529" in error_str or "overloaded" in error_str
+            
+            if is_overloaded:
+                print(f"⚠️ [RULES Mode] API de Anthropic sobrecargada (529) en síntesis, reintentando con backoff exponencial...")
+                # Retry con backoff exponencial para errores 529
+                max_retries = 5
+                retry_delay = 5  # Empezar con 5 segundos
+                combined_answer = None
+                
+                for retry in range(max_retries):
+                    try:
+                        if retry > 0:
+                            wait_time = retry_delay * (2 ** (retry - 1))  # 5s, 10s, 20s, 40s, 80s
+                            print(f"⏳ [RULES Mode] Reintentando síntesis en {wait_time}s (intento {retry + 1}/{max_retries})...")
+                            time.sleep(wait_time)
+                        
+                        synthesis_response = parallel_llm.invoke(prompt)
+                        combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
+                        print(f"✅ [RULES Mode] Síntesis completada después de {retry + 1} intentos")
+                        break
+                    except Exception as retry_error:
+                        retry_error_str = str(retry_error).lower()
+                        if "529" in retry_error_str or "overloaded" in retry_error_str:
+                            if retry == max_retries - 1:
+                                combined_answer = f"⚠️ **API de Anthropic sobrecargada**: La API de Claude está temporalmente sobrecargada. Por favor, intenta de nuevo en unos minutos.\n\n**Análisis individuales disponibles arriba.**\n\nError: {str(retry_error)[:150]}"
+                                print(f"❌ [RULES Mode] API sobrecargada después de {max_retries} intentos en síntesis")
+                        else:
+                            combined_answer = f"❌ Error generando respuesta combinada: {str(retry_error)[:200]}"
+                            break
+                
+                if not combined_answer:
+                    combined_answer = f"⚠️ **API de Anthropic sobrecargada**: La API de Claude está temporalmente sobrecargada. Por favor, intenta de nuevo en unos minutos.\n\n**Análisis individuales disponibles arriba.**"
+            else:
+                print(f"⚠️ [RULES Mode] Streaming de síntesis falló, usando invoke: {e}")
+                try:
+                    synthesis_response = parallel_llm.invoke(prompt)
+                    combined_answer = synthesis_response.content.strip() if hasattr(synthesis_response, 'content') else str(synthesis_response).strip()
+                except Exception as invoke_error:
+                    error_str_invoke = str(invoke_error).lower()
+                    if "529" in error_str_invoke or "overloaded" in error_str_invoke:
+                        combined_answer = f"⚠️ **API de Anthropic sobrecargada**: La API de Claude está temporalmente sobrecargada. Por favor, intenta de nuevo en unos minutos.\n\n**Análisis individuales disponibles arriba.**\n\nError: {str(invoke_error)[:150]}"
+                    else:
+                        combined_answer = f"❌ Error generando respuesta combinada: {str(invoke_error)[:200]}"
         
         # Combinar ambas opciones en la respuesta final
-        formatted_answer = combined_answer
+        # PRIMERO mostrar resumen combinado, LUEGO todos los análisis individuales
+        formatted_answer = "## 📊 Resumen Ejecutivo Combinado\n\n"
+        formatted_answer += combined_answer
         formatted_answer += "\n\n---\n\n"
         formatted_answer += individual_analyses_text
         
         # Agregar información del proceso
         formatted_answer += "\n\n---\n\n"
-        formatted_answer += "## 🔬 Proceso Multi-Agente DocChat (Modo Paralelo)\n\n"
-        formatted_answer += f"✅ **Documentos analizados:** {len(individual_analyses)}\n"
-        formatted_answer += "✅ **Procesamiento:** Paralelo (como Enterprise API)\n"
+        formatted_answer += "## 🔬 Proceso RULES Mode - Análisis Individual por Documento\n\n"
+        formatted_answer += f"✅ **Documentos analizados:** {len(individual_analyses)} (1 análisis por documento)\n"
+        formatted_answer += "✅ **Procesamiento:** Paralelo (cada PDF analizado individualmente)\n"
         formatted_answer += "✅ **Análisis:** Individual por documento + Respuesta combinada\n"
-        formatted_answer += "✅ **Capacidad:** Respuestas largas sin límite de tokens por documento\n\n"
+        formatted_answer += f"✅ **Respuestas individuales:** {len(individual_analyses)} respuestas (1 por cada PDF)\n"
+        formatted_answer += "✅ **Precisión:** Basado estrictamente en los documentos (sin invención)\n"
+        formatted_answer += "✅ **Completitud:** Respuestas super mega ultra hyper inteligentes y completas\n"
+        formatted_answer += "✅ **Streaming:** Respuestas en tiempo real (como ChatGPT)\n\n"
         
         # Actualizar historial
         session["history"].append({
@@ -1369,7 +1729,8 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
         metadata = {
             "execution_time": execution_time,
             "documents_analyzed": len(individual_analyses),
-            "processing_mode": "parallel"
+            "processing_mode": "parallel",
+            "streaming": True
         }
         
         # Convertir historial a formato tuples para Gradio
@@ -1380,7 +1741,8 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
             else:
                 tuple_history.append(entry)
         
-        return tuple_history, None, metadata
+        # YIELD respuesta final completa
+        yield tuple_history, None, metadata
     
     def get_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene estadísticas del modo."""
@@ -1410,30 +1772,30 @@ RESPUESTA FINAL QUE RESPONDE DIRECTAMENTE LA PREGUNTA DEL USUARIO (800-1200 pala
 
 
 # Instancia global
-_alien_mode_instance: Optional[AlienMode] = None
+_rules_mode_instance: Optional[RulesMode] = None
 
 
-def get_alien_mode(
+def get_rules_mode(
     config: AppConfig,
     processor: DocumentProcessor,
     retriever_builder: RetrieverBuilder,
     context_manager: Optional[Any] = None
-) -> AlienMode:
-    """Obtiene o crea la instancia global de Alien Mode."""
-    global _alien_mode_instance
+) -> RulesMode:
+    """Obtiene o crea la instancia global de RULES Mode."""
+    global _rules_mode_instance
     
-    if _alien_mode_instance is None:
-        _alien_mode_instance = AlienMode(
+    if _rules_mode_instance is None:
+        _rules_mode_instance = RulesMode(
             config=config,
             processor=processor,
             retriever_builder=retriever_builder,
             context_manager=context_manager
         )
     
-    return _alien_mode_instance
+    return _rules_mode_instance
 
 
-def run_alien_mode(
+def run_rules_mode(
     message: str,
     history: List[Tuple[str, str]],
     files: List[Any],
@@ -1444,16 +1806,25 @@ def run_alien_mode(
     processor: Optional[DocumentProcessor] = None,
     retriever_builder: Optional[RetrieverBuilder] = None,
     context_manager: Optional[Any] = None
-) -> Tuple[List[Tuple[str, str]], Optional[str]]:
+):
     """
-    Función principal para ejecutar Alien Mode.
-    Compatible con Gradio (síncrona).
+    Función principal para ejecutar RULES Mode con STREAMING EN TIEMPO REAL.
+    Compatible con Gradio - YIELD actualizaciones progresivas (como ChatGPT).
+    
+    Yields:
+        (history, history, status, stats_output): Actualizaciones progresivas para UI
     """
     if not config or not processor or not retriever_builder:
-        return history, "❌ Configuración incompleta"
+        # Importar gradio solo cuando sea necesario
+        try:
+            import gradio as gr
+            yield history, history, "❌ Configuración incompleta", gr.Markdown(visible=False)
+        except ImportError:
+            yield history, history, "❌ Configuración incompleta", None
+        return
     
     # Obtener instancia
-    alien_mode = get_alien_mode(
+    rules_mode = get_rules_mode(
         config=config,
         processor=processor,
         retriever_builder=retriever_builder,
@@ -1462,25 +1833,129 @@ def run_alien_mode(
     
     # Procesar documentos si hay
     if files:
-        result = alien_mode.process_documents(session_id, files)
+        result = rules_mode.process_documents(session_id, files)
         if result.get("status") == "error":
-            return history, f"❌ Error procesando documentos: {result.get('error')}"
+            try:
+                import gradio as gr
+                yield history, history, f"❌ Error procesando documentos: {result.get('error')}", gr.Markdown(visible=False)
+            except ImportError:
+                yield history, history, f"❌ Error procesando documentos: {result.get('error')}", None
+            return
     
-    # Ejecutar query (async wrapper)
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        new_history, error, metadata = loop.run_until_complete(
-            alien_mode.process_query_async(
+    # REAL-TIME CONTEXT ENGINE: Ejecutar query con STREAMING INMEDIATO
+    # Usar threading para evitar bloqueos y emitir actualizaciones inmediatas
+    import threading
+    import queue as thread_queue
+    
+    update_queue = thread_queue.Queue()
+    streaming_complete = threading.Event()
+    streaming_error = [None]
+    
+    def run_async_query():
+        """Ejecuta query async en thread separado para no bloquear"""
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            async_gen = rules_mode.process_query_async(
                 session_id=session_id,
                 message=message,
                 history=history,
                 speed_mode=speed_mode,
                 provider=provider
             )
-        )
-        loop.close()
-        return new_history, error
+            
+            async def collect_updates():
+                try:
+                    async for update in async_gen:
+                        update_queue.put(('update', update))
+                    update_queue.put(('done', None))
+                except Exception as e:
+                    update_queue.put(('error', str(e)))
+                    streaming_error[0] = e
+            
+            new_loop.run_until_complete(collect_updates())
+        except Exception as e:
+            update_queue.put(('error', str(e)))
+            streaming_error[0] = e
+        finally:
+            new_loop.close()
+            streaming_complete.set()
+    
+    # Iniciar query en thread separado
+    query_thread = threading.Thread(target=run_async_query, daemon=True)
+    query_thread.start()
+    
+    # Leer actualizaciones y emitir INMEDIATAMENTE a la UI
+    try:
+        last_update_time = time.time()
+        while not streaming_complete.is_set() or not update_queue.empty():
+            try:
+                # REAL-TIME CONTEXT ENGINE: Obtener actualización con timeout ultra corto
+                # Emitir actualizaciones inmediatamente sin esperas
+                try:
+                    item_type, item_data = update_queue.get(timeout=0.005)  # 5ms timeout para máxima fluidez
+                except thread_queue.Empty:
+                    # No hay actualizaciones aún, continuar inmediatamente
+                    # No hacer sleep para máxima responsividad
+                    continue
+                
+                if item_type == 'update':
+                    # Validar que item_data sea una tupla de 3 elementos
+                    if not isinstance(item_data, (tuple, list)) or len(item_data) != 3:
+                        print(f"⚠️ [RULES Mode] Formato de item_data inválido: {type(item_data)}, valor: {item_data}")
+                        continue
+                    
+                    new_history, error, metadata = item_data
+                    
+                    # Asegurar que new_history no sea None
+                    if new_history is None:
+                        new_history = history
+                    
+                    # Asegurar que metadata sea un dict
+                    if metadata is None:
+                        metadata = {}
+                    
+                    # Construir status
+                    status = f"✅ {len(new_history)} mensajes en la conversación"
+                    if error:
+                        status = error
+                    elif metadata.get("stage") == "individual_analyses":
+                        status = f"📄 Analizando documentos... ({metadata.get('documents_analyzed', 0)} completados)"
+                    elif metadata.get("stage") == "synthesis_streaming":
+                        status = f"🚀 Generando síntesis en tiempo real... ({metadata.get('chunk_count', 0)} tokens)"
+                    elif metadata.get("stage") == "synthesis_complete":
+                        status = f"✅ Síntesis completada ({metadata.get('chunk_count', 0)} tokens)"
+                    
+                    # YIELD INMEDIATO para streaming ultra fluido (como ChatGPT)
+                    try:
+                        import gradio as gr
+                        yield new_history, new_history, status, gr.Markdown(visible=False)
+                    except ImportError:
+                        yield new_history, new_history, status, None
+                    
+                    last_update_time = time.time()
+                    
+                elif item_type == 'done':
+                    break
+                elif item_type == 'error':
+                    raise Exception(f"Error en query: {item_data}")
+                    
+            except Exception as e:
+                print(f"⚠️ [RULES Mode] Error procesando actualizaciones: {e}")
+                break
+        
+        # Esperar a que termine el thread
+        query_thread.join(timeout=30.0)
+        
+        # Si hubo error, lanzarlo
+        if streaming_error[0]:
+            raise streaming_error[0]
+            
     except Exception as e:
-        return history, f"❌ Error: {str(e)}"
+        error_msg = f"❌ Error: {str(e)}"
+        try:
+            import gradio as gr
+            yield history, history, error_msg, gr.Markdown(visible=False)
+        except ImportError:
+            yield history, history, error_msg, None
 

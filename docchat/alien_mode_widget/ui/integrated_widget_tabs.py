@@ -590,6 +590,151 @@ El servidor está corriendo en un thread en background. Para detenerlo completam
                         **💬 Si el problema persiste:** Revisa los logs detallados en la terminal donde está corriendo el servidor.
                         """)
         
+        
+            # TAB 5: Links DinÃ¡micos
+            with gr.Tab("ðŸ”— Links DinÃ¡micos"):
+                gr.Markdown("""
+                # ðŸ”— Links DinÃ¡micos - ConfiguraciÃ³n de Enlaces para el Widget
+                
+                Configura links personalizados que el agente usarÃ¡ automÃ¡ticamente en sus respuestas.
+                Cada link tiene un nombre visible, URL y etiqueta de acciÃ³n interna.
+                """)
+                
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        gr.Markdown("### ðŸ“ Configurar Links")
+                        
+                        link_name = gr.Textbox(
+                            label="Nombre Visible",
+                            placeholder="Ej: Ver catÃ¡logo, Contactar especialista, Solicitar presupuesto",
+                            info="Nombre que verÃ¡ el usuario final"
+                        )
+                        
+                        link_url = gr.Textbox(
+                            label="URL",
+                            placeholder="https://tu-sitio.com/accion",
+                            info="URL completa del link"
+                        )
+                        
+                        link_action_tag = gr.Textbox(
+                            label="Etiqueta de AcciÃ³n",
+                            placeholder="Ej: action_show_info, action_contact_support, action_book_meeting",
+                            info="Etiqueta interna que el agente usarÃ¡ para identificar cuÃ¡ndo usar este link"
+                        )
+                        
+                        with gr.Row():
+                            add_link_btn = gr.Button("âž• Agregar Link", variant="primary")
+                            clear_links_btn = gr.Button("ðŸ—‘ï¸ Limpiar Todos", variant="stop")
+                        
+                        links_status = gr.Markdown("**Estado:** Listo para agregar links")
+                    
+                    with gr.Column(scale=3):
+                        gr.Markdown("### ðŸ“‹ Links Configurados")
+                        
+                        links_display = gr.JSON(
+                            label="Links",
+                            value={}
+                        )
+                        
+                        gr.Markdown("""
+                        ### ðŸ’¡ Ejemplos de Etiquetas de AcciÃ³n:
+                        
+                        - `action_show_info` - Mostrar mÃ¡s informaciÃ³n
+                        - `action_contact_support` - Contactar soporte/especialista
+                        - `action_book_meeting` - Reservar cita/clase
+                        - `action_buy_product` - Comprar producto
+                        - `action_request_quote` - Solicitar presupuesto
+                        - `action_view_catalog` - Ver catÃ¡logo completo
+                        - `action_compare_options` - Comparar opciones
+                        
+                        El agente usarÃ¡ automÃ¡ticamente estos links segÃºn el contexto de la conversaciÃ³n.
+                        """)
+                
+                # Estado para almacenar links (en memoria, se puede persistir despuÃ©s)
+                links_storage = gr.State(value={})
+                
+                def add_link(name, url, action_tag, current_links):
+                    """Agrega un nuevo link a la configuraciÃ³n."""
+                    if not name or not url or not action_tag:
+                        return current_links, "âš ï¸ Por favor completa todos los campos", current_links
+                    
+                    if current_links is None:
+                        current_links = {}
+                    
+                    # Agregar link
+                    link_id = str(uuid.uuid4())[:8]
+                    current_links[link_id] = {
+                        "name": name,
+                        "url": url,
+                        "action_tag": action_tag
+                    }
+                    
+                    # Guardar en archivo de configuraciÃ³n
+                    import json
+                    from pathlib import Path
+                    links_file = Path(config.memory_dir) / "widget_links.json"
+                    links_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(links_file, 'w', encoding='utf-8') as f:
+                        json.dump(current_links, f, indent=2, ensure_ascii=False)
+                    
+                    return current_links, f"âœ… Link agregado: {name}", current_links
+                
+                def clear_all_links(current_links):
+                    """Limpia todos los links."""
+                    import json
+                    from pathlib import Path
+                    links_file = Path(config.memory_dir) / "widget_links.json"
+                    if links_file.exists():
+                        links_file.unlink()
+                    return {}, "ðŸ—‘ï¸ Todos los links eliminados", {}
+                
+                def load_links():
+                    """Carga links desde archivo."""
+                    import json
+                    from pathlib import Path
+                    links_file = Path(config.memory_dir) / "widget_links.json"
+                    if links_file.exists():
+                        with open(links_file, 'r', encoding='utf-8') as f:
+                            return json.load(f)
+                    return {}
+                
+                # Cargar links al iniciar
+                initial_links = load_links()
+                links_storage.value = initial_links
+                links_display.value = initial_links
+                
+                add_link_btn.click(
+                    add_link,
+                    inputs=[link_name, link_url, link_action_tag, links_storage],
+                    outputs=[links_storage, links_status, links_display]
+                ).then(
+                    lambda: ("", "", ""),
+                    outputs=[link_name, link_url, link_action_tag]
+                )
+                
+                clear_links_btn.click(
+                    clear_all_links,
+                    inputs=[links_storage],
+                    outputs=[links_storage, links_status, links_display]
+                )
+                
+                gr.Markdown("""
+                ---
+                
+                ### ðŸ“– CÃ³mo Funciona:
+                
+                1. **Agrega Links**: Completa los campos y haz click en "Agregar Link"
+                2. **Etiquetas de AcciÃ³n**: El agente usa estas etiquetas para decidir quÃ© link mostrar
+                3. **AutomÃ¡tico**: El agente inserta los links automÃ¡ticamente en sus respuestas segÃºn el contexto
+                4. **Personalizable**: Cada cliente puede tener sus propios links segÃºn su negocio
+                
+                **Ejemplo:**
+                - Usuario pregunta: "Â¿CÃ³mo puedo contactar a un especialista?"
+                - Agente genera respuesta con etiqueta `action_contact_support`
+                - Sistema inserta automÃ¡ticamente el link configurado para esa acciÃ³n
+                """)
+
+
         return widget_tabs
     
     return _create_tabs

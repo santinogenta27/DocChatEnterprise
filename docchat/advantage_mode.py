@@ -144,6 +144,9 @@ class AdvantageMode:
         # MCP Manager potenciado
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
+        
+        # Sesiones activas
+        self.sessions: Dict[str, Dict[str, Any]] = {}
     
     def _get_llm_for_provider(self, provider: str = "openai"):
         """Crea un LLM dinÃ¡mico segÃºn el provider especificado."""

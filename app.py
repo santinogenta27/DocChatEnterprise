@@ -20055,6 +20055,319 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 gr.Markdown(f"```\n{traceback.format_exc()}\n```")
 
         # Tab 4.5.5.5.1: PDF Agent Mode - Clon de Alien Mode
+
+        with gr.Tab("ðŸ¤– AI Helper"):
+            gr.Markdown("### 👽 Alien Mode - Sistema Multi-Agente RAG de Máxima Calidad")
+            gr.Markdown("""
+            **🌟 Sistema Multi-Agente DocChat - Fact-Checked, Hallucination-Free Answers**
+            
+            **🔬 SISTEMA MULTI-AGENTE DOCCHAT (Core):**
+            - 🔍 **Relevance Checker**: Verifica si la pregunta puede responderse con los documentos (CAN_ANSWER, PARTIAL, NO_MATCH)
+            - 🔬 **Research Agent**: Genera respuestas iniciales basadas en documentos recuperados
+            - ✅ **Verification Agent**: Verifica que las respuestas estén soportadas por los documentos (anti-hallucinación)
+            - 🔄 **Self-Correction Mechanism**: Re-ejecuta research automáticamente si hay contradicciones o claims sin soporte (hasta 3 iteraciones)
+            - 🔀 **Hybrid Retriever**: Combina BM25 (búsqueda léxica/keyword) + Vector Search (búsqueda semántica) para máxima precisión
+            - 📊 **LangGraph Workflow**: Orquesta el flujo completo con verificación y auto-corrección
+            
+            **✨ CAPACIDADES AVANZADAS ADICIONALES:**
+            - 📦 **Context Folding**: Gestión eficiente de contextos masivos (500+ PDFs)
+            - 🔍 **Data Provenance**: Trazabilidad completa de cada pieza de información para compliance
+            - 🧠 **Chain of Thought**: Razonamiento paso a paso para conversaciones complejas
+            - 🛤️ **Path-dependent Reasoning**: Prueba múltiples enfoques y aprende qué funciona mejor
+            - 📈 **Test Time Training**: Mejora continua con cada conversación
+            - 👤 **Person in the Loop**: Control humano para decisiones críticas
+            - 🌳 **Reinforcement Learning & Planning**: Prueba estrategias, retrocede si es necesario, aprende qué funciona
+            - 🔌 **MCP Powered**: Conecta a sistemas externos, bases de datos, APIs; navega datos crudos sin conectores
+            
+            **💼 Perfecto para:**
+            - Empresas que suben 500+ PDFs por consulta
+            - Documentos largos con tablas, imágenes y texto denso
+            - Necesidad de respuestas verificadas sin alucinaciones
+            - Conversaciones multi-turn complejas
+            - Requisitos de compliance y auditoría
+            - Necesidad de rastrear fuentes de información
+            - Decisiones que requieren aprobación humana
+            
+            **💡 Ejemplo del Proceso Multi-Agente:**
+            1. Subes 500 PDFs de documentos legales
+            2. Preguntas: "¿Cuáles son los valores de eficiencia PUE del centro de datos en Singapur?"
+            3. **Relevance Checker** verifica que los documentos contengan información relevante
+            4. **Hybrid Retriever** busca usando BM25 (keywords) + Vector Search (semántica)
+            5. **Research Agent** genera respuesta inicial basada en documentos recuperados
+            6. **Verification Agent** verifica que la respuesta esté soportada por los documentos
+            7. Si hay contradicciones o claims sin soporte, **Self-Correction** re-ejecuta research
+            8. El sistema retorna respuesta verificada con reporte completo de verificación
+            9. **RL & Planning** aprende qué estrategias funcionan mejor para futuras consultas similares
+            10. **Data Provenance** rastrea cada fuente para compliance y auditoría
+            
+            **🎯 Ventajas sobre ChatGPT/DeepSeek:**
+            - ✅ **Sin alucinaciones**: Cada respuesta es verificada contra los documentos
+            - ✅ **Precisión en tablas**: Lee correctamente tablas complejas y datos estructurados
+            - ✅ **Múltiples documentos**: Encuentra inteligentemente el documento correcto entre muchos
+            - ✅ **Auto-corrección**: Re-ejecuta research si detecta problemas
+            - ✅ **Trazabilidad completa**: Rastrea cada pieza de información hasta su fuente
+            """)
+            
+            # Generar session_id único
+            ai_helper_session_id = gr.State(value="gradio_user")  # Usar session_id fijo para compartir con widget
+            
+            with gr.Row():
+                ai_helper_files = gr.Files(
+                    label="📂 Alien Mode Documents (PDF, DOCX, TXT, MD) - Up to 500+ documents",
+                    file_count="multiple",
+                    file_types=[".pdf", ".docx", ".txt", ".md"],
+                )
+            
+            with gr.Row():
+                ai_helper_speed_mode = gr.Radio(
+                    label="⚡ Speed Mode",
+                    choices=[
+                        ("🚀 Fast", "fast"),
+                        ("⚖️ Balanced (recommended)", "balanced"),
+                        ("🎯 Maximum Quality", "quality")
+                    ],
+                    value="balanced",
+                )
+                ai_helper_provider_toggle = gr.Radio(
+                    label="🤖 AI Engine",
+                    choices=[("Main Engine (Recommended)", "openai"), ("Alternative Engine", "claude")],
+                    value="openai",
+                    info="Switch the AI engine. Alternative Engine = Claude (higher precision)"
+                )
+            
+            # Chatbot component
+            ai_helper_bot = gr.Chatbot(
+                label="💬 Advanced Conversation",
+                height=500,
+                show_copy_button=True,
+            )
+            
+            with gr.Row():
+                ai_helper_input = gr.Textbox(
+                    label="Write your question",
+                    placeholder="Example: What important information is in these 500 documents?",
+                    lines=2,
+                    scale=4,
+                )
+                ai_helper_submit_btn = gr.Button("📤 Send", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_alien_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
+                clear_alien_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
+                ai_helper_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            ai_helper_status = gr.Markdown(label="ℹ️ Chat Status")
+            ai_helper_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
+            
+            # Event handlers
+            def ai_helper_submit(message, history, files, session_id, speed_mode, provider):
+                if not message.strip():
+                    return history, history, "⚠️ Write a question.", gr.Markdown(visible=False)
+                if not files:
+                    return history, history, "⚠️ Upload documents first.", gr.Markdown(visible=False)
+                
+                new_history, error = run_alien_mode(
+                    message=message,
+                    history=history,
+                    files=files,
+                    session_id=session_id,
+                    speed_mode=speed_mode,
+                    provider=provider,
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                status = f"✅ {len(new_history)} messages in the conversation"
+                if error:
+                    status = error
+                return new_history, new_history, status, gr.Markdown(visible=False)
+            
+            def clear_alien(history, session_id):
+                # Clear session for alien mode
+                ai_helper_mode = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(ai_helper_mode, 'sessions') and session_id in ai_helper_mode.sessions:
+                    ai_helper_mode.sessions[session_id]["history"] = []
+                    ai_helper_mode.sessions[session_id]["docs"] = []
+                    ai_helper_mode.sessions[session_id]["retriever"] = None
+                    ai_helper_mode.sessions[session_id]["processed_files"].clear()
+                return [], "✅ Chat cleared. You can upload new documents.", gr.Markdown(visible=False)
+            
+            def clear_alien_files(files, session_id):
+                ai_helper_mode = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                if hasattr(ai_helper_mode, 'sessions') and session_id in ai_helper_mode.sessions:
+                    ai_helper_mode.sessions[session_id]["processed_files"].clear()
+                    ai_helper_mode.sessions[session_id]["docs"] = []
+                    ai_helper_mode.sessions[session_id]["retriever"] = None
+                return None, "✅ Documents cleared. You can upload new ones.", gr.Markdown(visible=False)
+            
+            def show_alien_stats(session_id):
+                ai_helper_mode = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                stats = ai_helper_mode.get_statistics(session_id=session_id)
+                
+                output = "## 📊 Advanced Statistics - Alien Mode\n\n"
+                output += f"### 📦 Context Folding\n"
+                output += f"- Active branches: {stats['context_folding']['active_branches']}\n"
+                output += f"- Folded branches: {stats['context_folding']['folded_branches']}\n"
+                output += f"- Tokens saved: {stats['context_folding']['total_tokens_saved']:,}\n"
+                output += f"- Compression ratio: {stats['context_folding']['compression_ratio']*100:.1f}%\n\n"
+                
+                output += f"### 🔍 Data Provenance\n"
+                output += f"- Total records: {stats['data_provenance']['total_records']}\n"
+                output += f"- Unique sources: {stats['data_provenance']['unique_sources']}\n"
+                output += f"- Avg sources/record: {stats['data_provenance']['average_sources_per_record']:.1f}\n\n"
+                
+                output += f"### 🧠 Chain of Thought\n"
+                output += f"- Active chains: {stats['chain_of_thought']['active_chains']}\n"
+                output += f"- Completed chains: {stats['chain_of_thought']['completed_chains']}\n"
+                output += f"- Total steps: {stats['chain_of_thought']['total_steps']}\n\n"
+                
+                output += f"### 🛤️ Path-dependent Reasoning\n"
+                output += f"- Paths tested: {stats['path_reasoning']['total_paths_tested']}\n"
+                output += f"- Success rate: {stats['path_reasoning']['success_rate']:.1f}%\n"
+                output += f"- Learned approaches: {stats['path_reasoning']['learned_approaches']}\n\n"
+                
+                output += f"### 📈 Test Time Training\n"
+                output += f"- Total episodes: {stats['test_time_training']['total_episodes']}\n"
+                output += f"- Success rate: {stats['test_time_training']['success_rate']:.1f}%\n"
+                output += f"- Learned patterns: {stats['test_time_training']['learned_patterns']}\n\n"
+                
+                output += f"### 👤 Person in the Loop\n"
+                output += f"- Pending approvals: {stats['person_in_loop']['pending_approvals']}\n"
+                output += f"- Approval rate: {stats['person_in_loop']['approval_rate']:.1f}%\n"
+                output += f"- Active rules: {stats['person_in_loop']['active_rules']}\n\n"
+                
+                output += f"### 🧠 Reinforcement Learning & Planning\n"
+                output += f"- Total trees: {stats['reinforcement_planning']['total_trees']}\n"
+                output += f"- Success rate: {stats['reinforcement_planning']['success_rate']:.1f}%\n"
+                output += f"- Total explorations: {stats['reinforcement_planning']['total_explorations']}\n"
+                output += f"- Learning memory: {stats['reinforcement_planning']['learning_memory_size']} patterns\n\n"
+                
+                output += f"### 🔌 MCP Powered (Model Context Protocol)\n"
+                output += f"- Total connections: {stats['mcp_integration']['connections']}\n"
+                output += f"- Active connections: {stats['mcp_integration']['enabled_connections']}\n"
+                
+                if 'session' in stats:
+                    output += f"\n### 📋 Session\n"
+                    output += f"- Documents: {stats['session']['docs_count']}\n"
+                    output += f"- Messages: {stats['session']['history_count']}\n"
+                    output += f"- Processed files: {stats['session']['processed_files']}\n"
+                
+                return gr.Markdown(output, visible=True)
+            
+            ai_helper_submit_btn.click(
+                fn=ai_helper_submit,
+                inputs=[ai_helper_input, ai_helper_bot, ai_helper_files, ai_helper_session_id, ai_helper_speed_mode, ai_helper_provider_toggle],
+                outputs=[ai_helper_bot, ai_helper_bot, ai_helper_status, ai_helper_stats_output],
+            ).then(
+                lambda: "", None, ai_helper_input
+            )
+            
+            ai_helper_input.submit(
+                fn=ai_helper_submit,
+                inputs=[ai_helper_input, ai_helper_bot, ai_helper_files, ai_helper_session_id, ai_helper_speed_mode, ai_helper_provider_toggle],
+                outputs=[ai_helper_bot, ai_helper_bot, ai_helper_status, ai_helper_stats_output],
+            ).then(
+                lambda: "", None, ai_helper_input
+            )
+            
+
+            # Handler para procesar archivos automÃ¡ticamente cuando se suben
+            def process_alien_files(files, session_id):
+                """Procesa archivos automÃ¡ticamente cuando se suben."""
+                if not files:
+                    return "No hay archivos para procesar."
+                
+                try:
+                    ai_helper_mode = get_alien_mode(
+                        config=config,
+                        processor=processor,
+                        retriever_builder=retriever_builder,
+                        context_manager=context_manager
+                    )
+                    
+                    result = ai_helper_mode.process_documents(session_id, files)
+                    
+                    if result.get("status") == "error":
+                        return f"Error procesando documentos: {result.get('error')}"
+                    elif result.get("status") == "no_new_files":
+                        return f"Documentos ya procesados. Total: {result.get('total_docs')} chunks"
+                    else:
+                        return f"Documentos procesados exitosamente: {result.get('new_docs', 0)} nuevos, {result.get('total_docs', 0)} total"
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            
+            # Conectar handler a ai_helper_files
+            ai_helper_files.change(
+                fn=process_alien_files,
+                inputs=[ai_helper_files, ai_helper_session_id],
+                outputs=[ai_helper_status]
+            )
+            
+            clear_alien_btn.click(
+                fn=clear_alien,
+                inputs=[ai_helper_bot, ai_helper_session_id],
+                outputs=[ai_helper_bot, ai_helper_status, ai_helper_stats_output],
+            )
+            
+            clear_alien_files_btn.click(
+                fn=clear_alien_files,
+                inputs=[ai_helper_files, ai_helper_session_id],
+                outputs=[ai_helper_files, ai_helper_status, ai_helper_stats_output],
+            )
+            
+            ai_helper_stats_btn.click(
+                fn=show_alien_stats,
+                inputs=[ai_helper_session_id],
+                outputs=[ai_helper_stats_output],
+            )
+            
+            # ==================== TABS DE WIDGET ====================
+            # Agregar tabs para widget embeddable (Generar Código, Configuración, Servidor API, Instrucciones)
+            gr.Markdown("---")
+            gr.Markdown("### 🌐 Widget Embeddable - Integra Alien Mode en tu Website")
+            gr.Markdown("""
+            **Usa estos tabs para generar código HTML que puedes pegar en tu website.**
+            
+            El widget permitirá que los visitantes de tu website conversen con Alien Mode directamente,
+            usando los documentos que subiste arriba. Las respuestas aparecerán tanto en la UI de Gradio
+            como en el widget embebido en tu website.
+            """)
+            
+            try:
+                from docchat.alien_mode_widget.ui.integrated_widget_tabs import create_widget_tabs_in_alien_mode
+                # Obtener instancia de Alien Mode (la misma que usa el chat arriba)
+                ai_helper_mode_instance = get_alien_mode(
+                    config=config,
+                    processor=processor,
+                    retriever_builder=retriever_builder,
+                    context_manager=context_manager
+                )
+                # Crear tabs de widget pasando config y ai_helper_mode
+                widget_tabs_creator = create_widget_tabs_in_alien_mode(config, ai_helper_mode_instance)
+                widget_tabs_creator()
+            except Exception as e:
+                gr.Markdown(f"⚠️ Error cargando tabs de widget: {e}")
+                import traceback
+                gr.Markdown(f"```\n{traceback.format_exc()}\n```")
+
+        # Tab 4.5.5.5.1: PDF Agent Mode - Clon de Alien Mode
+
         with gr.Tab("📄 PDF Agent"):
             gr.Markdown("### 📄 PDF Agent - Sistema Multi-Agente RAG de Máxima Calidad")
             gr.Markdown("""

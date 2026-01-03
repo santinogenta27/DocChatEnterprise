@@ -146,6 +146,9 @@ class PDFAgentMode:
         self.mcp_manager = MCPManager(config=config, llm=self.llm)
         self.mcp_manager.initialize()
         
+        # Sesiones activas
+        self.sessions: Dict[str, Dict[str, Any]] = {}
+        
         # Sistema de Memoria Avanzado (Memoria Framework)
         memory_dir = Path(config.memory_dir) / "pdf_agent_memory"
         memory_dir.mkdir(parents=True, exist_ok=True)

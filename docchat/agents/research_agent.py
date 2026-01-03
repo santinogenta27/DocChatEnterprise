@@ -173,13 +173,18 @@ class ResearchAgent:
             prompt = (
                 f"{question}\n\n"
                 f"INFORMACIÃ“N DE LOS DOCUMENTOS ({num_sources} documento(s) con {len(documents)} fragmentos):\n{context}\n\n"
-                "INSTRUCCIONES FINALES:\n"
+                "INSTRUCCIONES CRÃTICAS PARA EXTRAER DATOS:\n"
+                "- Los documentos son tu ÃšNICA fuente de verdad. SOLO usa datos que estÃ©n EXPLÃCITAMENTE en los documentos.\n"
+                "- Extrae nombres EXACTOS de productos, materiales, talles, precios, mÃ­nimos de pedido del documento.\n"
+                "- Menciona datos ESPECÃFICOS: nombres de productos exactos, materiales exactos, talles exactos, etc.\n"
+                "- NO uses conocimiento general. Si un dato existe en el documento, es OBLIGATORIO usarlo.\n"
+                "- Si no hay informaciÃ³n en el documento, di claramente que no tienes esa informaciÃ³n.\n"
                 "- Responde SOLO con el contenido comercial, sin mencionar procesos tÃ©cnicos, verificaciones, fuentes ni metadata.\n"
                 "- NO incluyas secciones como 'Proceso Multi-Agente', 'VerificaciÃ³n', 'Fuentes Consultadas', etc.\n"
-                "- Responde de forma natural, comercial y humana.\n"
-                "- Responde DIRECTAMENTE la pregunta del usuario usando la informaciÃ³n de los documentos.\n"
+                "- Responde de forma natural, comercial y humana, pero usando SOLO datos reales del documento.\n"
+                "- Responde DIRECTAMENTE la pregunta del usuario usando la informaciÃ³n ESPECÃFICA de los documentos.\n"
                 "- Al final, incluye una pregunta o CTA suave para avanzar la conversaciÃ³n.\n\n"
-                "RESPUESTA COMERCIAL:"
+                "RESPUESTA COMERCIAL (usando SOLO datos del documento):"
             )
         elif conversational_mode:
             prompt = (
