@@ -20826,7 +20826,7 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
             """)
             
             # Generar session_id único
-            chat_pdf_session_id = gr.State(value=str(uuid.uuid4()))
+            chat_pdf_session_id = gr.State(value="gradio_user")  # Usar session_id fijo para compartir con widget
             
             with gr.Row():
                 chat_pdf_files = gr.Files(
@@ -20872,6 +20872,196 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 clear_chat_pdf_btn = gr.Button("🗑️ Clear Chat", variant="secondary")
                 clear_chat_pdf_files_btn = gr.Button("📂 Clear Documents", variant="secondary")
                 chat_pdf_stats_btn = gr.Button("📊 View Statistics", variant="secondary")
+            
+            # ==================== TABS DE WIDGET EMBEBIBLE ====================
+            gr.Markdown("---")
+            gr.Markdown("### ðŸš€ Widget Embebible - Integra ChatPDF en tu Website")
+            gr.Markdown("""
+            **Widget simple que expone ChatPDF como API.**
+            - Sin configuraciones complejas
+            - Usa la lÃ³gica original de ChatPDF sin modificaciones
+            - Las respuestas aparecen en el widget en lugar de la UI de Gradio
+            """)
+            
+            with gr.Tabs() as chatpdf_widget_tabs:
+                # TAB 1: Generar CÃ³digo
+                with gr.Tab("ðŸ”§ Generar CÃ³digo"):
+                    with gr.Row():
+                        with gr.Column():
+                            chatpdf_widget_api_url = gr.Textbox(
+                                label="ðŸŒ URL del Servidor",
+                                value="http://127.0.0.1:7867",
+                                placeholder="https://tu-servidor.com",
+                                info="URL donde estÃ¡ corriendo tu servidor ChatPDF Widget API"
+                            )
+                            chatpdf_widget_id = gr.Textbox(
+                                label="ðŸ†” Widget ID",
+                                placeholder="chatpdf_widget_abc123",
+                                info="ID Ãºnico para este widget"
+                            )
+                            generate_chatpdf_widget_code_btn = gr.Button("ðŸ”§ Generar CÃ³digo", variant="primary")
+                        
+                        with gr.Column():
+                            chatpdf_widget_code_output = gr.Code(
+                                label="ðŸ“‹ CÃ³digo HTML",
+                                language="html",
+                                lines=20
+                            )
+                    
+                    def generate_chatpdf_widget_code(api_url, widget_id_input):
+                        import uuid
+                        if not widget_id_input or not widget_id_input.strip():
+                            widget_id_final = f"chatpdf_widget_{uuid.uuid4().hex[:12]}"
+                        else:
+                            widget_id_final = widget_id_input.strip()
+                        
+                        if not api_url or not api_url.strip():
+                            return "âŒ URL del servidor es requerida"
+                        
+                        api_url_clean = api_url.strip().rstrip("/")
+                        # Formatear código HTML en múltiples líneas (uno por atributo)
+                        code = f'''<script 
+  src="{api_url_clean}/static/chatpdf-widget.js" 
+  data-api-url="{api_url_clean}" 
+  data-widget-id="{widget_id_final}" 
+  async>
+</script>'''
+                        return code
+                    
+                    generate_chatpdf_widget_code_btn.click(
+                        generate_chatpdf_widget_code,
+                        inputs=[chatpdf_widget_api_url, chatpdf_widget_id],
+                        outputs=[chatpdf_widget_code_output]
+                    )
+                
+                # TAB 2: ConfiguraciÃ³n Enterprise
+                with gr.Tab("âš™ï¸ ConfiguraciÃ³n Enterprise"):
+                    gr.Markdown("### âš™ï¸ ConfiguraciÃ³n Enterprise")
+                    gr.Markdown("El widget usa la misma configuraciÃ³n que ChatPDF Mode.")
+                
+                # TAB 3: Servidor API
+                with gr.Tab("ðŸš€ Servidor API"):
+                    gr.Markdown("### ðŸš€ Control del Servidor API")
+                    chatpdf_api_status = gr.Markdown("**Estado:** Servidor no iniciado")
+                    chatpdf_api_url = gr.Textbox(label="URL del Servidor", value="http://127.0.0.1:7867")
+                    
+                    with gr.Row():
+                        start_chatpdf_api_btn = gr.Button("â–¶ï¸ Iniciar", variant="primary")
+                        check_chatpdf_api_btn = gr.Button("ðŸ” Verificar", variant="secondary")
+                    
+                    def start_chatpdf_api_server(api_url):
+                        try:
+                            # ImportaciÃ³n robusta usando importlib
+                            import sys
+                            import os
+                            from pathlib import Path
+                            import importlib.util
+                            
+                            # Obtener la ruta del proyecto
+                            project_root = Path(__file__).parent if '__file__' in globals() else Path.cwd()
+                            api_server_path = project_root / "docchat" / "chat_pdf_mode" / "widget" / "api_server.py"
+                            
+                            # Cargar el mÃ³dulo directamente
+                            spec = importlib.util.spec_from_file_location("api_server_chatpdf", str(api_server_path))
+                            api_server_module = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(api_server_module)
+                            create_api_server_chatpdf = api_server_module.create_api_server_chatpdf
+                            
+                            import uvicorn
+                            import threading
+                            
+                            chatpdf_mode = get_chat_pdf_mode(config=config, processor=processor, retriever_builder=retriever_builder, context_manager=context_manager)
+                            app = create_api_server_chatpdf(chatpdf_mode)
+                            
+                            if app:
+                                port = int(api_url.split(":")[-1]) if ":" in api_url else 7867
+                                def run_server():
+                                    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+                                
+                                server_thread = threading.Thread(target=run_server, daemon=True)
+                                server_thread.start()
+                                return f"âœ… Servidor iniciado en {api_url}"
+                            return "âŒ Error creando servidor"
+                        except Exception as e:
+                            return f"âŒ Error: {str(e)}"
+
+                            
+                            if app:
+                                port = int(api_url.split(":")[-1]) if ":" in api_url else 7867
+                                def run_server():
+                                    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+                                
+                                server_thread = threading.Thread(target=run_server, daemon=True)
+                                server_thread.start()
+                                return f"âœ… Servidor iniciado en {api_url}"
+                            return "âŒ Error creando servidor"
+                        except Exception as e:
+                            return f"âŒ Error: {str(e)}"
+                    
+                    def check_chatpdf_api_status(api_url):
+                        try:
+                            import requests
+                            response = requests.get(f"{api_url}/health", timeout=2)
+                            if response.status_code == 200:
+                                return f"âœ… Servidor activo en {api_url}"
+                            return f"âš ï¸ Error: {response.status_code}"
+                        except:
+                            return f"âŒ Servidor no estÃ¡ corriendo"
+                    
+                    start_chatpdf_api_btn.click(start_chatpdf_api_server, inputs=[chatpdf_api_url], outputs=[chatpdf_api_status])
+                    check_chatpdf_api_btn.click(check_chatpdf_api_status, inputs=[chatpdf_api_url], outputs=[chatpdf_api_status])
+                
+                # TAB 4: Instrucciones
+                with gr.Tab("ðŸ“– Instrucciones"):
+                    gr.Markdown("### ðŸ“– Instrucciones")
+                    gr.Markdown("1. Inicia el servidor API\n2. Genera el cÃ³digo\n3. Pega el cÃ³digo en tu website")
+                
+                # TAB 5: Links DinÃ¡micos
+                with gr.Tab("ðŸ”— Links DinÃ¡micos"):
+                    gr.Markdown("### ðŸ”— Links DinÃ¡micos")
+                    gr.Markdown("Configura links que el agente usarÃ¡ automÃ¡ticamente.")
+                    
+                    with gr.Row():
+                        with gr.Column():
+                            chatpdf_link_name = gr.Textbox(label="Nombre Visible")
+                            chatpdf_link_url = gr.Textbox(label="URL")
+                            chatpdf_link_action_tag = gr.Textbox(label="Etiqueta de AcciÃ³n")
+                            chatpdf_link_intention = gr.Dropdown(label="IntenciÃ³n", choices=["Ver producto", "Comprar", "Cotizar", "Contactar", "General"], value="General")
+                            chatpdf_link_priority = gr.Radio(label="Prioridad", choices=[("Alta", "high"), ("Media", "medium"), ("Baja", "low")], value="medium")
+                            chatpdf_link_scope = gr.Dropdown(label="Alcance", choices=["Producto", "CategorÃ­a", "General", "Soporte"], value="General")
+                            add_chatpdf_link_btn = gr.Button("âž• Agregar", variant="primary")
+                        
+                        with gr.Column():
+                            chatpdf_links_display = gr.JSON(label="Links Configurados", value={})
+                    
+                    chatpdf_links_storage = gr.State(value={})
+                    
+                    def add_chatpdf_link(name, url, action_tag, intention, priority, scope, current_links):
+                        if not name or not url or not action_tag:
+                            return current_links, "âŒ Completa todos los campos", current_links
+                        
+                        if current_links is None:
+                            current_links = {}
+                        
+                        import uuid
+                        link_id = str(uuid.uuid4())
+                        current_links[link_id] = {"name": name, "url": url, "action_tag": action_tag, "intention": intention, "priority": priority, "scope": scope}
+                        
+                        try:
+                            from pathlib import Path
+                            links_file = Path(config.memory_dir) / "chatpdf_widget_links.json"
+                            with open(links_file, "w", encoding="utf-8") as f:
+                                json.dump(current_links, f, indent=2)
+                        except:
+                            pass
+                        
+                        return current_links, f"âœ… Link agregado: {name}", current_links
+                    
+                    add_chatpdf_link_btn.click(
+                        add_chatpdf_link,
+                        inputs=[chatpdf_link_name, chatpdf_link_url, chatpdf_link_action_tag, chatpdf_link_intention, chatpdf_link_priority, chatpdf_link_scope, chatpdf_links_storage],
+                        outputs=[chatpdf_links_storage, gr.Markdown(), chatpdf_links_display]
+                    )
             
             chat_pdf_status = gr.Markdown(label="ℹ️ Chat Status")
             chat_pdf_stats_output = gr.Markdown(label="📊 Advanced Statistics", visible=False)
@@ -21007,6 +21197,40 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 fn=clear_chat_pdf,
                 inputs=[chat_pdf_bot, chat_pdf_session_id],
                 outputs=[chat_pdf_bot, chat_pdf_status, chat_pdf_stats_output],
+            )
+            
+            def process_chat_pdf_files(files, session_id):
+                """Procesa archivos automáticamente cuando se suben."""
+                if not files:
+                    return "No hay archivos para procesar."
+                
+                try:
+                    chat_pdf_mode = get_chat_pdf_mode(
+                        config=config,
+                        processor=processor,
+                        retriever_builder=retriever_builder,
+                        context_manager=context_manager
+                    )
+                    
+                    result = chat_pdf_mode.process_documents(session_id, files)
+                    
+                    if result.get("status") == "error":
+                        return f"❌ Error: {result.get('error')}"
+                    elif result.get("status") == "no_new_files":
+                        return f"✅ Todos los archivos ya estaban procesados. Total: {result.get('total_docs')} documentos, {result.get('total_chunks')} chunks."
+                    else:
+                        return f"✅ Procesados {result.get('new_docs', 0)} nuevos documentos. Total: {result.get('total_docs')} documentos, {result.get('total_chunks')} chunks."
+                except Exception as e:
+                    import traceback
+                    error_trace = traceback.format_exc()
+                    print(f"⚠️ [ChatPDF] Error procesando archivos: {e}\n{error_trace}")
+                    return f"❌ Error procesando archivos: {str(e)}"
+            
+            # Procesar archivos automáticamente cuando se suben (igual que Alien Mode)
+            chat_pdf_files.change(
+                fn=process_chat_pdf_files,
+                inputs=[chat_pdf_files, chat_pdf_session_id],
+                outputs=[chat_pdf_status]
             )
             
             clear_chat_pdf_files_btn.click(

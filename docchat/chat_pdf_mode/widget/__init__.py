@@ -1,0 +1,1 @@
+# ChatPDF Widget Package
