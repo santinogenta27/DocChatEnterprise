@@ -16,7 +16,9 @@
 
     const config = {
         apiUrl: scriptTag.getAttribute('data-api-url') || 'http://127.0.0.1:7867',
-        widgetId: scriptTag.getAttribute('data-widget-id') || 'chatpdf-widget-default'
+        widgetId: scriptTag.getAttribute('data-widget-id') || 'chatpdf-widget-default',
+        whatsappNumber: scriptTag.getAttribute('data-whatsapp-number') || null,
+        calendlyLink: scriptTag.getAttribute('data-calendly-link') || null
     };
 
     // Normalizar URL de API
@@ -41,8 +43,12 @@
         'bottom:80px;width:380px;height:500px;background:white;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.2);display:none;flex-direction:column;overflow:hidden;}' +
         '#chatpdf-widget-chat.open{display:flex;}' +
         '.chatpdf-widget-header{background:' + primaryColor + 
-        ';color:white;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;}' +
-        '.chatpdf-widget-header h3{margin:0;font-size:18px;font-weight:600;}' +
+        ';color:white;padding:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}' +
+        '.chatpdf-widget-header-icons{display:flex;flex-direction:row;gap:12px;flex:1;align-items:center;flex-wrap:wrap;}' +
+        '.chatpdf-widget-icon-link{display:flex;align-items:center;gap:6px;text-decoration:none;color:white;font-size:12px;font-weight:600;transition:opacity 0.2s ease;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.1);}' +
+        '.chatpdf-widget-icon-link:hover{opacity:0.9;background:rgba(255,255,255,0.2);}' +
+        '.chatpdf-widget-icon-link svg{width:24px;height:24px;flex-shrink:0;}' +
+        '.chatpdf-widget-header h3{margin:0;font-size:18px;font-weight:600;display:none;}' +
         '.chatpdf-widget-close{background:none;border:none;color:white;font-size:24px;cursor:pointer;padding:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background 0.2s ease;}' +
         '.chatpdf-widget-close:hover{background:rgba(255,255,255,0.2);}' +
         '.chatpdf-widget-messages{flex:1;overflow-y:auto;padding:20px;background:#f8f9fa;}' +
@@ -83,9 +89,77 @@
     const header = document.createElement('div');
     header.className = 'chatpdf-widget-header';
     
-    const headerTitle = document.createElement('h3');
-    headerTitle.textContent = 'ChatPDF';
-    header.appendChild(headerTitle);
+    // Crear contenedor para iconos
+    const iconsContainer = document.createElement('div');
+    iconsContainer.className = 'chatpdf-widget-header-icons';
+    
+    // Agregar icono de WhatsApp si está configurado
+    if (config.whatsappNumber) {
+        const whatsappLink = document.createElement('a');
+        whatsappLink.href = 'https://wa.me/' + config.whatsappNumber.replace(/[^0-9]/g, '');
+        whatsappLink.target = '_blank';
+        whatsappLink.rel = 'noopener';
+        whatsappLink.className = 'chatpdf-widget-icon-link';
+        
+        const whatsappText = document.createTextNode('Go to');
+        whatsappLink.appendChild(whatsappText);
+        
+        // SVG de WhatsApp
+        const whatsappSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        whatsappSvg.setAttribute('width', '24');
+        whatsappSvg.setAttribute('height', '24');
+        whatsappSvg.setAttribute('viewBox', '0 0 256 256');
+        whatsappSvg.setAttribute('fill', 'none');
+        const whatsappPath1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        whatsappPath1.setAttribute('d', 'M128 24C74.98 24 32 66.98 32 120c0 21.62 6.28 41.72 17.16 58.68L24 232l55.89-24.32C90.79 214.95 109.12 120 224 120c0-53.02-42.98-96-96-96Z');
+        whatsappPath1.setAttribute('fill', '#25D366');
+        const whatsappPath2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        whatsappPath2.setAttribute('d', 'M195.12 145.37c-2.67-1.34-15.77-7.8-18.21-8.68-2.44-.88-4.22-1.34-6 1.34s-6.89 8.68-8.43 10.48c-1.55 1.8-3.11 2.02-5.78.68-15.78-7.89-26-14.06-36.41-31.92-2.76-4.8 2.76-4.48 7.92-14.82.88-1.8.44-3.37-.22-4.68-.66-1.34-6-14.48-8.24-19.8-2.17-5.18-4.38-4.48-6-4.56-1.55-.08-3.38-.1-5.22-.1s-4.68.68-7.14 3.37c-2.44 2.76-9.3 9.08-9.3 22.14s9.52 25.72 10.84 27.52c1.34 1.8 18.74 28.58 45.23 40.12 6.32 2.72 11.24 4.36 15.09 5.58 6.34 2.07 12.11 1.78 16.68 1.08 5.08-.78 15.77-6.44 18-12.66 2.22-6.22 2.22-11.56 1.56-12.66-.66-1.1-2.44-1.8-5.1-3.14Z');
+        whatsappPath2.setAttribute('fill', 'white');
+        whatsappSvg.appendChild(whatsappPath1);
+        whatsappSvg.appendChild(whatsappPath2);
+        whatsappLink.appendChild(whatsappSvg);
+        iconsContainer.appendChild(whatsappLink);
+    }
+    
+    // Agregar icono de Calendly si está configurado
+    if (config.calendlyLink) {
+        const calendlyLink = document.createElement('a');
+        calendlyLink.href = config.calendlyLink;
+        calendlyLink.target = '_blank';
+        calendlyLink.rel = 'noopener';
+        calendlyLink.className = 'chatpdf-widget-icon-link';
+        
+        const calendlyText = document.createTextNode('Book a call on');
+        calendlyLink.appendChild(calendlyText);
+        
+        // SVG de Calendly
+        const calendlySvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        calendlySvg.setAttribute('width', '24');
+        calendlySvg.setAttribute('height', '24');
+        calendlySvg.setAttribute('viewBox', '0 0 256 256');
+        calendlySvg.setAttribute('fill', 'none');
+        const calendlyPath1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        calendlyPath1.setAttribute('d', 'M128 0c70.58 0 128 57.42 128 128s-57.42 128-128 128S0 198.58 0 128 57.42 0 128 0Z');
+        calendlyPath1.setAttribute('fill', '#00A2FF');
+        const calendlyPath2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        calendlyPath2.setAttribute('d', 'M178.65 108.43a50.13 50.13 0 0 0-13.34-18.21 50.13 50.13 0 0 0-18.21-13.34c-12.68-5.16-26.02-3.45-37.42 4.56-15.24 10.92-22.5 29.76-19 48.03l.22.97.12.46c1.8 7.46 5.22 14.28 10.02 19.74 6.44 7.58 15.57 12.78 25.66 13.86l.73.08h.83c8.55 0 16.48-3.04 22.58-8.6 7.32-6.96 11.3-16.7 10.44-26.78l-.03-.23-.05-.23c-.88-7.63-4.53-14.51-10.65-19.32Z');
+        calendlyPath2.setAttribute('fill', 'white');
+        calendlySvg.appendChild(calendlyPath1);
+        calendlySvg.appendChild(calendlyPath2);
+        calendlyLink.appendChild(calendlySvg);
+        iconsContainer.appendChild(calendlyLink);
+    }
+    
+    // Si no hay iconos configurados, mostrar título por defecto
+    if (!config.whatsappNumber && !config.calendlyLink) {
+        const headerTitle = document.createElement('h3');
+        headerTitle.textContent = 'ChatPDF';
+        headerTitle.style.display = 'block';
+        iconsContainer.appendChild(headerTitle);
+    }
+    
+    header.appendChild(iconsContainer);
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'chatpdf-widget-close';
@@ -245,7 +319,7 @@
             input.focus();
             // Mostrar mensaje de bienvenida si es la primera vez
             if (conversationHistory.length === 0) {
-                addMessage('👋 ¡Hola! Soy tu asistente de ChatPDF. Puedo ayudarte a responder preguntas sobre tus documentos. ¿En qué puedo ayudarte?', false);
+                addMessage('Hello, I am Star Agent.\nI help you design systems capable of reaching $100K+/month.\nAsk me how the strategy works.', false);
             }
         } else {
             chatWindow.classList.remove('open');

@@ -257,13 +257,71 @@ class ChatPDFMode:
             self.mcp_manager.llm = llm
     
     def initialize_session(self, session_id: str) -> Dict[str, Any]:
-        """Inicializa una nueva sesión."""
+        """Inicializa una nueva sesión y carga retriever persistente si existe."""
         if session_id not in self.sessions:
+            # Namespace fijo basado en session_id para persistencia permanente
+            namespace = f"chatpdf_{session_id}"
+            persist_dir = Path(self.config.persist_dir) / namespace
+            
+            # Intentar cargar retriever existente desde ChromaDB persistente
+            retriever = None
+            docs = []
+            processed_files = set()
+            
+            if persist_dir.exists():
+                try:
+                    from langchain_community.vectorstores import Chroma as ChromaVectorStore
+                    # Cargar vectorstore existente
+                    existing_vectorstore = ChromaVectorStore(
+                        persist_directory=str(persist_dir),
+                        embedding_function=self.retriever_builder.embeddings
+                    )
+                    # Obtener documentos guardados
+                    existing_data = existing_vectorstore.get()
+                    existing_docs_list = existing_data.get("documents", [])
+                    existing_metas = existing_data.get("metadatas", [{}] * len(existing_docs_list))
+                    existing_ids = existing_data.get("ids", [])
+                    
+                    # Reconstruir objetos Document
+                    docs = [
+                        Document(page_content=content, metadata=meta)
+                        for content, meta in zip(existing_docs_list, existing_metas)
+                    ]
+                    
+                    # Reconstruir processed_files desde metadatos
+                    for meta in existing_metas:
+                        source = meta.get("source", "")
+                        if source:
+                            processed_files.add(source)
+                    
+                    # Reconstruir retriever desde vectorstore existente
+                    if docs:
+                        vector_retriever = existing_vectorstore.as_retriever(
+                            search_kwargs={"k": self.config.vector_k}
+                        )
+                        from langchain_community.retrievers import BM25Retriever
+                        bm25 = BM25Retriever.from_documents(docs)
+                        bm25.k = self.config.bm25_k
+                        
+                        from .retriever_builder import HybridRetriever
+                        retriever = HybridRetriever(
+                            bm25_retriever=bm25,
+                            vector_retriever=vector_retriever,
+                            weights=self.config.hybrid_weights,
+                        )
+                        print(f"✅ [ChatPDF Mode] Cargados {len(docs)} documentos persistentes desde ChromaDB")
+                except Exception as e:
+                    print(f"⚠️ [ChatPDF Mode] No se pudieron cargar documentos persistentes: {e}")
+                    docs = []
+                    processed_files = set()
+                    retriever = None
+            
             self.sessions[session_id] = {
-                "docs": [],
-                "retriever": None,
-                "processed_files": set(),
+                "docs": docs,
+                "retriever": retriever,
+                "processed_files": processed_files,
                 "history": [],
+                "namespace": namespace,  # Guardar namespace para uso posterior
                 "context_folder": ContextFolder(
                     config=self.config,
                     llm=self.llm,
@@ -282,10 +340,13 @@ class ChatPDFMode:
         session_id: str,
         files: List[Any]
     ) -> Dict[str, Any]:
-        """Procesa documentos para una sesión."""
+        """
+        Procesa documentos UNA SOLA VEZ y guarda embeddings permanentemente en ChromaDB.
+        Los documentos solo se procesan al subirlos, no en cada pregunta.
+        """
         session = self.initialize_session(session_id)
         
-        # Procesar nuevos archivos
+        # Procesar nuevos archivos (solo los que no se han procesado antes)
         new_files = []
         for file_obj in files:
             file_name = getattr(file_obj, "name", "")
@@ -301,9 +362,9 @@ class ChatPDFMode:
             }
         
         try:
-            print(f"📄 [ChatPDF Mode] Procesando {len(new_files)} nuevos documentos...")
+            print(f"📄 [ChatPDF Mode] Procesando {len(new_files)} nuevos documentos (UNA SOLA VEZ - se guardarán permanentemente)...")
+            # Extraer texto y crear chunks (sin LLM, solo procesamiento de documentos)
             new_docs = self.processor.process(new_files)
-            session["docs"].extend(new_docs)
             
             # Rastrear procedencia de documentos
             for doc in new_docs:
@@ -313,10 +374,28 @@ class ChatPDFMode:
                     session["provenances"] = []
                 session["provenances"].append(provenance)
             
-            # Reconstruir retriever
-            if session["docs"]:
-                session["retriever"] = self.retriever_builder.build_hybrid_retriever(session["docs"])
-                print(f"✅ [ChatPDF Mode] Retriever actualizado: {len(session['docs'])} chunks")
+            # Obtener namespace fijo para esta sesión (persistencia permanente)
+            namespace = session.get("namespace", f"chatpdf_{session_id}")
+            
+            # Construir retriever con load_existing=True para cargar documentos previos
+            # y agregar los nuevos, guardando todo permanentemente en ChromaDB
+            if new_docs:
+                # Combinar documentos existentes con nuevos
+                all_docs = session["docs"] + new_docs
+                
+                # Construir retriever con persistencia permanente
+                # load_existing=True carga documentos previos y agrega los nuevos
+                session["retriever"] = self.retriever_builder.build_hybrid_retriever(
+                    all_docs,
+                    namespace=namespace,
+                    load_existing=True  # CRÍTICO: Carga documentos previos y agrega nuevos
+                )
+                
+                # Actualizar docs en sesión
+                session["docs"] = all_docs
+                
+                print(f"✅ [ChatPDF Mode] {len(new_docs)} documentos procesados y guardados permanentemente en ChromaDB")
+                print(f"✅ [ChatPDF Mode] Total: {len(all_docs)} chunks disponibles (persistentes)")
             
             return {
                 "status": "success",
@@ -352,6 +431,49 @@ class ChatPDFMode:
         self._update_modules_with_llm(provider_llm)
         
         session = self.initialize_session(session_id)
+        
+        # Si no hay retriever en memoria, intentar cargarlo desde persistencia
+        if not session["retriever"]:
+            namespace = session.get("namespace", f"chatpdf_{session_id}")
+            persist_dir = Path(self.config.persist_dir) / namespace
+            
+            if persist_dir.exists():
+                try:
+                    from langchain_community.vectorstores import Chroma as ChromaVectorStore
+                    # Cargar vectorstore existente
+                    existing_vectorstore = ChromaVectorStore(
+                        persist_directory=str(persist_dir),
+                        embedding_function=self.retriever_builder.embeddings
+                    )
+                    # Obtener documentos guardados
+                    existing_data = existing_vectorstore.get()
+                    existing_docs_list = existing_data.get("documents", [])
+                    
+                    if existing_docs_list:
+                        existing_metas = existing_data.get("metadatas", [{}] * len(existing_docs_list))
+                        docs = [
+                            Document(page_content=content, metadata=meta)
+                            for content, meta in zip(existing_docs_list, existing_metas)
+                        ]
+                        
+                        # Reconstruir retriever desde persistencia
+                        vector_retriever = existing_vectorstore.as_retriever(
+                            search_kwargs={"k": self.config.vector_k}
+                        )
+                        from langchain_community.retrievers import BM25Retriever
+                        bm25 = BM25Retriever.from_documents(docs)
+                        bm25.k = self.config.bm25_k
+                        
+                        from .retriever_builder import HybridRetriever
+                        session["retriever"] = HybridRetriever(
+                            bm25_retriever=bm25,
+                            vector_retriever=vector_retriever,
+                            weights=self.config.hybrid_weights,
+                        )
+                        session["docs"] = docs
+                        print(f"✅ [ChatPDF Mode] Retriever cargado desde persistencia: {len(docs)} chunks")
+                except Exception as e:
+                    print(f"⚠️ [ChatPDF Mode] Error cargando retriever persistente: {e}")
         
         if not session["retriever"]:
             yield history, "⚠️ No hay documentos procesados. Carga documentos primero.", {}
@@ -1192,7 +1314,11 @@ class ChatPDFMode:
                     doc_content = doc_content[:half_chars] + "\n\n... [CONTENIDO TRUNCADO PARA EVITAR LÍMITES DE TOKENS] ...\n\n" + doc_content[-half_chars:]
                 
                 # PROMPT ULTRA MEJORADO - Respuestas super mega ultra hyper inteligentes y completas
-                prompt = f"""Eres un analista estratégico senior de nivel C-Suite con décadas de experiencia. Tu tarea es analizar ESTE documento específico de manera PROFUNDA y COMPLETA para responder DIRECTAMENTE la pregunta del usuario con el máximo nivel de inteligencia y detalle.
+                prompt = f"""CRITICAL: You must ALWAYS respond in English. Never respond in Spanish or any other language. All your responses must be in English only.
+
+CRITICAL WORD RESTRICTIONS: NEVER use these words or phrases in your response: "Resumen Ejecutivo Combinado", "document", ". document", "document.". These words are PROHIBITED and must NEVER appear in your answer.
+
+Eres un analista estratégico senior de nivel C-Suite con décadas de experiencia. Tu tarea es analizar ESTE documento específico de manera PROFUNDA y COMPLETA para responder DIRECTAMENTE la pregunta del usuario con el máximo nivel de inteligencia y detalle.
 
 PREGUNTA ESPECÍFICA DEL USUARIO (RESPONDE EXACTAMENTE ESTO):
 {message}
@@ -1439,7 +1565,11 @@ RESPUESTA SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA (800-1200 palabras, basa
         
         # Generar respuesta combinada que RESPONDE DIRECTAMENTE al prompt del usuario
         # PROMPT ULTRA MEJORADO para síntesis super inteligente y completa
-        synthesis_prompt = f"""Eres un consultor estratégico senior de nivel C-Suite con décadas de experiencia. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario con análisis profundo y completo.
+        synthesis_prompt = f"""CRITICAL: You must ALWAYS respond in English. Never respond in Spanish or any other language. All your responses must be in English only.
+
+CRITICAL WORD RESTRICTIONS: NEVER use these words or phrases in your response: "Resumen Ejecutivo Combinado", "document", ". document", "document.". These words are PROHIBITED and must NEVER appear in your answer.
+
+Eres un consultor estratégico senior de nivel C-Suite con décadas de experiencia. Has analizado {len(individual_analyses)} documentos individualmente, cada uno respondiendo la pregunta del usuario con análisis profundo y completo.
 
 TU TAREA PRINCIPAL: Combinar todos los análisis individuales para responder DIRECTAMENTE la pregunta del usuario de manera SUPER MEGA ULTRA HYPER INTELIGENTE, COMPLETA y ESTRATÉGICA.
 
@@ -1607,7 +1737,7 @@ RESPUESTA FINAL SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA QUE RESPONDE DIREC
         
         try:
             # Emitir mensaje inicial de "generando..."
-            initial_message = "## 📊 Resumen Ejecutivo Combinado\n\n🔄 Generando respuesta en tiempo real...\n\n---\n\n" + individual_analyses_text
+            initial_message = "🔄 Generando respuesta en tiempo real...\n\n---\n\n" + individual_analyses_text
             temp_history = history + [(message, initial_message)]
             yield temp_history, None, {
                 "stage": "synthesis_streaming",
@@ -1627,8 +1757,7 @@ RESPUESTA FINAL SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA QUE RESPONDE DIREC
                         if combined_answer:
                             elapsed = time.time() - last_yield_time
                             if elapsed >= 0.02:  # Emitir cada 20ms mínimo para mantener fluidez
-                                formatted_answer_partial = "## 📊 Resumen Ejecutivo Combinado\n\n"
-                                formatted_answer_partial += combined_answer + "▊"  # Cursor parpadeante
+                                formatted_answer_partial = combined_answer + "▊"  # Cursor parpadeante
                                 formatted_answer_partial += "\n\n---\n\n"
                                 formatted_answer_partial += individual_analyses_text
                                 
@@ -1657,8 +1786,7 @@ RESPUESTA FINAL SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA QUE RESPONDE DIREC
                         # YIELD INMEDIATO - CADA TOKEN para streaming ultra fluido (como ChatGPT)
                         # REAL-TIME CONTEXT ENGINE: Emitir inmediatamente sin esperas
                         # Esto es crítico para que aparezca en tiempo real en la UI
-                        formatted_answer_partial = "## 📊 Resumen Ejecutivo Combinado\n\n"
-                        formatted_answer_partial += combined_answer + "▊"  # Cursor parpadeante
+                        formatted_answer_partial = combined_answer + "▊"  # Cursor parpadeante
                         formatted_answer_partial += "\n\n---\n\n"
                         formatted_answer_partial += individual_analyses_text
                         
@@ -1714,8 +1842,7 @@ RESPUESTA FINAL SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA QUE RESPONDE DIREC
                                 print(f"⚠️ [ChatPDF Mode] Error publicando evento de streaming: {pub_error}")
                     elif item_type == 'done':
                         # Emitir respuesta final sin cursor
-                        formatted_answer_final = "## 📊 Resumen Ejecutivo Combinado\n\n"
-                        formatted_answer_final += combined_answer
+                        formatted_answer_final = combined_answer
                         formatted_answer_final += "\n\n---\n\n"
                         formatted_answer_final += individual_analyses_text
                         
@@ -1788,8 +1915,7 @@ RESPUESTA FINAL SUPER MEGA ULTRA HYPER INTELIGENTE Y COMPLETA QUE RESPONDE DIREC
         
         # Combinar ambas opciones en la respuesta final
         # PRIMERO mostrar resumen combinado, LUEGO todos los análisis individuales
-        formatted_answer = "## 📊 Resumen Ejecutivo Combinado\n\n"
-        formatted_answer += combined_answer
+        formatted_answer = combined_answer
         formatted_answer += "\n\n---\n\n"
         formatted_answer += individual_analyses_text
         

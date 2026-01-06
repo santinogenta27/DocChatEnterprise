@@ -1,4 +1,5 @@
-"""Gradio app for Data 📊 - Multi-Agent RAG with Autonomous Agents."""
+"""Gradio app for Enterprise Data AI 📊 - Multi-Agent RAG with Autonomous Agents."""
+
 
 from __future__ import annotations
 
@@ -198,6 +199,7 @@ from docchat.chat_pdf_mode import run_chat_pdf_mode, get_chat_pdf_mode
 from docchat.snipe_shot_mode import run_snipe_shot_mode, get_snipe_shot_mode
 from docchat.portal_ads_mode import run_portal_ads_mode, get_portal_ads_mode
 from docchat.ad_llm_mode import run_ad_llm_mode, get_ad_llm_mode
+from docchat.task_hybrid_mode import TaskHybridMode, get_task_hybrid_mode, run_task_hybrid_mode
 
 # Importar Business AI Omnicanal y Top Ads Mode
 try:
@@ -5525,7 +5527,7 @@ with gr.Blocks(title="ENTERPRISE DATA AI", theme=gr.themes.Soft(primary_hue="blu
         with gr.Column(scale=4):
             gr.Markdown(
                 """
-                # Data 📊
+                # Enterprise Data AI 📊
                 """
             )
         with gr.Column(scale=1, min_width=200):
@@ -20895,20 +20897,30 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                 info="URL donde estÃ¡ corriendo tu servidor ChatPDF Widget API"
                             )
                             chatpdf_widget_id = gr.Textbox(
-                                label="ðŸ†” Widget ID",
+                                label="Widget ID",
                                 placeholder="chatpdf_widget_abc123",
-                                info="ID Ãºnico para este widget"
+                                info="ID único para este widget"
                             )
-                            generate_chatpdf_widget_code_btn = gr.Button("ðŸ”§ Generar CÃ³digo", variant="primary")
+                            chatpdf_widget_whatsapp = gr.Textbox(
+                                label="📱 WhatsApp Number",
+                                placeholder="5491123456789",
+                                info="Número de WhatsApp con código de país (ej: 5491123456789 para Argentina)"
+                            )
+                            chatpdf_widget_calendly = gr.Textbox(
+                                label="📅 Calendly Link",
+                                placeholder="https://calendly.com/tu-usuario",
+                                info="Link completo de tu Calendly (ej: https://calendly.com/mi-usuario)"
+                            )
+                            generate_chatpdf_widget_code_btn = gr.Button("Generar Código", variant="primary")
                         
                         with gr.Column():
                             chatpdf_widget_code_output = gr.Code(
-                                label="ðŸ“‹ CÃ³digo HTML",
+                                label="Código HTML",
                                 language="html",
                                 lines=20
                             )
                     
-                    def generate_chatpdf_widget_code(api_url, widget_id_input):
+                    def generate_chatpdf_widget_code(api_url, widget_id_input, whatsapp_number, calendly_link):
                         import uuid
                         if not widget_id_input or not widget_id_input.strip():
                             widget_id_final = f"chatpdf_widget_{uuid.uuid4().hex[:12]}"
@@ -20919,18 +20931,27 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             return "âŒ URL del servidor es requerida"
                         
                         api_url_clean = api_url.strip().rstrip("/")
+                        
+                        # Construir atributos dinámicamente
+                        attributes = [
+                            f'src="{api_url_clean}/static/chatpdf-widget.js"',
+                            f'data-api-url="{api_url_clean}"',
+                            f'data-widget-id="{widget_id_final}"'
+                        ]
+                        
+                        if whatsapp_number and whatsapp_number.strip():
+                            attributes.append(f'data-whatsapp-number="{whatsapp_number.strip()}"')
+                        
+                        if calendly_link and calendly_link.strip():
+                            attributes.append(f'data-calendly-link="{calendly_link.strip()}"')
+                        
                         # Formatear código HTML en múltiples líneas (uno por atributo)
-                        code = f'''<script 
-  src="{api_url_clean}/static/chatpdf-widget.js" 
-  data-api-url="{api_url_clean}" 
-  data-widget-id="{widget_id_final}" 
-  async>
-</script>'''
+                        code = f'<script\n  ' + '\n  '.join(attributes) + '\n  async>\n</script>'
                         return code
                     
                     generate_chatpdf_widget_code_btn.click(
                         generate_chatpdf_widget_code,
-                        inputs=[chatpdf_widget_api_url, chatpdf_widget_id],
+                        inputs=[chatpdf_widget_api_url, chatpdf_widget_id, chatpdf_widget_whatsapp, chatpdf_widget_calendly],
                         outputs=[chatpdf_widget_code_output]
                     )
                 
@@ -21243,6 +21264,156 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                 fn=show_chat_pdf_stats,
                 inputs=[chat_pdf_session_id],
                 outputs=[chat_pdf_stats_output],
+            )
+
+        # Tab: 🔄 Task Hybrid - Enterprise Workflow Automation (CUGA-based)
+        with gr.Tab("🔄 Task Hybrid"):
+            gr.Markdown("### 🔄 Task Hybrid Mode - Enterprise Workflow Automation")
+            gr.Markdown("""
+            **🌟 Automatización de Workflows Empresariales End-to-End**
+            
+            **✨ BASADO EN CUGA AGENT (IBM) - HYBRID TASK MODE:**
+            
+            **🔄 COMBINA NAVEGACIÓN WEB + LLAMADAS API:**
+            - 🌐 **Web Navigation (Playwright)**: Simula interacciones humanas con interfaces web
+            - 🔌 **API Calls (OpenAPI)**: Ejecuta llamadas REST a sistemas empresariales
+            - 🔗 **Context Sharing**: Comparte variables entre pasos Web ↔ API
+            - 📋 **Workflow Planning**: Convierte instrucciones en lenguaje natural a workflows ejecutables
+            
+            **💼 CASOS DE USO EMPRESARIALES:**
+            - Actualizar clientes en CRM y enviar notificaciones por email
+            - Procesar órdenes combinando navegación web y APIs
+            - Onboarding de clientes con múltiples sistemas
+            - Cerrar ventas y generar reportes automáticos
+            - Sincronizar datos entre sistemas empresariales
+            
+            **🚀 CARACTERÍSTICAS:**
+            - ✅ Planificación automática de workflows
+            - ✅ Ejecución paso a paso con manejo de errores
+            - ✅ Compartir contexto entre Web y API
+            - ✅ Retry automático en caso de fallos
+            - ✅ Logging completo de ejecución
+            - ✅ Modos: PRODUCTION / DRY_RUN
+            
+            **💡 EJEMPLO:**
+            "Actualiza el estado del cliente Juan Pérez a Closed Won en el CRM y envíale un email de confirmación."
+            
+            El sistema:
+            1. Abre el CRM web
+            2. Busca "Juan Pérez"
+            3. Extrae el ID del cliente
+            4. Llama API del CRM para actualizar estado
+            5. Llama API de email para enviar notificación
+            """)
+            
+            # Configuration
+            with gr.Row():
+                with gr.Column(scale=1):
+                    task_hybrid_instruction = gr.Textbox(
+                        label="📝 Instrucción del Workflow",
+                        placeholder='Ejemplo: "Actualiza el estado del cliente Juan Pérez a Closed Won en el CRM y envíale un email de confirmación"',
+                        lines=3
+                    )
+                    
+                    task_hybrid_workflow_type = gr.Dropdown(
+                        label="📋 Tipo de Workflow",
+                        choices=["Custom", "UpdateCustomerNotify", "Onboarding", "CloseSaleReport"],
+                        value="Custom"
+                    )
+                    
+                    task_hybrid_execution_mode = gr.Radio(
+                        label="⚙️ Modo de Ejecución",
+                        choices=[("Producción", "PRODUCTION"), ("Simulación (DRY_RUN)", "DRY_RUN")],
+                        value="PRODUCTION"
+                    )
+                    
+                    task_hybrid_api_base_url = gr.Textbox(
+                        label="🔌 API Base URL",
+                        placeholder="https://api.example.com",
+                        value=""
+                    )
+                    
+                    task_hybrid_api_key = gr.Textbox(
+                        label="🔑 API Key",
+                        placeholder="Bearer token o API key",
+                        value="",
+                        type="password"
+                    )
+                    
+                    task_hybrid_headless = gr.Checkbox(
+                        label="🖥️ Ejecutar navegador en modo headless",
+                        value=True
+                    )
+                    
+                    task_hybrid_execute_btn = gr.Button("🚀 Ejecutar Workflow", variant="primary", size="lg")
+                
+                with gr.Column(scale=1):
+                    task_hybrid_output = gr.Code(
+                        label="📊 Resultado del Workflow",
+                        language="json",
+                        lines=30
+                    )
+                    
+                    task_hybrid_summary = gr.Markdown(
+                        label="📝 Resumen",
+                        value="**Estado:** Esperando instrucción..."
+                    )
+            
+            def execute_task_hybrid_workflow(
+                instruction: str,
+                workflow_type: str,
+                execution_mode: str,
+                api_base_url: str,
+                api_key: str,
+                headless: bool
+            ):
+                """Execute Task Hybrid workflow."""
+                if not instruction or not instruction.strip():
+                    return "{}", "❌ **Error:** La instrucción es requerida"
+                
+                try:
+                    task_hybrid_mode = get_task_hybrid_mode(config=config)
+                    
+                    # Configure executors
+                    task_hybrid_mode.set_web_config(headless=headless)
+                    if api_base_url:
+                        task_hybrid_mode.set_api_config(api_base_url, api_key if api_key else None)
+                    
+                    # Execute workflow
+                    result = asyncio.run(task_hybrid_mode.execute_workflow(
+                        instruction=instruction.strip(),
+                        workflow_type=workflow_type,
+                        execution_mode=execution_mode
+                    ))
+                    
+                    # Format output
+                    result_json = json.dumps(result, indent=2, ensure_ascii=False, default=str)
+                    summary = result.get("summary", "Workflow completado")
+                    
+                    return result_json, summary
+                    
+                except Exception as e:
+                    import traceback
+                    error_trace = traceback.format_exc()
+                    error_result = {
+                        "success": False,
+                        "error": str(e),
+                        "traceback": error_trace
+                    }
+                    error_json = json.dumps(error_result, indent=2, ensure_ascii=False, default=str)
+                    return error_json, f"❌ **Error:** {str(e)}"
+            
+            task_hybrid_execute_btn.click(
+                fn=execute_task_hybrid_workflow,
+                inputs=[
+                    task_hybrid_instruction,
+                    task_hybrid_workflow_type,
+                    task_hybrid_execution_mode,
+                    task_hybrid_api_base_url,
+                    task_hybrid_api_key,
+                    task_hybrid_headless
+                ],
+                outputs=[task_hybrid_output, task_hybrid_summary]
             )
 
         # Tab: 🤖 Business AI Omnicanal - Agente unificado ventas + soporte 24/7
@@ -21570,57 +21741,151 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                             outputs=[widget_code_output, widget_preview]
                         )
                     
-                    with gr.Tab("⚙️ Configuración Enterprise"):
-                        gr.Markdown("### ⚙️ Configuración Enterprise (Groq + PostgreSQL + n8n)")
+                    with gr.Tab("Configuración Enterprise"):
+                        gr.Markdown("### Configuración Enterprise")
+                        
+                        with gr.Accordion("🔧 Configuración General", open=True):
+                            chatpdf_config_brand_name = gr.Textbox(
+                                label="Nombre de tu Empresa",
+                                value=getattr(config, 'app_name', 'ChatPDF Mode'),
+                                placeholder="Ej: Mi Empresa"
+                            )
+                            
+                            chatpdf_config_rag_model = gr.Dropdown(
+                                label="Modelo de Embeddings para RAG",
+                                choices=[
+                                    ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "multilingual"),
+                                    ("sentence-transformers/all-MiniLM-L6-v2", "english"),
+                                ],
+                                value="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                                info="Modelo para generar embeddings de documentos"
+                            )
+                        
+                        with gr.Accordion("🎯 Configuración de Procesamiento", open=False):
+                            chatpdf_config_max_chunk_size = gr.Number(
+                                label="Tamaño Máximo de Chunk",
+                                value=1000,
+                                info="Tamaño máximo de cada fragmento de documento"
+                            )
+                            
+                            chatpdf_config_chunk_overlap = gr.Number(
+                                label="Solapamiento entre Chunks",
+                                value=200,
+                                info="Caracteres de solapamiento entre chunks"
+                            )
+                        
+                        with gr.Accordion("🔐 API Keys", open=False):
+                            chatpdf_config_openai_key = gr.Textbox(
+                                label="OpenAI API Key",
+                                type="password",
+                                placeholder="sk-...",
+                                value=os.getenv("OPENAI_API_KEY", ""),
+                                info="Para usar OpenAI como LLM"
+                            )
+                            
+                            chatpdf_config_anthropic_key = gr.Textbox(
+                                label="Anthropic API Key",
+                                type="password",
+                                placeholder="sk-ant-...",
+                                value=os.getenv("ANTHROPIC_API_KEY", ""),
+                                info="Para usar Claude como LLM"
+                            )
+                        
+                        chatpdf_config_save_btn = gr.Button("💾 Guardar Configuración", variant="primary")
+                        chatpdf_config_status = gr.Textbox(label="Estado", interactive=False)
+                        
+                        def save_chatpdf_config_fn(brand, rag_model_val, max_chunk, overlap, openai_key_val, anthropic_key_val):
+                            """Guarda configuración de ChatPDF."""
+                            try:
+                                import os
+                                from pathlib import Path
+                                
+                                # Actualizar configuración
+                                config.app_name = brand
+                                
+                                # Guardar API keys en .env si se proporcionaron
+                                env_path = Path(".env")
+                                env_vars = {}
+                                if env_path.exists():
+                                    with open(env_path, "r", encoding="utf-8") as f:
+                                        for line in f:
+                                            if "=" in line and not line.strip().startswith("#"):
+                                                key, value = line.strip().split("=", 1)
+                                                env_vars[key] = value
+                                
+                                if openai_key_val:
+                                    env_vars["OPENAI_API_KEY"] = openai_key_val
+                                if anthropic_key_val:
+                                    env_vars["ANTHROPIC_API_KEY"] = anthropic_key_val
+                                
+                                # Escribir .env
+                                with open(env_path, "w", encoding="utf-8") as f:
+                                    for key, value in env_vars.items():
+                                        f.write(f"{key}={value}\n")
+                                
+                                return "✅ Configuración guardada. Algunos cambios requieren reiniciar el servidor."
+                            except Exception as e:
+                                return f"❌ Error: {e}"
+                        
+                        chatpdf_config_save_btn.click(
+                            save_chatpdf_config_fn,
+                            inputs=[chatpdf_config_brand_name, chatpdf_config_rag_model, chatpdf_config_max_chunk_size, chatpdf_config_chunk_overlap, chatpdf_config_openai_key, chatpdf_config_anthropic_key],
+                            outputs=[chatpdf_config_status]
+                        )
+                    
+                    # NUEVO: Tab para controlar el Servidor API (para widget embeddable)
+                    with gr.Tab("🚀 Servidor API"):
+                        gr.Markdown("### 🚀 Control del Servidor API para Widget Embeddable")
                         gr.Markdown("""
-                        **Para velocidad extrema y memoria de largo plazo:**
-                        - **Groq:** Responde en <0.5 segundos (Llama 3.3 70B)
-                        - **PostgreSQL:** Recuerda clientes meses después
-                        - **n8n:** Conecta con WhatsApp/Instagram automáticamente
+                        **Inicia o detén el servidor API necesario para que el widget funcione en tu website.**
+                        
+                        **📋 El servidor API proporciona:**
+                        - 🔗 Endpoints REST para el widget embeddable
+                        - 📦 Servicio del archivo JavaScript del widget (`/static/business-ai-widget.js`)
+                        - 🔌 Endpoints de chat para Business AI Omnicanal
                         """)
                         
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Markdown("### 🔥 Groq Cloud (Velocidad Extrema)")
-                                groq_api_key_input = gr.Textbox(
-                                    label="🔑 Groq API Key",
-                                    type="password",
-                                    placeholder="gsk_...",
-                                    info="Obtén tu API key gratis en https://console.groq.com"
-                                )
-                                use_groq_checkbox = gr.Checkbox(
-                                    label="✅ Usar Groq (Llama 3.3 70B)",
-                                    value=False,
-                                    info="Activa para respuestas <0.5 segundos"
-                                )
-                                groq_model_select = gr.Dropdown(
-                                    label="🤖 Modelo Groq",
-                                    choices=[
-                                        ("llama-3.3-70b-versatile", "Llama 3.3 70B (Recomendado)"),
-                                        ("llama-3.1-70b-versatile", "Llama 3.1 70B"),
-                                        ("llama-3.1-8b-instant", "Llama 3.1 8B (Más rápido)")
-                                    ],
-                                    value="llama-3.3-70b-versatile",
-                                    allow_custom_value=True
-                                )
-                                save_groq_btn = gr.Button("💾 Guardar Configuración Groq", variant="primary")
-                                groq_status = gr.Markdown(label="📊 Estado Groq")
-                            
-                            with gr.Column():
-                                gr.Markdown("### 🗄️ PostgreSQL (Memoria de Largo Plazo)")
-                                postgresql_url_input = gr.Textbox(
-                                    label="🔗 Database URL",
-                                    placeholder="postgresql://user:pass@host:port/db",
-                                    type="password",
-                                    info="URL de conexión PostgreSQL"
-                                )
-                                use_postgresql_checkbox = gr.Checkbox(
-                                    label="✅ Usar PostgreSQL",
-                                    value=False,
-                                    info="Activa para recordar clientes meses después"
-                                )
-                                save_postgresql_btn = gr.Button("💾 Guardar Configuración PostgreSQL", variant="primary")
-                                postgresql_status = gr.Markdown(label="📊 Estado PostgreSQL")
+                        with gr.Column():
+                            gr.Markdown("### ⚡ Groq (LLM Ultra-Rápido)")
+                            groq_api_key_input = gr.Textbox(
+                                label="🔑 Groq API Key",
+                                placeholder="gsk_...",
+                                type="password",
+                                info="Obtén tu API key en: https://console.groq.com"
+                            )
+                            use_groq_checkbox = gr.Checkbox(
+                                label="✅ Usar Groq",
+                                value=False,
+                                info="Activa para usar Groq en lugar de OpenAI/Anthropic"
+                            )
+                            groq_model_select = gr.Dropdown(
+                                label="🤖 Modelo Groq",
+                                choices=[
+                                    ("llama-3.3-70b-versatile", "Llama 3.3 70B (Recomendado)"),
+                                    ("llama-3.1-70b-versatile", "Llama 3.1 70B"),
+                                    ("llama-3.1-8b-instant", "Llama 3.1 8B (Más rápido)")
+                                ],
+                                value="llama-3.3-70b-versatile",
+                                allow_custom_value=True
+                            )
+                            save_groq_btn = gr.Button("💾 Guardar Configuración Groq", variant="primary")
+                            groq_status = gr.Markdown(label="📊 Estado Groq")
+                        
+                        with gr.Column():
+                            gr.Markdown("### 🗄️ PostgreSQL (Memoria de Largo Plazo)")
+                            postgresql_url_input = gr.Textbox(
+                                label="🔗 Database URL",
+                                placeholder="postgresql://user:pass@host:port/db",
+                                type="password",
+                                info="URL de conexión PostgreSQL"
+                            )
+                            use_postgresql_checkbox = gr.Checkbox(
+                                label="✅ Usar PostgreSQL",
+                                value=False,
+                                info="Activa para recordar clientes meses después"
+                            )
+                            save_postgresql_btn = gr.Button("💾 Guardar Configuración PostgreSQL", variant="primary")
+                            postgresql_status = gr.Markdown(label="📊 Estado PostgreSQL")
                         
                         gr.Markdown("---")
                         gr.Markdown("### 🔗 n8n (WhatsApp/Instagram)")
@@ -22362,26 +22627,7 @@ Y usa como **Verify Token** el valor de `WHATSAPP_VERIFY_TOKEN`.
                                 import traceback
                                 return f"❌ Error: {str(e)}\n\n{traceback.format_exc()}"
                         
-                        save_chatbot_config_complete_btn.click(
-                            fn=save_chatbot_config_complete,
-                            inputs=[
-                                chatbot_tone_select, chatbot_personality_input, chatbot_custom_instructions_input,
-                                chatbot_rag_enabled_checkbox, chatbot_rag_documents_files, chatbot_rag_urls_input,
-                                shopify_enabled_checkbox, shopify_shop_url_input, shopify_access_token_input,
-                                woocommerce_enabled_checkbox, woocommerce_store_url_input, woocommerce_consumer_key_input, woocommerce_consumer_secret_input,
-                                chatbot_lead_scoring_enabled_checkbox, chatbot_lead_questions_input, chatbot_lead_hot_threshold_slider,
-                                chatbot_handoff_keywords_input, chatbot_handoff_sentiment_slider,
-                                chatbot_default_language_select, chatbot_multilingual_enabled_checkbox,
-                                chatbot_objection_responses_input,
-                                chatbot_booking_enabled_checkbox, chatbot_calendly_url_input, chatbot_google_calendar_url_input,
-                                chatbot_crm_type_select, chatbot_crm_webhook_url_input, chatbot_booking_message_input
-                            ],
-                            outputs=[chatbot_config_complete_status]
-                        )
-                    
-                    # NUEVO: Tab para controlar el Servidor API (para widget embeddable)
-                    with gr.Tab("🚀 Servidor API"):
-                        gr.Markdown("### 🚀 Control del Servidor API para Widget Embeddable")
+                        # Contenido del tab Servidor API continúa aquí
                         gr.Markdown("""
                         **Inicia o detén el servidor API necesario para que el widget funcione en tu website.**
                         
