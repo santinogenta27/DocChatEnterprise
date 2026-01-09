@@ -1,28 +1,22 @@
 """Gradio app for Enterprise Data AI 📊 - Multi-Agent RAG with Autonomous Agents."""
 
-
 from __future__ import annotations
 
 import os
 import sys
+import types
 import platform
-import types
-
-import sys
-import types
+import gradio as gr
 
 # Evita error de pyaudioop
 sys.modules['pyaudioop'] = types.ModuleType('pyaudioop')
 
-import gradio as gr
-
-#import sys, types
-sys.modules['pyaudioop'] = types.ModuleType('pyaudioop')
+# Evita error de pydub (si no está instalado)
 sys.modules['pydub'] = types.ModuleType('pydub')
 sys.modules['pydub.audio_segment'] = types.ModuleType('audio_segment')
-sys.modules['pydub.utils'] = types.ModuleType('utils') 
-# ===============================
+sys.modules['pydub.utils'] = types.ModuleType('utils')
 
+# FIX PARA WINDOWS: Configurar codificación UTF-8 para evitar errores con emojis
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -31,8 +25,9 @@ if sys.platform == "win32":
         import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-    
+
     os.environ["PYTHONIOENCODING"] = "utf-8"
+
 
 import json
 import uuid
