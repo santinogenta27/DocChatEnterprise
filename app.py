@@ -37115,16 +37115,25 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                         outputs=[company_knowledge_stats_output],
                     )
 
-# Nota: El endpoint para el widget embeddable está disponible en api_server.py
-# Para usar el widget, ejecuta: python api_server.py
-# El widget estará disponible en: http://localhost:7864/static/business-ai-widget.js
+# =====================================
+# LANZAMIENTO DE GRADIO COMPATIBLE CON RENDER
+# =====================================
+import os
 
-demo.launch(share=False, server_name="0.0.0.0") 
+if __name__ == "__main__":
+    # Render inyecta la variable de entorno PORT
+    # Si no existe (ej. corriendo local), usa 7860 por defecto
+    port = int(os.environ.get("PORT", 7860))
+    
+    demo.launch(
+        share=False,
+        server_name="0.0.0.0",   # Necesario para que sea accesible desde afuera
+        server_port=port         # Usa el puerto que Render asigna
+    )
 
 # =====================================
-# FASTAPI WRAPPER PARA RENDER (MINIMO)
+# FASTAPI WRAPPER PARA RENDER (MÍNIMO)
 # =====================================
-
 from fastapi import FastAPI
 
 fastapi_app = FastAPI()
@@ -37133,6 +37142,5 @@ fastapi_app = FastAPI()
 def healthz():
     return {"status": "ok"}
 
-# Render / uvicorn necesita una variable llamada "app"
+# Render y Uvicorn buscan una variable llamada "app"
 app = fastapi_app
-
