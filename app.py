@@ -37119,4 +37119,20 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
 # Para usar el widget, ejecuta: python api_server.py
 # El widget estará disponible en: http://localhost:7864/static/business-ai-widget.js
 
-demo.launch(share=False, server_name="0.0.0.0")
+demo.launch(share=False, server_name="0.0.0.0") 
+
+# =====================================
+# FASTAPI WRAPPER PARA RENDER (MINIMO)
+# =====================================
+
+from fastapi import FastAPI
+
+fastapi_app = FastAPI()
+
+@fastapi_app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+# Render / uvicorn necesita una variable llamada "app"
+app = fastapi_app
+
