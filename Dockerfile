@@ -1,52 +1,27 @@
-# ==========================
-# Imagen base
-# ==========================
-FROM python:3.12-slim
+FROM python:3.12-slim  # 🔹 Cambiado a 3.12
 
-# ==========================
-# Directorio de trabajo
-# ==========================
 WORKDIR /app
 
-# ==========================
-# Instalar dependencias del sistema
-# necesarias para PyAudio y otras librerías
-# ==========================
+# Dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    gcc \
-    portaudio19-dev \
-    libasound2-dev \
-    curl \
+    build-essential gcc portaudio19-dev libasound2-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-# ==========================
 # Actualizar pip
-# ==========================
 RUN python -m pip install --upgrade pip
 
-# ==========================
-# Copiar y instalar dependencias Python
-# ==========================
+# Copiar e instalar dependencias Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ==========================
-# Copiar todo el código
-# ==========================
+# Copiar código
 COPY . .
 
-# ==========================
-# Crear directorios necesarios
-# ==========================
+# Crear directorios
 RUN mkdir -p data documents .docchat_cache .docchat_vectordb .docchat_memory .docchat_audit
 
-# ==========================
 # Exponer puerto
-# ==========================
 EXPOSE 7860
 
-# ==========================
-# Comando para ejecutar la app
-# ==========================
+# Ejecutar app
 CMD ["python", "app.py"]
