@@ -2,30 +2,32 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Instalamos las dependencias del sistema necesarias
+# - portaudio19-dev: obligatorio para PyAudio
+# - build-essential y gcc: para compilar paquetes como PyAudio
+# - curl: lo dejaste tú, útil si lo necesitás
 RUN apt-get update && apt-get install -y \
     build-essential \
+    gcc \
+    portaudio19-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copiamos requirements.txt primero (mejor para caché de Docker)
 COPY requirements.txt .
 
-# Install Python dependencies
+# Instalamos dependencias de Python (ahora PyAudio podrá compilarse)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copiamos el resto del código
 COPY . .
 
-# Create necessary directories
+# Creamos directorios necesarios (buena práctica, lo mantenemos)
 RUN mkdir -p data documents .docchat_cache .docchat_vectordb .docchat_memory .docchat_audit
 
-# Cloud Run usa PORT environment variable (normalmente 8080)
-# La aplicación detecta PORT automáticamente en app.py
-EXPOSE 8080
+# Puerto por defecto (Render lo ignora, pero Gradio usa 7860 internamente)
+EXPOSE 7860
 
-# Run application
+# Ejecutamos la app (el puerto lo controla el código en app.py con os.environ.get("PORT"))
 CMD ["python", "app.py"]
-
-
 
