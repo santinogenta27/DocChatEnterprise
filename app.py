@@ -8,7 +8,14 @@ import sys
 import platform
 import types
 
-# ===============================
+import sys
+import types
+
+# Evita error de pyaudioop
+sys.modules['pyaudioop'] = types.ModuleType('pyaudioop')
+
+import gradio as gr
+
 #import sys, types
 sys.modules['pyaudioop'] = types.ModuleType('pyaudioop')
 sys.modules['pydub'] = types.ModuleType('pydub')
