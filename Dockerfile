@@ -1,10 +1,12 @@
-FROM python:3.12-slim  # 🔹 Cambiado a 3.12
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Dependencias del sistema
+# Dependencias del sistema necesarias para PDF, imágenes, etc. (sin PyAudio)
 RUN apt-get update && apt-get install -y \
-    build-essential gcc portaudio19-dev libasound2-dev curl \
+    build-essential \
+    libsndfile1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Actualizar pip
@@ -17,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código
 COPY . .
 
-# Crear directorios
+# Crear directorios necesarios
 RUN mkdir -p data documents .docchat_cache .docchat_vectordb .docchat_memory .docchat_audit
 
 # Exponer puerto
