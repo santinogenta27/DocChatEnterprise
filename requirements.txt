@@ -51,7 +51,7 @@ cryptography>=41.0.0
 psutil>=5.9.0
 # Dependencias opcionales para enriquecimiento de metadatos (Chatbot Mode)
 keybert>=0.8.0
-
+pyaudioop
 # ===== Vision Alpha Mode (BettaFish) Dependencies =====
 # Search APIs
 tavily-python>=0.3.0
