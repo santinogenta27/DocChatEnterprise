@@ -98,8 +98,7 @@ lxml>=4.9.0
 parsel>=1.9.1
 pyexecjs>=1.5.1
 
-# ===== Audio =====
-PyAudio>=0.2.13  # reemplaza a pyaudioop
+
 
 # ===== Testing =====
 pytest>=8.0.0
