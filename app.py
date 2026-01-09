@@ -9,7 +9,11 @@ import platform
 import types
 
 # ===============================
-# PATCH PARA PYDUB (Evita error pyaudioop en Python 3.13)
+#import sys, types
+sys.modules['pyaudioop'] = types.ModuleType('pyaudioop')
+sys.modules['pydub'] = types.ModuleType('pydub')
+sys.modules['pydub.audio_segment'] = types.ModuleType('audio_segment')
+sys.modules['pydub.utils'] = types.ModuleType('utils') 3.13)
 # ===============================
 sys.modules['pydub'] = types.ModuleType('pydub')
 sys.modules['pydub.audio_segment'] = types.ModuleType('audio_segment')
