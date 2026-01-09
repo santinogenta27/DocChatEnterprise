@@ -20,12 +20,9 @@ import gradio as gr
 sys.modules['pyaudioop'] = types.ModuleType('pyaudioop')
 sys.modules['pydub'] = types.ModuleType('pydub')
 sys.modules['pydub.audio_segment'] = types.ModuleType('audio_segment')
-sys.modules['pydub.utils'] = types.ModuleType('utils') 3.13)
+sys.modules['pydub.utils'] = types.ModuleType('utils') 
 # ===============================
-sys.modules['pydub'] = types.ModuleType('pydub')
-sys.modules['pydub.audio_segment'] = types.ModuleType('audio_segment')
-sys.modules['pydub.utils'] = types.ModuleType('utils')
-# FIX PARA WINDOWS: Configurar codificación UTF-8 para evitar errores con emojis
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
