@@ -1,11 +1,19 @@
 """Gradio app for Enterprise Data AI 📊 - Multi-Agent RAG with Autonomous Agents."""
 
+
 from __future__ import annotations
 
 import os
 import sys
 import platform
+import types
 
+# ===============================
+# PATCH PARA PYDUB (Evita error pyaudioop en Python 3.13)
+# ===============================
+sys.modules['pydub'] = types.ModuleType('pydub')
+sys.modules['pydub.audio_segment'] = types.ModuleType('audio_segment')
+sys.modules['pydub.utils'] = types.ModuleType('utils')
 # FIX PARA WINDOWS: Configurar codificación UTF-8 para evitar errores con emojis
 if sys.platform == "win32":
     try:
