@@ -1,25 +1,21 @@
 """Gradio app for Enterprise Data AI 📊 - Multi-Agent RAG with Autonomous Agents."""
 
-
 from __future__ import annotations
 
 import os
 import sys
+import platform
 
 # FIX PARA WINDOWS: Configurar codificación UTF-8 para evitar errores con emojis
-# Esto debe estar ANTES de cualquier import que pueda hacer print con emojis
 if sys.platform == "win32":
-    # Configurar stdout y stderr para usar UTF-8
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except AttributeError:
-        # Python < 3.7 fallback
         import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
     
-    # También configurar la variable de entorno para subprocesos
     os.environ["PYTHONIOENCODING"] = "utf-8"
 
 import json
@@ -32,89 +28,112 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-import gradio as gr
-from dotenv import load_dotenv
+# Agregar el directorio padre al PYTHONPATH para poder importar docchat
+current_dir = Path(__file__).resolve().parent
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
 
-# CONFIGURAR DIRECTORIO TEMPORAL ALTERNATIVO si el disco C: está lleno
-# Intentar usar otro disco si está disponible (D:, E:, etc.)
+# CONFIGURAR DIRECTORIO TEMPORAL ALTERNATIVO - Compatible con Linux y Windows
 try:
-    # Verificar espacio en C:
-    import shutil
-    _, _, free_c = shutil.disk_usage("C:\\")
-    free_c_gb = free_c / (1024**3)
+    is_windows = platform.system() == "Windows"
     
-    if free_c_gb < 1.0:  # Menos de 1 GB libre en C:
-        # Buscar otro disco con espacio disponible
-        alternative_drive = None
-        for drive_letter in ['D', 'E', 'F', 'G', 'H']:
-            try:
-                drive_path = f"{drive_letter}:\\"
-                _, _, free_alt = shutil.disk_usage(drive_path)
-                free_alt_gb = free_alt / (1024**3)
-                if free_alt_gb > 5.0:  # Al menos 5 GB libres
-                    alternative_drive = drive_path
-                    print(f"✅ Encontrado disco alternativo: {drive_letter}: con {free_alt_gb:.2f} GB libres")
-                    break
-            except:
-                continue
-        
-        if alternative_drive:
-            # Usar disco alternativo para archivos temporales
-            alt_temp_dir = Path(alternative_drive) / "gradio_temp"
-            alt_temp_dir.mkdir(exist_ok=True)
+    if is_windows:
+        # Lógica para Windows
+        try:
+            _, _, free_c = shutil.disk_usage("C:\\")
+            free_c_gb = free_c / (1024**3)
             
-            # Configurar variables de entorno para Gradio y Python
+            if free_c_gb < 1.0:
+                alternative_drive = None
+                for drive_letter in ['D', 'E', 'F', 'G', 'H']:
+                    try:
+                        drive_path = f"{drive_letter}:\\"
+                        _, _, free_alt = shutil.disk_usage(drive_path)
+                        free_alt_gb = free_alt / (1024**3)
+                        if free_alt_gb > 5.0:
+                            alternative_drive = drive_path
+                            print(f"✅ Encontrado disco alternativo: {drive_letter}: con {free_alt_gb:.2f} GB libres")
+                            break
+                    except:
+                        continue
+                
+                if alternative_drive:
+                    alt_temp_dir = Path(alternative_drive) / "gradio_temp"
+                    alt_temp_dir.mkdir(exist_ok=True)
+                    
+                    os.environ["GRADIO_TEMP_DIR"] = str(alt_temp_dir)
+                    os.environ["TMPDIR"] = str(alt_temp_dir)
+                    os.environ["TEMP"] = str(alt_temp_dir)
+                    os.environ["TMP"] = str(alt_temp_dir)
+                    tempfile.tempdir = str(alt_temp_dir)
+                    
+                    print(f"⚠️ Disco C: tiene poco espacio ({free_c_gb:.2f} GB).")
+                    print(f"✅ Usando disco {alternative_drive} para archivos temporales: {alt_temp_dir}")
+                else:
+                    project_temp = Path(__file__).parent / ".gradio_temp"
+                    project_temp.mkdir(exist_ok=True)
+                    
+                    os.environ["GRADIO_TEMP_DIR"] = str(project_temp)
+                    os.environ["TMPDIR"] = str(project_temp)
+                    os.environ["TEMP"] = str(project_temp)
+                    os.environ["TMP"] = str(project_temp)
+                    tempfile.tempdir = str(project_temp)
+                    
+                    print(f"⚠️ Disco C: tiene poco espacio ({free_c_gb:.2f} GB). Usando directorio del proyecto: {project_temp}")
+        except Exception as win_e:
+            print(f"⚠️ Error en configuración de Windows: {win_e}")
+    else:
+        # Lógica para Linux/Unix
+        try:
+            # Verificar espacio en el directorio actual
+            stat = shutil.disk_usage("/")
+            free_gb = stat.free / (1024**3)
+            
+            if free_gb < 1.0:
+                print(f"⚠️ Poco espacio en disco: {free_gb:.2f} GB libres")
+            
+            # Usar /tmp o crear directorio en el proyecto
+            if Path("/tmp").exists() and os.access("/tmp", os.W_OK):
+                alt_temp_dir = Path("/tmp") / "gradio_temp"
+            else:
+                alt_temp_dir = Path(__file__).parent / ".gradio_temp"
+            
+            alt_temp_dir.mkdir(exist_ok=True, parents=True)
+            
             os.environ["GRADIO_TEMP_DIR"] = str(alt_temp_dir)
             os.environ["TMPDIR"] = str(alt_temp_dir)
             os.environ["TEMP"] = str(alt_temp_dir)
             os.environ["TMP"] = str(alt_temp_dir)
-            
-            # También configurar tempfile
             tempfile.tempdir = str(alt_temp_dir)
             
-            print(f"⚠️ Disco C: tiene poco espacio ({free_c_gb:.2f} GB).")
-            print(f"✅ Usando disco {alternative_drive} para archivos temporales: {alt_temp_dir}")
-        else:
-            # Fallback: usar directorio del proyecto
-            project_temp = Path(__file__).parent / ".gradio_temp"
-            project_temp.mkdir(exist_ok=True)
+            print(f"✅ Usando directorio temporal: {alt_temp_dir}")
+        except Exception as linux_e:
+            print(f"⚠️ Error en configuración de Linux: {linux_e}")
             
-            os.environ["GRADIO_TEMP_DIR"] = str(project_temp)
-            os.environ["TMPDIR"] = str(project_temp)
-            os.environ["TEMP"] = str(project_temp)
-            os.environ["TMP"] = str(project_temp)
-            tempfile.tempdir = str(project_temp)
-            
-            print(f"⚠️ Disco C: tiene poco espacio ({free_c_gb:.2f} GB). Usando directorio del proyecto: {project_temp}")
 except Exception as e:
     print(f"⚠️ No se pudo configurar directorio temporal alternativo: {e}")
 
-# MONKEY PATCH: Fix para bug de Gradio 4.40.0 con TypeError en api_info
-# Este bug ocurre cuando schema es un bool en lugar de un dict en la línea 863
+import gradio as gr
+from dotenv import load_dotenv
+
+# MONKEY PATCH: Fix para bug de Gradio 4.40.0
 try:
     import gradio_client.utils as client_utils
     
-    # Guardar la función original
     _original_get_type = client_utils.get_type
     
     def _patched_get_type(schema):
-        """Monkey patch para evitar TypeError cuando schema es bool"""
-        # Si schema no es un dict, retornar tipo por defecto
         if not isinstance(schema, dict):
             return "Any"
-        # Verificar que "const" pueda ser buscado (schema debe ser dict)
         if "const" in schema:
             return "Literal"
         return _original_get_type(schema)
     
-    # Aplicar el patch
     client_utils.get_type = _patched_get_type
     
-    # También parchear _json_schema_to_python_type para mayor seguridad
     _original_json_schema_to_python_type = client_utils._json_schema_to_python_type
     
     def _patched_json_schema_to_python_type(schema, defs=None):
-        """Monkey patch para evitar TypeError en _json_schema_to_python_type"""
         if not isinstance(schema, dict):
             return "Any"
         return _original_json_schema_to_python_type(schema, defs)
@@ -123,7 +142,7 @@ try:
 except Exception as e:
     print(f"⚠️ Warning: No se pudo aplicar monkey patch para Gradio: {e}")
 
-# Cargar .env ANTES de cualquier otra cosa
+# Cargar .env
 env_path = Path(__file__).parent / ".env"
 cwd_env_path = Path.cwd() / ".env"
 
@@ -137,7 +156,6 @@ elif cwd_env_path.exists():
 else:
     load_dotenv(override=True)
 
-# Si load_dotenv no funcionó, leer el archivo manualmente y cargar todas las variables
 if env_file:
     try:
         content = env_file.read_text(encoding='utf-8-sig').strip()
@@ -147,59 +165,78 @@ if env_file:
                 key, value = line.split('=', 1)
                 key = key.strip()
                 value = value.strip().strip('"').strip("'")
-                # Cargar todas las variables de entorno del .env
                 if key and value:
                     os.environ[key] = value
-    except Exception:
-        pass
+    except Exception as env_e:
+        print(f"⚠️ Error al cargar .env: {env_e}")
 
-# Importar componentes
-from docchat import AppConfig, load_config
-from docchat.document_processor import DocumentProcessor
-from docchat.mass_processor import MassDocumentProcessor
-from docchat.retriever_builder import RetrieverBuilder
-from docchat.workflow import AgentWorkflow
-from docchat.memory import MemoryStore, ContextManager
-from docchat.autonomous_agent import AutonomousAgent
-from docchat.advanced_agent import AdvancedAutonomousAgent
-from docchat.enterprise_api import EnterpriseAPIMode
-from docchat.intelligence_contract_mode import IntelligenceContractMode
-from docchat.copilot_mode import CopilotMode
-from docchat.advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode
-# from docchat.optimus_mode import OptimusMode, get_optimus_mode, run_optimus_mode  # ELIMINADO
-from docchat.marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier
-from docchat.optimus_prime_mode import OptimusPrimeMode, get_optimus_prime_mode, run_optimus_prime_mode
-from docchat.extasis_mode import ExtasisMode, get_extasis_mode, run_extasis_mode
-from docchat.enterprise_api_stargate import StargatePDFMode
-from docchat.enterprise_api_data_sight import DataSightMode
-from docchat.data_sight_integrations import DataSightIntegrations
-from docchat.data_sight_automation import DataSightAutomation, AutomationRule
-from docchat.enterprise_api_mdp import EnterpriseAPIMDPMode
-from docchat.enterprise_api_supreme import EnterpriseAPISupremeMode
-from docchat.enterprise_api_gold import EnterpriseAPIGoldMode
-from docchat.chatdoc_mode import run_chatdoc, get_chatdoc
-from docchat.pdf_converter import convert_to_pdf, TEXT_EXTENSIONS
-from docchat.enterprise_autonomous_workflows import EnterpriseAutonomousWorkflows
-from docchat.enterprise_data_intelligence import EnterpriseDataIntelligence
-from docchat.agentic_workflow_orchestrator import AgenticWorkflowOrchestrator
-from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
-from docchat.customer_service_agent import CustomerServiceAgent
-from docchat.ads_optimization_mode import AdsOptimizationMode, get_ads_optimization_mode
-from docchat.chatbot_mode import ChatbotMode
-from docchat.text_to_action import TextToAction
-from docchat.email_autonomous_agent import EmailAutonomousAgent
-from docchat.multi_format_processor import MultiFormatProcessor
-from docchat.ai_agent_business_manager_mode import AIAgentBusinessManagerMode
-from docchat.iterative_learning_agent import IterativeLearningAgent
-from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
-from docchat.alien_mode import run_alien_mode, get_alien_mode
-from docchat.pdf_agent_mode import run_pdf_agent_mode, get_pdf_agent_mode
-from docchat.advantage_mode import run_advantage_mode, get_advantage_mode
-from docchat.chat_pdf_mode import run_chat_pdf_mode, get_chat_pdf_mode
-from docchat.snipe_shot_mode import run_snipe_shot_mode, get_snipe_shot_mode
-from docchat.portal_ads_mode import run_portal_ads_mode, get_portal_ads_mode
-from docchat.ad_llm_mode import run_ad_llm_mode, get_ad_llm_mode
-from docchat.task_hybrid_mode import TaskHybridMode, get_task_hybrid_mode, run_task_hybrid_mode
+# Importar componentes - con mejor manejo de errores
+try:
+    from docchat import AppConfig, load_config
+    from docchat.document_processor import DocumentProcessor
+    from docchat.mass_processor import MassDocumentProcessor
+    from docchat.retriever_builder import RetrieverBuilder
+    from docchat.workflow import AgentWorkflow
+    from docchat.memory import MemoryStore, ContextManager
+    from docchat.autonomous_agent import AutonomousAgent
+    from docchat.advanced_agent import AdvancedAutonomousAgent
+    from docchat.enterprise_api import EnterpriseAPIMode
+    from docchat.intelligence_contract_mode import IntelligenceContractMode
+    from docchat.copilot_mode import CopilotMode
+    from docchat.advice_god_mode import AdviceGodMode, get_advice_god_mode, run_advice_god_mode
+    from docchat.marketplace_mode import MarketplaceMode, get_marketplace_mode, run_marketplace_mode, PricingTier, AdStatus, CreatorTier
+    from docchat.optimus_prime_mode import OptimusPrimeMode, get_optimus_prime_mode, run_optimus_prime_mode
+    from docchat.extasis_mode import ExtasisMode, get_extasis_mode, run_extasis_mode
+    from docchat.enterprise_api_stargate import StargatePDFMode
+    from docchat.enterprise_api_data_sight import DataSightMode
+    from docchat.data_sight_integrations import DataSightIntegrations
+    from docchat.data_sight_automation import DataSightAutomation, AutomationRule
+    from docchat.enterprise_api_mdp import EnterpriseAPIMDPMode
+    from docchat.enterprise_api_supreme import EnterpriseAPISupremeMode
+    from docchat.enterprise_api_gold import EnterpriseAPIGoldMode
+    from docchat.chatdoc_mode import run_chatdoc, get_chatdoc
+    from docchat.pdf_converter import convert_to_pdf, TEXT_EXTENSIONS
+    from docchat.enterprise_autonomous_workflows import EnterpriseAutonomousWorkflows
+    from docchat.enterprise_data_intelligence import EnterpriseDataIntelligence
+    from docchat.agentic_workflow_orchestrator import AgenticWorkflowOrchestrator
+    from docchat.enterprise_agentic_ai import EnterpriseAgenticAI
+    from docchat.customer_service_agent import CustomerServiceAgent
+    from docchat.ads_optimization_mode import AdsOptimizationMode, get_ads_optimization_mode
+    from docchat.chatbot_mode import ChatbotMode
+    from docchat.text_to_action import TextToAction
+    from docchat.email_autonomous_agent import EmailAutonomousAgent
+    from docchat.multi_format_processor import MultiFormatProcessor
+    from docchat.ai_agent_business_manager_mode import AIAgentBusinessManagerMode
+    from docchat.iterative_learning_agent import IterativeLearningAgent
+    from docchat.chat_conversational_2 import run_chat_conversational_2, get_chat_conversational_2
+    from docchat.alien_mode import run_alien_mode, get_alien_mode
+    from docchat.pdf_agent_mode import run_pdf_agent_mode, get_pdf_agent_mode
+    from docchat.advantage_mode import run_advantage_mode, get_advantage_mode
+    from docchat.chat_pdf_mode import run_chat_pdf_mode, get_chat_pdf_mode
+    from docchat.snipe_shot_mode import run_snipe_shot_mode, get_snipe_shot_mode
+    from docchat.portal_ads_mode import run_portal_ads_mode, get_portal_ads_mode
+    from docchat.ad_llm_mode import run_ad_llm_mode, get_ad_llm_mode
+    from docchat.task_hybrid_mode import TaskHybridMode, get_task_hybrid_mode, run_task_hybrid_mode
+    
+    print("✅ Todos los módulos importados correctamente")
+    
+except ModuleNotFoundError as e:
+    print(f"❌ ERROR: No se pudo importar el módulo 'docchat': {e}")
+    print(f"📁 Directorio actual: {Path.cwd()}")
+    print(f"📁 Directorio del script: {Path(__file__).parent}")
+    print(f"🔍 PYTHONPATH: {sys.path}")
+    print("\n💡 Soluciones posibles:")
+    print("   1. Verifica que exista la carpeta 'docchat' en el mismo directorio que app.py")
+    print("   2. Verifica que 'docchat' tenga un archivo __init__.py")
+    print("   3. Instala el paquete si es necesario: pip install -e .")
+    sys.exit(1)
+except Exception as e:
+    print(f"❌ ERROR inesperado al importar módulos: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+
 
 # Importar Business AI Omnicanal y Top Ads Mode
 try:
