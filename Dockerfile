@@ -19,11 +19,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código
 COPY . .
 
+# INSTALAR TU PROPIO PAQUETE DOCCHAT
+# Esto hace que todos los imports internos funcionen
+RUN pip install --no-cache-dir -e .
+
 # Crear directorios necesarios
 RUN mkdir -p data documents .docchat_cache .docchat_vectordb .docchat_memory .docchat_audit
 
-# Exponer puerto
-EXPOSE 7860
+# Exponer puerto que Cloud Run asigna dinámicamente
+ENV PORT 8080
+EXPOSE $PORT
 
 # Ejecutar app
 CMD ["python", "app.py"]
