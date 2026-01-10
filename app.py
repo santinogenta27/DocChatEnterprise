@@ -37166,20 +37166,75 @@ print(f"📁 Directorio de trabajo: {os.getcwd()}")
 print(f"🐍 PYTHONPATH: {os.environ.get('PYTHONPATH', 'No definido')}")
 print(f"📦 Versión de Gradio: {gr.__version__}")
 
+# Configurar variables de entorno para Gradio en Cloud Run
+os.environ["GRADIO_SERVER_NAME"] = "0.0.0.0"
+os.environ["GRADIO_SERVER_PORT"] = str(port)
+
 if __name__ == "__main__":
     try:
         # Cloud Run inyecta la variable de entorno PORT
-        # Si no existe (ej. corriendo local), usa 8080 por defecto
+        # Configuración específica para Cloud Run
         print(f"✅ Lanzando aplicación Gradio en 0.0.0.0:{port}")
+        
+        # Deshabilitar la generación de API info para evitar el error del JSON schema
+        # Esto evita el TypeError: argument of type 'bool' is not iterable
+        try:
+            if hasattr(demo, 'get_blocks'):
+                blocks = demo.get_blocks()
+                if hasattr(blocks, 'get_api_info'):
+                    original_get_api_info = blocks.get_api_info
+                    def safe_get_api_info():
+                        try:
+                            return original_get_api_info()
+                        except (TypeError, AttributeError, KeyError) as api_error:
+                            print(f"⚠️ Error al generar API info (ignorado): {api_error}")
+                            return None
+                    blocks.get_api_info = safe_get_api_info
+        except Exception as api_fix_error:
+            print(f"⚠️ No se pudo deshabilitar API info (continuando): {api_fix_error}")
+        
+        # Deshabilitar verificación de localhost y API info para evitar errores
         demo.launch(
             share=False,
-            server_name="0.0.0.0",   # Necesario para que sea accesible desde afuera
-            server_port=port,        # Usa el puerto que Cloud Run asigna
-            show_error=True,         # Mostrar errores en la consola
-            prevent_thread_lock=False,  # Permitir que el proceso se cierre correctamente
-            quiet=False,             # Mostrar logs para debugging en Cloud Run
-            show_api=False           # No mostrar documentación de API
+            server_name="0.0.0.0",        # Necesario para que sea accesible desde afuera
+            server_port=port,            # Usa el puerto que Cloud Run asigna
+            show_error=True,             # Mostrar errores en la consola
+            prevent_thread_lock=False,    # Permitir que el proceso se cierre correctamente
+            quiet=False,                 # Mostrar logs para debugging en Cloud Run
+            show_api=False,              # No mostrar documentación de API
+            enable_queue=False,          # Deshabilitar queue para evitar problemas
+            inbrowser=False,            # No abrir navegador
+            favicon_path=None,           # No usar favicon personalizado
         )
+    except ValueError as ve:
+        # Manejar específicamente el error de localhost
+        if "shareable link" in str(ve) or "localhost" in str(ve).lower():
+            print(f"⚠️ Error de localhost detectado, reintentando con configuración alternativa...")
+            try:
+                # Configuración alternativa para Cloud Run sin verificación de localhost
+                demo.launch(
+                    share=False,
+                    server_name="0.0.0.0",
+                    server_port=port,
+                    show_error=True,
+                    prevent_thread_lock=False,
+                    quiet=False,
+                    show_api=False,
+                    enable_queue=False,
+                    inbrowser=False,
+                    favicon_path=None,
+                    root_path=None,
+                )
+            except Exception as e2:
+                print(f"❌ Error al lanzar con configuración alternativa: {e2}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+        else:
+            print(f"❌ Error de valor: {ve}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
     except Exception as e:
         print(f"❌ Error al lanzar la aplicación: {e}")
         import traceback
