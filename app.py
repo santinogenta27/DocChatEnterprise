@@ -236,10 +236,36 @@ except ModuleNotFoundError as e:
     print(f"📁 Directorio actual: {Path.cwd()}")
     print(f"📁 Directorio del script: {Path(__file__).parent}")
     print(f"🔍 PYTHONPATH: {sys.path}")
+    print(f"🐍 Versión de Python: {sys.version}")
+    
+    # Verificar si el directorio docchat existe
+    docchat_dir = Path(__file__).parent / "docchat"
+    print(f"📂 Verificando existencia de directorio docchat: {docchat_dir.exists()}")
+    if docchat_dir.exists():
+        print(f"   - Existe: {docchat_dir}")
+        init_file = docchat_dir / "__init__.py"
+        print(f"   - __init__.py existe: {init_file.exists()}")
+        if init_file.exists():
+            print(f"   - Tamaño de __init__.py: {init_file.stat().st_size} bytes")
+    else:
+        print(f"   - ❌ El directorio docchat no existe en {Path(__file__).parent}")
+    
+    # Listar contenido del directorio actual
+    print(f"\n📋 Contenido del directorio actual ({Path(__file__).parent}):")
+    try:
+        for item in sorted(Path(__file__).parent.iterdir()):
+            if item.is_dir():
+                print(f"   📁 {item.name}/")
+            else:
+                print(f"   📄 {item.name}")
+    except Exception as list_e:
+        print(f"   ⚠️ No se pudo listar el directorio: {list_e}")
+    
     print("\n💡 Soluciones posibles:")
     print("   1. Verifica que exista la carpeta 'docchat' en el mismo directorio que app.py")
     print("   2. Verifica que 'docchat' tenga un archivo __init__.py")
     print("   3. Instala el paquete si es necesario: pip install -e .")
+    print("   4. Verifica que PYTHONPATH incluya el directorio del proyecto")
     sys.exit(1)
 except Exception as e:
     print(f"❌ ERROR inesperado al importar módulos: {e}")
@@ -37127,31 +37153,35 @@ El agente analizó la tarea, creó un plan, tomó decisiones autónomas y ejecut
                     )
 
 # =====================================
-# LANZAMIENTO DE GRADIO COMPATIBLE CON RENDER
+# LANZAMIENTO DE GRADIO COMPATIBLE CON CLOUD RUN
 # =====================================
 import os
 
+# Obtener el puerto desde la variable de entorno PORT (Cloud Run lo asigna)
+# Cloud Run asigna dinámicamente el puerto a través de la variable PORT
+port = int(os.environ.get("PORT", 8080))
+
+print(f"🚀 Iniciando aplicación en puerto {port}")
+print(f"📁 Directorio de trabajo: {os.getcwd()}")
+print(f"🐍 PYTHONPATH: {os.environ.get('PYTHONPATH', 'No definido')}")
+print(f"📦 Versión de Gradio: {gr.__version__}")
+
 if __name__ == "__main__":
-    # Render inyecta la variable de entorno PORT
-    # Si no existe (ej. corriendo local), usa 7860 por defecto
-    port = int(os.environ.get("PORT", 7860))
-    
-    demo.launch(
-        share=False,
-        server_name="0.0.0.0",   # Necesario para que sea accesible desde afuera
-        server_port=port         # Usa el puerto que Render asigna
-    )
-
-# =====================================
-# FASTAPI WRAPPER PARA RENDER (MÍNIMO)
-# =====================================
-from fastapi import FastAPI
-
-fastapi_app = FastAPI()
-
-@fastapi_app.get("/healthz")
-def healthz():
-    return {"status": "ok"}
-
-# Render y Uvicorn buscan una variable llamada "app"
-app = fastapi_app
+    try:
+        # Cloud Run inyecta la variable de entorno PORT
+        # Si no existe (ej. corriendo local), usa 8080 por defecto
+        print(f"✅ Lanzando aplicación Gradio en 0.0.0.0:{port}")
+        demo.launch(
+            share=False,
+            server_name="0.0.0.0",   # Necesario para que sea accesible desde afuera
+            server_port=port,        # Usa el puerto que Cloud Run asigna
+            show_error=True,         # Mostrar errores en la consola
+            prevent_thread_lock=False,  # Permitir que el proceso se cierre correctamente
+            quiet=False,             # Mostrar logs para debugging en Cloud Run
+            show_api=False           # No mostrar documentación de API
+        )
+    except Exception as e:
+        print(f"❌ Error al lanzar la aplicación: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
