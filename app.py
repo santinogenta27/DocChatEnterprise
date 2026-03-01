@@ -16,12 +16,11 @@ def healthz():
     return {"status": "ok"}
 
 # Montar tu app Gradio en la raíz
-app.mount("/", demo.app)
+app.mount("/", demo.app, name="gradio")
 
 # Ejecutar con uvicorn si corremos app.py directamente
 if __name__ == "__main__":
     import uvicorn
-    # Render asigna el puerto dinámicamente vía la variable de entorno PORT
-    port = int(os.environ["PORT"])
+    port = int(os.environ.get("PORT", 7860))  # 7860 solo local
     print(f"🚀 Starting DocChat Enterprise on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
