@@ -21,6 +21,6 @@ app.mount("/", demo.app, name="gradio")
 # Ejecutar con uvicorn si corremos app.py directamente
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 7860))  # 7860 solo local
+    port = int(os.environ.get("PORT", 10000))  # Render usa 10000 por defecto
     print(f"🚀 Starting DocChat Enterprise on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
