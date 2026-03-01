@@ -1,7 +1,8 @@
 """
 DocChat Enterprise - Main Application
-Compatible with Render deployment (uvicorn + /healthz)
+Compatible con Render deployment (uvicorn + /healthz)
 """
+
 import os
 from fastapi import FastAPI
 from chatbot_dashboard import demo  # tu app Gradio
@@ -20,6 +21,7 @@ app.mount("/", demo.app)
 # Ejecutar con uvicorn si corremos app.py directamente
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 7860))  # 7860 solo local
+    # Render asigna el puerto dinámicamente vía la variable de entorno PORT
+    port = int(os.environ["PORT"])
     print(f"🚀 Starting DocChat Enterprise on port {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
