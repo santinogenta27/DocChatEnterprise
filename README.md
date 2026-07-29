@@ -1,38 +1,74 @@
----
-title: DocChat Enterprise
-emoji: 🤖
-colorFrom: blue
-colorTo: purple
-sdk: gradio
-sdk_version: "4.19.2"
-app_file: app.py
-pinned: false
----
-
 # DocChat Enterprise
 
-Sistema avanzado de procesamiento de documentos y agentes de IA empresariales.
+Enterprise AI platform for private document intelligence.
 
-## Características
+## 🌍 Real-World Use Cases & Applications
 
-- **RAG (Retrieval-Augmented Generation)**: Consulta inteligente sobre documentos
-- **Enterprise API**: API completa para integración empresarial
-- **Chat Conversacional**: Chat con contexto de documentos
-- **Text-to-Action**: Convierte descripciones en código Python ejecutable
-- **Agentes Autónomos**: Agentes que aprenden iterativamente
-- **Full-Stack Text-to-Action**: Construcción de aplicaciones completas
-- **Web Recency**: Integración con información en tiempo real
-- **Deep Chain of Thought**: Razonamiento profundo y verifiable
-- **Automated Testing**: Sistema de pruebas automatizado
-- **Adversarial AI**: Detección de vulnerabilidades
-- **Collaborative Agents**: Múltiples agentes trabajando juntos
-- **Advanced Integration**: Integración con APIs y servicios en la nube
+DocChat Enterprise can be integrated across a wide variety of industries and operational workflows to solve complex document-handling challenges:
 
-## Uso
+### 1. E-Commerce & Retail
 
-La aplicación se inicia automáticamente cuando se despliega en Hugging Face Spaces.
+* **24/7 Customer Support (via Embeddable Widget):** Instantly answer buyer inquiries regarding shipping policies, return guidelines, warranties, or size charts using uploaded product PDFs.
+* **Complex Product Assistance:** Help customers navigate extensive catalogs, technical specifications, or assembly manuals directly from the storefront website.
 
-## Requisitos
+### 2. Internal Knowledge Management & HR
 
-Ver `requirements.txt` para las dependencias necesarias.
+* **Employee Onboarding & Training:** Allow new hires to ask natural-language questions about company policies, internal benefits, organizational culture, and employee handbooks.
+* **Instant SOP Search (Standard Operating Procedures):** Help employees resolve operational doubts in seconds without manually reading hundreds of pages of internal documentation.
+* **Unified Corporate Assistant:** Serve as a single, centralized entry point for day-to-day administrative and operational queries across the company intranet.
 
+### 3. Legal, Compliance & Auditing
+
+* **Mass Contract Analysis:** Ingest dozens or hundreds of legal PDFs to quickly extract key clauses, expiration dates, or specific compliance conditions.
+* **Regulatory Compliance Checking:** Verify whether internal procedures or company documents align with local and international legal frameworks.
+* **Executive Summaries:** Generate concise, high-level summaries of complex legal filings and extensive audit reports for faster decision-making.
+
+### 4. Finance, Banking & Accounting
+
+* **Financial Report Analysis:** Extract, analyze, and compare financial metrics, corporate balances, and annual reports hidden within large volumes of PDF documentation.
+* **Credit & Risk Policy Consulting:** Help analysts instantly check current rules, thresholds, and requirements for credit approvals and financial investments.
+
+### 5. IT, Software Engineering & Technical Support
+
+* **Rapid Incident Resolution:** Query software architecture guides, server documentation, and technical manuals to troubleshoot errors faster.
+* **Technical Spec Libraries:** Allow engineers to cross-reference technical requirements and legacy project specifications without manual documentation scanning.
+
+### 6. Healthcare & Pharmaceuticals
+
+* **Clinical Trials & Medical Reference:** Search quickly through medical literature, clinical trials, drug monographs, and treatment guidelines.
+* **Secure Protocol Access:** Ensure medical staff have private, instant access to up-to-date hospital protocols and clinical care procedures.
+
+### 7. Education & Academic Portals
+
+* **Virtual Research Tutor:** Enable students and researchers to upload multiple textbooks, theses, or scientific papers to ask direct questions or generate chapter summaries.
+* **University Web Assistant:** Embed the widget on educational portals to handle student inquiries regarding syllabi, academic calendars, and enrollment processes.
+
+### 8. Sales, Marketing & B2B
+
+* **RFP & Tender Response Preparation:** Sales teams can quickly extract technical answers and past project details to draft competitive proposals under tight deadlines.
+* **Sales Enablement:** Provide sales reps with instant access to brand guidelines, product battlecards, and feature comparisons during client interactions.
+
+---
+
+## Features
+
+* Private RAG (Retrieval-Augmented Generation) over uploaded PDFs
+* Advanced RAG Pipeline: Intelligent, high-accuracy context retrieval and querying across complex enterprise documents
+* AI Widget embeddable into any website
+* Enterprise AI Assistant for employees
+* Secure private knowledge base built from company documents
+* Multi-document ingestion (upload dozens or hundreds of PDFs)
+* Chat with private enterprise knowledge
+* AI-powered document search and question answering
+* Enterprise-grade document summarization
+* Large context window for understanding extensive documentation
+
+## How it works
+
+* Upload one or more PDF documents to create a private enterprise knowledge base.
+* Index and retrieve information using an advanced RAG pipeline.
+* Employees can ask natural-language questions and receive answers grounded in the uploaded documents.
+* Generate summaries across large collections of enterprise PDFs.
+* Search internal company knowledge instantly without manually reading documentation.
+* Embed the AI assistant as a widget inside any website, portal, or internal enterprise application.
+* Keep enterprise knowledge private while enabling fast, intelligent access to information.
