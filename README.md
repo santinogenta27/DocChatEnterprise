@@ -1,4 +1,4 @@
-DocChat Enterprise
+## DocChat Enterprise
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
 
 DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
