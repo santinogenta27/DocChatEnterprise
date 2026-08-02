@@ -126,23 +126,39 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 
 ## Getting Started
 
+## Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/santinogenta27/DocChatEnterprise.git
 cd DocChatEnterprise
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
+# Create a virtual environment
+python -m venv .venv
+
+# Activate it
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+```
 
-# Configure environment variables
-cp .env.example .env
-# Add your OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+## Environment Variables
 
-# Run the application
-uvicorn api.main:app --reload
-# or
-python -m gradio app.py
+Create a `.env` file in the project root:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Add any additional API keys required for the features you want to use.
+
+## Run
+
+```bash
+python app.py
+```
