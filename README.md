@@ -1,9 +1,9 @@
 ## DocChat Enterprise
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
 
-**Demo Workflow:** The current public demonstration focuses on **Alien Mode**, showcasing the core platform capabilities: document upload, knowledge extraction, conversational AI, and an embeddable AI widget.
+**Demo Workflow:** The current public demonstration showcases **Alien Mode**, the main end-to-end workflow of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable AI widget.
 
-Additional modules included in the repository explore experimental AI workflows, enterprise automation patterns, and prototype integrations under active development.
+Additional modules included in the repository explore advanced AI workflows, enterprise automation patterns, and prototype integrations under continuous development.
 
 https://github.com/user-attachments/assets/0f008c2b-756b-4783-88a4-7c6e989c3912
 
