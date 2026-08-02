@@ -1,9 +1,11 @@
-
+## DocChat Enterprise
+Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
 
 https://github.com/user-attachments/assets/0f008c2b-756b-4783-88a4-7c6e989c3912
 
-## DocChat Enterprise
-Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
+**Alien Mode** is the primary functional workflow currently available. It demonstrates the core capabilities of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable widget.
+
+Other modules represent experimental AI workflows and enterprise prototypes under active development.
 
 DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
 
@@ -15,10 +17,6 @@ An internal AI assistant for employees to access company knowledge instantly.
 An AI customer support assistant embedded into any website to answer customer questions using the company’s own documentation.
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
-
-**Alien Mode** is the primary functional workflow currently available. It demonstrates the core capabilities of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable widget.
-
-Other modules represent experimental AI workflows and enterprise prototypes under active development.
 
 ## Key Features
 
