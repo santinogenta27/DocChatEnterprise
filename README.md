@@ -1,5 +1,5 @@
 ## DocChat Enterprise
-[![DocChat Enterprise Demo]([https://img.youtube.com/vi/TU_ID_DE_YOUTUBE/maxresdefault.jpg)](https://www.youtube.com/watch?v=TU_ID_DE_YOUTUBE](https://www.youtube.com/watch?v=wBtSqWNyFdI))
+[![WATCH DEMO VIDEO](https://img.shields.io/badge/▶️_WATCH_DEMO_VIDEO-YouTube-red?style=for-the-badge)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
 > 🚀 **Live SaaS Platform:** [https://www.enterprisedataai.com/](https://www.enterprisedataai.com/)
 
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
