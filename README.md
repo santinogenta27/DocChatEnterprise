@@ -16,8 +16,9 @@ An AI customer support assistant embedded into any website to answer customer qu
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
 
-> **Note:** Alien Mode is the primary functional workflow currently available, featuring document upload, knowledge extraction, conversational AI, and an embeddable widget. Other modules represent experimental AI workflows and enterprise prototypes under active development.
+**Alien Mode** is the primary functional workflow currently available. It demonstrates the core capabilities of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable widget.
 
+Other modules represent experimental AI workflows and enterprise prototypes under active development.
 
 ## Key Features
 
