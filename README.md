@@ -5,7 +5,16 @@ Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer
 
 Additional modules included in the repository explore advanced AI workflows, enterprise automation patterns, and prototype integrations under continuous development.
 
+> 🌐 **Language Note:** The public demo UI is currently configured in Spanish. Non-Spanish speakers can easily review the full application flow by enabling their browser's built-in translation (e.g., Chrome Google Translate).
+
 https://github.com/user-attachments/assets/0f008c2b-756b-4783-88a4-7c6e989c3912
+
+## 📌 Table of Contents
+- [Key Features](#key-features)
+- [Tech Stack](#tech-stack)
+- [System Architecture](#architecture-high-level)
+- [Real-World Use Cases](#real-world-use-cases--applications)
+- [Getting Started & Local Setup](#getting-started)
 
 DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
 
