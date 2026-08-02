@@ -1,11 +1,12 @@
-# Enterprise AI Agent for Sales, Internal Knowledge Management, and Customer Support
-[![LIVE  WEBSITE](https://img.shields.io/badge/🚀_LIVE_DEMO_WEBSITE-enterprisedataai.com-blue?style=for-the-badge)](https://www.enterprisedataai.com/)
-> 🌐 **LIVE  WEBSITE LINK:** https://www.enterprisedataai.com/
+# DocChat Enterprise
+### Enterprise AI Agent for Sales, Internal Knowledge Management, and Customer Support
 
-> 🎥 **Click the image or [this link](https://www.youtube.com/watch?v=wBtSqWNyFdI) to watch the video demo on YouTube.**
+[![Live Demo Website](https://img.shields.io/badge/🚀_LIVE_DEMO_WEBSITE-enterprisedataai.com-blue?style=for-the-badge)](https://www.enterprisedataai.com/)
+[![Watch Demo Video](https://img.shields.io/badge/▶️_WATCH_DEMO_VIDEO-YouTube-red?style=for-the-badge)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
+
+> 🎥 **Click the video thumbnail below or [this link](https://www.youtube.com/watch?v=wBtSqWNyFdI) to watch the Full Video Demo on YouTube.**
 
 [![DocChat Enterprise Demo](https://img.youtube.com/vi/wBtSqWNyFdI/maxresdefault.jpg)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
-
 
 **Demo Workflow:** The current public demonstration showcases **Alien Mode**, the main end-to-end workflow of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable AI widget.
 
@@ -19,6 +20,18 @@ Additional modules included in the repository explore advanced AI workflows, ent
 - [System Architecture](#architecture-high-level)
 - [Real-World Use Cases](#real-world-use-cases--applications)
 - [Getting Started & Local Setup](#getting-started)
+
+DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
+
+It transforms contracts, policies, manuals, technical documentation, and other enterprise knowledge into intelligent AI agents capable of answering questions, qualifying leads, generating summaries, and performing semantic search.
+
+The platform can be used as:
+
+* **An Autonomous Sales Agent:** Engages prospects, qualifies leads 24/7, and guides users through product technical details.
+* **An Internal AI Assistant:** Allows employees to instantly query company policies, SOPs, and technical documents.
+* **An AI Customer Support Agent:** Embeds into any website to handle complex user inquiries using private documentation.
+
+Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
 DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
 
