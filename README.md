@@ -1,4 +1,7 @@
 ## DocChat Enterprise
+[![DocChat Enterprise Demo]([https://img.youtube.com/vi/TU_ID_DE_YOUTUBE/maxresdefault.jpg)](https://www.youtube.com/watch?v=TU_ID_DE_YOUTUBE](https://www.youtube.com/watch?v=wBtSqWNyFdI))
+> 🚀 **Live SaaS Platform:** [https://www.enterprisedataai.com/](https://www.enterprisedataai.com/)
+
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
 
 **Demo Workflow:** The current public demonstration showcases **Alien Mode**, the main end-to-end workflow of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable AI widget.
@@ -6,8 +9,6 @@ Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer
 Additional modules included in the repository explore advanced AI workflows, enterprise automation patterns, and prototype integrations under continuous development.
 
 > 🌐 **Language Note:** The public demo UI is currently configured in Spanish. Non-Spanish speakers can easily review the full application flow by enabling their browser's built-in translation (e.g., Chrome Google Translate).
-
-https://github.com/user-attachments/assets/0f008c2b-756b-4783-88a4-7c6e989c3912
 
 ## 📌 Table of Contents
 - [Key Features](#key-features)
