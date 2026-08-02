@@ -28,9 +28,10 @@ It transforms contracts, policies, manuals, technical documentation, and complex
 ### Core Platform Capabilities:
 
 * **Massive Multi-Document Ingestion (100–500+ PDFs):** Ingest and index hundreds of corporate PDFs into a unified knowledge base to generate instant high-level summaries or execute deep queries across multiple files.
-* **Autonomous Sales Agent:** Engages prospects, qualifies leads 24/7, and guides users through product technical details.
 * **Internal Knowledge Assistant:** Allows employees to instantly query company policies, SOPs, and technical documents.
-* **AI Customer Support Agent:** Embeds into any website to handle complex user inquiries using private documentation.
+* **Embeddable Customer Support & Sales Widget:** Easily deploy a light web widget into any website to answer visitor inquiries 24/7 using uploaded document context via OpenAI.
+* **Context-Grounded RAG Pipeline:** Minimizes hallucinations by strictly anchoring LLM responses to the extracted text chunks from target documents.
+It transforms contracts... into interactive AI assistants capable of answering natural-language questions, generating multi-file summaries, and serving external users via a web widget.
 
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
@@ -111,23 +112,20 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 ## ⚡ Key Features
 
 ### 📄 Advanced Document Ingestion & RAG
-- **Massive Multi-Document Ingestion:** Ingest and index 100 to 500+ PDFs into a single, structured enterprise knowledge base.
+- **Massive Multi-Document Ingestion:** Ingest and index 100+ PDFs into a single, structured enterprise knowledge base.
 - **Advanced RAG Pipeline:** Context-aware retrieval and semantic search tailored for complex enterprise documentation.
 - **Enterprise Document Summarization:** Generate instant summaries and cross-document analysis across extensive PDF collections.
 - **OCR & Layout Processing:** Extract text and tables from scanned documents and complex layouts using Docling + OCR.
 
-### 🤖 Multi-Agent & AI Capabilities
-- **Multi-Agent Architecture:** Built with **LangChain** and **LangGraph** for intelligent routing, query decomposition, state management, and task execution.
-- **Autonomous Sales Agent:** Qualifies leads 24/7, engages prospects, and answers complex product questions.
-- **Internal Knowledge Assistant:** Gives employees immediate access to company SOPs, policies, and internal guides.
-- **AI Support Agent:** Handles automated customer service inquiries grounded strictly in uploaded company documents.
+### 🤖 AI Capabilities & Assistant Modes
+- **Embeddable AI Widget:** Deploy a lightweight assistant on any website to handle visitor queries 24/7 using product documentation via OpenAI.
+- **Internal Knowledge Assistant:** Gives employees immediate access to company SOPs, policies, and internal technical guides.
+- **Context-Grounded QA:** Minimizes hallucinations by strictly anchoring LLM answers to extracted document chunks.
 
-### 🔌 Integration & Deployment
-- **Embeddable AI Widget:** Seamless integration into any external website, internal portal, or intranet.
-- **Multi-LLM Support:** Native integration with OpenAI and Anthropic models via LangChain abstractions.
-- **Enterprise Storage Integration:** Compatible with PostgreSQL, Redis, MongoDB, AWS S3, Google Cloud Storage, and Azure Blob.
-- **Async Heavy Processing:** Background task queue processing powered by Celery for large document uploads.
-- **Data Privacy & Security:** Ensures sensitive company knowledge remains private and secure within the enterprise context.
+### 🔌 Tech Integration & Security
+- **LangChain & OpenAI Framework:** Clean orchestration for document loading, semantic chunking, and question-answering chains.
+- **Vector Search Indexing:** Fast similarity search powered by ChromaDB for accurate chunk retrieval.
+- **Data Privacy & Security:** Local vector indexing ensuring sensitive company knowledge remains private and controlled.
 
 ## ⚙️ How It Works (End-to-End Architecture Flow)
 
