@@ -50,33 +50,7 @@ PDF Upload → Document Processing (Docling + OCR)
 → Multi-Agent Orchestration (LangGraph)
 → LLM (OpenAI / Anthropic)
 → Response + Citations
-textThe system supports both internal employee chat and an embeddable customer-facing widget.
-
----
-
-## Getting Started
-
-```bash
-# Clone the repository
-git clone https://github.com/santinogenta27/DocChatEnterprise.git
-cd DocChatEnterprise
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Add your OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
-
-# Run the application
-uvicorn api.main:app --reload
-# or
-python -m gradio app.py
-
+textThe system supports both internal employee chat and an embeddable customer-facing widget
 
 
 ## 🌍 Real-World Use Cases & Applications
@@ -149,3 +123,26 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 * Search internal company knowledge instantly without manually reading documentation.
 * Embed the AI assistant as a widget inside any website, portal, or internal enterprise application.
 * Keep enterprise knowledge private while enabling fast, intelligent access to information.
+
+## Getting Started
+
+```bash
+# Clone the repository
+git clone https://github.com/santinogenta27/DocChatEnterprise.git
+cd DocChatEnterprise
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment variables
+cp .env.example .env
+# Add your OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+
+# Run the application
+uvicorn api.main:app --reload
+# or
+python -m gradio app.py
