@@ -3,7 +3,7 @@
 [![Live Demo Website](https://img.shields.io/badge/🚀_LIVE_DEMO_WEBSITE-enterprisedataai.com-blue?style=for-the-badge)](https://www.enterprisedataai.com/)
 [![Watch Demo Video](https://img.shields.io/badge/▶️_WATCH_DEMO_VIDEO-YouTube-red?style=for-the-badge)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
 
-> 🔗 **Quick Links:** [Try the Live Website](https://www.enterprisedataai.com/) | [Watch Full Video Demo on YouTube](https://www.youtube.com/watch?v=wBtSqWNyFdI)
+> 🎥 **Click the image or [this link](https://www.youtube.com/watch?v=wBtSqWNyFdI) to watch the video demo on YouTube.**
 
 [![DocChat Enterprise Demo](https://img.youtube.com/vi/wBtSqWNyFdI/maxresdefault.jpg)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
