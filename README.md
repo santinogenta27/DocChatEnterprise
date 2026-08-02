@@ -33,29 +33,6 @@ The platform can be used as:
 
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
-DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
-
-It transforms contracts, policies, manuals, technical documentation, and other enterprise knowledge into an intelligent AI assistant capable of answering questions, generating summaries, and performing semantic search.
-
-The platform can be used as:
-
-An internal AI assistant for employees to access company knowledge instantly.
-An AI customer support assistant embedded into any website to answer customer questions using the company’s own documentation.
-Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
-
-
-## Key Features
-
-- **Private RAG** over uploaded PDFs and multi-document knowledge bases
-- **Multi-agent architecture** powered by LangGraph
-- **Embeddable AI Widget** for any website
-- Advanced document understanding with Docling + OCR
-- Support for OpenAI and Anthropic models
-- Enterprise storage options (PostgreSQL, Redis, MongoDB, S3, GCS, Azure Blob)
-- Background task processing with Celery
-
----
-
 ## Tech Stack
 
 | Category              | Technologies                                      |
