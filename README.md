@@ -1,9 +1,9 @@
 ## DocChat Enterprise
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
 
-**Alien Mode** is the primary functional workflow currently available. It demonstrates the core capabilities of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable widget.
+**Demo Workflow:** The current public demonstration focuses on **Alien Mode**, showcasing the core platform capabilities: document upload, knowledge extraction, conversational AI, and an embeddable AI widget.
 
-Other modules represent experimental AI workflows and enterprise prototypes under active development.
+Additional modules included in the repository explore experimental AI workflows, enterprise automation patterns, and prototype integrations under active development.
 
 https://github.com/user-attachments/assets/0f008c2b-756b-4783-88a4-7c6e989c3912
 
