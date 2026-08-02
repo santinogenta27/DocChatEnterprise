@@ -23,13 +23,14 @@ Additional modules included in the repository explore advanced AI workflows, ent
 
 DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
 
-It transforms contracts, policies, manuals, technical documentation, and other enterprise knowledge into intelligent AI agents capable of answering questions, qualifying leads, generating summaries, and performing semantic search.
+It transforms contracts, policies, manuals, technical documentation, and complex knowledge bases into intelligent AI agents capable of answering questions, qualifying leads, generating summaries, and performing deep semantic search.
 
-The platform can be used as:
+### Core Platform Capabilities:
 
-* **An Autonomous Sales Agent:** Engages prospects, qualifies leads 24/7, and guides users through product technical details.
-* **An Internal AI Assistant:** Allows employees to instantly query company policies, SOPs, and technical documents.
-* **An AI Customer Support Agent:** Embeds into any website to handle complex user inquiries using private documentation.
+* **Massive Multi-Document Ingestion (100–500+ PDFs):** Ingest and index hundreds of corporate PDFs into a unified knowledge base to generate instant high-level summaries or execute deep queries across multiple files.
+* **Autonomous Sales Agent:** Engages prospects, qualifies leads 24/7, and guides users through product technical details.
+* **Internal Knowledge Assistant:** Allows employees to instantly query company policies, SOPs, and technical documents.
+* **AI Customer Support Agent:** Embeds into any website to handle complex user inquiries using private documentation.
 
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
@@ -107,28 +108,34 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 
 ---
 
-## Features
+## ⚡ Key Features
 
-* Private RAG (Retrieval-Augmented Generation) over uploaded PDFs
-* Advanced RAG Pipeline: Intelligent, high-accuracy context retrieval and querying across complex enterprise documents
-* AI Widget embeddable into any website
-* Enterprise AI Assistant for employees
-* Secure private knowledge base built from company documents
-* Multi-document ingestion (upload dozens or hundreds of PDFs)
-* Chat with private enterprise knowledge
-* AI-powered document search and question answering
-* Enterprise-grade document summarization
-* Large context window for understanding extensive documentation
+### 📄 Advanced Document Ingestion & RAG
+- **Massive Multi-Document Ingestion:** Ingest and index 100 to 500+ PDFs into a single, structured enterprise knowledge base.
+- **Advanced RAG Pipeline:** Context-aware retrieval and semantic search tailored for complex enterprise documentation.
+- **Enterprise Document Summarization:** Generate instant summaries and cross-document analysis across extensive PDF collections.
+- **OCR & Layout Processing:** Extract text and tables from scanned documents and complex layouts using Docling + OCR.
 
-## How it works
+### 🤖 Multi-Agent & AI Capabilities
+- **Multi-Agent Architecture:** Built with **LangChain** and **LangGraph** for intelligent routing, query decomposition, state management, and task execution.
+- **Autonomous Sales Agent:** Qualifies leads 24/7, engages prospects, and answers complex product questions.
+- **Internal Knowledge Assistant:** Gives employees immediate access to company SOPs, policies, and internal guides.
+- **AI Support Agent:** Handles automated customer service inquiries grounded strictly in uploaded company documents.
 
-* Upload one or more PDF documents to create a private enterprise knowledge base.
-* Index and retrieve information using an advanced RAG pipeline.
-* Employees can ask natural-language questions and receive answers grounded in the uploaded documents.
-* Generate summaries across large collections of enterprise PDFs.
-* Search internal company knowledge instantly without manually reading documentation.
-* Embed the AI assistant as a widget inside any website, portal, or internal enterprise application.
-* Keep enterprise knowledge private while enabling fast, intelligent access to information.
+### 🔌 Integration & Deployment
+- **Embeddable AI Widget:** Seamless integration into any external website, internal portal, or intranet.
+- **Multi-LLM Support:** Native integration with OpenAI and Anthropic models via LangChain abstractions.
+- **Enterprise Storage Integration:** Compatible with PostgreSQL, Redis, MongoDB, AWS S3, Google Cloud Storage, and Azure Blob.
+- **Async Heavy Processing:** Background task queue processing powered by Celery for large document uploads.
+- **Data Privacy & Security:** Ensures sensitive company knowledge remains private and secure within the enterprise context.
+
+## ⚙️ How It Works (End-to-End Architecture Flow)
+
+1. **Document Ingestion & OCR:** PDFs (up to 500+ files) are ingested using Docling and Tesseract OCR to extract text, tables, and structural layout.
+2. **Chunking & Vector Embedding:** Text is split into semantic chunks and embedded into ChromaDB for high-accuracy similarity search.
+3. **Multi-Agent Orchestration:** LangGraph routes user requests to specialized agents (Sales, Support, Knowledge) based on intent.
+4. **Contextual RAG & Synthesis:** Relevant context is retrieved and fed into LLMs (OpenAI/Anthropic) to generate accurate answers with source citations.
+5. **Multi-Channel Delivery:** Responses are served via direct interface or embedded live on web clients via the AI Widget.
 
 ## Getting Started
 
