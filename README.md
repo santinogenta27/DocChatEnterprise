@@ -15,6 +15,10 @@ An internal AI assistant for employees to access company knowledge instantly.
 An AI customer support assistant embedded into any website to answer customer questions using the company’s own documentation.
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
+
+> **Note:** Alien Mode is the primary functional workflow currently available, featuring document upload, knowledge extraction, conversational AI, and an embeddable widget. Other modules represent experimental AI workflows and enterprise prototypes under active development.
+
+
 ## Key Features
 
 - **Private RAG** over uploaded PDFs and multi-document knowledge bases
