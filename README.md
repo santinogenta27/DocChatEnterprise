@@ -23,34 +23,30 @@ Additional modules included in the repository explore advanced AI workflows, ent
 
 DocChat Enterprise is an enterprise-grade AI platform that enables organizations to securely chat with private documents using advanced Retrieval-Augmented Generation (RAG).
 
-It transforms contracts, policies, manuals, technical documentation, and complex knowledge bases into intelligent AI agents capable of answering questions, qualifying leads, generating summaries, and performing deep semantic search.
+It transforms contracts, policies, manuals, technical documentation, and complex knowledge bases into interactive AI assistants capable of answering natural-language questions, generating multi-file summaries, and serving external users via an embeddable web widget.
 
 ### Core Platform Capabilities:
 
-* **Massive Multi-Document Ingestion (100–500+ PDFs):** Ingest and index hundreds of corporate PDFs into a unified knowledge base to generate instant high-level summaries or execute deep queries across multiple files.
+* **Massive Multi-Document Ingestion (100+ PDFs):** Ingest and index hundreds of corporate PDFs into a unified knowledge base to generate instant high-level summaries or execute deep queries across multiple files.
 * **Internal Knowledge Assistant:** Allows employees to instantly query company policies, SOPs, and technical documents.
 * **Embeddable Customer Support & Sales Widget:** Easily deploy a light web widget into any website to answer visitor inquiries 24/7 using uploaded document context via OpenAI.
 * **Context-Grounded RAG Pipeline:** Minimizes hallucinations by strictly anchoring LLM responses to the extracted text chunks from target documents.
-It transforms contracts... into interactive AI assistants capable of answering natural-language questions, generating multi-file summaries, and serving external users via a web widget.
 
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
-## Tech Stack
-
-| Category              | Technologies                                      |
-|-----------------------|---------------------------------------------------|
-| **Core AI**           | LangChain, LangGraph, OpenAI, Anthropic           |
-| **Vector Store**      | ChromaDB                                          |
-| **Document Processing**| Docling, PyPDF2, pdf2image, pytesseract, Pillow  |
-| **Backend**           | FastAPI, Uvicorn, Pydantic                        |
-| **UI / Demo**         | Gradio                                            |
-| **Databases**         | PostgreSQL, Redis, MongoDB                        |
-| **Task Queue**        | Celery                                            |
-| **Cloud Storage**     | AWS S3, Google Cloud Storage, Azure Blob          |
-| **Integrations**      | Slack, Google APIs                                |
-
 ---
 
+## 🛠️ Tech Stack
+
+| Category | Technologies |
+|---|---|
+| **Core AI & RAG** | LangChain, OpenAI API |
+| **Vector Store** | ChromaDB |
+| **Document Processing** | Docling, PyPDF2, pdf2image, pytesseract, Pillow |
+| **Backend API** | FastAPI, Uvicorn, Pydantic |
+| **UI & Demo Interface** | Gradio |
+
+---
 ## Architecture (High Level)
 PDF Upload → Document Processing (Docling + OCR)
 → Chunking + Embedding
