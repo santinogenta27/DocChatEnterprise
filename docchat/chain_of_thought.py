@@ -102,18 +102,18 @@ Cada paso debe:
 4. Llevar hacia la solución final
 
 Responde en JSON:
-{
+{{
     "steps": [
-        {
+        {{
             "step_type": "observation|analysis|hypothesis|verification|conclusion|action",
             "content": "descripción del paso",
             "reasoning": "por qué este paso es necesario",
-            "confidence": 0.0-1.0,
-            "depends_on": ["step_id"] o []
-        }
+            "confidence": 0.0,
+            "depends_on": []
+        }}
     ],
     "reasoning": "razonamiento general sobre el enfoque"
-}"""),
+}}"""),
             ("human", """Consulta: {query}
 
 Contexto anterior: {previous_context}
