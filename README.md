@@ -1,10 +1,9 @@
 ## DocChat Enterprise
 [![WATCH DEMO VIDEO](https://img.shields.io/badge/▶️_WATCH_DEMO_VIDEO-YouTube-red?style=for-the-badge)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
-[![Live SaaS Website](https://img.shields.io/badge/🌐_LIVE_DEMO_WEBSITE-enterprisedataai.com-blue?style=for-the-badge)](https://www.enterprisedataai.com/)
-[![Watch Demo Video](https://img.shields.io/badge/▶️_WATCH_DEMO_VIDEO-YouTube-red?style=for-the-badge)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
+[![LIVE DEMO WEBSITE](https://img.shields.io/badge/🚀_LIVE_DEMO_WEBSITE-enterprisedataai.com-blue?style=for-the-badge)](https://www.enterprisedataai.com/)
 
-> *(Al hacer clic en la imagen de abajo, se abre el video en YouTube)*
-[![DocChat Enterprise Demo](https://img.youtube.com/vi/wBtSqWNyFdI/maxresdefault.jpg)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
+> 🎬 **YOUTUBE DEMO VIDEO LINK:** https://www.youtube.com/watch?v=wBtSqWNyFdI  
+> 🌐 **LIVE DEMO WEBSITE LINK:** https://www.enterprisedataai.com/
 
 [![DocChat Enterprise Demo](https://img.youtube.com/vi/wBtSqWNyFdI/maxresdefault.jpg)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
 
