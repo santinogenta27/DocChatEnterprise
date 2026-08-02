@@ -125,11 +125,11 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 
 ## ⚙️ How It Works (End-to-End Architecture Flow)
 
-1. **Document Ingestion & OCR:** PDFs (up to 500+ files) are ingested using Docling and Tesseract OCR to extract text, tables, and structural layout.
-2. **Chunking & Vector Embedding:** Text is split into semantic chunks and embedded into ChromaDB for high-accuracy similarity search.
-3. **Multi-Agent Orchestration:** LangGraph routes user requests to specialized agents (Sales, Support, Knowledge) based on intent.
-4. **Contextual RAG & Synthesis:** Relevant context is retrieved and fed into LLMs (OpenAI/Anthropic) to generate accurate answers with source citations.
-5. **Multi-Channel Delivery:** Responses are served via direct interface or embedded live on web clients via the AI Widget.
+1. **Document Ingestion & OCR:** PDFs (100+ files) are uploaded and processed using Docling and Tesseract OCR to extract raw text, tables, and document structural layout.
+2. **Chunking & Vector Embedding:** Extracted text is split into semantic chunks and stored in ChromaDB for high-accuracy similarity search.
+3. **Context Retrieval & RAG Chain:** When a user submits a query, LangChain searches ChromaDB to retrieve the most relevant document chunks based on semantic similarity.
+4. **LLM Synthesis & Citation:** Retrieved text chunks and the user prompt are sent to the OpenAI API to generate accurate, context-grounded responses with minimal hallucination.
+5. **Multi-Channel Delivery:** Answers are delivered directly through the main Gradio interface or served to site visitors live via the embeddable Web Widget.
 
 ## Getting Started
 
