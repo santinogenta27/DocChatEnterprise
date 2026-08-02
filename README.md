@@ -15,6 +15,73 @@ An internal AI assistant for employees to access company knowledge instantly.
 An AI customer support assistant embedded into any website to answer customer questions using the company’s own documentation.
 Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
 
+## Key Features
+
+- **Private RAG** over uploaded PDFs and multi-document knowledge bases
+- **Multi-agent architecture** powered by LangGraph
+- **Embeddable AI Widget** for any website
+- Advanced document understanding with Docling + OCR
+- Support for OpenAI and Anthropic models
+- Enterprise storage options (PostgreSQL, Redis, MongoDB, S3, GCS, Azure Blob)
+- Background task processing with Celery
+
+---
+
+## Tech Stack
+
+| Category              | Technologies                                      |
+|-----------------------|---------------------------------------------------|
+| **Core AI**           | LangChain, LangGraph, OpenAI, Anthropic           |
+| **Vector Store**      | ChromaDB                                          |
+| **Document Processing**| Docling, PyPDF2, pdf2image, pytesseract, Pillow  |
+| **Backend**           | FastAPI, Uvicorn, Pydantic                        |
+| **UI / Demo**         | Gradio                                            |
+| **Databases**         | PostgreSQL, Redis, MongoDB                        |
+| **Task Queue**        | Celery                                            |
+| **Cloud Storage**     | AWS S3, Google Cloud Storage, Azure Blob          |
+| **Integrations**      | Slack, Google APIs                                |
+
+---
+
+## Architecture (High Level)
+PDF Upload → Document Processing (Docling + OCR)
+→ Chunking + Embedding
+→ Vector Store (ChromaDB)
+→ Multi-Agent Orchestration (LangGraph)
+→ LLM (OpenAI / Anthropic)
+→ Response + Citations
+textThe system supports both internal employee chat and an embeddable customer-facing widget.
+
+---
+
+## Getting Started
+
+```bash
+# Clone the repository
+git clone https://github.com/santinogenta27/DocChatEnterprise.git
+cd DocChatEnterprise
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment variables
+cp .env.example .env
+# Add your OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+
+# Run the application
+uvicorn api.main:app --reload
+# or
+python -m gradio app.py
+
+
+
+
+
+
 ## 🌍 Real-World Use Cases & Applications
 
 DocChat Enterprise can be integrated across a wide variety of industries and operational workflows to solve complex document-handling challenges:
