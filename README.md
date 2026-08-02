@@ -2,6 +2,11 @@
 [![WATCH DEMO VIDEO](https://img.shields.io/badge/▶️_WATCH_DEMO_VIDEO-YouTube-red?style=for-the-badge)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
 > 🚀 **Live SaaS Platform:** [https://www.enterprisedataai.com/](https://www.enterprisedataai.com/)
 
+> 🎬 **YOUTUBE DEMO VIDEO LINK:** https://www.youtube.com/watch?v=wBtSqWNyFdI  
+> 🌐 **LIVE DEMO WEBSITE LINK:** https://www.enterprisedataai.com/
+
+[![DocChat Enterprise Demo](https://img.youtube.com/vi/wBtSqWNyFdI/maxresdefault.jpg)](https://www.youtube.com/watch?v=wBtSqWNyFdI)
+
 Enterprise AI Knowledge Assistant for Internal Knowledge Management and Customer Support.
 
 **Demo Workflow:** The current public demonstration showcases **Alien Mode**, the main end-to-end workflow of the platform, including document upload, knowledge extraction, conversational AI, and an embeddable AI widget.
