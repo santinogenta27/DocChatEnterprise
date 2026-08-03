@@ -48,13 +48,12 @@ Built for security, scalability, and enterprise-grade performance, DocChat Enter
 
 ---
 ## Architecture (High Level)
-PDF Upload → Document Processing (Docling + OCR)
-→ Chunking + Embedding
-→ Vector Store (ChromaDB)
-→ Multi-Agent Orchestration (LangGraph)
-→ LLM (OpenAI / Anthropic)
-→ Response + Citations
-textThe system supports both internal employee chat and an embeddable customer-facing widget
+PDF Upload → Document Processing (Docling + OCR) 
+           → Chunking + Embedding 
+           → Vector Store (ChromaDB) 
+           → LangChain RAG Chain 
+           → LLM Synthesis (OpenAI API) 
+           → Response + Citations (Gradio UI / Web Widget)
 
 
 ## 🌍 Real-World Use Cases & Applications
