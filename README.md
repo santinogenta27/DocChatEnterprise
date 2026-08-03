@@ -49,7 +49,6 @@ Built for security, scalability, and enterprise-grade performance, DocChat Enter
 ---
 ## 🏗️ Architecture (High Level)
 
-```text
 PDF Upload → Document Processing (Docling + OCR) 
            → Chunking + Embedding 
            → Vector Store (ChromaDB) 
