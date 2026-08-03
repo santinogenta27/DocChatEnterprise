@@ -47,7 +47,9 @@ Built for security, scalability, and enterprise-grade performance, DocChat Enter
 | **UI & Demo Interface** | Gradio |
 
 ---
-## Architecture (High Level)
+## 🏗️ Architecture (High Level)
+
+```text
 PDF Upload → Document Processing (Docling + OCR) 
            → Chunking + Embedding 
            → Vector Store (ChromaDB) 
