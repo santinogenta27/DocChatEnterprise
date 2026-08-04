@@ -81,6 +81,21 @@ Answers pricing, product features, and technical specification questions using e
 | **User Interface** | Gradio |
 | **Programming Language** | Python 3.10+ |
 
+## 📄 Supported Documents
+
+The platform is designed to process and index a wide variety of corporate document formats and structures:
+
+- **Legal:** Contracts, NDAs, Terms of Service, Compliance Guidelines
+- **Operations:** SOPs, Internal Policies, Employee Handbooks
+- **Product:** User Manuals, Technical Specifications, Battlecards
+- **Research & Finance:** Financial Reports, Audit Documents, Research Papers
+- **Support:** FAQ Bases, Troubleshooting Guides, Service Catalogs
+
+
+
+
+
+
 
 ## 🏗️ System Architecture
 
