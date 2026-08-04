@@ -97,32 +97,36 @@ The platform is designed to process and index a wide variety of corporate docume
 
 
 
-## 🏗️ System Architecture
-
-### Pipeline Workflow
+## 🔄 Agentic & Multi-Agent Architecture
 
 ```text
 PDF Upload
-   ↓
+      │
+      ▼
 Docling + OCR (Tesseract)
-   ↓
-Text Extraction & Cleaning
-   ↓
+      │
+      ▼
+Markdown Extraction & Cleaning
+      │
+      ▼
 Semantic Chunking
-   ↓
-Embeddings Generation
-   ↓
-Vector Database (ChromaDB)
-   ↓
-Semantic Retrieval
-   ↓
-LangChain Context Assembly
-   ↓
-OpenAI LLM Synthesis
-   ↓
+      │
+      ▼
+Hybrid Search Index (BM25 + ChromaDB Vector)
+      │
+      ▼
+Scope Checker Agent
+      │
+      ▼
+Research Agent
+      │
+      ▼
+Verification Agent & Self-Correction
+      │
+      ▼
 Grounded Response (Citations)
-   ├── Gradio Web Interface
-   └── Embeddable AI Agent / REST API
+      ├── Gradio Web Interface
+      └── Embeddable AI Agent / REST API
 ```
 ### 🌍 Real-World Use Cases & Applications
 
