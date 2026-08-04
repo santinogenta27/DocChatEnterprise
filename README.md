@@ -74,7 +74,7 @@ It combines document parsing, OCR, Retrieval-Augmented Generation (RAG), semanti
 - **OCR & Layout Processing:** Extract text and tables from scanned documents and complex layouts using Docling + OCR.
 
 ### 🤖 AI Capabilities & Assistant Modes
-- **Embeddable AI Widget:** Deploy a lightweight assistant on any website to handle visitor queries 24/7 using product documentation via OpenAI.
+- **Embeddable AI Agent:** Deploy a lightweight assistant on any website to handle visitor queries 24/7 using product documentation via OpenAI.
 - **Internal Knowledge Assistant:** Gives employees immediate access to company SOPs, policies, and internal technical guides.
 - **Context-Grounded QA:** Minimizes hallucinations by strictly anchoring LLM answers to extracted document chunks.
 
