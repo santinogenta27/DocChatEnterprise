@@ -175,7 +175,7 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 
 
 
-## 🏗️ System Architecture
+ 🏗️ System Architecture
 
 ### Pipeline Workflow
 
