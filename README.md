@@ -86,35 +86,7 @@ Answers pricing, product features, and technical specification questions using e
 
 ---
 
-## 🏗️ System Architecture
-
-### Pipeline Workflow
-
-```text
-PDF Upload
-   ↓
-Docling + OCR (Tesseract)
-   ↓
-Text Extraction & Cleaning
-   ↓
-Semantic Chunking
-   ↓
-Embeddings Generation
-   ↓
-Vector Database (ChromaDB)
-   ↓
-Semantic Retrieval
-   ↓
-LangChain Context Assembly
-   ↓
-OpenAI LLM Synthesis
-   ↓
-Grounded Response (Citations)
-   ├── Gradio Web Interface
-   └── Embeddable AI Agent / REST API
-
-
- 🌍 Real-World Use Cases & Applications
+### 🌍 Real-World Use Cases & Applications
 
 DocChat Enterprise can be integrated across a wide variety of industries and operational workflows to solve complex document-handling challenges:
 
@@ -187,6 +159,50 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 3. **Context Retrieval & RAG Chain:** When a user submits a query, LangChain searches ChromaDB to retrieve the most relevant document chunks based on semantic similarity.
 4. **LLM Synthesis & Citation:** Retrieved text chunks and the user prompt are sent to the OpenAI API to generate accurate, context-grounded responses with minimal hallucination.
 5. **Multi-Channel Delivery:** Answers are delivered directly through the main Gradio interface or served to site visitors live via the embeddable Web Widget.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 🏗️ System Architecture
+
+### Pipeline Workflow
+
+```text
+PDF Upload
+   ↓
+Docling + OCR (Tesseract)
+   ↓
+Text Extraction & Cleaning
+   ↓
+Semantic Chunking
+   ↓
+Embeddings Generation
+   ↓
+Vector Database (ChromaDB)
+   ↓
+Semantic Retrieval
+   ↓
+LangChain Context Assembly
+   ↓
+OpenAI LLM Synthesis
+   ↓
+Grounded Response (Citations)
+   ├── Gradio Web Interface
+   └── Embeddable AI Agent / REST API
+
+
 
 ## Getting Started
 
