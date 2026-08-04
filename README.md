@@ -64,6 +64,48 @@ It combines document parsing, OCR, Retrieval-Augmented Generation (RAG), semanti
 
 ---
 
+## ⚡ Key Features
+
+### 📄 Advanced Document Ingestion & RAG
+- **Massive Multi-Document Ingestion:** Ingest and index 100+ PDFs into a single, structured enterprise knowledge base.
+- **Advanced RAG Pipeline:** Context-aware retrieval and semantic search tailored for complex enterprise documentation.
+- **Enterprise Document Summarization:** Generate instant summaries and cross-document analysis across extensive PDF collections.
+- **OCR & Layout Processing:** Extract text and tables from scanned documents and complex layouts using Docling + OCR.
+
+### 🤖 AI Capabilities & Assistant Modes
+- **Embeddable AI Widget:** Deploy a lightweight assistant on any website to handle visitor queries 24/7 using product documentation via OpenAI.
+- **Internal Knowledge Assistant:** Gives employees immediate access to company SOPs, policies, and internal technical guides.
+- **Context-Grounded QA:** Minimizes hallucinations by strictly anchoring LLM answers to extracted document chunks.
+
+### 🔌 Tech Integration & Security
+- **LangChain & OpenAI Framework:** Clean orchestration for document loading, semantic chunking, and question-answering chains.
+- **Vector Search Indexing:** Fast similarity search powered by ChromaDB for accurate chunk retrieval.
+- **Data Privacy & Security:** Local vector indexing ensuring sensitive company knowledge remains private and controlled.
+
+## ⚙️ How It Works (End-to-End Architecture Flow)
+
+1. **Document Ingestion & OCR:** PDFs (100+ files) are uploaded and processed using Docling and Tesseract OCR to extract raw text, tables, and document structural layout.
+2. **Chunking & Vector Embedding:** Extracted text is split into semantic chunks and stored in ChromaDB for high-accuracy similarity search.
+3. **Context Retrieval & RAG Chain:** When a user submits a query, LangChain searches ChromaDB to retrieve the most relevant document chunks based on semantic similarity.
+4. **LLM Synthesis & Citation:** Retrieved text chunks and the user prompt are sent to the OpenAI API to generate accurate, context-grounded responses with minimal hallucination.
+5. **Multi-Channel Delivery:** Answers are delivered directly through the main Gradio interface or served to site visitors live via the embeddable Web Widget.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## 🤖 Enterprise AI Agents
 
 DocChat Enterprise is structured around specialized agent workflows to target distinct operational environments:
@@ -83,27 +125,14 @@ Answers pricing, product features, and technical specification questions using e
 
 ---
 
-## 🛠️ Tech Stack
 
-| Layer | Technologies |
-| :--- | :--- |
-| **AI Framework** | LangChain |
-| **LLM Provider** | OpenAI API |
-| **Vector Database** | ChromaDB |
-| **Document Parsing & OCR** | Docling, PyPDF2, pdf2image, pytesseract, Pillow |
-| **Backend API** | FastAPI, Uvicorn, Pydantic |
-| **User Interface** | Gradio |
-| **Programming Language** | Python 3.10+ |
 
-## 📄 Supported Documents
 
-The platform is designed to process and index a wide variety of corporate document formats and structures:
 
-- **Legal:** Contracts, NDAs, Terms of Service, Compliance Guidelines
-- **Operations:** SOPs, Internal Policies, Employee Handbooks
-- **Product:** User Manuals, Technical Specifications, Battlecards
-- **Research & Finance:** Financial Reports, Audit Documents, Research Papers
-- **Support:** FAQ Bases, Troubleshooting Guides, Service Catalogs
+
+
+
+
 
 
 
@@ -142,6 +171,46 @@ Grounded Response (Citations)
       ├── Gradio Web Interface
       └── Embeddable AI Agent / REST API
 ```
+
+
+
+
+
+
+
+
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **AI Framework** | LangChain |
+| **LLM Provider** | OpenAI API |
+| **Vector Database** | ChromaDB |
+| **Document Parsing & OCR** | Docling, PyPDF2, pdf2image, pytesseract, Pillow |
+| **Backend API** | FastAPI, Uvicorn, Pydantic |
+| **User Interface** | Gradio |
+| **Programming Language** | Python 3.10+ |
+
+
+
+
+
+
+
+
+
+
+## 📄 Supported Documents
+
+The platform is designed to process and index a wide variety of corporate document formats and structures:
+
+- **Legal:** Contracts, NDAs, Terms of Service, Compliance Guidelines
+- **Operations:** SOPs, Internal Policies, Employee Handbooks
+- **Product:** User Manuals, Technical Specifications, Battlecards
+- **Research & Finance:** Financial Reports, Audit Documents, Research Papers
+- **Support:** FAQ Bases, Troubleshooting Guides, Service Catalogs
+
 ### 🌍 Real-World Use Cases & Applications
 
 DocChat Enterprise can be integrated across a wide variety of industries and operational workflows to solve complex document-handling challenges:
@@ -189,36 +258,6 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 * **Sales Enablement:** Provide sales reps with instant access to brand guidelines, product battlecards, and feature comparisons during client interactions.
 
 ---
-
-## ⚡ Key Features
-
-### 📄 Advanced Document Ingestion & RAG
-- **Massive Multi-Document Ingestion:** Ingest and index 100+ PDFs into a single, structured enterprise knowledge base.
-- **Advanced RAG Pipeline:** Context-aware retrieval and semantic search tailored for complex enterprise documentation.
-- **Enterprise Document Summarization:** Generate instant summaries and cross-document analysis across extensive PDF collections.
-- **OCR & Layout Processing:** Extract text and tables from scanned documents and complex layouts using Docling + OCR.
-
-### 🤖 AI Capabilities & Assistant Modes
-- **Embeddable AI Widget:** Deploy a lightweight assistant on any website to handle visitor queries 24/7 using product documentation via OpenAI.
-- **Internal Knowledge Assistant:** Gives employees immediate access to company SOPs, policies, and internal technical guides.
-- **Context-Grounded QA:** Minimizes hallucinations by strictly anchoring LLM answers to extracted document chunks.
-
-### 🔌 Tech Integration & Security
-- **LangChain & OpenAI Framework:** Clean orchestration for document loading, semantic chunking, and question-answering chains.
-- **Vector Search Indexing:** Fast similarity search powered by ChromaDB for accurate chunk retrieval.
-- **Data Privacy & Security:** Local vector indexing ensuring sensitive company knowledge remains private and controlled.
-
-## ⚙️ How It Works (End-to-End Architecture Flow)
-
-1. **Document Ingestion & OCR:** PDFs (100+ files) are uploaded and processed using Docling and Tesseract OCR to extract raw text, tables, and document structural layout.
-2. **Chunking & Vector Embedding:** Extracted text is split into semantic chunks and stored in ChromaDB for high-accuracy similarity search.
-3. **Context Retrieval & RAG Chain:** When a user submits a query, LangChain searches ChromaDB to retrieve the most relevant document chunks based on semantic similarity.
-4. **LLM Synthesis & Citation:** Retrieved text chunks and the user prompt are sent to the OpenAI API to generate accurate, context-grounded responses with minimal hallucination.
-5. **Multi-Channel Delivery:** Answers are delivered directly through the main Gradio interface or served to site visitors live via the embeddable Web Widget.
-
-
-
-
 
 
 
