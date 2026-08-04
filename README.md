@@ -25,11 +25,16 @@ Additional modules included in the repository explore advanced AI workflows, ent
 > 🌐 **Language Note:** The public demo UI is currently configured in Spanish. Non-Spanish speakers can easily review the full application flow by enabling their browser's built-in translation (e.g., Chrome Google Translate).
 
 ## 📌 Table of Contents
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [System Architecture](#architecture-high-level)
-- [Real-World Use Cases](#real-world-use-cases--applications)
-- [Getting Started & Local Setup](#getting-started)
+- [Overview](#-overview)
+- [Why DocChat Enterprise?](#-why-docchat-enterprise)
+- [Core Platform Capabilities](#-core-platform-capabilities)
+- [Enterprise AI Agents](#-enterprise-ai-agents)
+- [Tech Stack](#️-tech-stack)
+- [Supported Documents](#-supported-documents)
+- [Agentic & Multi-Agent Architecture](#-agentic--multi-agent-architecture)
+- [Real-World Use Cases](#-real-world-use-cases--applications)
+- [Key Features](#-key-features)
+- [Getting Started](#getting-started)
 
 ## 💡 Overview
 
