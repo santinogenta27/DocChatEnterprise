@@ -28,12 +28,13 @@ Additional modules included in the repository explore advanced AI workflows, ent
 - [Overview](#-overview)
 - [Why DocChat Enterprise?](#-why-docchat-enterprise)
 - [Core Platform Capabilities](#-core-platform-capabilities)
+- [Key Features](#-key-features)
+- [How It Works](#️-how-it-works-end-to-end-architecture-flow)
 - [Enterprise AI Agents](#-enterprise-ai-agents)
+- [Agentic & Multi-Agent Architecture](#-agentic--multi-agent-architecture)
 - [Tech Stack](#️-tech-stack)
 - [Supported Documents](#-supported-documents)
-- [Agentic & Multi-Agent Architecture](#-agentic--multi-agent-architecture)
 - [Real-World Use Cases](#-real-world-use-cases--applications)
-- [Key Features](#-key-features)
 - [Installation](#Installation)
 
 ## 💡 Overview
