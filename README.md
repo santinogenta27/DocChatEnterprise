@@ -34,7 +34,7 @@ Additional modules included in the repository explore advanced AI workflows, ent
 - [Agentic & Multi-Agent Architecture](#-agentic--multi-agent-architecture)
 - [Real-World Use Cases](#-real-world-use-cases--applications)
 - [Key Features](#-key-features)
-- [Getting Started](#getting-started)
+- [Installation](#Installation)
 
 ## 💡 Overview
 
