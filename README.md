@@ -114,7 +114,7 @@ Grounded Response (Citations)
    └── Embeddable AI Agent / REST API
 
 
-## 🌍 Real-World Use Cases & Applications
+ 🌍 Real-World Use Cases & Applications
 
 DocChat Enterprise can be integrated across a wide variety of industries and operational workflows to solve complex document-handling challenges:
 
