@@ -87,7 +87,7 @@ Answers pricing, product features, and technical specification questions using e
 
 ## 🏗️ System Architecture
 
- Pipeline Workflow
+### Pipeline Workflow
 
 ```text
 PDF Upload
@@ -111,7 +111,6 @@ OpenAI LLM Synthesis
 Grounded Response (Citations)
    ├── Gradio Web Interface
    └── Embeddable AI Agent / REST API
----
 ```
 ### 🌍 Real-World Use Cases & Applications
 
