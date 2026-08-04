@@ -25,36 +25,93 @@ DocChat Enterprise is an enterprise-grade AI platform that enables organizations
 
 It transforms contracts, policies, manuals, technical documentation, and complex knowledge bases into interactive AI assistants capable of answering natural-language questions, generating multi-file summaries, and serving external users via an embeddable web widget.
 
-### Core Platform Capabilities:
+## 💡 Overview
 
-* **Massive Multi-Document Ingestion (100+ PDFs):** Ingest and index hundreds of corporate PDFs into a unified knowledge base to generate instant high-level summaries or execute deep queries across multiple files.
-* **Internal Knowledge Assistant:** Allows employees to instantly query company policies, SOPs, and technical documents.
-* **Embeddable Customer Support & Sales Widget:** Easily deploy a light web widget into any website to answer visitor inquiries 24/7 using uploaded document context via OpenAI.
-* **Context-Grounded RAG Pipeline:** Minimizes hallucinations by strictly anchoring LLM responses to the extracted text chunks from target documents.
+DocChat Enterprise is a production-oriented Enterprise AI platform that transforms large collections of private documents into intelligent AI Agents capable of answering complex questions, generating cross-document summaries, and providing grounded responses for employees and customers.
 
-Built for security, scalability, and enterprise-grade performance, DocChat Enterprise helps organizations unlock the full value of their private knowledge and data while keeping sensitive information secure.
+The platform combines Retrieval-Augmented Generation (RAG), OCR document processing, vector search, LangChain orchestration, and modern LLMs to create reliable enterprise knowledge assistants while reducing hallucinations through context-grounded generation.
+
+---
+
+## ❓ Why DocChat Enterprise?
+
+Unlike traditional PDF chatbots, DocChat Enterprise is designed to operate as a production-oriented enterprise document intelligence platform. 
+
+It combines document parsing, OCR, Retrieval-Augmented Generation (RAG), semantic search, and AI-powered agents into a single workflow capable of serving both internal employees and external customers.
+
+---
+
+## 🚀 Core Platform Capabilities
+
+- **Multi-Document Ingestion (100+ PDFs):** Ingest and index hundreds of corporate PDFs into a unified knowledge base.
+- **Cross-Document Semantic Search:** Query across multiple documents simultaneously with precise vector-based retrieval.
+- **AI-Powered Document Summarization:** Generate instant high-level summaries and analytical synthesis across extensive PDF collections.
+- **Context-Grounded RAG Pipeline:** Minimizes hallucinations by strictly anchoring LLM responses to extracted context chunks.
+- **OCR Document Processing:** Extract structured text and tables from scanned documents, legacy files, and complex layouts.
+- **Embeddable AI Agent:** Lightweight, ready-to-deploy web agent for external websites and customer touchpoints.
+- **Enterprise REST API:** Scalable FastAPI backend to serve internal workflows, microservices, and external client applications.
+
+---
+
+## 🤖 Enterprise AI Agents
+
+DocChat Enterprise is structured around specialized agent workflows to target distinct operational environments:
+
+### 🏢 Internal Knowledge Assistant
+Allows employees to query internal documentation, operational procedures, HR policies, SOPs, and technical manuals instantly.
+
+---
+
+### 🎧 Customer Support AI Agent
+Provides instant 24/7 grounded responses to customer inquiries directly on external websites using uploaded documentation.
+
+---
+
+### 💼 Sales AI Agent
+Answers pricing, product features, and technical specification questions using enterprise documentation to accelerate sales cycles.
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Category | Technologies |
-|---|---|
-| **Core AI & RAG** | LangChain, OpenAI API |
-| **Vector Store** | ChromaDB |
-| **Document Processing** | Docling, PyPDF2, pdf2image, pytesseract, Pillow |
+| Layer | Technologies |
+| :--- | :--- |
+| **AI Framework** | LangChain |
+| **LLM Provider** | OpenAI API |
+| **Vector Database** | ChromaDB |
+| **Document Parsing & OCR** | Docling, PyPDF2, pdf2image, pytesseract, Pillow |
 | **Backend API** | FastAPI, Uvicorn, Pydantic |
-| **UI & Demo Interface** | Gradio |
+| **User Interface** | Gradio |
+| **Programming Language** | Python 3.10+ |
 
 ---
-## 🏗️ Architecture (High Level)
 
-PDF Upload → Document Processing (Docling + OCR) 
-           → Chunking + Embedding 
-           → Vector Store (ChromaDB) 
-           → LangChain RAG Chain 
-           → LLM Synthesis (OpenAI API) 
-           → Response + Citations (Gradio UI / Web Widget)
+## 🏗️ System Architecture
+
+### Pipeline Workflow
+
+```text
+PDF Upload
+   ↓
+Docling + OCR (Tesseract)
+   ↓
+Text Extraction & Cleaning
+   ↓
+Semantic Chunking
+   ↓
+Embeddings Generation
+   ↓
+Vector Database (ChromaDB)
+   ↓
+Semantic Retrieval
+   ↓
+LangChain Context Assembly
+   ↓
+OpenAI LLM Synthesis
+   ↓
+Grounded Response (Citations)
+   ├── Gradio Web Interface
+   └── Embeddable AI Agent / REST API
 
 
 ## 🌍 Real-World Use Cases & Applications
