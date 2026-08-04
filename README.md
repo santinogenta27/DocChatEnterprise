@@ -84,6 +84,33 @@ Answers pricing, product features, and technical specification questions using e
 | **User Interface** | Gradio |
 | **Programming Language** | Python 3.10+ |
 
+
+## 🏗️ System Architecture
+
+ Pipeline Workflow
+
+```text
+PDF Upload
+   ↓
+Docling + OCR (Tesseract)
+   ↓
+Text Extraction & Cleaning
+   ↓
+Semantic Chunking
+   ↓
+Embeddings Generation
+   ↓
+Vector Database (ChromaDB)
+   ↓
+Semantic Retrieval
+   ↓
+LangChain Context Assembly
+   ↓
+OpenAI LLM Synthesis
+   ↓
+Grounded Response (Citations)
+   ├── Gradio Web Interface
+   └── Embeddable AI Agent / REST API
 ---
 
 ### 🌍 Real-World Use Cases & Applications
@@ -174,33 +201,6 @@ DocChat Enterprise can be integrated across a wide variety of industries and ope
 
 
 
-
-## 🏗️ System Architecture
-
- Pipeline Workflow
-
-```text
-PDF Upload
-   ↓
-Docling + OCR (Tesseract)
-   ↓
-Text Extraction & Cleaning
-   ↓
-Semantic Chunking
-   ↓
-Embeddings Generation
-   ↓
-Vector Database (ChromaDB)
-   ↓
-Semantic Retrieval
-   ↓
-LangChain Context Assembly
-   ↓
-OpenAI LLM Synthesis
-   ↓
-Grounded Response (Citations)
-   ├── Gradio Web Interface
-   └── Embeddable AI Agent / REST API
 
 
 
